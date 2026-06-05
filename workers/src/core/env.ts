@@ -20,8 +20,17 @@ export interface GhlEnv {
   apiBase: string;
   /** Shared secret / signing key used to verify inbound webhooks. */
   webhookSecret: string | undefined;
-  /** Fallback/agency API token. Per-tenant tokens (TBD) resolve via tenants.ghl_token_ref. */
+  /** Fallback/agency API token used when a tenant has no OAuth token yet. */
   apiToken: string | undefined;
+}
+
+export interface GhlOAuthEnv {
+  /** OAuth2 client id from the GHL App Marketplace. */
+  clientId: string;
+  /** OAuth2 client secret from the GHL App Marketplace. */
+  clientSecret: string;
+  /** Full callback URL registered in the GHL app (e.g. https://…/oauth/ghl/callback). */
+  redirectUri: string;
 }
 
 function required(name: keyof CoreEnv): string {
@@ -46,4 +55,14 @@ export function getGhlEnv(): GhlEnv {
     webhookSecret: process.env.GHL_WEBHOOK_SECRET,
     apiToken: process.env.GHL_API_TOKEN,
   };
+}
+
+export function getGhlOAuthEnv(): GhlOAuthEnv {
+  const clientId = process.env.GHL_CLIENT_ID;
+  const clientSecret = process.env.GHL_CLIENT_SECRET;
+  const redirectUri = process.env.GHL_OAUTH_REDIRECT_URI;
+  if (!clientId || !clientSecret || !redirectUri) {
+    throw new Error('Missing GHL OAuth env vars: GHL_CLIENT_ID, GHL_CLIENT_SECRET, GHL_OAUTH_REDIRECT_URI');
+  }
+  return { clientId, clientSecret, redirectUri };
 }

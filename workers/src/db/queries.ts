@@ -8,11 +8,13 @@
 
 import { getSupabase } from './client.js';
 import type { ConversationMessage, TenantContext } from '../core/types.js';
+import type { GhlTokenResponse } from '../ghl/oauth.js';
 import type {
   LogAppointmentParams,
   LogEventParams,
   LogMessageParams,
   MessageRow,
+  OAuthTokenRow,
   TenantConfigRow,
   TenantRow,
 } from './types.js';
@@ -34,7 +36,7 @@ export async function loadTenantConfig(ghlLocationId: string): Promise<TenantCon
     .from('tenant_config')
     .select(
       'business_name, timezone, tone, services, hours, calendars, faq, enabled_roles, prompt_overrides, ' +
-        'tenants!inner(id, client_id, ghl_location_id, ghl_token_ref, is_active)',
+        'tenants!inner(id, client_id, ghl_location_id, is_active)',
     )
     .eq('tenants.ghl_location_id', ghlLocationId)
     .eq('tenants.is_active', true)
@@ -48,7 +50,6 @@ export async function loadTenantConfig(ghlLocationId: string): Promise<TenantCon
     tenantId: t.id,
     clientId: t.client_id,
     ghlLocationId: t.ghl_location_id,
-    ghlTokenRef: t.ghl_token_ref,
     enabledRoles: row.enabled_roles ?? [],
     config: {
       businessName: row.business_name,
@@ -126,6 +127,37 @@ export async function setHandoff(ghlConversationId: string): Promise<void> {
     p_ghl_conversation_id: ghlConversationId,
   });
   fail('setHandoff', error);
+}
+
+/** Upsert a tenant's GHL OAuth tokens (insert on first install, update on refresh). */
+export async function upsertOAuthToken(tenantId: string, tokens: GhlTokenResponse): Promise<void> {
+  const supabase = getSupabase();
+  const expiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString();
+  const { error } = await supabase.from('ghl_oauth_tokens').upsert(
+    {
+      tenant_id: tenantId,
+      access_token: tokens.access_token,
+      refresh_token: tokens.refresh_token,
+      expires_at: expiresAt,
+      token_type: tokens.token_type,
+      scope: tokens.scope,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: 'tenant_id' },
+  );
+  fail('upsertOAuthToken', error);
+}
+
+/** Fetch the stored OAuth tokens for a tenant, or null if not yet installed. */
+export async function getOAuthToken(tenantId: string): Promise<OAuthTokenRow | null> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from('ghl_oauth_tokens')
+    .select('access_token, refresh_token, expires_at, token_type')
+    .eq('tenant_id', tenantId)
+    .maybeSingle();
+  fail('getOAuthToken', error);
+  return (data as OAuthTokenRow | null);
 }
 
 /** Is this conversation currently owned by a human? (AI should stay silent.) */

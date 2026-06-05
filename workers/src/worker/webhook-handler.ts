@@ -115,7 +115,7 @@ export async function handleInboundWebhook(
   });
 
   // 6) Deliver via GHL (transport; stubbed until endpoints are wired).
-  await new GhlClient().sendMessage(parsed.conversationId, reply);
+  await new GhlClient(tenant.tenantId).sendMessage(parsed.conversationId, reply);
 
   return { status: 200, body: { replied: true, conversationId } };
 }

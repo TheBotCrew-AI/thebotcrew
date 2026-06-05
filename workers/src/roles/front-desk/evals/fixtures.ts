@@ -9,7 +9,6 @@ export const demoTenant: TenantContext = {
   tenantId: 't_demo',
   clientId: 'c_demo',
   ghlLocationId: 'loc_demo_0001',
-  ghlTokenRef: null,
   enabledRoles: ['front-desk'],
   config: {
     businessName: 'Clínica Demo',

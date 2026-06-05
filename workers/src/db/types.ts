@@ -25,8 +25,15 @@ export interface TenantRow {
   id: string;
   client_id: string;
   ghl_location_id: string;
-  ghl_token_ref: string | null;
   is_active: boolean;
+}
+
+/** Row from `ghl_oauth_tokens`. */
+export interface OAuthTokenRow {
+  access_token: string;
+  refresh_token: string;
+  expires_at: string;
+  token_type: string;
 }
 
 /** Row shape returned by loadRecentMessages. */

@@ -33,7 +33,6 @@ export interface TenantContext {
   tenantId: string;
   clientId: string;
   ghlLocationId: string;
-  ghlTokenRef: string | null;
   enabledRoles: string[];
   config: RawTenantConfig;
 }
