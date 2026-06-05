@@ -1,0 +1,8 @@
+{
+  "locationId": "loc_demo_0001",
+  "contactId": "contact_demo_001",
+  "conversationId": "conv_demo_001",
+  "messageType": "WhatsApp",
+  "phone": "+5215555550123",
+  "body": "Hola, quería información para agendar una consulta general. ¿Tienen disponibilidad esta semana?"
+}

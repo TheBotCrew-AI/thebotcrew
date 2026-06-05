@@ -1,0 +1,16 @@
+# Local Worker secrets for `mastra dev` / `wrangler dev`.
+# Copy to `workers/.dev.vars` (gitignored) and fill in. NEVER commit real values.
+
+# Supabase — the Worker uses the service-role key (bypasses RLS). Server-side only.
+SUPABASE_URL="http://127.0.0.1:54321"
+SUPABASE_SERVICE_ROLE_KEY="<local-service-role-key-from-`supabase start`>"
+
+# Anthropic — model provider for the agents.
+ANTHROPIC_API_KEY="sk-ant-..."
+
+# GoHighLevel — outbound transport + calendar. Endpoints/auth model still TBD.
+GHL_API_BASE="https://services.leadconnectorhq.com"
+GHL_WEBHOOK_SECRET="<shared-secret-or-signing-key-for-inbound-verification>"
+# TODO(GHL auth): single agency token vs per-location OAuth. If per-tenant, this is the
+# fallback/agency token and per-tenant tokens are resolved via tenants.ghl_token_ref.
+GHL_API_TOKEN="<ghl-api-token>"

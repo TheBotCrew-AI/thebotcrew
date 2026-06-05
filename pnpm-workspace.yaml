@@ -1,0 +1,3 @@
+packages:
+  - 'workers'
+  # 'api' and 'dashboard' join the workspace once they have a package.json.

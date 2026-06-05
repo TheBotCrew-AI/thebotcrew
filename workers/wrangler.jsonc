@@ -1,0 +1,18 @@
+{
+  // Reference Worker config. `mastra build` (via CloudflareDeployer) emits its own
+  // wrangler config into the build output (.mastra/output); this file documents the
+  // intended settings and is the source of truth for compatibility flags / secrets.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "thebotcrew-agents",
+  "main": ".mastra/output/index.mjs",
+  "compatibility_date": "2025-06-01",
+  // Mastra + the AI/Supabase SDKs need Node built-ins on Workers.
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true
+  }
+  // Secrets are NOT stored here. Set them with `wrangler secret put <NAME>`:
+  //   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, ANTHROPIC_API_KEY,
+  //   GHL_API_BASE, GHL_WEBHOOK_SECRET, GHL_API_TOKEN
+  // For local dev, put the same keys in workers/.dev.vars (gitignored).
+}
