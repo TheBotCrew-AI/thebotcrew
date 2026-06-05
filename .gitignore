@@ -13,6 +13,11 @@ dist/
 build/
 .next/
 out/
+.mastra/
+
+# Cloudflare Worker local secrets — NUNCA al repo
+.dev.vars
+.wrangler/
 
 # OS
 .DS_Store

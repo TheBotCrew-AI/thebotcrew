@@ -1,0 +1,17 @@
+{
+  "name": "thebotcrew",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The Bot Crew — multi-tenant AI agent platform for LATAM service businesses",
+  "packageManager": "pnpm@10.17.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @thebotcrew/workers dev",
+    "build": "pnpm --filter @thebotcrew/workers build",
+    "typecheck": "pnpm --filter @thebotcrew/workers typecheck",
+    "eval": "pnpm --filter @thebotcrew/workers eval",
+    "webhook:simulate": "pnpm --filter @thebotcrew/workers webhook:simulate"
+  }
+}

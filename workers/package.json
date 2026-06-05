@@ -1,0 +1,29 @@
+{
+  "name": "@thebotcrew/workers",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Cloudflare Worker runtime: GHL webhook → tenant resolve → Mastra agent → reply",
+  "scripts": {
+    "dev": "mastra dev",
+    "build": "mastra build",
+    "typecheck": "tsc --noEmit",
+    "eval": "vitest run",
+    "webhook:simulate": "node scripts/simulate-webhook.mjs"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.81",
+    "@mastra/core": "^1.41.0",
+    "@supabase/supabase-js": "^2.107.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250620.0",
+    "@mastra/deployer-cloudflare": "^1.1.42",
+    "@types/node": "^22.0.0",
+    "mastra": "^1.12.2",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0",
+    "wrangler": "^4.20.0"
+  }
+}
