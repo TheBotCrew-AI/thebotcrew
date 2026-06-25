@@ -51,7 +51,9 @@ bypasses RLS).
 - **Code = the product.** Role definitions, system-prompt templates, tool
   implementations, and orchestration live in git. Editing them ships to all clients.
 - **Database = per-tenant variables.** Business name, services, hours, calendar IDs,
-  FAQ, tone overrides, and which roles are enabled live in Supabase. Onboarding a client
+  FAQ, tone overrides, which roles are enabled, provider/model, follow-up tiers, and the
+  reply gates (`enabled_channels`, `test_contact_ids`, `trigger_keywords` — see GHL notes)
+  live in Supabase. Onboarding a client
   is a DB row + config — no redeploy for the common case.
 
 Prompt templates carry placeholders; tenant config fills them at runtime. Agents only
@@ -76,14 +78,18 @@ workers/                       # Mastra + Cloudflare Worker package (@thebotcrew
     core/                      # role interface + registry, tenant resolver, request-context, env, types
     roles/
       front-desk/              # config (zod), prompt (es template), agent, tools/, evals/
-    ghl/                       # webhook parse/verify + transport-only API client (stubbed, typed)
+      reactivation/            # text-only follow-up/reactivation agent (no tools)
+    ghl/                       # webhook parse/verify, OAuth, tags + transport-only API client (live)
     db/                        # service-role Supabase client, queries (config read + RPC writes)
     worker/                    # webhook-handler (inbound) + outbound-handler (human takeover) + tag-handler (bot-off) + delivery-retry + followup-runner
   scripts/simulate-webhook.mjs # local dev: fire a fake GHL webhook
   fixtures/                    # sample webhook payloads
   wrangler.jsonc, vitest.config.ts, tsconfig.json
 supabase/
-  migrations/                  # 0001 init (stats), 0002/0003 rpc, 0004 tenant_config, 0005 conversation_store
+  migrations/                  # 0001–0017 (plus 0014a–d backfilled from prod). Core: 0001 init,
+                               # 0004 tenant_config, 0005 conversation_store, 0006 ghl_oauth, 0011 debounce,
+                               # 0012 follow_ups, 0013 human_takeover, 0014b add_facebook_channel,
+                               # 0015 tag_handoff, 0016 channel_control+test_mode, 0017 trigger_keyword_gate
   clients.sql, seed-tenants.sql# seeds (run by `supabase db reset` per config.toml)
 ```
 
@@ -114,8 +120,12 @@ go through the `app_log_*` RPCs; `app_log_message` (0005) stores content + attri
 
 1. Insert a `tenants` row and a `tenant_config` row in Supabase.
 2. Fill config: business name, services, hours, calendar IDs, FAQ, tone, enabled roles.
-3. Point the client's GHL subaccount webhook at the Worker.
-4. Verify with the local/staging webhook simulation before going live.
+3. Install/authorize the GHL Marketplace app for the subaccount (`/oauth/ghl/install`) so a
+   per-location OAuth token lands in `ghl_oauth_tokens`. The shared webhook routes by
+   `locationId` — no per-tenant webhook config needed.
+4. **Go-live gates** (a new tenant is silent by default — `enabled_channels` is NULL):
+   test with `test_contact_ids` (your own contacts) first, then set `enabled_channels`
+   (e.g. `{facebook}`) to go live. Optionally set `trigger_keywords` for ad-CTA flows.
    No code change or redeploy required for a standard onboarding.
 
 ## Workflows
@@ -125,13 +135,15 @@ go through the `app_log_*` RPCs; `app_log_message` (0005) stores content + attri
 
 ### Local dev
 ```bash
-supabase start && supabase db reset      # applies migrations 0001–0005 + seeds demo tenant
+supabase start && supabase db reset      # applies all migrations (0001–0017) + seeds demo tenant
 pnpm dev                                  # mastra dev — Worker + /webhooks/ghl route (port 4111)
 pnpm webhook:simulate                     # POST workers/fixtures/ghl-inbound.example.json
 ```
 Fire `webhook:simulate` twice to confirm turn 2 sees turn 1 as history (loaded from our
-DB). Inspect `messages` — rows carry `content`, `sender_type`, `agent_role`. GHL send is
-stubbed/logged, not a real outbound call.
+DB). Inspect `messages` — rows carry `content`, `sender_type`, `agent_role`. GHL send is a
+**real** API call now: it uses the tenant's stored OAuth token, falling back to
+`GHL_API_TOKEN`; with no token the send fails and the row is left `delivery_status='pending'`
+for the retry cron.
 
 ### Evals
 - Reliability is a first-class feature (we moved off n8n for exactly this reason).
@@ -178,11 +190,13 @@ stubbed/logged, not a real outbound call.
     once activated (`conversations.bot_activated`), the thread flows without the keyword.
     Helpers: `channelEnabled` / `inTestMode` / `hasTriggerKeywords` / `messageMatchesTrigger`
     (`core/tenant.ts`); gate order in `webhook-handler.ts`: channel/test → keyword.
-- Open questions (block only the real calls, not the stubbed scaffold): exact inbound
-  payload JSON, signature/verification scheme, send-message + calendar endpoints, and the
-  **auth model** (agency-level token vs per-location OAuth → whether `tenants.ghl_token_ref`
-  points at one shared secret or per-tenant tokens). Until answered, GHL calls are stubbed
-  but fully typed (`workers/src/ghl/`).
+- Resolved: inbound payload shape (`type=InboundMessage`, `direction=inbound`,
+  `locationId/contactId/conversationId/body/messageType`), send/calendar/tag endpoints
+  (live in `ghl/client.ts`), and the **auth model** — per-location **OAuth** via the GHL App
+  Marketplace, tokens in `ghl_oauth_tokens`, install/authorize at `/oauth/ghl/install`,
+  auto-refreshed. Scopes in `ghl/oauth.ts`.
+- Still open: **webhook signature verification** — `verifyWebhook()` is a placeholder that
+  accepts any request with a signature header (see TODO / `docs/plan-webhook-authentication.md`).
 
 ## Models
 

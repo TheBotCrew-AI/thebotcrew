@@ -16,9 +16,10 @@
 - [x] Confirm inbound webhook payload field names — `type=InboundMessage`, `direction=inbound`, `locationId/contactId/conversationId/body/messageType` all confirmed
 - [x] Resolve auth model: per-location OAuth via GHL App Marketplace → `ghl_oauth_tokens` table, install at `/oauth/ghl/install`
 - [ ] Confirm webhook signature scheme (`x-wh-signature` or `x-ghl-signature`, HMAC vs RSA) → replace placeholder in `verifyWebhook()`
-- [ ] Handle outbound GHL webhook events — store human-agent messages in our `messages` table so history stays complete when a human takes over a thread
-- [ ] Wire calendar availability (`GhlClient.getAvailability()`)
-- [ ] Wire appointment booking (`GhlClient.bookAppointment()`)
+- [x] Handle outbound GHL webhook events — `outbound-handler.ts` stores human-agent messages (`source:'app'`) so history stays complete on takeover
+- [x] Wire contact tags (`GhlClient.addContactTags` / `removeContactTags`, `contacts.write` scope, Version `2021-07-28`) — used by the handoff tag sync
+- [~] Wire calendar availability (`GhlClient.getAvailability()`) — implemented; not yet live-tested against a real GHL calendar
+- [~] Wire appointment booking (`GhlClient.bookAppointment()`) — implemented; not yet live-tested against a real GHL calendar
 
 ## Agent / Roles
 - [x] Seed real tenant config — The Bot Crew (`wRMDr6h3anwYpM64XAUe`): services, hours, calendars, FAQ, provider/model
@@ -41,8 +42,17 @@
 - [x] `app_is_bot_suppressed` — composite check: `handed_off` (manual) OR `human_active_until > now()`
 - [x] `isBotMessageById` secondary guard — identifies GHL echo of bot's own message (GHL sends `source: "app"` even for API-sent messages when OAuth token is tied to a user)
 - [x] Store `ghl_message_id` on bot outbound messages after send — required for echo detection to work
+- [x] **Tag-based handoff (`bot-off` kill switch)** — `ContactTagUpdate` webhook → `/webhooks/ghl/tags` → `tag-handler.ts`; `bot-off` tag ↔ `handed_off` (contact-scoped via `app_set_bot_off_by_contact`). The bot also writes `bot-off`/status tags on the contact when it sets a status (`ghl/tags.ts` `STATUS_TAGS`). Needs `contacts.write` scope. Validated end-to-end against live GHL webhooks
+- [x] **Anti-double-message guard** — re-check `isHumanActive` right before send (before logging the outbound, so the retry cron can't re-send a dropped reply); the agent's own self-handoff farewell still goes out
 - [ ] **Follow-up gap after human takeover:** when human agent responds and timer expires, no follow-up is scheduled. If lead goes silent after human responds, bot stays passive indefinitely. Decision needed: (A) don't cancel follow-ups on human takeover (timer already suppresses bot), or (B) re-schedule a follow-up when `human_active_until` expires and lead hasn't replied
 - [ ] Confirm two-webhook behavior (sent + delivered) for real human messages — dedup by `ghl_message_id` should handle it, verify in production
+
+## Per-tenant reply gating (`tenant_config`, enforced in `webhook-handler.ts`)
+> Inbound is always stored; only the *reply* is gated. Gate order: channel/test → keyword.
+- [x] **Channel control** (`enabled_channels text[]`) — NULL = silent (onboarding default); existing tenants backfilled to all three. `channelEnabled` helper. Validated (HappyNatyNat replies on FB, gates WhatsApp)
+- [x] **Pre-live test mode** (`test_contact_ids text[]`) — when non-empty, reply only to those contacts on any channel (bypasses channel gate). `inTestMode` helper
+- [x] **Trigger-keyword entry gate** (`trigger_keywords text[]` + `conversations.bot_activated`) — bot only ENTERS when a message contains a keyword (whole-word, accent-insensitive); once activated the thread flows. `messageMatchesTrigger` + atomic `app_bot_activation`. Validated
+- [ ] Expose these gates in a future dashboard/onboarding UI (today they're set via SQL)
 
 ## Follow-up System
 - [x] Migration 0012 — `follow_ups` table + 7 RPCs (`app_cancel_follow_ups`, `app_schedule_follow_up`, `app_load_due_follow_ups`, `app_mark_follow_up_sent`, `app_mark_follow_up_failed`, `app_update_conversation_status`, `app_reactivate_conversation`)
@@ -54,6 +64,7 @@
 
 ## Onboarding
 - [x] Seed first real tenant into remote Supabase (`tenants` + `tenant_config` rows)
+- [x] **Second tenant — HappyNatyNat** (image consulting / colorimetría, location `X8zdJcQaVckHuF3W4grr`): config + FAQ scraped from site, single "Llamada de diagnóstico" calendar, OAuth installed (incl. `contacts.write`), live on **FB only** (`enabled_channels={facebook}`). Validated end-to-end on Facebook
 - [x] Point tenant's GHL subaccount webhook at the Worker URL
 - [x] End-to-end live test confirmed working — WhatsApp → Worker → GPT-4o-mini → GHL reply
 - [x] Follow-up system live tested — tier 1 sent, tier 2 auto-scheduled, cancel-on-reply confirmed
@@ -63,4 +74,4 @@
 - [x] `updateConversationStatus` usage instructions added to front-desk system prompt
 - [ ] Monitor The Bot Crew setter flow with real leads — review conversation logs and tune paso transitions as needed
 - [ ] Handle the case where a lead reactivates mid-follow-up sequence: currently `reactivateConversation` + `cancelFollowUps` run on inbound, but the front-desk needs to pick up the thread gracefully (history will be there, verify it does)
-- [ ] Think about adding a `handed_off` webhook event handler so human replies get stored in `messages` and AI doesn't re-engage after handoff
+- [x] `handed_off` webhook handling — `outbound-handler.ts` stores human replies in `messages`; `isBotSuppressed` (handed_off OR human-active timer) stops the AI re-engaging; `bot-off` tag gives humans a manual permanent kill switch
