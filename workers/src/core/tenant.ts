@@ -31,3 +31,23 @@ export function channelEnabled(tenant: TenantContext, channel: Channel): boolean
 export function inTestMode(tenant: TenantContext): boolean {
   return (tenant.testContactIds?.length ?? 0) > 0;
 }
+
+/** True if the tenant gates new conversations behind a trigger keyword. */
+export function hasTriggerKeywords(tenant: TenantContext): boolean {
+  return (tenant.triggerKeywords?.length ?? 0) > 0;
+}
+
+/**
+ * Whole-word/phrase, case- and accent-insensitive keyword match. Punctuation is
+ * flattened to spaces and the text is space-padded, so "Agente" matches
+ * "Hola, Agente!" but not "urgente", and phrases like "quiero info" still match.
+ */
+export function messageMatchesTrigger(text: string, keywords: string[]): boolean {
+  const norm = (s: string): string =>
+    ' ' + s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim() + ' ';
+  const hay = norm(text);
+  return keywords.some((kw) => {
+    const needle = norm(kw);
+    return needle.trim().length > 0 && hay.includes(needle);
+  });
+}

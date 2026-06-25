@@ -40,7 +40,7 @@ export async function loadTenantConfig(ghlLocationId: string): Promise<TenantCon
   const { data, error } = await supabase
     .from('tenant_config')
     .select(
-      'business_name, timezone, tone, services, hours, calendars, faq, enabled_roles, prompt_overrides, ai_provider, ai_model, follow_up_tiers, enabled_channels, test_contact_ids, ' +
+      'business_name, timezone, tone, services, hours, calendars, faq, enabled_roles, prompt_overrides, ai_provider, ai_model, follow_up_tiers, enabled_channels, test_contact_ids, trigger_keywords, ' +
         'tenants!inner(id, client_id, ghl_location_id, is_active)',
     )
     .eq('tenants.ghl_location_id', ghlLocationId)
@@ -62,6 +62,7 @@ export async function loadTenantConfig(ghlLocationId: string): Promise<TenantCon
       ? row.enabled_channels.filter((c): c is Channel => validChannels.includes(c as Channel))
       : null,
     testContactIds: row.test_contact_ids ?? null,
+    triggerKeywords: row.trigger_keywords ?? null,
     config: {
       businessName: row.business_name,
       timezone: row.timezone,
@@ -464,6 +465,26 @@ export async function isBotSuppressed(ghlConversationId: string): Promise<boolea
   });
   fail('isBotSuppressed', error);
   return Boolean(data);
+}
+
+/**
+ * Trigger-keyword entry gate (atomic). Given whether the inbound matched a keyword,
+ * returns the activation state for the conversation:
+ *   'already'   → already activated earlier (proceed)
+ *   'activated' → matched now, flag flipped (proceed, first time)
+ *   'gated'     → no match and not yet activated (bot stays out)
+ */
+export async function botActivation(
+  conversationId: string,
+  matched: boolean,
+): Promise<'already' | 'activated' | 'gated'> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase.rpc('app_bot_activation', {
+    p_conversation_id: conversationId,
+    p_matched: matched,
+  });
+  fail('botActivation', error);
+  return (data as 'already' | 'activated' | 'gated' | null) ?? 'gated';
 }
 
 /**

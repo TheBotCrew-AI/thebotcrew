@@ -14,11 +14,12 @@
 
 import type { Agent } from '@mastra/core/agent';
 import { getAiApiKey, getGhlEnv } from '../core/env.js';
-import { channelEnabled, inTestMode, resolveTenant, roleEnabled } from '../core/tenant.js';
+import { channelEnabled, hasTriggerKeywords, inTestMode, messageMatchesTrigger, resolveTenant, roleEnabled } from '../core/tenant.js';
 import { buildAgentRequestContext } from '../core/runtime-context.js';
 import type { AiProvider, ConversationMessage, ConversationStatus, TenantContext, TurnContext } from '../core/types.js';
 import {
   cancelFollowUps,
+  botActivation,
   isBotSuppressed,
   isHumanActive,
   isLatestInboundMessage,
@@ -408,6 +409,22 @@ export async function handleInboundWebhook(
     console.log(`[gate] channel disabled conv=${parsed.conversationId} channel=${parsed.channel}`);
     await logBotEvent(tenant.clientId, parsed.conversationId, 'channel_disabled', { channel: parsed.channel });
     return { status: 200, body: { ignored: 'channel not enabled for tenant', channel: parsed.channel, conversationId } };
+  }
+
+  // Trigger-keyword entry gate: some tenants only let the bot ENTER a conversation
+  // when the first message contains a keyword (e.g. ad CTA "manda Agente"). Once a
+  // conversation is activated it flows normally — the keyword isn't required again.
+  if (hasTriggerKeywords(tenant)) {
+    const matched = messageMatchesTrigger(parsed.text, tenant.triggerKeywords ?? []);
+    const state = await botActivation(conversationId, matched);
+    if (state === 'gated') {
+      console.log(`[gate] trigger keyword required conv=${parsed.conversationId}`);
+      await logBotEvent(tenant.clientId, parsed.conversationId, 'keyword_required', { text: parsed.text.slice(0, 80) });
+      return { status: 200, body: { ignored: 'trigger keyword required', conversationId } };
+    }
+    if (state === 'activated') {
+      await logBotEvent(tenant.clientId, parsed.conversationId, 'bot_activated', { via: 'keyword' });
+    }
   }
 
   if (!messageId) {

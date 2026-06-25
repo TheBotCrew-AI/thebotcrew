@@ -53,6 +53,9 @@ export interface TenantContext {
   enabledChannels: Channel[] | null;
   /** Pre-live test allowlist: when non-empty, reply only to these GHL contact ids. */
   testContactIds: string[] | null;
+  /** Entry-gate keywords: when non-empty, the bot only enters a conversation whose
+   *  first message contains one of these. null/empty = no gating. */
+  triggerKeywords: string[] | null;
   config: RawTenantConfig;
 }
 

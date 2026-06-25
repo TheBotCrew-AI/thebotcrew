@@ -25,6 +25,9 @@ export interface TenantConfigRow {
   enabled_channels: string[] | null;
   /** Pre-live test allowlist: when non-empty, reply only to these GHL contact ids. */
   test_contact_ids: string[] | null;
+  /** Entry-gate keywords: when non-empty, the bot only enters a conversation whose
+   *  first message contains one of these. NULL/empty = no gating. */
+  trigger_keywords: string[] | null;
 }
 
 /** One row returned by app_load_due_follow_ups. */
@@ -130,7 +133,9 @@ export type BotEventType =
   | 'handoff_tag_off'  // `bot-off` tag removed → conversation(s) reactivated
   // Per-tenant gating
   | 'channel_disabled' // inbound channel not in the tenant's enabled_channels
-  | 'test_mode_skip';  // test allowlist active and this contact isn't on it
+  | 'test_mode_skip'   // test allowlist active and this contact isn't on it
+  | 'keyword_required' // trigger keyword gate: message lacked the keyword
+  | 'bot_activated';   // trigger keyword matched → conversation entered the flow
 
 export interface LogAppointmentParams {
   p_client_id: string;

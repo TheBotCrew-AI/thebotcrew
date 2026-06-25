@@ -12,6 +12,7 @@ export const demoTenant: TenantContext = {
   enabledRoles: ['front-desk'],
   enabledChannels: ['whatsapp', 'instagram', 'facebook'],
   testContactIds: null,
+  triggerKeywords: null,
   config: {
     businessName: 'Clínica Demo',
     timezone: 'America/Mexico_City',

@@ -172,7 +172,12 @@ stubbed/logged, not a real outbound call.
     backfilled to all three. Set e.g. `{facebook}` to go live on one channel.
   - `test_contact_ids text[]` — pre-live test allowlist. When non-empty, the bot replies
     **only** to those GHL contact ids, on **any** channel (bypasses the channel gate).
-    Helpers: `channelEnabled` / `inTestMode` (`core/tenant.ts`).
+  - `trigger_keywords text[]` — entry-gate keywords (e.g. ad CTA "manda Agente"). When
+    non-empty, the bot only **enters** a conversation whose message contains a keyword
+    (whole-word/phrase, case- & accent-insensitive). It's an entry gate, not per-message:
+    once activated (`conversations.bot_activated`), the thread flows without the keyword.
+    Helpers: `channelEnabled` / `inTestMode` / `hasTriggerKeywords` / `messageMatchesTrigger`
+    (`core/tenant.ts`); gate order in `webhook-handler.ts`: channel/test → keyword.
 - Open questions (block only the real calls, not the stubbed scaffold): exact inbound
   payload JSON, signature/verification scheme, send-message + calendar endpoints, and the
   **auth model** (agency-level token vs per-location OAuth → whether `tenants.ghl_token_ref`
