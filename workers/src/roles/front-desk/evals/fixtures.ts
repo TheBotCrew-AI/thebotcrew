@@ -10,6 +10,8 @@ export const demoTenant: TenantContext = {
   clientId: 'c_demo',
   ghlLocationId: 'loc_demo_0001',
   enabledRoles: ['front-desk'],
+  enabledChannels: ['whatsapp', 'instagram', 'facebook'],
+  testContactIds: null,
   config: {
     businessName: 'Clínica Demo',
     timezone: 'America/Mexico_City',

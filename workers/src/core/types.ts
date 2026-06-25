@@ -49,6 +49,10 @@ export interface TenantContext {
   clientId: string;
   ghlLocationId: string;
   enabledRoles: string[];
+  /** Channels the bot may reply on. null = none (installed but silent). */
+  enabledChannels: Channel[] | null;
+  /** Pre-live test allowlist: when non-empty, reply only to these GHL contact ids. */
+  testContactIds: string[] | null;
   config: RawTenantConfig;
 }
 

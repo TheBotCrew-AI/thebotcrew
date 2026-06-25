@@ -14,7 +14,7 @@
 
 import type { Agent } from '@mastra/core/agent';
 import { getAiApiKey, getGhlEnv } from '../core/env.js';
-import { resolveTenant, roleEnabled } from '../core/tenant.js';
+import { channelEnabled, inTestMode, resolveTenant, roleEnabled } from '../core/tenant.js';
 import { buildAgentRequestContext } from '../core/runtime-context.js';
 import type { AiProvider, ConversationMessage, ConversationStatus, TenantContext, TurnContext } from '../core/types.js';
 import {
@@ -394,6 +394,21 @@ export async function handleInboundWebhook(
   reactivateConversation(parsed.conversationId).catch((e: unknown) => {
     console.error('[followup] reactivateConversation failed:', e instanceof Error ? e.message : String(e));
   });
+
+  // Per-tenant reply gating (the inbound is already stored — we only gate the reply).
+  // Test mode takes precedence: when an allowlist exists, reply only to those
+  // contacts (any channel). Otherwise the channel must be enabled (null = silent).
+  if (inTestMode(tenant)) {
+    if (!tenant.testContactIds?.includes(parsed.contactId)) {
+      console.log(`[gate] test-mode skip conv=${parsed.conversationId} contact=${parsed.contactId}`);
+      await logBotEvent(tenant.clientId, parsed.conversationId, 'test_mode_skip', { contactId: parsed.contactId });
+      return { status: 200, body: { ignored: 'test mode: contact not in allowlist', conversationId } };
+    }
+  } else if (!channelEnabled(tenant, parsed.channel)) {
+    console.log(`[gate] channel disabled conv=${parsed.conversationId} channel=${parsed.channel}`);
+    await logBotEvent(tenant.clientId, parsed.conversationId, 'channel_disabled', { channel: parsed.channel });
+    return { status: 200, body: { ignored: 'channel not enabled for tenant', channel: parsed.channel, conversationId } };
+  }
 
   if (!messageId) {
     // Shouldn't happen with migration 0011 applied, but fail safe: run immediately without debounce.

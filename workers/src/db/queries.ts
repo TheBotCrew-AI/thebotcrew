@@ -7,7 +7,7 @@
  */
 
 import { getSupabase } from './client.js';
-import type { AiProvider, ConversationMessage, ConversationStatus, FollowUpTier, TenantContext } from '../core/types.js';
+import type { AiProvider, Channel, ConversationMessage, ConversationStatus, FollowUpTier, TenantContext } from '../core/types.js';
 import type { GhlTokenResponse } from '../ghl/oauth.js';
 import type {
   BotEventType,
@@ -40,7 +40,7 @@ export async function loadTenantConfig(ghlLocationId: string): Promise<TenantCon
   const { data, error } = await supabase
     .from('tenant_config')
     .select(
-      'business_name, timezone, tone, services, hours, calendars, faq, enabled_roles, prompt_overrides, ai_provider, ai_model, follow_up_tiers, ' +
+      'business_name, timezone, tone, services, hours, calendars, faq, enabled_roles, prompt_overrides, ai_provider, ai_model, follow_up_tiers, enabled_channels, test_contact_ids, ' +
         'tenants!inner(id, client_id, ghl_location_id, is_active)',
     )
     .eq('tenants.ghl_location_id', ghlLocationId)
@@ -51,11 +51,17 @@ export async function loadTenantConfig(ghlLocationId: string): Promise<TenantCon
 
   const row = data as unknown as TenantConfigRow & { tenants: TenantRow };
   const t = row.tenants;
+  const validChannels: Channel[] = ['whatsapp', 'instagram', 'facebook'];
   return {
     tenantId: t.id,
     clientId: t.client_id,
     ghlLocationId: t.ghl_location_id,
     enabledRoles: row.enabled_roles ?? [],
+    // null stays null (silent); otherwise keep only recognized channels.
+    enabledChannels: row.enabled_channels
+      ? row.enabled_channels.filter((c): c is Channel => validChannels.includes(c as Channel))
+      : null,
+    testContactIds: row.test_contact_ids ?? null,
     config: {
       businessName: row.business_name,
       timezone: row.timezone,

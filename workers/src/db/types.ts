@@ -21,6 +21,10 @@ export interface TenantConfigRow {
   ai_provider: string | null;
   ai_model: string | null;
   follow_up_tiers: unknown;
+  /** Channels the bot may reply on. NULL = none (installed but silent). */
+  enabled_channels: string[] | null;
+  /** Pre-live test allowlist: when non-empty, reply only to these GHL contact ids. */
+  test_contact_ids: string[] | null;
 }
 
 /** One row returned by app_load_due_follow_ups. */
@@ -123,7 +127,10 @@ export type BotEventType =
   | 'run_superseded'   // debounced run skipped: a newer inbound message arrived
   | 'run_suppressed'   // run skipped: human active or handed_off (see metadata.stage)
   | 'handoff_tag_on'   // `bot-off` tag added → conversation(s) handed off
-  | 'handoff_tag_off'; // `bot-off` tag removed → conversation(s) reactivated
+  | 'handoff_tag_off'  // `bot-off` tag removed → conversation(s) reactivated
+  // Per-tenant gating
+  | 'channel_disabled' // inbound channel not in the tenant's enabled_channels
+  | 'test_mode_skip';  // test allowlist active and this contact isn't on it
 
 export interface LogAppointmentParams {
   p_client_id: string;

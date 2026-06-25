@@ -165,6 +165,14 @@ stubbed/logged, not a real outbound call.
   scope** (`ghl/oauth.ts`) — adding it means tenants must re-authorize the Marketplace app.
 - Webhook routes (configure in the Marketplace app): InboundMessage → `/webhooks/ghl`,
   OutboundMessage → `/webhooks/ghl/outbound`, ContactTagUpdate → `/webhooks/ghl/tags`.
+- Per-tenant reply gating (`tenant_config`, enforced in `webhook-handler.ts`; inbound is
+  always stored — only the *reply* is gated):
+  - `enabled_channels text[]` — channels the bot may reply on. **`NULL` = none** (installed
+    but silent; the onboarding default — new rows are born NULL). Existing tenants were
+    backfilled to all three. Set e.g. `{facebook}` to go live on one channel.
+  - `test_contact_ids text[]` — pre-live test allowlist. When non-empty, the bot replies
+    **only** to those GHL contact ids, on **any** channel (bypasses the channel gate).
+    Helpers: `channelEnabled` / `inTestMode` (`core/tenant.ts`).
 - Open questions (block only the real calls, not the stubbed scaffold): exact inbound
   payload JSON, signature/verification scheme, send-message + calendar endpoints, and the
   **auth model** (agency-level token vs per-location OAuth → whether `tenants.ghl_token_ref`
