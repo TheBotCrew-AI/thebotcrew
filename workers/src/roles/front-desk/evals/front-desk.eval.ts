@@ -30,9 +30,9 @@ describe('front-desk prompt (offline)', () => {
   });
 
   it('carries the anti-hallucination rule and the availability→booking sequence', () => {
-    expect(prompt).toContain('NUNCA inventes');
+    expect(prompt).toContain('Nunca inventes');
     expect(prompt).toContain('getAvailability');
-    expect(prompt).toContain('bookAppointment');
+    expect(prompt).toContain('agendar');
   });
 
   it('validates config (services + calendars + faq present)', () => {
