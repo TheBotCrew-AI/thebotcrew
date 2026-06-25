@@ -17,5 +17,5 @@ export const frontDeskRole: Role<FrontDeskConfig> = {
 
 registerRole(frontDeskRole);
 
-export { buildFrontDeskAgent, FRONT_DESK_ROLE, DEFAULT_MODEL } from './agent.js';
+export { buildFrontDeskAgent, FRONT_DESK_ROLE, DEFAULT_PROVIDER, DEFAULT_MODEL } from './agent.js';
 export type { FrontDeskConfig } from './config.js';

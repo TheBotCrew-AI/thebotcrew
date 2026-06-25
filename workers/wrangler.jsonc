@@ -11,6 +11,12 @@
       "enabled": true
     }
   },
+  "triggers": {
+    "crons": [
+      "* * * * *",
+      "*/5 * * * *"
+    ]
+  },
   "main": "./.mastra/output/index.mjs",
   "vars": {},
   "alias": {

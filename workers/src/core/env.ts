@@ -12,7 +12,6 @@
 export interface CoreEnv {
   SUPABASE_URL: string;
   SUPABASE_SERVICE_ROLE_KEY: string;
-  ANTHROPIC_API_KEY: string;
 }
 
 export interface GhlEnv {
@@ -33,7 +32,7 @@ export interface GhlOAuthEnv {
   redirectUri: string;
 }
 
-function required(name: keyof CoreEnv): string {
+function required(name: string): string {
   const value = process.env[name];
   if (!value) {
     throw new Error(`Missing required environment variable: ${name}`);
@@ -45,8 +44,16 @@ export function getCoreEnv(): CoreEnv {
   return {
     SUPABASE_URL: required('SUPABASE_URL'),
     SUPABASE_SERVICE_ROLE_KEY: required('SUPABASE_SERVICE_ROLE_KEY'),
-    ANTHROPIC_API_KEY: required('ANTHROPIC_API_KEY'),
   };
+}
+
+/**
+ * Return the API key for the given AI provider, read from Worker secrets.
+ * Throws if the key for that provider is not set.
+ */
+export function getAiApiKey(provider: import('./types.js').AiProvider): string {
+  const envVar = provider === 'openai' ? 'OPENAI_API_KEY' : 'ANTHROPIC_API_KEY';
+  return required(envVar);
 }
 
 export function getGhlEnv(): GhlEnv {

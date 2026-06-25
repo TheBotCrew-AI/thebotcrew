@@ -8,7 +8,16 @@
 
 export type Direction = 'inbound' | 'outbound';
 export type SenderType = 'lead' | 'bot' | 'human_agent';
-export type Channel = 'whatsapp' | 'instagram';
+export type Channel = 'whatsapp' | 'instagram' | 'facebook';
+export type AiProvider = 'openai' | 'anthropic';
+export type ConversationStatus = 'active' | 'handed_off' | 'completed' | 'opted_out' | 'standby';
+
+export interface FollowUpTier {
+  tier: number;
+  delayMinutes: number;
+  /** Short prompt describing the angle/hook for the reactivation message. */
+  angle: string;
+}
 
 /**
  * Raw per-tenant config as stored in `tenant_config` (jsonb fields arrive parsed).
@@ -23,6 +32,12 @@ export interface RawTenantConfig {
   calendars: unknown;
   faq: unknown;
   promptOverrides: unknown;
+  /** Overrides the platform-default provider (env-driven). */
+  provider?: AiProvider | null;
+  /** Overrides the platform-default model for this tenant. */
+  model?: string | null;
+  /** Configures follow-up tiers; null/absent means no follow-ups. */
+  followUpTiers?: FollowUpTier[] | null;
 }
 
 /**

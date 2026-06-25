@@ -20,6 +20,8 @@ const SCOPES = [
   'conversations/message.write',
   'calendars/events.write',
   'contacts.readonly',
+  // Required to write the `bot-off` / status tags back onto the GHL contact.
+  'contacts.write',
 ].join(' ');
 
 export interface GhlTokenResponse {

@@ -5,8 +5,10 @@
 SUPABASE_URL="http://127.0.0.1:54321"
 SUPABASE_SERVICE_ROLE_KEY="<local-service-role-key-from-`supabase start`>"
 
-# Anthropic — model provider for the agents.
-ANTHROPIC_API_KEY="sk-ant-..."
+# AI providers — set whichever you have. Default provider is OpenAI (gpt-4o-mini).
+# Per-tenant overrides are stored in tenant_config.ai_provider / ai_model.
+OPENAI_API_KEY="sk-..."
+# ANTHROPIC_API_KEY="sk-ant-..."
 
 # GoHighLevel — outbound transport + calendar. Endpoints/auth model still TBD.
 GHL_API_BASE="https://services.leadconnectorhq.com"
@@ -14,3 +16,9 @@ GHL_WEBHOOK_SECRET="<shared-secret-or-signing-key-for-inbound-verification>"
 # TODO(GHL auth): single agency token vs per-location OAuth. If per-tenant, this is the
 # fallback/agency token and per-tenant tokens are resolved via tenants.ghl_token_ref.
 GHL_API_TOKEN="<ghl-api-token>"
+
+# Delivery retry cron — the scheduled event self-calls this endpoint.
+# WORKER_URL is the deployed Worker URL (e.g. https://thebotcrew-agents.workers.dev).
+# INTERNAL_CRON_SECRET is any strong random secret; generate with: openssl rand -hex 32
+WORKER_URL="http://localhost:4111"
+INTERNAL_CRON_SECRET="<random-secret>"

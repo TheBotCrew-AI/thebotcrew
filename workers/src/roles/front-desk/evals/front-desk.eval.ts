@@ -16,12 +16,12 @@ import { buildFrontDeskInstructions } from '../prompt.js';
 import { parseFrontDeskConfig } from '../config.js';
 import { buildFrontDeskAgent, DEFAULT_MODEL } from '../agent.js';
 import { buildAgentRequestContext } from '../../../core/runtime-context.js';
-import type { TurnContext } from '../../../core/types.js';
+import type { AiProvider, TurnContext } from '../../../core/types.js';
 import { demoTenant } from './fixtures.js';
 
 describe('front-desk prompt (offline)', () => {
   const config = parseFrontDeskConfig(demoTenant.config);
-  const prompt = buildFrontDeskInstructions(config);
+  const prompt = buildFrontDeskInstructions(config, new Date().toISOString());
 
   it('fills the business name and services from config', () => {
     expect(prompt).toContain('Clínica Demo');
@@ -48,16 +48,20 @@ const turn: TurnContext = {
   channel: 'whatsapp',
 };
 
+const evalProvider: AiProvider = process.env.ANTHROPIC_API_KEY ? 'anthropic' : 'openai';
+const evalApiKey = process.env.ANTHROPIC_API_KEY ?? process.env.OPENAI_API_KEY ?? '';
+
 function evalRequestContext() {
   return buildAgentRequestContext({
     tenant: demoTenant,
     turn,
+    provider: evalProvider,
     model: DEFAULT_MODEL,
-    anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? '',
+    llmApiKey: evalApiKey,
   });
 }
 
-describe.skipIf(!process.env.ANTHROPIC_API_KEY)('front-desk agent (live)', () => {
+describe.skipIf(!evalApiKey)('front-desk agent (live)', () => {
   it('responds in Spanish to a qualification opener', async () => {
     const agent = buildFrontDeskAgent();
     const res = await agent.generate('Hola, ¿qué servicios ofrecen?', {

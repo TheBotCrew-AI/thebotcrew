@@ -7,16 +7,21 @@
  */
 
 import { getSupabase } from './client.js';
-import type { ConversationMessage, TenantContext } from '../core/types.js';
+import type { AiProvider, ConversationMessage, ConversationStatus, FollowUpTier, TenantContext } from '../core/types.js';
 import type { GhlTokenResponse } from '../ghl/oauth.js';
 import type {
+  BotEventType,
+  DueFollowUp,
   LogAppointmentParams,
   LogEventParams,
   LogMessageParams,
+  LogMessageResult,
   MessageRow,
   OAuthTokenRow,
+  PendingDelivery,
   TenantConfigRow,
   TenantRow,
+  UpsertHumanAgentParams,
 } from './types.js';
 
 function fail(scope: string, error: { message: string } | null): void {
@@ -35,7 +40,7 @@ export async function loadTenantConfig(ghlLocationId: string): Promise<TenantCon
   const { data, error } = await supabase
     .from('tenant_config')
     .select(
-      'business_name, timezone, tone, services, hours, calendars, faq, enabled_roles, prompt_overrides, ' +
+      'business_name, timezone, tone, services, hours, calendars, faq, enabled_roles, prompt_overrides, ai_provider, ai_model, follow_up_tiers, ' +
         'tenants!inner(id, client_id, ghl_location_id, is_active)',
     )
     .eq('tenants.ghl_location_id', ghlLocationId)
@@ -60,6 +65,11 @@ export async function loadTenantConfig(ghlLocationId: string): Promise<TenantCon
       calendars: row.calendars,
       faq: row.faq,
       promptOverrides: row.prompt_overrides,
+      provider: (row.ai_provider as AiProvider) ?? undefined,
+      model: row.ai_model ?? undefined,
+      followUpTiers: Array.isArray(row.follow_up_tiers)
+        ? (row.follow_up_tiers as FollowUpTier[])
+        : null,
     },
   };
 }
@@ -96,12 +106,84 @@ export async function loadRecentMessages(
     }));
 }
 
-/** Upsert the conversation + insert one message. Returns our conversation uuid. */
-export async function logMessage(params: LogMessageParams): Promise<{ conversationId: string }> {
+/**
+ * Upsert the conversation + insert one message.
+ * Returns null conversationId/messageId when an inbound message with the same
+ * ghl_message_id was already processed (duplicate webhook) — callers must abort.
+ * Outbound bot messages get delivery_status='pending'; messageId is needed for
+ * markDelivered() once GHL confirms receipt.
+ */
+export async function logMessage(params: LogMessageParams): Promise<LogMessageResult> {
   const supabase = getSupabase();
   const { data, error } = await supabase.rpc('app_log_message', params);
   fail('logMessage', error);
-  return { conversationId: data as string };
+  const result = data as { conversation_id: string; message_id: string } | null;
+  return {
+    conversationId: result?.conversation_id ?? null,
+    messageId: result?.message_id ?? null,
+  };
+}
+
+/** Mark an outbound bot message as delivered. Fire-and-forget safe. */
+export async function markDelivered(messageId: string): Promise<void> {
+  const supabase = getSupabase();
+  const { error } = await supabase.rpc('app_mark_delivered', { p_message_id: messageId });
+  fail('markDelivered', error);
+}
+
+/**
+ * Store the GHL-assigned message ID on a bot outbound message.
+ * Called right after sendMessage() returns so the outbound webhook echo
+ * can be identified and ignored by isBotMessageById().
+ */
+export async function setGhlMessageId(messageId: string, ghlMessageId: string): Promise<void> {
+  const supabase = getSupabase();
+  const { error } = await supabase
+    .from('messages')
+    .update({ ghl_message_id: ghlMessageId })
+    .eq('id', messageId);
+  fail('setGhlMessageId', error);
+}
+
+/** Mark an outbound bot message as permanently failed (retries exhausted). */
+export async function markDeliveryFailed(messageId: string): Promise<void> {
+  const supabase = getSupabase();
+  const { error } = await supabase.rpc('app_mark_delivery_failed', { p_message_id: messageId });
+  fail('markDeliveryFailed', error);
+}
+
+/** Increment the retry counter for a message before each cron retry attempt. */
+export async function incrementRetryCount(messageId: string): Promise<void> {
+  const supabase = getSupabase();
+  const { error } = await supabase.rpc('app_increment_retry_count', { p_message_id: messageId });
+  fail('incrementRetryCount', error);
+}
+
+/** Load outbound bot messages pending delivery (>30s old, <3 cron retries). */
+export async function loadPendingDeliveries(limit = 20): Promise<PendingDelivery[]> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase.rpc('app_load_pending_deliveries', { p_limit: limit });
+  fail('loadPendingDeliveries', error);
+  type Row = {
+    message_id: string;
+    content: string;
+    channel: string;
+    ghl_conversation_id: string;
+    ghl_contact_id: string;
+    contact_phone: string | null;
+    tenant_id: string;
+    retry_count: number;
+  };
+  return ((data ?? []) as Row[]).map((r) => ({
+    messageId: r.message_id,
+    content: r.content,
+    channel: r.channel,
+    ghlConversationId: r.ghl_conversation_id,
+    ghlContactId: r.ghl_contact_id,
+    contactPhone: r.contact_phone,
+    tenantId: r.tenant_id,
+    retryCount: r.retry_count,
+  }));
 }
 
 /** Record an appointment action (booked / rescheduled / cancelled). Returns appt uuid. */
@@ -120,6 +202,26 @@ export async function logEvent(params: LogEventParams): Promise<{ eventId: strin
   return { eventId: data as string };
 }
 
+/**
+ * Fire-and-forget error logger — writes to bot_events, never throws.
+ * Use in catch blocks so observability failures never mask the original error.
+ */
+export function logError(
+  clientId: string,
+  ghlConversationId: string,
+  type: 'agent_error' | 'delivery_error' | 'db_error',
+  metadata: Record<string, unknown>,
+): void {
+  logEvent({
+    p_client_id: clientId,
+    p_ghl_conversation_id: ghlConversationId,
+    p_event_type: type,
+    p_metadata: metadata,
+  }).catch((err) => {
+    console.error('[logError] failed to write error event:', err instanceof Error ? err.message : String(err));
+  });
+}
+
 /** Mark a conversation as handed off to a human (pauses the AI for that thread). */
 export async function setHandoff(ghlConversationId: string): Promise<void> {
   const supabase = getSupabase();
@@ -127,6 +229,47 @@ export async function setHandoff(ghlConversationId: string): Promise<void> {
     p_ghl_conversation_id: ghlConversationId,
   });
   fail('setHandoff', error);
+}
+
+/**
+ * Tag-driven kill switch: set (off=true) or clear (off=false) handed_off for
+ * every conversation belonging to a GHL contact. Contact-scoped because the
+ * GHL ContactTagUpdate webhook carries no conversationId. Returns the number of
+ * conversations whose status actually changed.
+ */
+export async function setBotOffByContact(ghlContactId: string, off: boolean): Promise<number> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase.rpc('app_set_bot_off_by_contact', {
+    p_ghl_contact_id: ghlContactId,
+    p_off: off,
+  });
+  fail('setBotOffByContact', error);
+  return (data as number | null) ?? 0;
+}
+
+/**
+ * Observability event (run outcome, suppression, …). Never throws — swallows its
+ * own errors. AWAIT it in request handlers: on Cloudflare a detached promise is
+ * killed once the response is sent (no waitUntil in the route), so fire-and-forget
+ * would silently drop the event.
+ * Pass an empty ghlConversationId for contact-level events with no conversation.
+ */
+export async function logBotEvent(
+  clientId: string,
+  ghlConversationId: string,
+  eventType: BotEventType,
+  metadata: Record<string, unknown> = {},
+): Promise<void> {
+  try {
+    await logEvent({
+      p_client_id: clientId,
+      p_ghl_conversation_id: ghlConversationId,
+      p_event_type: eventType,
+      p_metadata: metadata,
+    });
+  } catch (err) {
+    console.error('[logBotEvent] failed to write event:', err instanceof Error ? err.message : String(err));
+  }
 }
 
 /** Upsert a tenant's GHL OAuth tokens (insert on first install, update on refresh). */
@@ -160,14 +303,186 @@ export async function getOAuthToken(tenantId: string): Promise<OAuthTokenRow | n
   return (data as OAuthTokenRow | null);
 }
 
-/** Is this conversation currently owned by a human? (AI should stay silent.) */
-export async function isHandedOff(ghlConversationId: string): Promise<boolean> {
+/**
+ * Returns true when messageId is still the last inbound message logged for
+ * this conversation. Used by the debounce gate: if another message arrived
+ * during the delay, this returns false and the caller should skip the agent run.
+ */
+export async function isLatestInboundMessage(
+  conversationId: string,
+  messageId: string,
+): Promise<boolean> {
   const supabase = getSupabase();
   const { data, error } = await supabase
     .from('conversations')
-    .select('status')
-    .eq('ghl_conversation_id', ghlConversationId)
+    .select('last_inbound_message_id')
+    .eq('id', conversationId)
     .maybeSingle();
-  fail('isHandedOff', error);
-  return (data as { status?: string } | null)?.status === 'handed_off';
+  fail('isLatestInboundMessage', error);
+  return (data as { last_inbound_message_id: string | null } | null)?.last_inbound_message_id === messageId;
+}
+
+
+/** Cancel all pending follow-ups for a conversation. Call on every inbound message. */
+export async function cancelFollowUps(conversationId: string): Promise<void> {
+  const supabase = getSupabase();
+  const { error } = await supabase.rpc('app_cancel_follow_ups', {
+    p_conversation_id: conversationId,
+  });
+  fail('cancelFollowUps', error);
+}
+
+/**
+ * Schedule a follow-up for a conversation. Returns the new follow-up id, or null
+ * if the conversation is not active (the RPC no-ops for non-active conversations).
+ */
+export async function scheduleFollowUp(
+  conversationId: string,
+  tier: number,
+  delayMinutes: number,
+): Promise<string | null> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase.rpc('app_schedule_follow_up', {
+    p_conversation_id: conversationId,
+    p_tier: tier,
+    p_delay_minutes: delayMinutes,
+  });
+  fail('scheduleFollowUp', error);
+  return (data as string | null) ?? null;
+}
+
+/** Load follow-ups that are due and ready to be sent. */
+export async function loadDueFollowUps(limit = 20): Promise<DueFollowUp[]> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase.rpc('app_load_due_follow_ups', { p_limit: limit });
+  fail('loadDueFollowUps', error);
+  type Row = {
+    follow_up_id: string;
+    conversation_id: string;
+    ghl_conversation_id: string;
+    ghl_contact_id: string;
+    contact_phone: string | null;
+    channel: string;
+    tier: number;
+    ghl_location_id: string;
+  };
+  return ((data ?? []) as Row[]).map((r) => ({
+    followUpId: r.follow_up_id,
+    conversationId: r.conversation_id,
+    ghlConversationId: r.ghl_conversation_id,
+    ghlContactId: r.ghl_contact_id,
+    contactPhone: r.contact_phone,
+    channel: r.channel,
+    tier: r.tier,
+    ghlLocationId: r.ghl_location_id,
+  }));
+}
+
+/** Mark a follow-up as successfully sent. */
+export async function markFollowUpSent(followUpId: string): Promise<void> {
+  const supabase = getSupabase();
+  const { error } = await supabase.rpc('app_mark_follow_up_sent', { p_follow_up_id: followUpId });
+  fail('markFollowUpSent', error);
+}
+
+/** Mark a follow-up as permanently failed. */
+export async function markFollowUpFailed(followUpId: string): Promise<void> {
+  const supabase = getSupabase();
+  const { error } = await supabase.rpc('app_mark_follow_up_failed', { p_follow_up_id: followUpId });
+  fail('markFollowUpFailed', error);
+}
+
+/**
+ * Update conversation status and atomically cancel any pending follow-ups.
+ * Called by the front-desk updateConversationStatus tool.
+ */
+export async function updateConversationStatus(
+  ghlConversationId: string,
+  status: ConversationStatus,
+): Promise<void> {
+  const supabase = getSupabase();
+  const { error } = await supabase.rpc('app_update_conversation_status', {
+    p_ghl_conversation_id: ghlConversationId,
+    p_status: status,
+  });
+  fail('updateConversationStatus', error);
+}
+
+/**
+ * Upsert a human agent by their GHL user id.
+ * Fast path: ghl_user_id already in DB → update name/email and return id.
+ * Slow path: insert new row (called after fetching from GHL Users API).
+ * Returns the human_agents UUID.
+ */
+export async function upsertHumanAgent(params: UpsertHumanAgentParams): Promise<string> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase.rpc('app_upsert_human_agent', params);
+  fail('upsertHumanAgent', error);
+  return data as string;
+}
+
+/** Look up a human_agents row by ghl_user_id. Returns null if not yet in our DB. */
+export async function findHumanAgentByGhlId(ghlUserId: string): Promise<string | null> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from('human_agents')
+    .select('id')
+    .eq('ghl_user_id', ghlUserId)
+    .maybeSingle();
+  fail('findHumanAgentByGhlId', error);
+  return (data as { id: string } | null)?.id ?? null;
+}
+
+/**
+ * Set or refresh the human-active timer for a conversation.
+ * Called on every human agent outbound message — slides the window.
+ */
+export async function setHumanActive(ghlConversationId: string, minutes = 5): Promise<void> {
+  const supabase = getSupabase();
+  const { error } = await supabase.rpc('app_set_human_active', {
+    p_ghl_conversation_id: ghlConversationId,
+    p_minutes: minutes,
+  });
+  fail('setHumanActive', error);
+}
+
+/**
+ * Returns true if the bot should stay silent for this conversation:
+ *   - manually handed off (permanent, until released), OR
+ *   - human-active timer is still running (auto-expires after 5 min of no human messages).
+ */
+export async function isBotSuppressed(ghlConversationId: string): Promise<boolean> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase.rpc('app_is_bot_suppressed', {
+    p_ghl_conversation_id: ghlConversationId,
+  });
+  fail('isBotSuppressed', error);
+  return Boolean(data);
+}
+
+/**
+ * Check if a GHL message ID belongs to a bot message in our DB.
+ * Belt-and-suspenders guard in the outbound handler — primary filter is source==='api'.
+ */
+export async function isBotMessageById(ghlMessageId: string): Promise<boolean> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from('messages')
+    .select('sender_type')
+    .eq('ghl_message_id', ghlMessageId)
+    .maybeSingle();
+  fail('isBotMessageById', error);
+  return (data as { sender_type?: string } | null)?.sender_type === 'bot';
+}
+
+/**
+ * Reactivate a conversation to 'active' when the lead messages again.
+ * Only fires if the conversation is in standby/completed/opted_out.
+ */
+export async function reactivateConversation(ghlConversationId: string): Promise<void> {
+  const supabase = getSupabase();
+  const { error } = await supabase.rpc('app_reactivate_conversation', {
+    p_ghl_conversation_id: ghlConversationId,
+  });
+  fail('reactivateConversation', error);
 }

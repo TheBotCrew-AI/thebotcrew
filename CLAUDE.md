@@ -78,7 +78,7 @@ workers/                       # Mastra + Cloudflare Worker package (@thebotcrew
       front-desk/              # config (zod), prompt (es template), agent, tools/, evals/
     ghl/                       # webhook parse/verify + transport-only API client (stubbed, typed)
     db/                        # service-role Supabase client, queries (config read + RPC writes)
-    worker/                    # webhook-handler.ts orchestration
+    worker/                    # webhook-handler (inbound) + outbound-handler (human takeover) + tag-handler (bot-off) + delivery-retry + followup-runner
   scripts/simulate-webhook.mjs # local dev: fire a fake GHL webhook
   fixtures/                    # sample webhook payloads
   wrangler.jsonc, vitest.config.ts, tsconfig.json
@@ -137,7 +137,7 @@ stubbed/logged, not a real outbound call.
 - Reliability is a first-class feature (we moved off n8n for exactly this reason).
 - Every role ships with eval cases (under `roles/<role>/evals/`): qualification, booking,
   and anti-hallucination. Offline cases always run; live (model-calling) cases run only
-  when `ANTHROPIC_API_KEY` is set.
+  when `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` is set (eval picks whichever is present).
 - Run before any change to a role's prompt or tools: `pnpm eval`.
 
 ### Deploy
@@ -150,6 +150,21 @@ stubbed/logged, not a real outbound call.
 - Inbound: parse the webhook payload; the subaccount/location id identifies the tenant.
 - Outbound: send replies and create bookings via the GHL API. **Transport only** — we do
   NOT read conversation history from GHL (it lives in our DB).
+- Channels: FB / IG / WhatsApp all work. Inbound channel comes from the webhook
+  `messageType` (`FB`/`IG`/`WhatsApp`, normalized in `ghl/webhook.ts`); outbound sends with
+  the matching `type`. FB/IG have no phone — delivery routes by `contactId`, and a real
+  inbound (FB/IG/WhatsApp messaging window) must be open for GHL to deliver.
+- Human takeover (hybrid): a human reply (`source:'app'` outbound webhook) opens a 5-min
+  sliding pause; `status='handed_off'` is a permanent pause. Both are enforced by
+  `isBotSuppressed`, re-checked again right before send (anti-double-message).
+- Tag kill switch: the `bot-off` tag on a GHL contact = permanent handoff; removing it
+  resumes the bot (no `bot-on` tag — absence means on). Wired via the **ContactTagUpdate**
+  webhook → `/webhooks/ghl/tags` → `worker/tag-handler.ts` (contact-scoped: resolves by
+  `ghl_contact_id`). The bot also writes tags when IT sets a status (`ghl/tags.ts`
+  `STATUS_TAGS`), so state stays visible/synced in GHL. **Requires the `contacts.write`
+  scope** (`ghl/oauth.ts`) — adding it means tenants must re-authorize the Marketplace app.
+- Webhook routes (configure in the Marketplace app): InboundMessage → `/webhooks/ghl`,
+  OutboundMessage → `/webhooks/ghl/outbound`, ContactTagUpdate → `/webhooks/ghl/tags`.
 - Open questions (block only the real calls, not the stubbed scaffold): exact inbound
   payload JSON, signature/verification scheme, send-message + calendar endpoints, and the
   **auth model** (agency-level token vs per-location OAuth → whether `tenants.ghl_token_ref`
@@ -158,10 +173,13 @@ stubbed/logged, not a real outbound call.
 
 ## Models
 
-- Default front-desk model: `claude-sonnet-4-6` (`DEFAULT_MODEL` in
-  `roles/front-desk/agent.ts`), resolved per request via `@ai-sdk/anthropic` with the key
-  read from the Worker env (not implicit process env — required for Workers). Overridable
-  per tenant later.
+- Provider and model are per-tenant, with platform-level defaults (`DEFAULT_PROVIDER` /
+  `DEFAULT_MODEL` in `roles/front-desk/agent.ts`).
+- Platform default: `openai` / `gpt-4o-mini`. Per-tenant override stored in
+  `tenant_config.ai_provider` + `tenant_config.ai_model`.
+- Both `@ai-sdk/openai` and `@ai-sdk/anthropic` are installed. The agent creates the right
+  provider at request time via `getAiApiKey(provider)` reading `OPENAI_API_KEY` or
+  `ANTHROPIC_API_KEY` from Worker secrets. Keys never touch the DB.
 
 ## Working with me (Leo)
 

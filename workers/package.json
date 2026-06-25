@@ -13,8 +13,10 @@
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.81",
+    "@ai-sdk/openai": "^3.0.69",
     "@mastra/core": "^1.41.0",
     "@supabase/supabase-js": "^2.107.0",
+    "ai": "^6.0.205",
     "zod": "^4.4.3"
   },
   "devDependencies": {

@@ -8,15 +8,16 @@
  */
 
 import { RequestContext } from '@mastra/core/request-context';
-import type { TenantContext, TurnContext } from './types.js';
+import type { AiProvider, TenantContext, TurnContext } from './types.js';
 
 export interface AgentRequestValues {
   tenant: TenantContext;
   turn: TurnContext;
-  /** Model id, e.g. 'claude-sonnet-4-6'. */
+  provider: AiProvider;
   model: string;
-  /** Anthropic API key, read from the Worker env at request time. */
-  anthropicApiKey: string;
+  llmApiKey: string;
+  /** Set for reactivation agent runs; undefined for front-desk runs. */
+  reactivationAngle?: string;
 }
 
 export type AgentRequestContext = RequestContext<AgentRequestValues>;
@@ -25,7 +26,11 @@ export function buildAgentRequestContext(values: AgentRequestValues): AgentReque
   const ctx = new RequestContext<AgentRequestValues>();
   ctx.set('tenant', values.tenant);
   ctx.set('turn', values.turn);
+  ctx.set('provider', values.provider);
   ctx.set('model', values.model);
-  ctx.set('anthropicApiKey', values.anthropicApiKey);
+  ctx.set('llmApiKey', values.llmApiKey);
+  if (values.reactivationAngle !== undefined) {
+    ctx.set('reactivationAngle', values.reactivationAngle);
+  }
   return ctx;
 }

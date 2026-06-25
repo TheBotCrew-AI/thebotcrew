@@ -25,7 +25,7 @@ export const getAvailabilityTool = createTool({
     note: z.string().optional(),
   }),
   execute: async ({ serviceName, fromDate, toDate }, ctx) => {
-    const { config } = resolveAgentContext(ctx);
+    const { tenant, config } = resolveAgentContext(ctx);
     const calendarId = config.calendars[serviceName];
     if (!calendarId) {
       return {
@@ -37,11 +37,15 @@ export const getAvailabilityTool = createTool({
     const from = fromDate ?? new Date().toISOString();
     const to = toDate ?? new Date(Date.now() + SEVEN_DAYS_MS).toISOString();
 
-    const ghl = new GhlClient();
-    const slots = await ghl.getAvailability(calendarId, from, to);
-    return {
-      slots,
-      note: slots.length === 0 ? 'Sin disponibilidad en el rango consultado (o integración GHL pendiente).' : undefined,
-    };
+    const ghl = new GhlClient(tenant.tenantId);
+    try {
+      const slots = await ghl.getAvailability(calendarId, from, to);
+      return {
+        slots,
+        note: slots.length === 0 ? 'Sin disponibilidad en el rango consultado.' : undefined,
+      };
+    } catch {
+      return { slots: [], note: 'No se pudo consultar disponibilidad en este momento.' };
+    }
   },
 });

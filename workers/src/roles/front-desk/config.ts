@@ -24,6 +24,21 @@ export const hoursSchema = z.record(z.string(), dayHoursSchema);
 
 export const faqSchema = z.array(z.object({ q: z.string(), a: z.string() }));
 
+export const promptOverridesSchema = z.object({
+  /** Replaces the opening identity line. Use to disclose AI nature, role, and channels. */
+  identity: z.string().optional(),
+  /** Replaces the services section. Use for rich offering/pricing descriptions. */
+  offering: z.string().optional(),
+  /** Appended after the built-in qualification flow. Use for tenant-specific instructions. */
+  qualificationNotes: z.string().optional(),
+  /**
+   * Per-tool business rules, keyed by tool id (e.g. "getAvailability").
+   * Injected as a dedicated prompt section so the agent knows how to interpret
+   * and present each tool's results for this specific tenant.
+   */
+  toolInstructions: z.record(z.string(), z.string()).default({}),
+});
+
 export const frontDeskConfigSchema = z.object({
   businessName: z.string().min(1),
   timezone: z.string().min(1),
@@ -33,10 +48,12 @@ export const frontDeskConfigSchema = z.object({
   /** Map of service name -> GHL calendar id. */
   calendars: z.record(z.string(), z.string()).default({}),
   faq: faqSchema.default([]),
+  promptOverrides: promptOverridesSchema.default({ toolInstructions: {} }),
 });
 
 export type FrontDeskConfig = z.infer<typeof frontDeskConfigSchema>;
 export type FrontDeskService = z.infer<typeof serviceSchema>;
+export type PromptOverrides = z.infer<typeof promptOverridesSchema>;
 
 /** Validate + narrow the raw tenant config into the front-desk shape. */
 export function parseFrontDeskConfig(raw: RawTenantConfig): FrontDeskConfig {
@@ -48,5 +65,6 @@ export function parseFrontDeskConfig(raw: RawTenantConfig): FrontDeskConfig {
     hours: raw.hours,
     calendars: raw.calendars,
     faq: raw.faq,
+    promptOverrides: raw.promptOverrides ?? {},
   });
 }

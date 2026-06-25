@@ -8,18 +8,20 @@
  */
 
 import { Agent } from '@mastra/core/agent';
+import { createOpenAI } from '@ai-sdk/openai';
 import { createAnthropic } from '@ai-sdk/anthropic';
-import type { TenantContext } from '../../core/types.js';
+import type { AiProvider, TenantContext } from '../../core/types.js';
 import { buildFrontDeskInstructions } from './prompt.js';
 import { parseFrontDeskConfig } from './config.js';
 import { lookupFaqTool } from './tools/lookup-faq.js';
 import { getAvailabilityTool } from './tools/get-availability.js';
 import { bookAppointmentTool } from './tools/book-appointment.js';
+import { updateConversationStatusTool } from './tools/update-conversation-status.js';
 
 export const FRONT_DESK_ROLE = 'front-desk';
 
-/** Production default. Overridable per tenant later via config/request context. */
-export const DEFAULT_MODEL = 'claude-sonnet-4-6';
+export const DEFAULT_PROVIDER: AiProvider = 'openai';
+export const DEFAULT_MODEL = 'gpt-4o-mini';
 
 export function buildFrontDeskAgent(): Agent {
   return new Agent({
@@ -28,17 +30,24 @@ export function buildFrontDeskAgent(): Agent {
     description: 'Recepcionista virtual multi-tenant: califica leads, responde FAQ y agenda citas.',
     instructions: ({ requestContext }) => {
       const tenant = requestContext.get('tenant') as TenantContext;
-      return buildFrontDeskInstructions(parseFrontDeskConfig(tenant.config));
+      const config = parseFrontDeskConfig(tenant.config);
+      const nowLocal = new Date()
+        .toLocaleString('sv-SE', { timeZone: config.timezone })
+        .replace(' ', 'T');
+      return buildFrontDeskInstructions(config, nowLocal);
     },
     model: ({ requestContext }) => {
-      const apiKey = requestContext.get('anthropicApiKey') as string;
+      const provider = requestContext.get('provider') as AiProvider;
+      const apiKey = requestContext.get('llmApiKey') as string;
       const modelId = requestContext.get('model') as string;
-      return createAnthropic({ apiKey })(modelId);
+      if (provider === 'anthropic') return createAnthropic({ apiKey })(modelId);
+      return createOpenAI({ apiKey })(modelId);
     },
     tools: {
       lookupFaq: lookupFaqTool,
       getAvailability: getAvailabilityTool,
       bookAppointment: bookAppointmentTool,
+      updateConversationStatus: updateConversationStatusTool,
     },
   });
 }

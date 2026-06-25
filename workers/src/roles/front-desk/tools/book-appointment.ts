@@ -30,30 +30,38 @@ export const bookAppointmentTool = createTool({
       return { booked: false, message: `No tengo un calendario para "${serviceName}".` };
     }
 
-    const ghl = new GhlClient();
-    const { ghlAppointmentId } = await ghl.bookAppointment({
-      calendarId,
-      contactId: turn.ghlContactId,
-      startTime,
-      title: serviceName,
-    });
+    let ghlAppointmentId: string | undefined;
+    try {
+      const ghl = new GhlClient(tenant.tenantId);
+      ({ ghlAppointmentId } = await ghl.bookAppointment({
+        calendarId,
+        locationId: tenant.ghlLocationId,
+        contactId: turn.ghlContactId,
+        startTime,
+        title: serviceName,
+      }));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('[bookAppointment] GHL call failed:', msg);
+      return { booked: false, message: 'No se pudo confirmar la cita en este momento. Intenta de nuevo o contacta al equipo.' };
+    }
 
-    // Record to our stats/proof layer (existing RPCs).
-    await logAppointment({
+    // Record to our stats/proof layer — fire-and-forget, don't fail the tool on log errors.
+    logAppointment({
       p_client_id: tenant.clientId,
       p_ghl_contact_id: turn.ghlContactId,
       p_action: 'booked',
       p_appointment_datetime: startTime,
       p_service_type: serviceName,
       p_source: 'front-desk',
-      p_ghl_appointment_id: ghlAppointmentId,
-    });
-    await logEvent({
+      p_ghl_appointment_id: ghlAppointmentId ?? null,
+    }).catch((e: unknown) => console.error('[bookAppointment] logAppointment failed:', e));
+    logEvent({
       p_client_id: tenant.clientId,
       p_ghl_conversation_id: turn.ghlConversationId,
       p_event_type: 'lead_qualified',
       p_metadata: { service: serviceName, startTime },
-    });
+    }).catch((e: unknown) => console.error('[bookAppointment] logEvent failed:', e));
 
     return {
       booked: true,
