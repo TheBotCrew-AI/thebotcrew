@@ -461,6 +461,24 @@ export async function isBotSuppressed(ghlConversationId: string): Promise<boolea
 }
 
 /**
+ * Returns true only if a HUMAN is actively handling the thread (sliding timer).
+ * Unlike isBotSuppressed, this ignores `handed_off` — used for the post-generate
+ * anti-double check so the agent's OWN self-handoff (which sets handed_off during
+ * generation) doesn't suppress its own farewell message.
+ */
+export async function isHumanActive(ghlConversationId: string): Promise<boolean> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from('conversations')
+    .select('human_active_until')
+    .eq('ghl_conversation_id', ghlConversationId)
+    .maybeSingle();
+  fail('isHumanActive', error);
+  const until = (data as { human_active_until: string | null } | null)?.human_active_until;
+  return until != null && new Date(until).getTime() > Date.now();
+}
+
+/**
  * Check if a GHL message ID belongs to a bot message in our DB.
  * Belt-and-suspenders guard in the outbound handler — primary filter is source==='api'.
  */

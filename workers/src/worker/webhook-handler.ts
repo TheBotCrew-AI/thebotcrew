@@ -20,6 +20,7 @@ import type { AiProvider, ConversationMessage, ConversationStatus, TenantContext
 import {
   cancelFollowUps,
   isBotSuppressed,
+  isHumanActive,
   isLatestInboundMessage,
   loadRecentMessages,
   logBotEvent,
@@ -244,11 +245,12 @@ async function runAgentTurn({
     ? (steps.slice().reverse().find((s) => s.text?.trim())?.text?.trim() ?? result.text)
     : result.text;
 
-  // Anti-double guard: a human may have taken over (handed_off or sent a message)
-  // WHILE we were generating. Re-check before doing anything outward-facing. We
-  // bail BEFORE logging the outbound, so the cron never finds a pending row to
-  // re-send — and BEFORE touching status, so we don't clobber the handoff.
-  if (await isBotSuppressed(parsed.conversationId)) {
+  // Anti-double guard: a HUMAN may have replied in GHL WHILE we were generating.
+  // Re-check before sending so we don't talk over them. We bail BEFORE logging the
+  // outbound, so the delivery cron never finds a pending row to re-send.
+  // Note: we check isHumanActive (not isBotSuppressed) on purpose — the agent's OWN
+  // self-handoff sets handed_off during generation, and its farewell SHOULD still go out.
+  if (await isHumanActive(parsed.conversationId)) {
     console.log(`[agent] drop reply conv=${parsed.conversationId} — human took over during generation`);
     await logBotEvent(tenant.clientId, parsed.conversationId, 'run_suppressed', { stage: 'post_generate' });
     return { status: 200, body: { ignored: 'suppressed during generation', conversationId } };
