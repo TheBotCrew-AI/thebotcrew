@@ -21,7 +21,7 @@ export const getAvailabilityTool = createTool({
     toDate: z.string().optional().describe('Fecha/hora ISO 8601 de fin del rango (por defecto: +7 días)'),
   }),
   outputSchema: z.object({
-    slots: z.array(z.object({ start: z.string(), end: z.string() })),
+    slots: z.array(z.object({ start: z.string(), end: z.string(), label: z.string() })),
     note: z.string().optional(),
   }),
   execute: async ({ serviceName, fromDate, toDate }, ctx) => {
@@ -37,12 +37,34 @@ export const getAvailabilityTool = createTool({
     const from = fromDate ?? new Date().toISOString();
     const to = toDate ?? new Date(Date.now() + SEVEN_DAYS_MS).toISOString();
 
+    // Format each slot's day/time in code (correct weekday in the tenant's tz), so
+    // the agent presents them verbatim and never computes a date itself.
+    const fmt = new Intl.DateTimeFormat('es-MX', {
+      timeZone: config.timezone,
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    });
+    const label = (iso: string): string => {
+      try {
+        return fmt.format(new Date(iso));
+      } catch {
+        return iso;
+      }
+    };
+
     const ghl = new GhlClient(tenant.tenantId);
     try {
       const slots = await ghl.getAvailability(calendarId, from, to);
       return {
-        slots,
-        note: slots.length === 0 ? 'Sin disponibilidad en el rango consultado.' : undefined,
+        slots: slots.map((s) => ({ ...s, label: label(s.start) })),
+        note:
+          slots.length === 0
+            ? 'Sin disponibilidad en el rango consultado.'
+            : 'Ofrece estos horarios al lead usando EXACTAMENTE el texto del campo "label" (ya trae el día de la semana correcto). No recalcules ni traduzcas fechas.',
       };
     } catch {
       return { slots: [], note: 'No se pudo consultar disponibilidad en este momento.' };

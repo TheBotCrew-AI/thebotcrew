@@ -89,11 +89,30 @@ export function buildFrontDeskInstructions(config: FrontDeskConfig, nowIso: stri
     ? `\n\n# Reglas por herramienta\n${toolEntries.map(([id, rule]) => `## ${id}\n${rule.trim()}`).join('\n\n')}`
     : '';
 
+  // Spell out today's date WITH the weekday so the model never computes it (LLMs
+  // are unreliable at day-of-week math). nowIso already encodes tenant-local time.
+  let nowReadable = nowIso;
+  try {
+    nowReadable = new Intl.DateTimeFormat('es-MX', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    }).format(new Date(nowIso));
+  } catch {
+    /* keep raw ISO on parse error */
+  }
+
   return `${identityLine}
 
 # Fecha y hora actuales
-${nowIso} (zona horaria: ${config.timezone})
-Usa esta fecha para calcular rangos cuando llames herramientas que requieran fechas ISO.
+Hoy es ${nowReadable} (zona horaria: ${config.timezone}).
+Formato ISO para herramientas: ${nowIso}.
+NUNCA calcules tú el día de la semana de una fecha — usa el día que ya viene en los
+horarios de getAvailability (campo "label") o la fecha de hoy de arriba.
 
 # Tono y formato
 ${toneBody}
