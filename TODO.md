@@ -18,8 +18,9 @@
 - [x] Webhook signature scheme confirmed + implemented — Ed25519 (`x-ghl-signature`) + RSA legacy (`x-wh-signature`); see Webhook authentication above
 - [x] Handle outbound GHL webhook events — `outbound-handler.ts` stores human-agent messages (`source:'app'`) so history stays complete on takeover
 - [x] Wire contact tags (`GhlClient.addContactTags` / `removeContactTags`, `contacts.write` scope, Version `2021-07-28`) — used by the handoff tag sync
-- [~] Wire calendar availability (`GhlClient.getAvailability()`) — implemented; not yet live-tested against a real GHL calendar
-- [~] Wire appointment booking (`GhlClient.bookAppointment()`) — implemented; not yet live-tested against a real GHL calendar
+- [x] Wire calendar availability (`GhlClient.getAvailability()`) — live-tested against HappyNatyNat's real calendar (`/free-slots`, Version 2021-04-15, returns date-keyed slots)
+- [x] Wire appointment booking (`GhlClient.bookAppointment()`) — live-tested: create (`/events/appointments`) → confirmed + id → delete (`/calendars/events/{id}`) all succeed. Endpoint/payload/scope validated
+- [ ] End-to-end booking via the **agent tools** (getAvailability → offer slots → bookAppointment → `logAppointment` to our DB) — the GHL API side is validated; the agent-driven path + DB appointment logging is not yet live-tested
 
 ## Agent / Roles
 - [x] Seed real tenant config — The Bot Crew (`wRMDr6h3anwYpM64XAUe`): services, hours, calendars, FAQ, provider/model
