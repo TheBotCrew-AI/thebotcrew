@@ -1,5 +1,11 @@
 # Implementation Plan — Durable Turn Processing (P0)
 
+> ✅ **PARTIAL — the "zero-infra durability net" below is SHIPPED** (`worker/reconciliation.ts`,
+> `app_load_unanswered_turns`, migration 0020): a per-minute cron re-runs any dropped turn,
+> recovering within ~1 min, with an atomic claim guarding against double-sends. The **Cloudflare
+> Queues** upgrade (durable debounce + retries + DLQ) is still pending — blocked on the deployer
+> queue-binding spike. Original plan below.
+
 > Hand-to-implementer plan. Goal: a customer turn is never silently dropped. Today the 8s debounce
 > is a `setTimeout` inside `ctx.waitUntil` (`webhook-handler.ts:377-383`) and a model/GHL failure
 > just logs and returns (`webhook-handler.ts:221-233`) with no retry — an isolate eviction or a

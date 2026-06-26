@@ -51,7 +51,7 @@ interface ExecutionCtx {
   waitUntil(promise: Promise<unknown>): void;
 }
 
-interface AgentRunParams {
+export interface AgentRunParams {
   agent: Agent;
   conversationId: string;
   messageId: string;
@@ -176,7 +176,7 @@ function toModelMessages(history: ConversationMessage[]): ChatMessage[] {
  * Gate checks → load history → generate reply → log outbound → deliver.
  * Called from ctx.waitUntil (debounced) or directly (sync/test path).
  */
-async function runAgentTurn({
+export async function runAgentTurn({
   agent,
   conversationId,
   messageId,

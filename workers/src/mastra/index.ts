@@ -17,6 +17,7 @@ import { handleTagWebhook } from '../worker/tag-handler.js';
 import { verifyGhlWebhook, webhookAuthDisabled } from '../ghl/webhook.js';
 import { retryPendingDeliveries } from '../worker/delivery-retry.js';
 import { runPendingFollowUps } from '../worker/followup-runner.js';
+import { runReconciliationSweep } from '../worker/reconciliation.js';
 import { exchangeCode, getInstallUrl } from '../ghl/oauth.js';
 import { upsertOAuthToken } from '../db/queries.js';
 import { resolveTenant } from '../core/tenant.js';
@@ -27,6 +28,7 @@ import type { GhlContactTagWebhook, GhlInboundWebhook, GhlOutboundWebhook } from
 export { executionCtxStorage };
 export { runPendingFollowUps } from '../worker/followup-runner.js';
 export { retryPendingDeliveries } from '../worker/delivery-retry.js';
+export { runReconciliationSweep } from '../worker/reconciliation.js';
 
 const frontDesk = buildFrontDeskAgent();
 const reactivation = buildReactivationAgent();
@@ -220,7 +222,7 @@ export const mastra = new Mastra({
 
         scheduled: async (event, _env, ctx) => {
           ctx.waitUntil((async () => {
-            const { mastra, runPendingFollowUps, retryPendingDeliveries } = await import('#mastra');
+            const { mastra, runPendingFollowUps, retryPendingDeliveries, runReconciliationSweep } = await import('#mastra');
             const _mastra = mastra();
             try {
               const reactivationAgent = _mastra.getAgent('reactivation');
@@ -228,6 +230,13 @@ export const mastra = new Mastra({
               console.log('[cron] run-followups:', JSON.stringify(result));
             } catch (err) {
               console.error('[cron] run-followups error:', err instanceof Error ? err.message : String(err));
+            }
+            try {
+              const frontDeskAgent = _mastra.getAgent('frontDesk');
+              const result = await runReconciliationSweep(frontDeskAgent);
+              if (result.claimed > 0) console.log('[cron] reconcile:', JSON.stringify(result));
+            } catch (err) {
+              console.error('[cron] reconcile error:', err instanceof Error ? err.message : String(err));
             }
             if (event.cron === '*/5 * * * *') {
               try {

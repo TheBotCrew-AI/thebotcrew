@@ -41,6 +41,13 @@ One Worker serves all clients. Request flow:
 6. Persist the outbound reply (with sender attribution: which AI role / model), then
    deliver it via the GHL API (transport only).
 
+Turn durability: the agent run is debounced 8s in `waitUntil`. If that's dropped (isolate
+eviction, transient model/GHL failure), a **reconciliation cron** (`worker/reconciliation.ts`,
+runs each minute) finds conversations whose latest message is an unanswered inbound (>45s old,
+active, gates pass) and re-runs the turn — recovering within ~1 min. The atomic claim
+(`reconcile_claimed_at`, FOR UPDATE SKIP LOCKED + cooldown) + the latest-message gate prevent
+double-replies. (Cloudflare Queues would be the heavier "correct" upgrade — deferred.)
+
 We own conversation history, including message content + who sent what (lead vs which AI
 role vs which human agent) — the foundation for future human-agent ↔ AI collaboration.
 Tenant data is isolated with Postgres row-level security (deny-by-default on `tenants`,
@@ -81,7 +88,7 @@ workers/                       # Mastra + Cloudflare Worker package (@thebotcrew
       reactivation/            # text-only follow-up/reactivation agent (no tools)
     ghl/                       # webhook parse/verify, OAuth, tags + transport-only API client (live)
     db/                        # service-role Supabase client, queries (config read + RPC writes)
-    worker/                    # webhook-handler (inbound) + outbound-handler (human takeover) + tag-handler (bot-off) + delivery-retry + followup-runner
+    worker/                    # webhook-handler (inbound) + outbound-handler (human takeover) + tag-handler (bot-off) + delivery-retry + followup-runner + reconciliation (dropped-turn backstop)
   scripts/simulate-webhook.mjs # local dev: fire a fake GHL webhook
   fixtures/                    # sample webhook payloads
   wrangler.jsonc, vitest.config.ts, tsconfig.json
