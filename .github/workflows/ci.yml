@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# The deploy gate: typecheck + deterministic unit/orchestration tests (Layers 1–2).
+# No API keys are provided, so live (model-calling) eval cases self-skip — CI stays
+# fast and deterministic. Live golden-conversation evals (Layer 3) run separately.
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4 # reads packageManager (pnpm@10.x) from package.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Unit + orchestration tests
+        run: pnpm test:unit

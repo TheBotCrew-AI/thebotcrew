@@ -1,5 +1,13 @@
 # Implementation Plan — Testing Strategy (P0)
 
+> ✅ **PARTIAL — Layers 1–2 + the CI gate are SHIPPED.** `pnpm test:unit` (no keys/network/DB)
+> covers webhook parsers + signature verification (`verifyDetached` keypair round-trip), the gate
+> helpers / keyword matcher, and mocked-seam orchestration of `handleInboundWebhook` (dedup,
+> suppression, channel/keyword gates, happy path, delivery failure). `.github/workflows/ci.yml`
+> runs typecheck + `test:unit` on every push/PR. **Still pending:** Layer 3 golden-conversation
+> live set (the staging deploy gate) + Layer 1 for the FAQ matcher / prompt / classifier. Original
+> plan below.
+
 > Hand-to-implementer plan. Goal: back the "reliability is a first-class feature" claim with an
 > actual test harness, and make it the deploy gate so AI-driven changes are safe to ship. Today the
 > only tests are prompt-string assertions + two live smell-tests (`front-desk.eval.ts`); the

@@ -48,40 +48,48 @@ export function webhookAuthDisabled(): boolean {
 }
 
 /**
+ * Verify a detached base64 signature over `rawBody` against an SPKI public key.
+ * Exported for unit tests (sign a fixture with a generated keypair → round-trip).
+ * Returns false on any error (bad key, unsupported algorithm, verify fail).
+ */
+export async function verifyDetached(
+  rawBody: string,
+  signatureB64: string,
+  spkiB64: string,
+  alg: 'ed25519' | 'rsa',
+): Promise<boolean> {
+  try {
+    const data = new TextEncoder().encode(rawBody);
+    const sig = b64ToBytes(signatureB64);
+    const keyBytes = b64ToBytes(spkiB64);
+    if (alg === 'ed25519') {
+      const key = await crypto.subtle.importKey('spki', keyBytes, { name: 'Ed25519' }, false, ['verify']);
+      return await crypto.subtle.verify({ name: 'Ed25519' }, key, sig, data);
+    }
+    const key = await crypto.subtle.importKey(
+      'spki', keyBytes, { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['verify'],
+    );
+    return await crypto.subtle.verify({ name: 'RSASSA-PKCS1-v1_5' }, key, sig, data);
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Verify a GHL webhook over its RAW body. Prefers Ed25519 (`x-ghl-signature`),
  * falls back to RSA-SHA256 (`x-wh-signature`). Fails closed: missing/invalid
- * signature ⇒ false.
+ * signature ⇒ false. The fall-through is safe — both keys require GHL's private
+ * keys to forge — and guards against a runtime without Ed25519 support.
  */
 export async function verifyGhlWebhook(rawBody: string, headers: Headers): Promise<boolean> {
-  const data = new TextEncoder().encode(rawBody);
-
-  // Try Ed25519 first; fall through to RSA if it's absent OR fails (e.g. runtime
-  // without Ed25519 support). Both keys require GHL's private keys to forge, so
-  // the fall-through doesn't weaken security.
   const ed = headers.get('x-ghl-signature');
-  if (ed && ed !== 'N/A') {
-    try {
-      const key = await crypto.subtle.importKey(
-        'spki', b64ToBytes(GHL_ED25519_SPKI_B64), { name: 'Ed25519' }, false, ['verify'],
-      );
-      if (await crypto.subtle.verify({ name: 'Ed25519' }, key, b64ToBytes(ed), data)) return true;
-    } catch {
-      /* fall through to RSA */
-    }
+  if (ed && ed !== 'N/A' && (await verifyDetached(rawBody, ed, GHL_ED25519_SPKI_B64, 'ed25519'))) {
+    return true;
   }
-
   const rsa = headers.get('x-wh-signature');
-  if (rsa && rsa !== 'N/A') {
-    try {
-      const key = await crypto.subtle.importKey(
-        'spki', b64ToBytes(GHL_RSA_SPKI_B64), { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['verify'],
-      );
-      if (await crypto.subtle.verify({ name: 'RSASSA-PKCS1-v1_5' }, key, b64ToBytes(rsa), data)) return true;
-    } catch {
-      /* fall through to reject */
-    }
+  if (rsa && rsa !== 'N/A' && (await verifyDetached(rawBody, rsa, GHL_RSA_SPKI_B64, 'rsa'))) {
+    return true;
   }
-
   return false;
 }
 

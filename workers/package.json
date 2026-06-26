@@ -8,6 +8,7 @@
     "dev": "mastra dev",
     "build": "mastra build",
     "typecheck": "tsc --noEmit",
+    "test:unit": "vitest run src/**/*.test.ts",
     "eval": "vitest run",
     "webhook:simulate": "node scripts/simulate-webhook.mjs"
   },

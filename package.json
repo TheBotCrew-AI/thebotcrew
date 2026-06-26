@@ -11,6 +11,7 @@
     "dev": "pnpm --filter @thebotcrew/workers dev",
     "build": "pnpm --filter @thebotcrew/workers build",
     "typecheck": "pnpm --filter @thebotcrew/workers typecheck",
+    "test:unit": "pnpm --filter @thebotcrew/workers test:unit",
     "eval": "pnpm --filter @thebotcrew/workers eval",
     "webhook:simulate": "pnpm --filter @thebotcrew/workers webhook:simulate"
   }

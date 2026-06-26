@@ -152,17 +152,23 @@ DB). Inspect `messages` — rows carry `content`, `sender_type`, `agent_role`. G
 `GHL_API_TOKEN`; with no token the send fails and the row is left `delivery_status='pending'`
 for the retry cron.
 
-### Evals
+### Tests & evals
 - Reliability is a first-class feature (we moved off n8n for exactly this reason).
-- Every role ships with eval cases (under `roles/<role>/evals/`): qualification, booking,
-  and anti-hallucination. Offline cases always run; live (model-calling) cases run only
-  when `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` is set (eval picks whichever is present).
-- Run before any change to a role's prompt or tools: `pnpm eval`.
+- **`pnpm test:unit`** — deterministic unit + orchestration tests (`*.test.ts`), **no API
+  key / no network / no DB**. Layer 1: webhook parsers + signature verification (`verifyDetached`
+  round-trip with a generated keypair) + the gate helpers / keyword matcher. Layer 2: mock
+  `db/queries` + `GhlClient` + the agent and drive `handleInboundWebhook` (dedup, suppression,
+  channel/keyword gates, happy path, delivery failure). **This is the CI gate** (`.github/workflows/ci.yml`
+  runs typecheck + `test:unit` on every push/PR, no keys).
+- **`pnpm eval`** — adds the role eval cases (`*.eval.ts`): offline (prompt) cases always run;
+  live (model-calling) golden cases run only when `OPENAI_API_KEY`/`ANTHROPIC_API_KEY` is set.
+- Run `pnpm test:unit` before any change to orchestration/parsing, and `pnpm eval` before a
+  change to a role's prompt or tools. (Layer 3 golden-conversation gate on staging: TBD.)
 
 ### Deploy
-- `pnpm typecheck` then `pnpm build` (mastra build via CloudflareDeployer) →
-  `pnpm --filter @thebotcrew/workers exec wrangler deploy`. Set Worker secrets with
-  `wrangler secret put <NAME>` (see `.env.example`). Staging step TBD.
+- `pnpm typecheck` + `pnpm test:unit` (the gate) then `pnpm build` (mastra build via
+  CloudflareDeployer) → `pnpm --filter @thebotcrew/workers exec wrangler deploy`. Set Worker
+  secrets with `wrangler secret put <NAME>` (see `.env.example`). Staging step TBD.
 
 ## GHL integration notes
 
