@@ -39,8 +39,12 @@ import { STATUS_TAGS } from '../ghl/tags.js';
 import type { GhlInboundWebhook, ParsedInbound } from '../ghl/types.js';
 import { DEFAULT_MODEL, DEFAULT_PROVIDER, FRONT_DESK_ROLE } from '../roles/front-desk/index.js';
 
-/** Milliseconds to wait before running the agent after the last inbound message. */
-const DEBOUNCE_MS = 8_000;
+/**
+ * Milliseconds to wait after the last inbound message before running the agent.
+ * Coalesces a burst of rapid messages into one reply. 15s tolerates natural
+ * typing pauses (8s split multi-message turns into separate replies).
+ */
+const DEBOUNCE_MS = 15_000;
 
 export interface WebhookResult {
   status: 200 | 400 | 401 | 500;

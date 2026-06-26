@@ -41,7 +41,8 @@ One Worker serves all clients. Request flow:
 6. Persist the outbound reply (with sender attribution: which AI role / model), then
    deliver it via the GHL API (transport only).
 
-Turn durability: the agent run is debounced 8s in `waitUntil`. If that's dropped (isolate
+Turn durability: the agent run is debounced 15s in `waitUntil` (coalesces rapid multi-message
+bursts into one reply). If that's dropped (isolate
 eviction, transient model/GHL failure), a **reconciliation cron** (`worker/reconciliation.ts`,
 runs each minute) finds conversations whose latest message is an unanswered inbound (>45s old,
 active, gates pass) and re-runs the turn — recovering within ~1 min. The atomic claim
