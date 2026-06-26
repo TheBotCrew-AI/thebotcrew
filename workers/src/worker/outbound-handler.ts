@@ -16,7 +16,6 @@
  *   8. Cancel any pending follow-ups (human is in the conversation).
  */
 
-import { getGhlEnv } from '../core/env.js';
 import { resolveTenant } from '../core/tenant.js';
 import type { TenantContext } from '../core/types.js';
 import {
@@ -29,18 +28,13 @@ import {
 } from '../db/queries.js';
 import { GhlClient } from '../ghl/client.js';
 import type { GhlOutboundWebhook } from '../ghl/types.js';
-import { parseOutboundWebhook, verifyWebhook } from '../ghl/webhook.js';
+import { parseOutboundWebhook } from '../ghl/webhook.js';
 import type { WebhookResult } from './webhook-handler.js';
 
 export async function handleOutboundWebhook(
   payload: GhlOutboundWebhook,
-  headers: Headers,
 ): Promise<WebhookResult> {
-  const ghlEnv = getGhlEnv();
-  if (!verifyWebhook(headers, ghlEnv.webhookSecret)) {
-    return { status: 401, body: { error: 'invalid signature' } };
-  }
-
+  // Signature already verified at the route handler (raw body, before parse).
   const parsed = parseOutboundWebhook(payload);
   if (!parsed) {
     return { status: 200, body: { ignored: 'not a human agent outbound message' } };

@@ -4,7 +4,7 @@
 > Strategic review + per-item plans in `docs/production-readiness-and-roadmap.md`.
 > Suggested order: testing harness first (unblocks the others) → webhook auth → durable execution.
 - [ ] **Testing harness & deploy gate** — see `docs/plan-testing-strategy.md`. Layer 2 orchestration tests (mock `db/queries.js`) first; then Layer 1 pure-function tests (webhook parse/verify, FAQ matcher, classifier gate); then Layer 3 golden-conversation regression set. Split `test:unit` (always) from `eval` (API-key gated); CI blocks merge on Layers 1–2.
-- [ ] **Webhook authentication** — see `docs/plan-webhook-authentication.md`. `verifyWebhook()` currently accepts any request with *any* signature header (`ghl/webhook.ts:27-32`) — effectively unauthenticated. Implement real RSA public-key verification (`x-wh-signature`) over the **raw body before JSON parse**; move verification into the route handlers; fail closed; protect both `/webhooks/ghl` and `/webhooks/ghl/outbound`. Confirm scheme against GHL docs.
+- [x] **Webhook authentication** — `verifyGhlWebhook()` verifies the RAW body in each route handler before parse: **Ed25519** (`x-ghl-signature`, current) + **RSA-SHA256** (`x-wh-signature`, legacy → 2026-07-01) fallback, against GHL's published public keys (embedded). Fails closed → 401. All 3 routes (`/webhooks/ghl`, `/webhooks/ghl/outbound`, `/webhooks/ghl/tags`). Dev bypass `ALLOW_UNVERIFIED_WEBHOOKS`. Validated: reject path 401, accept path confirmed with a real GHL webhook
 - [ ] **Durable turn processing** — see `docs/plan-durable-execution.md`. The 8s debounce is a `setTimeout` in `waitUntil` and a model/GHL failure silently drops the turn (no retry). Migrate `runAgentTurn` onto Cloudflare Queues + `delaySeconds` (retries + DLQ); keep the `isLatestInboundMessage` gate for burst coalescing. **First: timebox a spike** on how `CloudflareDeployer` exposes queue bindings (the main risk). Add idempotency guards (no double-send under retry). Fallback if the spike stalls: a reconciliation cron that re-runs any inbound with no reply after ~30–60s.
 
 ## Infra / Deploy
@@ -15,7 +15,7 @@
 - [x] Confirm outbound message endpoint (`POST /conversations/messages`) + auth header → wire `GhlClient.sendMessage()`
 - [x] Confirm inbound webhook payload field names — `type=InboundMessage`, `direction=inbound`, `locationId/contactId/conversationId/body/messageType` all confirmed
 - [x] Resolve auth model: per-location OAuth via GHL App Marketplace → `ghl_oauth_tokens` table, install at `/oauth/ghl/install`
-- [ ] Confirm webhook signature scheme (`x-wh-signature` or `x-ghl-signature`, HMAC vs RSA) → replace placeholder in `verifyWebhook()`
+- [x] Webhook signature scheme confirmed + implemented — Ed25519 (`x-ghl-signature`) + RSA legacy (`x-wh-signature`); see Webhook authentication above
 - [x] Handle outbound GHL webhook events — `outbound-handler.ts` stores human-agent messages (`source:'app'`) so history stays complete on takeover
 - [x] Wire contact tags (`GhlClient.addContactTags` / `removeContactTags`, `contacts.write` scope, Version `2021-07-28`) — used by the handoff tag sync
 - [~] Wire calendar availability (`GhlClient.getAvailability()`) — implemented; not yet live-tested against a real GHL calendar

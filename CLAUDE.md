@@ -195,8 +195,12 @@ for the retry cron.
   (live in `ghl/client.ts`), and the **auth model** — per-location **OAuth** via the GHL App
   Marketplace, tokens in `ghl_oauth_tokens`, install/authorize at `/oauth/ghl/install`,
   auto-refreshed. Scopes in `ghl/oauth.ts`.
-- Still open: **webhook signature verification** — `verifyWebhook()` is a placeholder that
-  accepts any request with a signature header (see TODO / `docs/plan-webhook-authentication.md`).
+- **Webhook verification (live):** every webhook is verified over its RAW body in the route
+  handler **before** parse — Ed25519 (`x-ghl-signature`, current) with RSA-SHA256
+  (`x-wh-signature`, legacy, GHL-deprecated 2026-07-01) fallback, against GHL's published
+  public keys (embedded in `ghl/webhook.ts`, `verifyGhlWebhook`). Fails closed → 401, no DB
+  write / no agent run. Local-dev bypass: `ALLOW_UNVERIFIED_WEBHOOKS=true` (off in prod, so
+  `webhook:simulate` needs it set in `.dev.vars`).
 
 ## Models
 

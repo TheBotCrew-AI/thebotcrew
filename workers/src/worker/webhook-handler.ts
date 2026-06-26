@@ -13,7 +13,7 @@
  */
 
 import type { Agent } from '@mastra/core/agent';
-import { getAiApiKey, getGhlEnv } from '../core/env.js';
+import { getAiApiKey } from '../core/env.js';
 import { channelEnabled, hasTriggerKeywords, inTestMode, messageMatchesTrigger, resolveTenant, roleEnabled } from '../core/tenant.js';
 import { buildAgentRequestContext } from '../core/runtime-context.js';
 import type { AiProvider, ConversationMessage, ConversationStatus, TenantContext, TurnContext } from '../core/types.js';
@@ -34,7 +34,7 @@ import {
   updateConversationStatus,
 } from '../db/queries.js';
 import { GhlClient } from '../ghl/client.js';
-import { parseInboundWebhook, verifyWebhook } from '../ghl/webhook.js';
+import { parseInboundWebhook } from '../ghl/webhook.js';
 import { STATUS_TAGS } from '../ghl/tags.js';
 import type { GhlInboundWebhook, ParsedInbound } from '../ghl/types.js';
 import { DEFAULT_MODEL, DEFAULT_PROVIDER, FRONT_DESK_ROLE } from '../roles/front-desk/index.js';
@@ -344,15 +344,10 @@ async function runAgentTurn({
 
 export async function handleInboundWebhook(
   payload: GhlInboundWebhook,
-  headers: Headers,
   agent: Agent,
   ctx?: ExecutionCtx,
 ): Promise<WebhookResult> {
-  const ghlEnv = getGhlEnv();
-  if (!verifyWebhook(headers, ghlEnv.webhookSecret)) {
-    return { status: 401, body: { error: 'invalid signature' } };
-  }
-
+  // Signature already verified at the route handler (raw body, before parse).
   const parsed = parseInboundWebhook(payload);
   if (!parsed) {
     return { status: 200, body: { ignored: 'unparseable or non-message payload' } };

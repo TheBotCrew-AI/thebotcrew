@@ -1,5 +1,11 @@
 # Implementation Plan — Webhook Authentication (P0)
 
+> ✅ **IMPLEMENTED** (`ghl/webhook.ts` `verifyGhlWebhook`). Final scheme is **Ed25519**
+> (`x-ghl-signature`, current) with **RSA-SHA256** (`x-wh-signature`, legacy → 2026-07-01)
+> fallback — not RSA-only as this plan originally assumed. Verified in the route handlers
+> over the raw body before parse, on all three routes. Original plan below.
+
+
 > Hand-to-implementer plan. Goal: every inbound request from GHL is cryptographically verified
 > before we act on it. Today `verifyWebhook()` accepts any request carrying *any* value in a
 > signature header (`ghl/webhook.ts:27-32`) — effectively unauthenticated. Pairs with

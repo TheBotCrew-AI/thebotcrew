@@ -10,23 +10,17 @@
  * RPC's `status <> 'handed_off'` guard makes it a no-op.
  */
 
-import { getGhlEnv } from '../core/env.js';
 import { resolveTenant } from '../core/tenant.js';
 import { logBotEvent, setBotOffByContact } from '../db/queries.js';
 import { BOT_OFF_TAG } from '../ghl/tags.js';
 import type { GhlContactTagWebhook } from '../ghl/types.js';
-import { parseContactTagWebhook, verifyWebhook } from '../ghl/webhook.js';
+import { parseContactTagWebhook } from '../ghl/webhook.js';
 import type { WebhookResult } from './webhook-handler.js';
 
 export async function handleTagWebhook(
   payload: GhlContactTagWebhook,
-  headers: Headers,
 ): Promise<WebhookResult> {
-  const ghlEnv = getGhlEnv();
-  if (!verifyWebhook(headers, ghlEnv.webhookSecret)) {
-    return { status: 401, body: { error: 'invalid signature' } };
-  }
-
+  // Signature already verified at the route handler (raw body, before parse).
   const parsed = parseContactTagWebhook(payload);
   if (!parsed) {
     return { status: 200, body: { ignored: 'not a contact tag update' } };

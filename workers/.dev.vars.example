@@ -10,9 +10,12 @@ SUPABASE_SERVICE_ROLE_KEY="<local-service-role-key-from-`supabase start`>"
 OPENAI_API_KEY="sk-..."
 # ANTHROPIC_API_KEY="sk-ant-..."
 
-# GoHighLevel — outbound transport + calendar. Endpoints/auth model still TBD.
+# GoHighLevel — outbound transport + calendar (live, per-location OAuth).
 GHL_API_BASE="https://services.leadconnectorhq.com"
-GHL_WEBHOOK_SECRET="<shared-secret-or-signing-key-for-inbound-verification>"
+# Inbound webhooks are verified by GHL's public keys (Ed25519 `x-ghl-signature` /
+# RSA `x-wh-signature`), embedded in code — no secret needed. For LOCAL DEV only,
+# set this to bypass verification so `webhook:simulate` works (NEVER in prod):
+ALLOW_UNVERIFIED_WEBHOOKS="true"
 # TODO(GHL auth): single agency token vs per-location OAuth. If per-tenant, this is the
 # fallback/agency token and per-tenant tokens are resolved via tenants.ghl_token_ref.
 GHL_API_TOKEN="<ghl-api-token>"

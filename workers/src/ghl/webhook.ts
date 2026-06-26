@@ -1,7 +1,6 @@
 /**
- * Inbound GHL webhook parsing + verification.
+ * Inbound GHL webhook parsing + RSA/Ed25519 signature verification.
  *
- * NOTE(GHL): signature verification and the exact payload field names are TBD.
  * Parsing is defensive so a missing/renamed field fails closed (returns null)
  * rather than throwing.
  */
@@ -24,18 +23,66 @@ function normalizeChannel(raw: string | undefined): Channel {
   return 'whatsapp';
 }
 
+// ── Webhook signature verification ───────────────────────────────────────────
+// GHL signs the RAW request body and sends one or both signature headers,
+// verified against its published public keys:
+//   x-ghl-signature → Ed25519       (current)
+//   x-wh-signature  → RSA-SHA256     (legacy, deprecated 2026-07-01)
+// Verify over the raw bytes — re-serializing the parsed JSON won't match.
+// Keys from https://marketplace.gohighlevel.com/docs/webhook/WebhookIntegrationGuide
+
+const GHL_ED25519_SPKI_B64 = 'MCowBQYDK2VwAyEAi2HR1srL4o18O8BRa7gVJY7G7bupbN3H9AwJrHCDiOg=';
+const GHL_RSA_SPKI_B64 =
+  'MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAokvo/r9tVgcfZ5DysOSCFrm602qYV0MaAiNnX9O8KxMbiyRKWeL9JpCpVpt4XHIcBOK4u3cLSqJGOLaPuXw6dO0t6Q/ZVdAV5Phz+ZtzPL16iCGeK9po6D6JHBpbi989mmzMryUnQJezlYJ3DVfBcsedpinheNnyYeFXolrJvcsjDtfAeRx5ByHQmTnSdFUzuAnC9/GepgLT9SM4nCpvuxmZMxrJt5Rw+VUaQ9B8JSvbMPpez4peKaJPZHBbU3OdeCVx5klVXXZQGNHOs8gF3kvoV5rTnXV0IknLBXlcKKAQLZcY/Q9rG6Ifi9c+5vqlvHPCUJFT5XUGG5RKgOKUJ062fRtN+rLYZUV+BjafxQauvC8wSWeYja63VSUruvmNj8xkx2zE/Juc+yjLjTXpIocmaiFeAO6fUtNjDeFVkhf5LNb59vECyrHD2SQIrhgXpO4Q3dVNA5rw576PwTzNh/AMfHKIjE4xQA1SZuYJmNnmVZLIZBlQAF9Ntd03rfadZ+yDiOXCCs9FkHibELhCHULgCsnuDJHcrGNd5/Ddm5hxGQ0ASitgHeMZ0kcIOwKDOzOU53lDza6/Y09T7sYJPQe7z0cvj7aE4B+Ax1ZoZGPzpJlZtGXCsu9aTEGEnKzmsFqwcSsnw3JB31IGKAykT1hhTiaCeIY/OwwwNUY2yvcCAwEAAQ==';
+
+function b64ToBytes(b64: string): Uint8Array {
+  const bin = atob(b64.replace(/-/g, '+').replace(/_/g, '/'));
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+
+/** Local-dev escape hatch: skip verification when explicitly enabled. Off by default. */
+export function webhookAuthDisabled(): boolean {
+  return process.env.ALLOW_UNVERIFIED_WEBHOOKS === 'true';
+}
+
 /**
- * Verify the inbound request came from GHL.
- *
- * TODO(GHL): implement the real scheme (HMAC signature header vs shared secret)
- * once confirmed. Until then: if a secret is configured, require it; if not,
- * allow (local dev). Never silently accept in production without a secret.
+ * Verify a GHL webhook over its RAW body. Prefers Ed25519 (`x-ghl-signature`),
+ * falls back to RSA-SHA256 (`x-wh-signature`). Fails closed: missing/invalid
+ * signature ⇒ false.
  */
-export function verifyWebhook(headers: Headers, secret: string | undefined): boolean {
-  if (!secret) return true; // local/dev: no secret configured
-  // Placeholder: GHL typically sends a signature header to validate against `secret`.
-  const provided = headers.get('x-ghl-signature') ?? headers.get('x-wh-signature');
-  return Boolean(provided); // TODO: replace with constant-time HMAC comparison
+export async function verifyGhlWebhook(rawBody: string, headers: Headers): Promise<boolean> {
+  const data = new TextEncoder().encode(rawBody);
+
+  // Try Ed25519 first; fall through to RSA if it's absent OR fails (e.g. runtime
+  // without Ed25519 support). Both keys require GHL's private keys to forge, so
+  // the fall-through doesn't weaken security.
+  const ed = headers.get('x-ghl-signature');
+  if (ed && ed !== 'N/A') {
+    try {
+      const key = await crypto.subtle.importKey(
+        'spki', b64ToBytes(GHL_ED25519_SPKI_B64), { name: 'Ed25519' }, false, ['verify'],
+      );
+      if (await crypto.subtle.verify({ name: 'Ed25519' }, key, b64ToBytes(ed), data)) return true;
+    } catch {
+      /* fall through to RSA */
+    }
+  }
+
+  const rsa = headers.get('x-wh-signature');
+  if (rsa && rsa !== 'N/A') {
+    try {
+      const key = await crypto.subtle.importKey(
+        'spki', b64ToBytes(GHL_RSA_SPKI_B64), { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['verify'],
+      );
+      if (await crypto.subtle.verify({ name: 'RSASSA-PKCS1-v1_5' }, key, b64ToBytes(rsa), data)) return true;
+    } catch {
+      /* fall through to reject */
+    }
+  }
+
+  return false;
 }
 
 /**

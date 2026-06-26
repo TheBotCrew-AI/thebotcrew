@@ -14,6 +14,7 @@ import { buildReactivationAgent } from '../roles/reactivation/index.js';
 import { handleInboundWebhook } from '../worker/webhook-handler.js';
 import { handleOutboundWebhook } from '../worker/outbound-handler.js';
 import { handleTagWebhook } from '../worker/tag-handler.js';
+import { verifyGhlWebhook, webhookAuthDisabled } from '../ghl/webhook.js';
 import { retryPendingDeliveries } from '../worker/delivery-retry.js';
 import { runPendingFollowUps } from '../worker/followup-runner.js';
 import { exchangeCode, getInstallUrl } from '../ghl/oauth.js';
@@ -91,13 +92,17 @@ export const mastra = new Mastra({
       registerApiRoute('/webhooks/ghl/outbound', {
         method: 'POST',
         handler: async (c) => {
+          const raw = await c.req.text();
+          if (!webhookAuthDisabled() && !(await verifyGhlWebhook(raw, c.req.raw.headers))) {
+            return c.json({ error: 'invalid signature' }, 401);
+          }
           let payload: GhlOutboundWebhook;
           try {
-            payload = (await c.req.json()) as GhlOutboundWebhook;
+            payload = JSON.parse(raw) as GhlOutboundWebhook;
           } catch {
             return c.json({ error: 'invalid json body' }, 400);
           }
-          const result = await handleOutboundWebhook(payload, c.req.raw.headers);
+          const result = await handleOutboundWebhook(payload);
           return c.json(result.body, result.status);
         },
       }),
@@ -107,13 +112,17 @@ export const mastra = new Mastra({
       registerApiRoute('/webhooks/ghl/tags', {
         method: 'POST',
         handler: async (c) => {
+          const raw = await c.req.text();
+          if (!webhookAuthDisabled() && !(await verifyGhlWebhook(raw, c.req.raw.headers))) {
+            return c.json({ error: 'invalid signature' }, 401);
+          }
           let payload: GhlContactTagWebhook;
           try {
-            payload = (await c.req.json()) as GhlContactTagWebhook;
+            payload = JSON.parse(raw) as GhlContactTagWebhook;
           } catch {
             return c.json({ error: 'invalid json body' }, 400);
           }
-          const result = await handleTagWebhook(payload, c.req.raw.headers);
+          const result = await handleTagWebhook(payload);
           return c.json(result.body, result.status);
         },
       }),
@@ -124,9 +133,13 @@ export const mastra = new Mastra({
           const m = c.get('mastra');
           const agent = m.getAgent('frontDesk');
 
+          const raw = await c.req.text();
+          if (!webhookAuthDisabled() && !(await verifyGhlWebhook(raw, c.req.raw.headers))) {
+            return c.json({ error: 'invalid signature' }, 401);
+          }
           let payload: GhlInboundWebhook;
           try {
-            payload = (await c.req.json()) as GhlInboundWebhook;
+            payload = JSON.parse(raw) as GhlInboundWebhook;
           } catch {
             return c.json({ error: 'invalid json body' }, 400);
           }
@@ -134,7 +147,7 @@ export const mastra = new Mastra({
           // executionCtxStorage is populated by the entry point wrapper; falls back
           // to undefined (sync path) in test environments without a CF context.
           const execCtx = executionCtxStorage.getStore();
-          const result = await handleInboundWebhook(payload, c.req.raw.headers, agent, execCtx);
+          const result = await handleInboundWebhook(payload, agent, execCtx);
           return c.json(result.body, result.status);
         },
       }),
