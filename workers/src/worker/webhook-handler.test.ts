@@ -14,7 +14,7 @@ vi.mock('../db/queries.js');
 
 import * as q from '../db/queries.js';
 import { getAiApiKey } from '../core/env.js';
-import { handleInboundWebhook } from './webhook-handler.js';
+import { handleInboundWebhook, splitIntoMessages } from './webhook-handler.js';
 
 function tenant(overrides: Partial<TenantContext> = {}): TenantContext {
   return {
@@ -66,6 +66,30 @@ beforeEach(() => {
   ghl.getContactPhone.mockResolvedValue(undefined);
   ghl.sendMessage.mockResolvedValue({ ghlMessageId: 'out-ghl-1' });
   ghl.addContactTags.mockResolvedValue(undefined);
+});
+
+describe('splitIntoMessages', () => {
+  it('keeps a single paragraph as one message', () => {
+    expect(splitIntoMessages('Hola, ¿cómo estás?')).toEqual(['Hola, ¿cómo estás?']);
+  });
+
+  it('splits on blank-line paragraph breaks', () => {
+    expect(splitIntoMessages('Primera idea.\n\nSegunda idea.')).toEqual(['Primera idea.', 'Segunda idea.']);
+  });
+
+  it('does NOT split single line breaks within a paragraph', () => {
+    expect(splitIntoMessages('línea uno\nlínea dos')).toEqual(['línea uno\nlínea dos']);
+  });
+
+  it('trims parts and drops empty ones', () => {
+    expect(splitIntoMessages('  uno  \n\n\n  dos  \n\n   ')).toEqual(['uno', 'dos']);
+  });
+
+  it('caps at 4 parts, merging the overflow into the last', () => {
+    const out = splitIntoMessages('a\n\nb\n\nc\n\nd\n\ne');
+    expect(out).toHaveLength(4);
+    expect(out[3]).toBe('d\n\ne');
+  });
 });
 
 describe('handleInboundWebhook — happy path', () => {

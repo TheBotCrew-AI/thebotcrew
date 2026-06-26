@@ -90,6 +90,24 @@ async function sendWithRetry(ghl: GhlClient, params: Parameters<GhlClient['sendM
   return trySend(ghl, params);
 }
 
+/**
+ * Split a reply on blank-line paragraph breaks so it goes out as separate, more
+ * human-feeling messages. Caps at MAX parts (overflow merged into the last) so a
+ * choppy reply never turns into a spam burst. Single-paragraph replies pass through.
+ */
+const MAX_MESSAGE_PARTS = 4;
+export function splitIntoMessages(text: string): string[] {
+  const parts = text.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
+  if (parts.length <= 1) return [text.trim()];
+  if (parts.length <= MAX_MESSAGE_PARTS) return parts;
+  return [...parts.slice(0, MAX_MESSAGE_PARTS - 1), parts.slice(MAX_MESSAGE_PARTS - 1).join('\n\n')];
+}
+
+/** Human-like "typing" pause before sending a follow-up part (~0.8–3s by length). */
+function typingDelayMs(text: string): number {
+  return Math.min(3000, Math.max(800, text.length * 25));
+}
+
 const CLASSIFY_PROMPT = (leadMessage: string, botReply: string) =>
   `Clasifica el estado de esta conversación de ventas tras el último intercambio.
 
@@ -285,50 +303,55 @@ export async function runAgentTurn({
     }
   }
 
-  let outboundMessageId: string | null = null;
-  try {
-    ({ messageId: outboundMessageId } = await logMessage({
-      p_ghl_conversation_id: parsed.conversationId,
-      p_client_id: tenant.clientId,
-      p_channel: parsed.channel,
-      p_ghl_contact_id: parsed.contactId,
-      p_contact_phone: phone ?? null,
-      p_direction: 'outbound',
-      p_sender_type: 'bot',
-      p_content: reply,
-      p_agent_role: FRONT_DESK_ROLE,
-      p_human_agent_id: null,
-      p_model: model,
-      p_sent_at: null,
-    }));
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.error('[db] outbound logMessage failed:', msg);
-    logError(tenant.clientId, parsed.conversationId, 'db_error', { error: msg, stage: 'outbound_log' });
-  }
+  // Split into separate messages on paragraph breaks; send each with a short
+  // human-like gap. Each part is its own logged + tracked outbound message.
+  const parts = splitIntoMessages(reply);
+  for (const [i, part] of parts.entries()) {
+    if (i > 0) await new Promise<void>((r) => setTimeout(r, typingDelayMs(part)));
 
-  const sendParams = { contactId: parsed.contactId, channel: parsed.channel, text: reply, phone: phone ?? undefined };
-  const ghlMessageId = await sendWithRetry(ghl, sendParams);
+    let outId: string | null = null;
+    try {
+      ({ messageId: outId } = await logMessage({
+        p_ghl_conversation_id: parsed.conversationId,
+        p_client_id: tenant.clientId,
+        p_channel: parsed.channel,
+        p_ghl_contact_id: parsed.contactId,
+        p_contact_phone: phone ?? null,
+        p_direction: 'outbound',
+        p_sender_type: 'bot',
+        p_content: part,
+        p_agent_role: FRONT_DESK_ROLE,
+        p_human_agent_id: null,
+        p_model: model,
+        p_sent_at: null,
+      }));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('[db] outbound logMessage failed:', msg);
+      logError(tenant.clientId, parsed.conversationId, 'db_error', { error: msg, stage: 'outbound_log' });
+    }
 
-  if (ghlMessageId) {
-    if (outboundMessageId) {
-      // Await both — we're inside waitUntil so latency doesn't affect the HTTP response.
+    const ghlMessageId = await sendWithRetry(ghl, {
+      contactId: parsed.contactId,
+      channel: parsed.channel,
+      text: part,
+      phone: phone ?? undefined,
+    });
+
+    if (ghlMessageId && outId) {
       // setGhlMessageId must run before the outbound echo arrives so isBotMessageById works.
       try {
-        await setGhlMessageId(outboundMessageId, ghlMessageId);
-        await markDelivered(outboundMessageId);
+        await setGhlMessageId(outId, ghlMessageId);
+        await markDelivered(outId);
       } catch (e: unknown) {
         console.error('[db] post-send DB update failed:', e instanceof Error ? e.message : String(e));
       }
+    } else if (!ghlMessageId) {
+      console.error('[ghl] sendMessage failed after retry — leaving pending for cron');
+      logError(tenant.clientId, parsed.conversationId, 'delivery_error', {
+        channel: parsed.channel, hasPhone: !!phone, part: i, parts: parts.length, note: 'inline retry exhausted',
+      });
     }
-  } else {
-    console.error('[ghl] sendMessage failed after retry — leaving pending for cron');
-    logError(tenant.clientId, parsed.conversationId, 'delivery_error', {
-      channel: parsed.channel,
-      hasPhone: !!phone,
-      replyLen: reply.length,
-      note: 'inline retry exhausted',
-    });
   }
 
   // Schedule tier-1 follow-up after every bot reply (RPC no-ops if conv is not active).
