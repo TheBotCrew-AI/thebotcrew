@@ -106,13 +106,32 @@ export function buildFrontDeskInstructions(config: FrontDeskConfig, nowIso: stri
     /* keep raw ISO on parse error */
   }
 
+  // Surface the booking horizon (as a pre-computed date, never asking the model to do
+  // date math) so the agent sets expectations up front: when a lead asks for a time
+  // past the window, it says so instead of silently offering near-term slots (the tool
+  // clamps the range either way — this makes the agent aware of it).
+  let horizonLine = '';
+  if (config.bookingHorizonDays != null) {
+    let maxReadable = '';
+    try {
+      const maxDate = new Date(new Date(nowIso).getTime() + config.bookingHorizonDays * 24 * 60 * 60 * 1000);
+      maxReadable = new Intl.DateTimeFormat('es-MX', { weekday: 'long', day: 'numeric', month: 'long' }).format(maxDate);
+    } catch {
+      /* fall back to the day count without a date */
+    }
+    horizonLine =
+      `\nSolo puedes agendar dentro de los próximos ${config.bookingHorizonDays} días` +
+      (maxReadable ? ` (hasta el ${maxReadable})` : '') +
+      `. Si el lead pide una fecha posterior (p. ej. "la próxima semana"), díselo con claridad —que solo hay cupo hasta esa fecha— y ofrécele el horario más pronto disponible; nunca agendes ni ofrezcas nada fuera de esa ventana.`;
+  }
+
   return `${identityLine}
 
 # Fecha y hora actuales
 Hoy es ${nowReadable} (zona horaria: ${config.timezone}).
 Formato ISO para herramientas: ${nowIso}.
 NUNCA calcules tú el día de la semana de una fecha — usa el día que ya viene en los
-horarios de getAvailability (campo "label") o la fecha de hoy de arriba.
+horarios de getAvailability (campo "label") o la fecha de hoy de arriba.${horizonLine}
 
 # Tono y formato
 ${toneBody}

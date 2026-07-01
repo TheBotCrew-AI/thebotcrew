@@ -85,7 +85,7 @@ export const getAvailabilityTool = createTool({
 
     const horizonNote =
       window.clamped && window.maxMs != null
-        ? ` Nota: solo se agenda hasta ${label(new Date(window.maxMs).toISOString())} (próximos ${horizon} días); no ofrezcas nada después de esa fecha.`
+        ? ` IMPORTANTE: el rango pedido excede la ventana de agendado. Solo hay cupo hasta ${label(new Date(window.maxMs).toISOString())} (próximos ${horizon} días). Si el lead pidió una fecha posterior, díselo explícitamente y ofrécele ÚNICAMENTE estos horarios.`
         : undefined;
 
     const from = new Date(window.fromMs).toISOString();

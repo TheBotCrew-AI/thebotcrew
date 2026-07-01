@@ -120,7 +120,10 @@ slots. Rules (also reinforced in the front-desk prompt):
   NULL = no cap) is enforced in the tool via the pure `resolveBookingWindow`
   (`tools/booking-window.ts`): the requested range is clamped to `now + N days`, and a range
   starting entirely beyond it returns an `out_of_horizon` note the agent relays to the lead.
-  This does **not** rely on the model — the tool never even queries GHL past the horizon.
+  This does **not** rely on the model — the tool never even queries GHL past the horizon. The
+  horizon date is also **surfaced in the prompt** (`# Fecha y hora actuales`, pre-computed — no
+  model date math), so the agent sets expectations up front instead of silently offering
+  near-term slots when a lead asks for a later date.
 - **Timezone:** slot labels are formatted in `tenant_config.timezone`, which **must match the
   GHL calendar's timezone** (else labels are offset — e.g. a Pacific calendar shown in CDMX is
   +1h wrong). The Bot Crew's calendar is `America/Tijuana`.
