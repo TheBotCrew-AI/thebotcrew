@@ -51,7 +51,10 @@ eviction, transient model/GHL failure), a **reconciliation cron** (`worker/recon
 runs each minute) finds conversations whose latest message is an unanswered inbound (>45s old,
 active, gates pass) and re-runs the turn — recovering within ~1 min. The atomic claim
 (`reconcile_claimed_at`, FOR UPDATE SKIP LOCKED + cooldown) + the latest-message gate prevent
-double-replies. (Cloudflare Queues would be the heavier "correct" upgrade — deferred.)
+double-replies. The **live turn also claims** (`claimTurnForProcessing` at the top of
+`runAgentTurn`, before generate) so a slow in-flight turn — one that hasn't logged its reply
+before the sweep's min-age — isn't re-run and double-sent by the cron. (Cloudflare Queues would
+be the heavier "correct" upgrade — deferred.)
 
 We own conversation history, including message content + who sent what (lead vs which AI
 role vs which human agent) — the foundation for future human-agent ↔ AI collaboration.

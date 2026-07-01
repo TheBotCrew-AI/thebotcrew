@@ -20,6 +20,7 @@ import type { AiProvider, ConversationMessage, ConversationStatus, TenantContext
 import {
   cancelFollowUps,
   botActivation,
+  claimTurnForProcessing,
   isBotSuppressed,
   isHumanActive,
   isLatestInboundMessage,
@@ -235,6 +236,16 @@ export async function runAgentTurn({
     return { status: 200, body: { ignored: 'bot suppressed (handoff or human active)', conversationId } };
   }
 
+  // Claim the turn so the reconciliation sweep skips it while in flight. A slow
+  // generation can exceed the sweep's min-age before we log a reply; without this
+  // the cron would re-run — and double-send — the same turn. Best-effort: on failure
+  // the isLatestInboundMessage guard above still applies.
+  try {
+    await claimTurnForProcessing(conversationId);
+  } catch (e) {
+    console.error('[reconcile-claim] failed:', e instanceof Error ? e.message : String(e));
+  }
+
   const history = await loadRecentMessages(conversationId);
   const messages = toModelMessages(history);
 
@@ -376,7 +387,13 @@ export async function runAgentTurn({
     try {
       await scheduleFollowUp(conversationId, 1, firstDelay, tenant.config.timezone, tenant.config.quietHours);
     } catch (e) {
-      console.error('[followup] scheduleFollowUp failed:', e instanceof Error ? e.message : String(e));
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error('[followup] scheduleFollowUp failed:', msg);
+      // Surface it — a swallowed failure here is exactly why a delivered reply can end
+      // up with no follow-up scheduled, invisible until now (logBotEvent never throws).
+      await logBotEvent(tenant.clientId, parsed.conversationId, 'db_error', {
+        stage: 'schedule_follow_up', tier: 1, error: msg,
+      });
     }
   }
 

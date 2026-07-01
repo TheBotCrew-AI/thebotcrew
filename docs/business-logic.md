@@ -181,3 +181,12 @@ Short log of *why* certain rules exist, so they aren't "simplified away" later.
   echo guard (`isRecentBotEcho`, §3). Residual: a raw network error after GHL commits still
   double-delivers — only true send idempotency closes it (deferred). Frequency at time of fix: 1
   in ~26k. Conversation `5a2ab928-d8a9-4eac-abe8-9fa0fa93db7e`.
+- **2026-07-01 — reconciliation double-run (second double-send source).** A single inbound
+  logged **two** `availability_checked` events ~43s apart: the debounced turn was abnormally
+  slow (~58s from tool-call to logged reply), so it hadn't recorded a reply when the
+  reconciliation sweep's 45s min-age elapsed — the inbound still looked "unanswered," so the
+  cron re-ran (and re-sent) the same turn. Distinct from the inline-retry bug above. Fix: the
+  live turn now claims `reconcile_claimed_at` at the start of `runAgentTurn` (before generate),
+  so the sweep's cooldown skips an in-flight turn (§2 / CLAUDE.md turn-durability). Also, a
+  swallowed `scheduleFollowUp` failure (a delivered reply left with no follow-up) now emits a
+  `db_error` event (`stage:'schedule_follow_up'`) instead of vanishing into Cloudflare logs.

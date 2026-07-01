@@ -631,6 +631,22 @@ export async function isRecentBotEcho(
 }
 
 /**
+ * Claim a conversation's turn as in-flight by bumping `reconcile_claimed_at`. The
+ * reconciliation sweep skips conversations claimed within its cooldown, so this closes
+ * the race where a slow in-flight turn (not yet reflected as an answered inbound) is
+ * re-run — and double-sent — by the cron. Best-effort: on failure we fall back to the
+ * pre-existing isLatestInboundMessage guard.
+ */
+export async function claimTurnForProcessing(conversationId: string): Promise<void> {
+  const supabase = getSupabase();
+  const { error } = await supabase
+    .from('conversations')
+    .update({ reconcile_claimed_at: new Date().toISOString() })
+    .eq('id', conversationId);
+  fail('claimTurnForProcessing', error);
+}
+
+/**
  * Reactivate a conversation to 'active' when the lead messages again.
  * Only fires if the conversation is in standby/completed/opted_out.
  */
