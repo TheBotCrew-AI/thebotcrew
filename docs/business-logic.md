@@ -57,6 +57,12 @@ Hybrid human ↔ AI. Enforced by `isBotSuppressed`, re-checked again right befor
   conversations); removing it resumes the bot. There is no `bot-on` tag — absence means on.
   Requires the `contacts.write` scope. The bot also writes status tags back to GHL so state
   stays visible there (`ghl/tags.ts`).
+- **Bot-echo guards.** GHL echoes our *own* API sends back on the outbound webhook as
+  `source:'app'`, so before treating an outbound as a human takeover the handler ignores it if
+  (a) its GHL message id matches a stored bot message (`isBotMessageById`), or (b) — backstop —
+  its content matches a bot message sent to that conversation in the last 90s (`isRecentBotEcho`).
+  (b) catches an accepted send whose id we couldn't capture; without it that echo would open a
+  false 5-min pause (see §7, 2026-07-01 double-send).
 
 ## 4. Follow-ups (reactivation)
 
@@ -165,3 +171,13 @@ Short log of *why* certain rules exist, so they aren't "simplified away" later.
   contradicting its own tool output, **not** a real calendar gap. Fixes: raised default model
   to `gpt-5-mini`, added `availability_checked` logging (§5), and the strict availability
   prompt rule (§5). Conversation `d5ba232b-d955-4104-a385-8e99471b0965`.
+- **2026-07-01 — double send + false takeover.** A front-desk reply reached the lead twice.
+  Root cause: `sendWithRetry` retried a send GHL had actually **accepted** (the first attempt
+  looked failed on our side — a 2xx whose id we couldn't parse, or a network blip after commit),
+  and GHL's send API isn't idempotent. The un-captured duplicate echoed back as `source:'app'`
+  and was logged as a **human takeover**, opening a false 5-min pause (which also self-silences
+  the bot). Fixes: never retry after a 2xx — treat *accepted-without-id* as delivered so neither
+  the inline retry nor the pending cron re-sends (`webhook-handler.ts`); plus a content+recency
+  echo guard (`isRecentBotEcho`, §3). Residual: a raw network error after GHL commits still
+  double-delivers — only true send idempotency closes it (deferred). Frequency at time of fix: 1
+  in ~26k. Conversation `5a2ab928-d8a9-4eac-abe8-9fa0fa93db7e`.

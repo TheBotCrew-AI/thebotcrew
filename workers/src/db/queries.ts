@@ -605,6 +605,32 @@ export async function isBotMessageById(ghlMessageId: string): Promise<boolean> {
 }
 
 /**
+ * Content-based echo guard: true if a bot message with this exact content was sent to
+ * this conversation within the last `withinSeconds`. Backstop for our own outbound echo
+ * when we couldn't capture its GHL message id (so isBotMessageById can't match it) — e.g.
+ * a send GHL accepted but whose id we couldn't parse. Prevents that echo from being
+ * mislabeled as a human takeover (which would wrongly pause the bot for 5 min).
+ */
+export async function isRecentBotEcho(
+  ghlConversationId: string,
+  content: string,
+  withinSeconds = 90,
+): Promise<boolean> {
+  const supabase = getSupabase();
+  const since = new Date(Date.now() - withinSeconds * 1000).toISOString();
+  const { data, error } = await supabase
+    .from('messages')
+    .select('id, conversations!inner(ghl_conversation_id)')
+    .eq('sender_type', 'bot')
+    .eq('content', content)
+    .gte('sent_at', since)
+    .eq('conversations.ghl_conversation_id', ghlConversationId)
+    .limit(1);
+  fail('isRecentBotEcho', error);
+  return Array.isArray(data) && data.length > 0;
+}
+
+/**
  * Reactivate a conversation to 'active' when the lead messages again.
  * Only fires if the conversation is in standby/completed/opted_out.
  */

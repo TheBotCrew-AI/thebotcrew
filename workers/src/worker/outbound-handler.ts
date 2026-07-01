@@ -8,7 +8,8 @@
  * Flow:
  *   1. Verify signature.
  *   2. Parse: return early if not a human-sent outbound message.
- *   3. Secondary bot-echo guard: check our DB by GHL message ID.
+ *   3. Secondary bot-echo guards: by GHL message ID, then by content+recency
+ *      (catches our own echo when we couldn't capture its id).
  *   4. Resolve tenant.
  *   5. Resolve (or lazily create) the human_agents row for this GHL user.
  *   6. Log message to our store (sender_type='human_agent').
@@ -22,6 +23,7 @@ import {
   cancelFollowUps,
   findHumanAgentByGhlId,
   isBotMessageById,
+  isRecentBotEcho,
   logMessage,
   setHumanActive,
   upsertHumanAgent,
@@ -44,6 +46,13 @@ export async function handleOutboundWebhook(
   // it's an echo of our own reply that slipped past the source==='api' filter.
   if (await isBotMessageById(parsed.messageId)) {
     return { status: 200, body: { ignored: 'bot echo (confirmed by DB)' } };
+  }
+
+  // Content backstop: an echo of our own send whose GHL id we couldn't capture comes
+  // back as source:'app' with a NEW message id, so the id guard above misses it. Match
+  // it by exact content + recency so it isn't mislabeled as a human takeover.
+  if (await isRecentBotEcho(parsed.conversationId, parsed.text)) {
+    return { status: 200, body: { ignored: 'bot echo (matched by content)' } };
   }
 
   const tenant = await resolveTenant(parsed.locationId);

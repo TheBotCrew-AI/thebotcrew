@@ -166,3 +166,17 @@ describe('handleInboundWebhook — delivery failure', () => {
     expect(res.status).toBe(200);
   });
 });
+
+describe('handleInboundWebhook — accepted without id', () => {
+  it('GHL accepts (2xx) but returns no id → no retry, marked delivered, not left pending', async () => {
+    ghl.sendMessage.mockResolvedValue({ ghlMessageId: '' });
+    const agent = agentReplying();
+    const res = await handleInboundWebhook(inbound, agent);
+
+    expect(ghl.sendMessage).toHaveBeenCalledTimes(1); // accepted → never retried (no double-send)
+    expect(q.setGhlMessageId).not.toHaveBeenCalled(); // no id to store
+    expect(q.markDelivered).toHaveBeenCalledWith('msg-uuid'); // delivered → cron won't re-send
+    expect(q.logError).not.toHaveBeenCalledWith('client1', 'conv1', 'delivery_error', expect.anything());
+    expect(res.status).toBe(200);
+  });
+});

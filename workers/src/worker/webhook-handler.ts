@@ -68,24 +68,33 @@ export interface AgentRunParams {
 
 type ChatMessage = { role: 'user'; content: string } | { role: 'assistant'; content: string };
 
-/** One send attempt; returns the GHL message ID on success, null on failure. */
-async function trySend(ghl: GhlClient, params: Parameters<GhlClient['sendMessage']>[0]): Promise<string | null> {
+/** Outcome of a send: whether GHL accepted it, and its id if we could read one. */
+type SendOutcome = { delivered: boolean; ghlMessageId: string | null };
+
+/**
+ * One send attempt. A 2xx from GHL (sendMessage returns) means the message was
+ * ACCEPTED — we treat it as delivered even if we couldn't parse the id, because
+ * the send is NOT idempotent and retrying an accepted message double-sends it.
+ * Only a thrown error (network failure / non-2xx) counts as not-delivered.
+ */
+async function trySend(ghl: GhlClient, params: Parameters<GhlClient['sendMessage']>[0]): Promise<SendOutcome> {
   try {
     const { ghlMessageId } = await ghl.sendMessage(params);
-    return ghlMessageId || null;
+    return { delivered: true, ghlMessageId: ghlMessageId || null };
   } catch {
-    return null;
+    return { delivered: false, ghlMessageId: null };
   }
 }
 
 /**
- * Attempt delivery with one inline retry after 1.5s.
- * Returns the GHL message ID on success, null if both attempts fail.
- * If both fail, the DB row stays delivery_status='pending' and the cron picks it up.
+ * Attempt delivery with one inline retry after 1.5s. Retries ONLY a genuine
+ * failure (the first attempt threw) — never after a 2xx, so an accepted-but-
+ * unparsed send is not double-delivered. If both attempts fail to deliver, the
+ * DB row stays delivery_status='pending' and the cron picks it up.
  */
-async function sendWithRetry(ghl: GhlClient, params: Parameters<GhlClient['sendMessage']>[0]): Promise<string | null> {
-  const id = await trySend(ghl, params);
-  if (id) return id;
+async function sendWithRetry(ghl: GhlClient, params: Parameters<GhlClient['sendMessage']>[0]): Promise<SendOutcome> {
+  const first = await trySend(ghl, params);
+  if (first.delivered) return first;
   await new Promise<void>((r) => setTimeout(r, 1500));
   return trySend(ghl, params);
 }
@@ -331,22 +340,25 @@ export async function runAgentTurn({
       logError(tenant.clientId, parsed.conversationId, 'db_error', { error: msg, stage: 'outbound_log' });
     }
 
-    const ghlMessageId = await sendWithRetry(ghl, {
+    const { delivered, ghlMessageId } = await sendWithRetry(ghl, {
       contactId: parsed.contactId,
       channel: parsed.channel,
       text: part,
       phone: phone ?? undefined,
     });
 
-    if (ghlMessageId && outId) {
-      // setGhlMessageId must run before the outbound echo arrives so isBotMessageById works.
+    if (delivered && outId) {
+      // Mark delivered so the pending-delivery cron never re-sends it (that would
+      // double-deliver too). setGhlMessageId, when we have the id, lets the outbound
+      // echo be recognized as ours (isBotMessageById); when GHL accepted but we
+      // couldn't read the id, the content guard in the outbound handler is the backstop.
       try {
-        await setGhlMessageId(outId, ghlMessageId);
+        if (ghlMessageId) await setGhlMessageId(outId, ghlMessageId);
         await markDelivered(outId);
       } catch (e: unknown) {
         console.error('[db] post-send DB update failed:', e instanceof Error ? e.message : String(e));
       }
-    } else if (!ghlMessageId) {
+    } else if (!delivered) {
       console.error('[ghl] sendMessage failed after retry — leaving pending for cron');
       logError(tenant.clientId, parsed.conversationId, 'delivery_error', {
         channel: parsed.channel, hasPhone: !!phone, part: i, parts: parts.length, note: 'inline retry exhausted',
