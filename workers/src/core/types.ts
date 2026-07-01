@@ -45,6 +45,8 @@ export interface RawTenantConfig {
   followUpAngles?: string[] | null;
   /** Quiet window for follow-ups; null/absent uses the platform default (21:00–08:00). */
   quietHours?: QuietHours | null;
+  /** Max days ahead the bot may look for / offer appointment slots; null = no cap. */
+  bookingHorizonDays?: number | null;
 }
 
 /**

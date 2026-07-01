@@ -42,7 +42,7 @@ export async function loadTenantConfig(ghlLocationId: string): Promise<TenantCon
   const { data, error } = await supabase
     .from('tenant_config')
     .select(
-      'business_name, timezone, tone, services, hours, calendars, faq, enabled_roles, prompt_overrides, ai_provider, ai_model, follow_up_tiers, follow_up_cadence, follow_up_angles, quiet_hours, enabled_channels, test_contact_ids, trigger_keywords, ' +
+      'business_name, timezone, tone, services, hours, calendars, faq, enabled_roles, prompt_overrides, ai_provider, ai_model, follow_up_tiers, follow_up_cadence, follow_up_angles, quiet_hours, booking_horizon_days, enabled_channels, test_contact_ids, trigger_keywords,' +
         'tenants!inner(id, client_id, ghl_location_id, is_active)',
     )
     .eq('tenants.ghl_location_id', ghlLocationId)
@@ -83,6 +83,10 @@ export async function loadTenantConfig(ghlLocationId: string): Promise<TenantCon
         ? (row.follow_up_angles as unknown[]).filter((s): s is string => typeof s === 'string' && s.length > 0)
         : null,
       quietHours: parseQuietHours(row.quiet_hours),
+      bookingHorizonDays:
+        typeof row.booking_horizon_days === 'number' && row.booking_horizon_days > 0
+          ? row.booking_horizon_days
+          : null,
     },
   };
 }

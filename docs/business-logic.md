@@ -111,8 +111,17 @@ single scheduling choke point `scheduleFollowUp` via the pure helper
 Tool: `getAvailability` (`roles/front-desk/tools/get-availability.ts`) → real GHL calendar
 slots. Rules (also reinforced in the front-desk prompt):
 
-- The agent **must call `getAvailability` before offering or confirming any time.** Never
-  invent slots.
+- The agent **must call `getAvailability` before offering or confirming any time**, and may
+  only offer/confirm a time that came **verbatim** from a result (no inventing/extrapolating
+  dates like "next week"). Enforced in the front-desk prompt (§ Disponibilidad).
+- **Booking horizon (deterministic, per-tenant):** `tenant_config.booking_horizon_days` (int,
+  NULL = no cap) is enforced in the tool via the pure `resolveBookingWindow`
+  (`tools/booking-window.ts`): the requested range is clamped to `now + N days`, and a range
+  starting entirely beyond it returns an `out_of_horizon` note the agent relays to the lead.
+  This does **not** rely on the model — the tool never even queries GHL past the horizon.
+- **Timezone:** slot labels are formatted in `tenant_config.timezone`, which **must match the
+  GHL calendar's timezone** (else labels are offset — e.g. a Pacific calendar shown in CDMX is
+  +1h wrong). The Bot Crew's calendar is `America/Tijuana`.
 - Slots are labeled **in code** in the tenant's timezone (correct weekday); the agent presents
   the `label` **verbatim** and never recomputes/translates a date. Dates are grounded from the
   prompt's "today" line — the model never does weekday math.

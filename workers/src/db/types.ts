@@ -27,6 +27,8 @@ export interface TenantConfigRow {
   follow_up_angles: unknown;
   /** Quiet (DND) window for follow-ups as {start,end} local hours. NULL = platform default. */
   quiet_hours: unknown;
+  /** Max days ahead the bot may offer appointment slots. NULL = no cap. */
+  booking_horizon_days: number | null;
   /** Channels the bot may reply on. NULL = none (installed but silent). */
   enabled_channels: string[] | null;
   /** Pre-live test allowlist: when non-empty, reply only to these GHL contact ids. */

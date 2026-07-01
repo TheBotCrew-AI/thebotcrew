@@ -66,7 +66,8 @@ bypasses RLS).
   FAQ, tone overrides, which roles are enabled, provider/model, follow-ups (`follow_up_cadence`
   timing ladder + `follow_up_angles` content pool — decoupled, see docs/business-logic.md §4),
   follow-up quiet hours (`quiet_hours` jsonb `{start,end}` local, NULL = platform default
-  21:00–08:00), and the reply gates (`enabled_channels`, `test_contact_ids`,
+  21:00–08:00), booking horizon (`booking_horizon_days` int, NULL = no cap — deterministically
+  clamps getAvailability), and the reply gates (`enabled_channels`, `test_contact_ids`,
   `trigger_keywords` — see GHL notes) live in Supabase. Onboarding a client
   is a DB row + config — no redeploy for the common case.
 
@@ -105,7 +106,8 @@ supabase/
                                # 0012 follow_ups, 0013 human_takeover, 0014b add_facebook_channel,
                                # 0015 tag_handoff, 0016 channel_control+test_mode, 0017 trigger_keyword_gate,
                                # 0020 turn_reconciliation, 0021 availability_event, 0022 follow_up_quiet_hours,
-                               # 0023 follow_up_cadence_angles (decouple timing from angle pool), 0024 booking_failed_event
+                               # 0023 follow_up_cadence_angles (decouple timing from angle pool), 0024 booking_failed_event,
+                               # 0025 booking_horizon
   clients.sql, seed-tenants.sql# seeds (run by `supabase db reset` per config.toml)
 ```
 

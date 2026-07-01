@@ -8,8 +8,7 @@ import { z } from 'zod';
 import { GhlClient } from '../../../ghl/client.js';
 import { logBotEvent } from '../../../db/queries.js';
 import { resolveAgentContext } from './agent-context.js';
-
-const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+import { resolveBookingWindow } from './booking-window.js';
 
 export const getAvailabilityTool = createTool({
   id: 'getAvailability',
@@ -40,9 +39,6 @@ export const getAvailabilityTool = createTool({
       };
     }
 
-    const from = fromDate ?? new Date().toISOString();
-    const to = toDate ?? new Date(Date.now() + SEVEN_DAYS_MS).toISOString();
-
     // Format each slot's day/time in code (correct weekday in the tenant's tz), so
     // the agent presents them verbatim and never computes a date itself.
     const fmt = new Intl.DateTimeFormat('es-MX', {
@@ -62,6 +58,39 @@ export const getAvailabilityTool = createTool({
       }
     };
 
+    // Deterministic booking horizon (business rule, per-tenant): the tool never looks
+    // past now + bookingHorizonDays. Does NOT rely on the model behaving — the range is
+    // clamped here, or (if it starts entirely beyond the horizon) we return that fact so
+    // the agent redirects the lead to the valid window.
+    const horizon = config.bookingHorizonDays ?? null;
+    const window = resolveBookingWindow(Date.now(), fromDate, toDate, horizon);
+
+    if (window.outOfHorizon && window.maxMs != null) {
+      const maxLabel = label(new Date(window.maxMs).toISOString());
+      await logBotEvent(tenant.clientId, turn.ghlConversationId, 'availability_checked', {
+        serviceName,
+        calendarId,
+        from: new Date(window.fromMs).toISOString(),
+        to: new Date(window.toMs).toISOString(),
+        outcome: 'out_of_horizon',
+        horizonDays: horizon,
+      });
+      return {
+        slots: [],
+        note:
+          `Solo se pueden agendar horarios dentro de los próximos ${horizon} días (hasta ${maxLabel}). ` +
+          'El rango que pediste queda fuera de esa ventana; dile al lead esa limitación y ofrécele un horario dentro de ella.',
+      };
+    }
+
+    const horizonNote =
+      window.clamped && window.maxMs != null
+        ? ` Nota: solo se agenda hasta ${label(new Date(window.maxMs).toISOString())} (próximos ${horizon} días); no ofrezcas nada después de esa fecha.`
+        : undefined;
+
+    const from = new Date(window.fromMs).toISOString();
+    const to = new Date(window.toMs).toISOString();
+
     const ghl = new GhlClient(tenant.tenantId);
     try {
       const slots = await ghl.getAvailability(calendarId, from, to);
@@ -76,12 +105,13 @@ export const getAvailabilityTool = createTool({
         slotCount: labeled.length,
         slots: labeled.slice(0, 50).map((s) => ({ start: s.start, label: s.label })),
       });
+      const baseNote =
+        slots.length === 0
+          ? 'Sin disponibilidad en el rango consultado.'
+          : 'Ofrece estos horarios al lead usando EXACTAMENTE el texto del campo "label" (ya trae el día de la semana correcto). No recalcules ni traduzcas fechas.';
       return {
         slots: labeled,
-        note:
-          slots.length === 0
-            ? 'Sin disponibilidad en el rango consultado.'
-            : 'Ofrece estos horarios al lead usando EXACTAMENTE el texto del campo "label" (ya trae el día de la semana correcto). No recalcules ni traduzcas fechas.',
+        note: horizonNote ? baseNote + horizonNote : baseNote,
       };
     } catch (err) {
       await logBotEvent(tenant.clientId, turn.ghlConversationId, 'availability_checked', {
