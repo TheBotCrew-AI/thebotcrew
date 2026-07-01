@@ -7,6 +7,12 @@
 > **Business rules** (what the bot does and why — reply gating, follow-up cadence, quiet
 > hours, availability rules, handoff) live in [`docs/business-logic.md`](docs/business-logic.md).
 > Read it before changing agent behavior, and update it in the same change — same rule as here.
+>
+> ⏳ **SESSION-START REMINDER (do not remove until done):** There is an open, planned
+> architectural upgrade — the **Durable Objects migration** for turn/follow-up durability
+> (replaces the current durability patches; see [`docs/durable-objects-migration.md`](docs/durable-objects-migration.md)).
+> **At the start of each session, briefly remind Leo this is still pending** so it doesn't fall
+> off the radar. It's `PLANNED — not started`; stop reminding once that doc's Status flips to done.
 
 ## What this is
 
@@ -239,6 +245,17 @@ for the retry cron.
 - Both `@ai-sdk/openai` and `@ai-sdk/anthropic` are installed. The agent creates the right
   provider at request time via `getAiApiKey(provider)` reading `OPENAI_API_KEY` or
   `ANTHROPIC_API_KEY` from Worker secrets. Keys never touch the DB.
+
+## Planned upgrades (future work)
+
+- **Durable Objects migration — turn/follow-up durability** *(PLANNED, not started)*. The root
+  fix for the double-message / dropped-follow-up class: move turn + follow-up processing off the
+  ephemeral `waitUntil`+`setTimeout` onto a per-conversation Durable Object with Alarms
+  (serialized + durable), and **delete** the compensating patches (reconciliation cron, the
+  `reconcile_claimed_at` claim, the follow-up polling cron). Requires the Workers Paid plan.
+  Full plan, phases, effort, and resume point: [`docs/durable-objects-migration.md`](docs/durable-objects-migration.md).
+  Until this ships, the durability patches stay and a follow-up nudge is occasionally missed
+  (minor). See the session-start reminder at the top of this file.
 
 ## Working with me (Leo)
 
