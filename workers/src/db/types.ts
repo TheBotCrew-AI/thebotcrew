@@ -161,7 +161,9 @@ export type BotEventType =
   // Availability observability — raw slots GHL returned for a given check
   | 'availability_checked'
   // Booking observability — GHL rejected a bookAppointment call (status/body in metadata)
-  | 'booking_failed';
+  | 'booking_failed'
+  // Conversation state changed via app_update_conversation_status ({from,to} in metadata)
+  | 'status_changed';
 
 export interface LogAppointmentParams {
   p_client_id: string;

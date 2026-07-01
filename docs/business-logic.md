@@ -38,7 +38,9 @@ Statuses (`conversations.status`): `active`, `standby`, `completed`, `opted_out`
 - The front-desk agent sets terminal states via its `updateConversationStatus` tool:
   `standby` (not qualified / not ready), `completed` (booked or done), `opted_out` (asked to
   stop), `handed_off` (escalated to a human). Setting a terminal state **atomically cancels
-  pending follow-ups** (`app_update_conversation_status`).
+  pending follow-ups** and logs a **`status_changed`** event (`{from,to}`) — both in
+  `app_update_conversation_status`, so every state change (agent tool or follow-up runner) is
+  traceable. (A "silent standby" — agent ending a fresh lead with no reply — is visible here.)
 - A silent conversation in `standby`/`completed`/`opted_out` is **reactivated to `active`**
   when the lead messages again (`app_reactivate_conversation`). `active` and `handed_off` are
   untouched by reactivation.
