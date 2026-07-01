@@ -54,8 +54,13 @@ The point of this migration is to **remove** patches, not add another:
 - `worker/reconciliation.ts` + `app_load_unanswered_turns` RPC + `reconcile_claimed_at` column
   + `claimTurnForProcessing` — durability now comes from the guaranteed Alarm.
 - The `setTimeout` debounce inside `waitUntil`.
-- `worker/followup-runner.ts` as a **cron** + `app_load_due_follow_ups` polling — replaced by
-  per-conversation Alarms. (The reactivation agent + angle logic stay; only the scheduler moves.)
+- The follow-up **scheduler plumbing only**: the per-minute cron trigger for
+  `worker/followup-runner.ts` + the `app_load_due_follow_ups` DB polling — replaced by
+  per-conversation Alarms fired at the exact time. **The follow-up business logic is NOT
+  touched** — tiers/cadence, the angle pool + non-repeating cursor, quiet hours, the freno, and
+  the reactivation agent all stay exactly as they are (see business-logic.md §4). We're only
+  swapping "a cron that polls every minute for due rows" for "a durable alarm set to the exact
+  time"; same behavior, better mechanism (precise, per-conversation, survives eviction).
 - Fix #1 (claim) and the reconciliation double-run concern — gone (serialized).
 - Fix A (no-retry-after-2xx) can stay as-is (it's about GHL non-idempotency, still valid) but
   the *concurrency* reason for double-sends is gone.
