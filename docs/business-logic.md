@@ -85,6 +85,10 @@ Core mechanics — **one follow-up at a time**:
   `standby`. So an unresponsive lead gets at most `cadence.length` nudges per silence; replying is
   what "refuels" a new cycle. The stop condition is the lead going silent through a full cycle.
 
+The reactivation agent is text-only (no `getAvailability`, no booking horizon): it **never
+proposes dates/days/timeframes** (e.g. "next week") — doing so contradicts what the front-desk
+can actually book. It only baits a reply; scheduling/availability is entirely the front-desk's.
+
 **Angle progression (never repeats):** at send time the runner offers the reactivation agent only
 the pool angles **not yet sent** on this conversation (`loadSentAngleIndexes`, keyed on
 `follow_ups.angle_index` where `status='sent'` — cancelled/undelivered never count). Selection is
