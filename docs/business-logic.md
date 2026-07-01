@@ -1,0 +1,125 @@
+# Business Logic — The Bot Crew Agent Platform
+
+> The **rules that govern agent behavior**, separate from `CLAUDE.md` (which covers
+> architecture, stack, and conventions). Read this to understand *what the bot does and
+> why*, without reverse-engineering it from code.
+>
+> **Maintenance rule (non-negotiable):** when a change alters any behavior described here,
+> update this file **in the same change** — same standard as `CLAUDE.md`. Each rule points
+> to where it is enforced so the doc stays anchored to the code. If code and this doc
+> disagree, the code is the truth and this doc is a bug — fix it.
+
+---
+
+## 1. Reply gating — when the bot is allowed to answer
+
+Inbound messages are **always stored**; only the *reply* is gated. Enforced in
+`worker/webhook-handler.ts`; helpers in `core/tenant.ts`. Gate order: **channel / test → keyword**.
+
+- **`enabled_channels text[]`** — channels the bot may reply on. **`NULL` = none** (installed
+  but silent; the onboarding default — new tenants are born silent). Set e.g. `{facebook}` to
+  go live on one channel.
+- **`test_contact_ids text[]`** — pre-live allowlist. When non-empty, the bot replies **only**
+  to those GHL contact ids, on **any** channel (bypasses the channel gate). Used to test with
+  your own contacts before going live.
+- **`trigger_keywords text[]`** — entry gate (e.g. an ad CTA "manda Agente"). When non-empty,
+  the bot only **enters** a conversation whose message contains a keyword (whole-word/phrase,
+  case- & accent-insensitive). It's an entry gate, not per-message: once activated
+  (`conversations.bot_activated`), the thread flows without the keyword.
+
+Each blocked turn is logged to `bot_events` (`channel_disabled`, `test_mode_skip`,
+`keyword_required`, `bot_activated`) so you can see *why* the bot stayed quiet.
+
+## 2. Conversation lifecycle
+
+Statuses (`conversations.status`): `active`, `standby`, `completed`, `opted_out`,
+`handed_off`, `closed`.
+
+- The front-desk agent sets terminal states via its `updateConversationStatus` tool:
+  `standby` (not qualified / not ready), `completed` (booked or done), `opted_out` (asked to
+  stop), `handed_off` (escalated to a human). Setting a terminal state **atomically cancels
+  pending follow-ups** (`app_update_conversation_status`).
+- A silent conversation in `standby`/`completed`/`opted_out` is **reactivated to `active`**
+  when the lead messages again (`app_reactivate_conversation`). `active` and `handed_off` are
+  untouched by reactivation.
+
+## 3. Human takeover & kill switch
+
+Hybrid human ↔ AI. Enforced by `isBotSuppressed`, re-checked again right before send
+(anti-double-message). See `worker/outbound-handler.ts`, `worker/tag-handler.ts`.
+
+- **Human reply** (`source:'app'` outbound webhook) opens a **5-minute sliding pause**
+  (`conversations.human_active_until`). Each human message extends it.
+- **`status='handed_off'`** is a **permanent** pause.
+- **`bot-off` tag** on a GHL contact = permanent handoff (contact-scoped, affects all their
+  conversations); removing it resumes the bot. There is no `bot-on` tag — absence means on.
+  Requires the `contacts.write` scope. The bot also writes status tags back to GHL so state
+  stays visible there (`ghl/tags.ts`).
+
+## 4. Follow-ups (reactivation cadence)
+
+Tenants **opt in** via `tenant_config.follow_up_tiers` (jsonb array of `{tier, delayMinutes,
+angle}`); absent/null = no follow-ups. Runner: `worker/followup-runner.ts` (1-min cron). The
+text-only **reactivation** role (no tools) writes each message using the tier's `angle`.
+
+Core mechanics — **one follow-up at a time**:
+
+- Tier 1 is scheduled after every bot reply (`webhook-handler.ts`); the RPC no-ops if the
+  conversation isn't `active`. Each subsequent tier is scheduled **only after** the previous
+  one sends (`followup-runner.ts`). So there is never more than one `pending` row per
+  conversation, and delays compound relative to the previous send.
+- **Every inbound message cancels all pending follow-ups** (`app_cancel_follow_ups`) — a lead
+  who replies is never spammed.
+- When the last configured tier is exhausted, the conversation is set to `standby`.
+
+### 4.1 Quiet hours (DND) — never message overnight
+
+A follow-up whose computed send time (`now + delayMinutes`) lands inside the tenant's quiet
+window is **pushed forward to when the window ends** (default 08:00 local). Enforced at the
+single scheduling choke point `scheduleFollowUp` via the pure helper
+`core/active-hours.ts` (`clampToActiveHours`).
+
+- **Default window: 21:00–08:00** tenant-local (`DEFAULT_QUIET_HOURS`).
+- **Per-tenant override:** `tenant_config.quiet_hours` jsonb `{"start": 22, "end": 7}` (local
+  hours 0–23). `NULL` = platform default. No redeploy to change.
+- Because each tier is scheduled relative to when the previous one *actually* sent, clamping
+  one tier shifts the whole chain forward — **no cascading to handle**. Windows that cross
+  midnight are handled (`hour >= start || hour < end`).
+
+## 5. Availability & booking
+
+Tool: `getAvailability` (`roles/front-desk/tools/get-availability.ts`) → real GHL calendar
+slots. Rules (also reinforced in the front-desk prompt):
+
+- The agent **must call `getAvailability` before offering or confirming any time.** Never
+  invent slots.
+- Slots are labeled **in code** in the tenant's timezone (correct weekday); the agent presents
+  the `label` **verbatim** and never recomputes/translates a date. Dates are grounded from the
+  prompt's "today" line — the model never does weekday math.
+- **Never claim a specific time is unavailable unless it's absent from the returned labels**,
+  and never mix a "no availability" preamble with a list that contains slots. (This rule exists
+  because gpt-4o-mini once said "11:30 no disponible" then listed 11:30 first — see §7.)
+- Every check logs the **raw slots GHL returned** to `bot_events`
+  (`event_type = 'availability_checked'`), so an availability claim can be audited against
+  ground truth instead of inferred. Query by `conversation_id`.
+- Booking is created via the GHL API (`bookAppointment` tool) and recorded in `appointments`.
+
+## 6. Models & factual grounding
+
+- **Platform default: `openai` / `gpt-5-mini`** (`DEFAULT_PROVIDER` / `DEFAULT_MODEL` in
+  `roles/front-desk/agent.ts`). Per-tenant override in `tenant_config.ai_provider` /
+  `ai_model`; `NULL` inherits the default.
+- **Anti-hallucination rule:** agents only state facts present in tenant config or returned by
+  tools. No invented prices, addresses, hours, availability, or promotions. When unsure, say so
+  and offer to connect a human.
+- Client-facing agent content defaults to **Spanish**.
+
+## 7. Known incidents & rationale
+
+Short log of *why* certain rules exist, so they aren't "simplified away" later.
+
+- **2026-07-01 — false unavailability.** A front-desk reply said "a las 11:30 no tengo
+  disponibilidad" then listed "11:30 a.m." as the first offered slot. Root cause: `gpt-4o-mini`
+  contradicting its own tool output, **not** a real calendar gap. Fixes: raised default model
+  to `gpt-5-mini`, added `availability_checked` logging (§5), and the strict availability
+  prompt rule (§5). Conversation `d5ba232b-d955-4104-a385-8e99471b0965`.

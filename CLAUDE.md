@@ -3,6 +3,10 @@
 > This file is the project's persistent memory. Read it at the start of every session.
 > Keep it current: when an architectural decision, convention, or workflow changes,
 > update this file in the same change.
+>
+> **Business rules** (what the bot does and why — reply gating, follow-up cadence, quiet
+> hours, availability rules, handoff) live in [`docs/business-logic.md`](docs/business-logic.md).
+> Read it before changing agent behavior, and update it in the same change — same rule as here.
 
 ## What this is
 
