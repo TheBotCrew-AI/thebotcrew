@@ -360,7 +360,7 @@ export async function runAgentTurn({
   const tier1 = tiers?.find((t) => t.tier === 1);
   if (tier1) {
     try {
-      await scheduleFollowUp(conversationId, 1, tier1.delayMinutes);
+      await scheduleFollowUp(conversationId, 1, tier1.delayMinutes, tenant.config.timezone, tenant.config.quietHours);
     } catch (e) {
       console.error('[followup] scheduleFollowUp failed:', e instanceof Error ? e.message : String(e));
     }

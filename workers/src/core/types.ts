@@ -19,6 +19,14 @@ export interface FollowUpTier {
   angle: string;
 }
 
+/** Quiet (DND) window in tenant-local hours; follow-ups never fire inside it. */
+export interface QuietHours {
+  /** Local hour [0-23] when the quiet window starts (inclusive). */
+  start: number;
+  /** Local hour [0-23] when the quiet window ends (exclusive). */
+  end: number;
+}
+
 /**
  * Raw per-tenant config as stored in `tenant_config` (jsonb fields arrive parsed).
  * Each role validates the slice it needs against its own zod schema.
@@ -38,6 +46,8 @@ export interface RawTenantConfig {
   model?: string | null;
   /** Configures follow-up tiers; null/absent means no follow-ups. */
   followUpTiers?: FollowUpTier[] | null;
+  /** Quiet window for follow-ups; null/absent uses the platform default (21:00–08:00). */
+  quietHours?: QuietHours | null;
 }
 
 /**

@@ -7,7 +7,8 @@
  */
 
 import { getSupabase } from './client.js';
-import type { AiProvider, Channel, ConversationMessage, ConversationStatus, FollowUpTier, TenantContext } from '../core/types.js';
+import type { AiProvider, Channel, ConversationMessage, ConversationStatus, FollowUpTier, QuietHours, TenantContext } from '../core/types.js';
+import { clampToActiveHours, DEFAULT_QUIET_HOURS } from '../core/active-hours.js';
 import type { GhlTokenResponse } from '../ghl/oauth.js';
 import type {
   BotEventType,
@@ -41,7 +42,7 @@ export async function loadTenantConfig(ghlLocationId: string): Promise<TenantCon
   const { data, error } = await supabase
     .from('tenant_config')
     .select(
-      'business_name, timezone, tone, services, hours, calendars, faq, enabled_roles, prompt_overrides, ai_provider, ai_model, follow_up_tiers, enabled_channels, test_contact_ids, trigger_keywords, ' +
+      'business_name, timezone, tone, services, hours, calendars, faq, enabled_roles, prompt_overrides, ai_provider, ai_model, follow_up_tiers, quiet_hours, enabled_channels, test_contact_ids, trigger_keywords, ' +
         'tenants!inner(id, client_id, ghl_location_id, is_active)',
     )
     .eq('tenants.ghl_location_id', ghlLocationId)
@@ -78,8 +79,17 @@ export async function loadTenantConfig(ghlLocationId: string): Promise<TenantCon
       followUpTiers: Array.isArray(row.follow_up_tiers)
         ? (row.follow_up_tiers as FollowUpTier[])
         : null,
+      quietHours: parseQuietHours(row.quiet_hours),
     },
   };
+}
+
+/** Validate the stored quiet_hours jsonb; anything malformed falls back to null (platform default). */
+function parseQuietHours(raw: unknown): QuietHours | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const { start, end } = raw as { start?: unknown; end?: unknown };
+  const valid = (h: unknown): h is number => typeof h === 'number' && Number.isInteger(h) && h >= 0 && h <= 23;
+  return valid(start) && valid(end) ? { start, end } : null;
 }
 
 /**
@@ -378,17 +388,25 @@ export async function cancelFollowUps(conversationId: string): Promise<void> {
 /**
  * Schedule a follow-up for a conversation. Returns the new follow-up id, or null
  * if the conversation is not active (the RPC no-ops for non-active conversations).
+ *
+ * The send time is `now + delayMinutes`, clamped out of the tenant's quiet window
+ * (DND) so reactivation messages never fire overnight — a time that lands in the
+ * window is pushed forward to when it ends (e.g. 08:00 local).
  */
 export async function scheduleFollowUp(
   conversationId: string,
   tier: number,
   delayMinutes: number,
+  timezone: string,
+  quietHours?: QuietHours | null,
 ): Promise<string | null> {
+  const base = new Date(Date.now() + delayMinutes * 60_000);
+  const scheduledFor = clampToActiveHours(base, timezone, quietHours ?? DEFAULT_QUIET_HOURS);
   const supabase = getSupabase();
   const { data, error } = await supabase.rpc('app_schedule_follow_up', {
     p_conversation_id: conversationId,
     p_tier: tier,
-    p_delay_minutes: delayMinutes,
+    p_scheduled_for: scheduledFor.toISOString(),
   });
   fail('scheduleFollowUp', error);
   return (data as string | null) ?? null;

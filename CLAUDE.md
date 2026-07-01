@@ -59,9 +59,10 @@ bypasses RLS).
 - **Code = the product.** Role definitions, system-prompt templates, tool
   implementations, and orchestration live in git. Editing them ships to all clients.
 - **Database = per-tenant variables.** Business name, services, hours, calendar IDs,
-  FAQ, tone overrides, which roles are enabled, provider/model, follow-up tiers, and the
-  reply gates (`enabled_channels`, `test_contact_ids`, `trigger_keywords` — see GHL notes)
-  live in Supabase. Onboarding a client
+  FAQ, tone overrides, which roles are enabled, provider/model, follow-up tiers,
+  follow-up quiet hours (`quiet_hours` jsonb `{start,end}` local, NULL = platform default
+  21:00–08:00), and the reply gates (`enabled_channels`, `test_contact_ids`,
+  `trigger_keywords` — see GHL notes) live in Supabase. Onboarding a client
   is a DB row + config — no redeploy for the common case.
 
 Prompt templates carry placeholders; tenant config fills them at runtime. Agents only
@@ -94,10 +95,11 @@ workers/                       # Mastra + Cloudflare Worker package (@thebotcrew
   fixtures/                    # sample webhook payloads
   wrangler.jsonc, vitest.config.ts, tsconfig.json
 supabase/
-  migrations/                  # 0001–0017 (plus 0014a–d backfilled from prod). Core: 0001 init,
+  migrations/                  # 0001–0022 (plus 0014a–d backfilled from prod). Core: 0001 init,
                                # 0004 tenant_config, 0005 conversation_store, 0006 ghl_oauth, 0011 debounce,
                                # 0012 follow_ups, 0013 human_takeover, 0014b add_facebook_channel,
-                               # 0015 tag_handoff, 0016 channel_control+test_mode, 0017 trigger_keyword_gate
+                               # 0015 tag_handoff, 0016 channel_control+test_mode, 0017 trigger_keyword_gate,
+                               # 0020 turn_reconciliation, 0021 availability_event, 0022 follow_up_quiet_hours
   clients.sql, seed-tenants.sql# seeds (run by `supabase db reset` per config.toml)
 ```
 

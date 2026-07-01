@@ -21,6 +21,8 @@ export interface TenantConfigRow {
   ai_provider: string | null;
   ai_model: string | null;
   follow_up_tiers: unknown;
+  /** Quiet (DND) window for follow-ups as {start,end} local hours. NULL = platform default. */
+  quiet_hours: unknown;
   /** Channels the bot may reply on. NULL = none (installed but silent). */
   enabled_channels: string[] | null;
   /** Pre-live test allowlist: when non-empty, reply only to these GHL contact ids. */

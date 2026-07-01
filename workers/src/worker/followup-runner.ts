@@ -146,7 +146,7 @@ async function processOne(
 
   const nextTier = tiers.find((t) => t.tier === followUp.tier + 1);
   if (nextTier) {
-    await scheduleFollowUp(followUp.conversationId, nextTier.tier, nextTier.delayMinutes);
+    await scheduleFollowUp(followUp.conversationId, nextTier.tier, nextTier.delayMinutes, tenant.config.timezone, tenant.config.quietHours);
   } else {
     await updateConversationStatus(followUp.ghlConversationId, 'standby');
   }
