@@ -21,7 +21,7 @@ import { updateConversationStatusTool } from './tools/update-conversation-status
 export const FRONT_DESK_ROLE = 'front-desk';
 
 export const DEFAULT_PROVIDER: AiProvider = 'openai';
-export const DEFAULT_MODEL = 'gpt-4o-mini';
+export const DEFAULT_MODEL = 'gpt-5-mini';
 
 export function buildFrontDeskAgent(): Agent {
   return new Agent({

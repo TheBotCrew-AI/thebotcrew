@@ -220,8 +220,9 @@ for the retry cron.
 
 - Provider and model are per-tenant, with platform-level defaults (`DEFAULT_PROVIDER` /
   `DEFAULT_MODEL` in `roles/front-desk/agent.ts`).
-- Platform default: `openai` / `gpt-4o-mini`. Per-tenant override stored in
-  `tenant_config.ai_provider` + `tenant_config.ai_model`.
+- Platform default: `openai` / `gpt-5-mini` (raised from `gpt-4o-mini` — the older mini
+  contradicted its own availability slot list; see `bot_events.availability_checked`).
+  Per-tenant override stored in `tenant_config.ai_provider` + `tenant_config.ai_model`.
 - Both `@ai-sdk/openai` and `@ai-sdk/anthropic` are installed. The agent creates the right
   provider at request time via `getAiApiKey(provider)` reading `OPENAI_API_KEY` or
   `ANTHROPIC_API_KEY` from Worker secrets. Keys never touch the DB.

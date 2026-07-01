@@ -149,7 +149,9 @@ export type BotEventType =
   | 'channel_disabled' // inbound channel not in the tenant's enabled_channels
   | 'test_mode_skip'   // test allowlist active and this contact isn't on it
   | 'keyword_required' // trigger keyword gate: message lacked the keyword
-  | 'bot_activated';   // trigger keyword matched → conversation entered the flow
+  | 'bot_activated'    // trigger keyword matched → conversation entered the flow
+  // Availability observability — raw slots GHL returned for a given check
+  | 'availability_checked';
 
 export interface LogAppointmentParams {
   p_client_id: string;
