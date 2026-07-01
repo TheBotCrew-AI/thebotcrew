@@ -6,7 +6,7 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { GhlClient } from '../../../ghl/client.js';
-import { logAppointment, logEvent } from '../../../db/queries.js';
+import { logAppointment, logBotEvent, logEvent } from '../../../db/queries.js';
 import { resolveAgentContext } from './agent-context.js';
 
 export const bookAppointmentTool = createTool({
@@ -43,6 +43,14 @@ export const bookAppointmentTool = createTool({
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error('[bookAppointment] GHL call failed:', msg);
+      // Persist the GHL rejection (status + body live in msg) so a failed booking is
+      // diagnosable from bot_events instead of only ephemeral Cloudflare logs.
+      await logBotEvent(tenant.clientId, turn.ghlConversationId, 'booking_failed', {
+        serviceName,
+        calendarId,
+        startTime,
+        error: msg,
+      });
       return { booked: false, message: 'No se pudo confirmar la cita en este momento. Intenta de nuevo o contacta al equipo.' };
     }
 

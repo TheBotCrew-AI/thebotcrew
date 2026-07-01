@@ -105,7 +105,7 @@ supabase/
                                # 0012 follow_ups, 0013 human_takeover, 0014b add_facebook_channel,
                                # 0015 tag_handoff, 0016 channel_control+test_mode, 0017 trigger_keyword_gate,
                                # 0020 turn_reconciliation, 0021 availability_event, 0022 follow_up_quiet_hours,
-                               # 0023 follow_up_cadence_angles (decouple timing from angle pool)
+                               # 0023 follow_up_cadence_angles (decouple timing from angle pool), 0024 booking_failed_event
   clients.sql, seed-tenants.sql# seeds (run by `supabase db reset` per config.toml)
 ```
 

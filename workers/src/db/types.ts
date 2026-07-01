@@ -157,7 +157,9 @@ export type BotEventType =
   | 'keyword_required' // trigger keyword gate: message lacked the keyword
   | 'bot_activated'    // trigger keyword matched → conversation entered the flow
   // Availability observability — raw slots GHL returned for a given check
-  | 'availability_checked';
+  | 'availability_checked'
+  // Booking observability — GHL rejected a bookAppointment call (status/body in metadata)
+  | 'booking_failed';
 
 export interface LogAppointmentParams {
   p_client_id: string;

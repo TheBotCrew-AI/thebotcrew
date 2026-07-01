@@ -123,6 +123,10 @@ slots. Rules (also reinforced in the front-desk prompt):
   (`event_type = 'availability_checked'`), so an availability claim can be audited against
   ground truth instead of inferred. Query by `conversation_id`.
 - Booking is created via the GHL API (`bookAppointment` tool) and recorded in `appointments`.
+  A GHL rejection logs a **`booking_failed`** event to `bot_events` with the GHL status/body +
+  `startTime`/`calendarId`/`serviceName`, so a failed booking is diagnosable (the reason is not
+  left in ephemeral Cloudflare logs). A common cause is offering a slot the model didn't get
+  verbatim from `getAvailability`, so GHL rejects the unrecognized `startTime`.
 
 ## 6. Models & factual grounding
 
