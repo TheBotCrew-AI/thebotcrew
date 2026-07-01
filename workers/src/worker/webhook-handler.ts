@@ -354,13 +354,15 @@ export async function runAgentTurn({
     }
   }
 
-  // Schedule tier-1 follow-up after every bot reply (RPC no-ops if conv is not active).
-  // Must be awaited — fire-and-forget gets killed when waitUntil resolves.
-  const tiers = tenant.config.followUpTiers;
-  const tier1 = tiers?.find((t) => t.tier === 1);
-  if (tier1) {
+  // Start a fresh follow-up cycle after every bot reply: schedule cadence position 1
+  // (RPC no-ops if conv is not active). Every inbound already cancelled the prior
+  // pending nudge, so this resets the cadence clock while the angle cursor advances
+  // independently (see followup-runner). Must be awaited — a detached promise gets
+  // killed when waitUntil resolves.
+  const firstDelay = tenant.config.followUpCadence?.[0];
+  if (firstDelay !== undefined) {
     try {
-      await scheduleFollowUp(conversationId, 1, tier1.delayMinutes, tenant.config.timezone, tenant.config.quietHours);
+      await scheduleFollowUp(conversationId, 1, firstDelay, tenant.config.timezone, tenant.config.quietHours);
     } catch (e) {
       console.error('[followup] scheduleFollowUp failed:', e instanceof Error ? e.message : String(e));
     }

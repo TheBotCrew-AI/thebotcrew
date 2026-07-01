@@ -16,6 +16,7 @@ import { loadTenantConfig } from '../db/queries.js';
 import {
   cancelFollowUps,
   loadDueFollowUps,
+  loadSentAngleIndexes,
   logMessage,
   markDelivered,
   markFollowUpFailed,
@@ -25,6 +26,7 @@ import {
   updateConversationStatus,
   loadRecentMessages,
 } from '../db/queries.js';
+import { parseAngleSelection } from '../roles/reactivation/angle-select.js';
 import { buildAgentRequestContext } from '../core/runtime-context.js';
 import type { AiProvider, Channel } from '../core/types.js';
 import type { DueFollowUp } from '../db/types.js';
@@ -60,12 +62,22 @@ async function processOne(
     return 'skip';
   }
 
-  const tiers = tenant.config.followUpTiers ?? [];
-  const tierConfig = tiers.find((t) => t.tier === followUp.tier);
-  if (!tierConfig) {
-    console.warn(`[followup] no tier config for tier=${followUp.tier} tenant=${tenant.tenantId}`);
+  // followUp.tier is the 1-based position within the current cadence cycle.
+  const cadence = tenant.config.followUpCadence ?? [];
+  const position = followUp.tier;
+  if (position < 1 || position > cadence.length) {
+    console.warn(`[followup] cadence position ${position} out of range (len=${cadence.length}) tenant=${tenant.tenantId}`);
     return 'skip';
   }
+
+  // Hybrid angle selection: offer only the pool angles not yet SENT on this
+  // conversation, so angles never repeat even as the cadence cycle resets. An empty
+  // pool (all used) → the agent free-forms a fresh nudge (chosenAngleIndex stays null).
+  const anglePool = tenant.config.followUpAngles ?? [];
+  const usedIndexes = await loadSentAngleIndexes(followUp.conversationId);
+  const remaining = anglePool
+    .map((text, index) => ({ text, index }))
+    .filter((a) => !usedIndexes.includes(a.index));
 
   const provider = (tenant.config.provider ?? DEFAULT_PROVIDER) as AiProvider;
   const model = tenant.config.model ?? DEFAULT_MODEL;
@@ -82,16 +94,22 @@ async function processOne(
     provider,
     model,
     llmApiKey: getAiApiKey(provider),
-    reactivationAngle: tierConfig.angle,
+    reactivationCandidates: remaining.map((a) => a.text),
   });
 
   const history = await loadRecentMessages(followUp.conversationId);
   const messages = toModelMessages(history);
 
   let reply: string;
+  let chosenAngleIndex: number | null = null;
   try {
     const result = await reactivationAgent.generate(messages, { requestContext, maxSteps: 3 });
-    reply = result.text;
+    const selection = parseAngleSelection(result.text, remaining.length);
+    reply = selection.message;
+    const picked = selection.angleChoice != null
+      ? remaining[selection.angleChoice - 1]
+      : remaining[0]; // no valid tag but angles remain → consume the first unused one
+    if (picked) chosenAngleIndex = picked.index;
   } catch (err) {
     console.error(
       `[followup] agent generate failed followUpId=${followUp.followUpId}:`,
@@ -142,11 +160,15 @@ async function processOne(
     });
   }
 
-  await markFollowUpSent(followUp.followUpId);
+  await markFollowUpSent(followUp.followUpId, chosenAngleIndex);
 
-  const nextTier = tiers.find((t) => t.tier === followUp.tier + 1);
-  if (nextTier) {
-    await scheduleFollowUp(followUp.conversationId, nextTier.tier, nextTier.delayMinutes, tenant.config.timezone, tenant.config.quietHours);
+  // Advance the cadence cycle: schedule the next attempt, or stop (standby) when the
+  // cycle is exhausted with no reply — the "freno". The angle cursor persists across
+  // cycles via angle_index, so a reset cycle keeps advancing to fresh angles.
+  const nextPosition = position + 1;
+  const nextDelay = cadence[nextPosition - 1];
+  if (nextDelay !== undefined) {
+    await scheduleFollowUp(followUp.conversationId, nextPosition, nextDelay, tenant.config.timezone, tenant.config.quietHours);
   } else {
     await updateConversationStatus(followUp.ghlConversationId, 'standby');
   }

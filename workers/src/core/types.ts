@@ -12,13 +12,6 @@ export type Channel = 'whatsapp' | 'instagram' | 'facebook';
 export type AiProvider = 'openai' | 'anthropic';
 export type ConversationStatus = 'active' | 'handed_off' | 'completed' | 'opted_out' | 'standby';
 
-export interface FollowUpTier {
-  tier: number;
-  delayMinutes: number;
-  /** Short prompt describing the angle/hook for the reactivation message. */
-  angle: string;
-}
-
 /** Quiet (DND) window in tenant-local hours; follow-ups never fire inside it. */
 export interface QuietHours {
   /** Local hour [0-23] when the quiet window starts (inclusive). */
@@ -44,8 +37,12 @@ export interface RawTenantConfig {
   provider?: AiProvider | null;
   /** Overrides the platform-default model for this tenant. */
   model?: string | null;
-  /** Configures follow-up tiers; null/absent means no follow-ups. */
-  followUpTiers?: FollowUpTier[] | null;
+  /** Delays (minutes) per attempt in a follow-up cycle; null/empty = no follow-ups. The
+   *  cycle resets on every lead reply; exhausting it unanswered stops (standby). */
+  followUpCadence?: number[] | null;
+  /** Pool of angle directives for reactivation messages, decoupled from cadence. A
+   *  per-conversation cursor advances across cycles so angles never repeat. */
+  followUpAngles?: string[] | null;
   /** Quiet window for follow-ups; null/absent uses the platform default (21:00–08:00). */
   quietHours?: QuietHours | null;
 }

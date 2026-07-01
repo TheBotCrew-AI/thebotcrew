@@ -14,9 +14,9 @@ export function buildReactivationAgent(): Agent {
     description: 'Sends short follow-up messages to silent leads to bait a response.',
     instructions: ({ requestContext }) => {
       const tenant = requestContext.get('tenant') as TenantContext;
-      const angle = (requestContext.get('reactivationAngle') as string | undefined) ?? '';
+      const candidates = (requestContext.get('reactivationCandidates') as string[] | undefined) ?? [];
       const config = parseReactivationConfig(tenant.config);
-      return buildReactivationInstructions(config.businessName, config.tone, angle);
+      return buildReactivationInstructions(config.businessName, config.tone, candidates);
     },
     model: ({ requestContext }) => {
       const provider = requestContext.get('provider') as AiProvider;

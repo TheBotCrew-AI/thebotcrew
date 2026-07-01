@@ -16,8 +16,8 @@ export interface AgentRequestValues {
   provider: AiProvider;
   model: string;
   llmApiKey: string;
-  /** Set for reactivation agent runs; undefined for front-desk runs. */
-  reactivationAngle?: string;
+  /** Unused angle pool passed to reactivation runs (hybrid selection); undefined for front-desk. */
+  reactivationCandidates?: string[];
 }
 
 export type AgentRequestContext = RequestContext<AgentRequestValues>;
@@ -29,8 +29,8 @@ export function buildAgentRequestContext(values: AgentRequestValues): AgentReque
   ctx.set('provider', values.provider);
   ctx.set('model', values.model);
   ctx.set('llmApiKey', values.llmApiKey);
-  if (values.reactivationAngle !== undefined) {
-    ctx.set('reactivationAngle', values.reactivationAngle);
+  if (values.reactivationCandidates !== undefined) {
+    ctx.set('reactivationCandidates', values.reactivationCandidates);
   }
   return ctx;
 }

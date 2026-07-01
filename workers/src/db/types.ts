@@ -21,6 +21,10 @@ export interface TenantConfigRow {
   ai_provider: string | null;
   ai_model: string | null;
   follow_up_tiers: unknown;
+  /** Delays (minutes) per attempt in a follow-up cycle. */
+  follow_up_cadence: unknown;
+  /** Pool of angle directives for reactivation, decoupled from cadence. */
+  follow_up_angles: unknown;
   /** Quiet (DND) window for follow-ups as {start,end} local hours. NULL = platform default. */
   quiet_hours: unknown;
   /** Channels the bot may reply on. NULL = none (installed but silent). */

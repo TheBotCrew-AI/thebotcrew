@@ -56,21 +56,41 @@ Hybrid human ↔ AI. Enforced by `isBotSuppressed`, re-checked again right befor
   Requires the `contacts.write` scope. The bot also writes status tags back to GHL so state
   stays visible there (`ghl/tags.ts`).
 
-## 4. Follow-ups (reactivation cadence)
+## 4. Follow-ups (reactivation)
 
-Tenants **opt in** via `tenant_config.follow_up_tiers` (jsonb array of `{tier, delayMinutes,
-angle}`); absent/null = no follow-ups. Runner: `worker/followup-runner.ts` (1-min cron). The
-text-only **reactivation** role (no tools) writes each message using the tier's `angle`.
+Tenants **opt in** via two **decoupled** config fields (absent/null = no follow-ups). Runner:
+`worker/followup-runner.ts` (1-min cron); the text-only **reactivation** role (no tools) writes
+each message.
+
+- **`follow_up_cadence`** (jsonb `number[]`, minutes) — the **timing/attempt** ladder within a
+  *cycle*, e.g. `[15,180,360,720]`. Controls when nudges fire and how many per cycle.
+- **`follow_up_angles`** (jsonb `string[]`) — a **content** pool of angle directives, decoupled
+  from timing. Can be longer than the cadence.
+
+Why decoupled: a "tier" used to fuse timing + angle, so the cycle resetting on every reply also
+reset the angle → the same angle repeated each cycle (felt repetitive). Now the two advance
+independently.
 
 Core mechanics — **one follow-up at a time**:
 
-- Tier 1 is scheduled after every bot reply (`webhook-handler.ts`); the RPC no-ops if the
-  conversation isn't `active`. Each subsequent tier is scheduled **only after** the previous
-  one sends (`followup-runner.ts`). So there is never more than one `pending` row per
-  conversation, and delays compound relative to the previous send.
-- **Every inbound message cancels all pending follow-ups** (`app_cancel_follow_ups`) — a lead
-  who replies is never spammed.
-- When the last configured tier is exhausted, the conversation is set to `standby`.
+- Cadence position 1 is scheduled after every bot reply (`webhook-handler.ts`); the RPC no-ops if
+  the conversation isn't `active`. Each next position is scheduled **only after** the previous one
+  sends (`followup-runner.ts`). Never more than one `pending` row per conversation.
+- **Every inbound message cancels all pending follow-ups** (`app_cancel_follow_ups`) and the next
+  bot reply restarts the cycle at position 1 — so a lead who keeps re-engaging keeps getting fresh
+  attempts (the cadence **clock resets**).
+- **The freno:** when a cadence cycle is exhausted **with no reply**, the conversation goes to
+  `standby`. So an unresponsive lead gets at most `cadence.length` nudges per silence; replying is
+  what "refuels" a new cycle. The stop condition is the lead going silent through a full cycle.
+
+**Angle progression (never repeats):** at send time the runner offers the reactivation agent only
+the pool angles **not yet sent** on this conversation (`loadSentAngleIndexes`, keyed on
+`follow_ups.angle_index` where `status='sent'` — cancelled/undelivered never count). Selection is
+**hybrid**: the agent picks the best-fitting unused angle for the current context and reports its
+choice via a machine-readable `ANGULO: n` tag (parsed + stripped in `roles/reactivation/
+angle-select.ts`, with a deterministic "next unused" fallback). When the pool is exhausted it
+free-forms a fresh nudge (`angle_index` NULL). Because this cursor persists across cycles, a reset
+cycle keeps advancing to new angles — the "4 more attempts" never feel repetitive.
 
 ### 4.1 Quiet hours (DND) — never message overnight
 

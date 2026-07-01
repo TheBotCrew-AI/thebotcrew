@@ -7,7 +7,7 @@
  */
 
 import { getSupabase } from './client.js';
-import type { AiProvider, Channel, ConversationMessage, ConversationStatus, FollowUpTier, QuietHours, TenantContext } from '../core/types.js';
+import type { AiProvider, Channel, ConversationMessage, ConversationStatus, QuietHours, TenantContext } from '../core/types.js';
 import { clampToActiveHours, DEFAULT_QUIET_HOURS } from '../core/active-hours.js';
 import type { GhlTokenResponse } from '../ghl/oauth.js';
 import type {
@@ -42,7 +42,7 @@ export async function loadTenantConfig(ghlLocationId: string): Promise<TenantCon
   const { data, error } = await supabase
     .from('tenant_config')
     .select(
-      'business_name, timezone, tone, services, hours, calendars, faq, enabled_roles, prompt_overrides, ai_provider, ai_model, follow_up_tiers, quiet_hours, enabled_channels, test_contact_ids, trigger_keywords, ' +
+      'business_name, timezone, tone, services, hours, calendars, faq, enabled_roles, prompt_overrides, ai_provider, ai_model, follow_up_tiers, follow_up_cadence, follow_up_angles, quiet_hours, enabled_channels, test_contact_ids, trigger_keywords, ' +
         'tenants!inner(id, client_id, ghl_location_id, is_active)',
     )
     .eq('tenants.ghl_location_id', ghlLocationId)
@@ -76,8 +76,11 @@ export async function loadTenantConfig(ghlLocationId: string): Promise<TenantCon
       promptOverrides: row.prompt_overrides,
       provider: (row.ai_provider as AiProvider) ?? undefined,
       model: row.ai_model ?? undefined,
-      followUpTiers: Array.isArray(row.follow_up_tiers)
-        ? (row.follow_up_tiers as FollowUpTier[])
+      followUpCadence: Array.isArray(row.follow_up_cadence)
+        ? (row.follow_up_cadence as unknown[]).filter((n): n is number => typeof n === 'number' && n > 0)
+        : null,
+      followUpAngles: Array.isArray(row.follow_up_angles)
+        ? (row.follow_up_angles as unknown[]).filter((s): s is string => typeof s === 'string' && s.length > 0)
         : null,
       quietHours: parseQuietHours(row.quiet_hours),
     },
@@ -440,10 +443,33 @@ export async function loadDueFollowUps(limit = 20): Promise<DueFollowUp[]> {
 }
 
 /** Mark a follow-up as successfully sent. */
-export async function markFollowUpSent(followUpId: string): Promise<void> {
+export async function markFollowUpSent(followUpId: string, angleIndex: number | null = null): Promise<void> {
   const supabase = getSupabase();
-  const { error } = await supabase.rpc('app_mark_follow_up_sent', { p_follow_up_id: followUpId });
+  const { error } = await supabase.rpc('app_mark_follow_up_sent', {
+    p_follow_up_id: followUpId,
+    p_angle_index: angleIndex,
+  });
   fail('markFollowUpSent', error);
+}
+
+/**
+ * Angle-pool cursor for a conversation: the indices of pool angles already SENT.
+ * Drives non-repeating angle selection — cancelled/undelivered follow-ups never
+ * count, so an angle scheduled but not delivered stays available. Free-formed
+ * nudges (angle_index NULL) occupy no pool slot and are excluded.
+ */
+export async function loadSentAngleIndexes(conversationId: string): Promise<number[]> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from('follow_ups')
+    .select('angle_index')
+    .eq('conversation_id', conversationId)
+    .eq('status', 'sent')
+    .not('angle_index', 'is', null);
+  fail('loadSentAngleIndexes', error);
+  return ((data ?? []) as { angle_index: number | null }[])
+    .map((r) => r.angle_index)
+    .filter((n): n is number => typeof n === 'number');
 }
 
 /** Mark a follow-up as permanently failed. */
