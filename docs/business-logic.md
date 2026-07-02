@@ -165,6 +165,12 @@ slots. Rules (also reinforced in the front-desk prompt):
   with no slots). The turn runs with `maxSteps: 8` so a full booking chain (getAvailability +
   bookAppointment [which also saves the reminder number] + updateConversationStatus + final
   reply) doesn't exhaust steps and emit only a truncated pre-tool intro.
+- **After booking, the agent closes and goes quiet (prompt-enforced).** The confirmation is a
+  short close: day + time + "you'll get the confirmation/reminders on WhatsApp" — then it stops.
+  It must **not** ask a trailing question, try to "advance" the conversation, or offer to send
+  anything not in tenant config (no invented agenda, Zoom/Meet link, topics list, prep materials).
+  It also calls `updateConversationStatus(completed)`, which cancels pending follow-ups so the bot
+  doesn't keep poking a booked lead. (It still replies normally if the lead writes again.)
 - Booking is created via the GHL API (`bookAppointment` tool) and recorded in `appointments`.
   A GHL rejection logs a **`booking_failed`** event to `bot_events` with the GHL status/body +
   `startTime`/`calendarId`/`serviceName`, so a failed booking is diagnosable (the reason is not
