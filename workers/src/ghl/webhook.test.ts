@@ -101,7 +101,8 @@ async function genKey(alg: 'ed25519' | 'rsa') {
     true,
     ['sign', 'verify'],
   )) as KeyPair;
-  const spki = new Uint8Array(await crypto.subtle.exportKey('spki', kp.publicKey));
+  // exportKey is overloaded (jwk → JsonWebKey); 'spki' always yields an ArrayBuffer.
+  const spki = new Uint8Array((await crypto.subtle.exportKey('spki', kp.publicKey)) as ArrayBuffer);
   return { priv: kp.privateKey, pubB64: btoa(String.fromCharCode(...spki)) };
 }
 

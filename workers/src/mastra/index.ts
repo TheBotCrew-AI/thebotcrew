@@ -29,6 +29,12 @@ export { executionCtxStorage };
 export { runPendingFollowUps } from '../worker/followup-runner.js';
 export { retryPendingDeliveries } from '../worker/delivery-retry.js';
 export { runReconciliationSweep } from '../worker/reconciliation.js';
+// The Durable Object class MUST be exported from the built Worker entry (index.mjs) for the
+// runtime to instantiate it. The getEntry() override below re-exports it from '#mastra'.
+export { ConversationDO } from '../worker/conversation-do.js';
+
+// Type-only import for typing the DO namespace binding (RPC method surface).
+import type { ConversationDO } from '../worker/conversation-do.js';
 
 const frontDesk = buildFrontDeskAgent();
 const reactivation = buildReactivationAgent();
@@ -170,6 +176,24 @@ export const mastra = new Mastra({
         },
       }),
 
+      // DO binding health check (Phase 0). Proves CONVERSATION_DO is bound and the RPC
+      // path works, locally under `wrangler dev` and post-deploy. Bearer-secured.
+      registerApiRoute('/internal/do-ping', {
+        method: 'POST',
+        handler: async (c) => {
+          const expected = (c.env as Record<string, string | undefined>).INTERNAL_CRON_SECRET;
+          const auth = c.req.header('authorization') ?? '';
+          if (!expected || auth !== `Bearer ${expected}`) {
+            return c.json({ error: 'unauthorized' }, 401);
+          }
+          const ns = (c.env as { CONVERSATION_DO?: DurableObjectNamespace<ConversationDO> }).CONVERSATION_DO;
+          if (!ns) return c.json({ error: 'CONVERSATION_DO binding missing' }, 500);
+          const stub = ns.get(ns.idFromName('healthcheck'));
+          const pong = await stub.ping();
+          return c.json({ pong });
+        },
+      }),
+
       // Triggered by the 1-minute cron to send due follow-up messages.
       registerApiRoute('/internal/run-followups', {
         method: 'POST',
@@ -194,6 +218,13 @@ export const mastra = new Mastra({
       compatibility_date: '2025-06-01',
       compatibility_flags: ['nodejs_compat'],
       triggers: { crons: ['* * * * *', '*/5 * * * *'] },
+      // Per-conversation Durable Object (turn/follow-up durability — see
+      // docs/durable-objects-migration.md). CloudflareDeployer spreads this into the
+      // generated wrangler.jsonc. Names are STICKY: don't rename ConversationDO / tag v1.
+      durable_objects: {
+        bindings: [{ name: 'CONVERSATION_DO', class_name: 'ConversationDO' }],
+      },
+      migrations: [{ tag: 'v1', new_sqlite_classes: ['ConversationDO'] }],
     });
     // getEntry() is private upstream but we need to add a `scheduled` handler and
     // wrap each request in executionCtxStorage.run() so that route handlers can
@@ -204,6 +235,10 @@ export const mastra = new Mastra({
     (d as unknown as { getEntry(): string }).getEntry = () => `
       import '#polyfills';
       import { scoreTracesWorkflow } from '@mastra/core/evals/scoreTraces';
+
+      // Durable Object class must be a named export of the Worker entry module so the
+      // runtime can instantiate it for the CONVERSATION_DO binding.
+      export { ConversationDO } from '#mastra';
 
       export default {
         fetch: async (request, env, context) => {

@@ -17,6 +17,22 @@
       "*/5 * * * *"
     ]
   },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "CONVERSATION_DO",
+        "class_name": "ConversationDO"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": [
+        "ConversationDO"
+      ]
+    }
+  ],
   "main": "./.mastra/output/index.mjs",
   "vars": {},
   "alias": {

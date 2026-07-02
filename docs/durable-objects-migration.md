@@ -1,6 +1,7 @@
 # Future Upgrade — Turn/Follow-up Durability via Durable Objects
 
-> **Status: PLANNED — not started (as of 2026-07-01).**
+> **Status: IN PROGRESS — Phase 0 (scaffold + wiring) code-complete & build-verified
+> (as of 2026-07-01). Deploy of the DO is GATED on enabling the Workers Paid plan.**
 > Owner: Leo. This is the "correct" architectural fix that replaces the accumulating
 > durability patches. Resume point + effort are at the bottom (§7). Read §1–§2 first when
 > you pick this up cold.
@@ -92,8 +93,14 @@ without a new sweep.
 
 ## 6. Phased plan (incremental, safe to roll out gradually)
 
-- **Phase 0 — Prereqs.** Enable Workers Paid; add the DO binding + migration to `wrangler.jsonc`;
-  scaffold an empty `ConversationDO`. No behavior change. *(~0.5 day)*
+- **Phase 0 — Prereqs.** ✅ *Code done (2026-07-01):* scaffolded `ConversationDO`
+  (`worker/conversation-do.ts`), wired the DO **binding + `migrations` (tag `v1`,
+  `new_sqlite_classes`) through the `CloudflareDeployer` constructor** in `mastra/index.ts`
+  (deployer spreads `userConfig` into the generated `wrangler.jsonc` — verified present),
+  exported the class from the built entry via the `getEntry()` override, added a bearer-secured
+  `/internal/do-ping` RPC health check, and stubbed `cloudflare:workers` for vitest. Typecheck +
+  63/63 unit tests green. **⏳ Remaining: enable Workers Paid, then `wrangler deploy` and hit
+  `/internal/do-ping` to confirm the DO instantiates in prod.** No behavior change.
 - **Phase 1 — Turn into the DO.** Route inbound → DO; move the debounce + turn from `waitUntil`
   into a DO Alarm. Keep the reconciliation cron running as a safety net during rollout.
   *(~2–3 days)*
@@ -118,6 +125,9 @@ and reversible; the safety net stays until Phase 3).
   after a clean monitoring window, so a bug can't cause a regression with no net.
 - **Test locally** with `scripts/simulate-webhook.mjs` (DO works under `wrangler dev`).
 
-**▶ Where to resume (next action):** Start at **Phase 0**. Nothing has been built yet. When
-picking up, re-read §1–§2, confirm Workers Paid is enabled, then scaffold `ConversationDO` +
-the `wrangler.jsonc` binding. Update this **Status** line and the phase checkboxes as you go.
+**▶ Where to resume (next action):** Phase 0 code is done. **(1)** Enable **Workers Paid**
+(dash.cloudflare.com → Workers & Pages → Plans → Workers Paid, ~$5/mo). **(2)** `pnpm build` +
+`wrangler deploy`; the `v1` migration applies the DO. **(3)** `POST /internal/do-ping` with the
+`INTERNAL_CRON_SECRET` bearer → expect `{"pong":"pong from <hex>"}`. **(4)** Then start **Phase 1**
+(route inbound → DO; move debounce + turn into a DO Alarm; keep reconciliation as the net).
+Update this **Status** line and the phase checkboxes as you go.
