@@ -61,8 +61,8 @@ export function buildFrontDeskInstructions(
 ): string {
   // In demo mode use the demo persona overrides (same engine/tools, different brain);
   // fall back to the normal overrides if demo mode is off or no demo persona is configured.
-  const overrides =
-    activeRole === 'demo' && config.demoPromptOverrides ? config.demoPromptOverrides : config.promptOverrides;
+  const usingDemo = activeRole === 'demo' && !!config.demoPromptOverrides;
+  const overrides = usingDemo ? config.demoPromptOverrides! : config.promptOverrides;
   const { identity, offering, qualificationNotes, toolInstructions } = overrides;
 
   const identityLine = identity?.trim()
@@ -159,7 +159,9 @@ horarios de getAvailability (campo "label") o la fecha de hoy de arriba.${horizo
 
 # Tono y formato
 ${toneBody}
-Mensajes breves, una idea a la vez. Sin listas. Sin negritas. Sin emojis (a menos que el lead los use). WhatsApp no renderiza markdown — manda URLs como texto plano.
+${usingDemo
+  ? 'Mensajes breves y naturales (1–3 mensajes cortos por turno), una idea a la vez. Sin markdown ni tablas; manda URLs como texto plano. Puedes usar emojis con medida (1–2 por mensaje).'
+  : 'Mensajes breves, una idea a la vez. Sin listas. Sin negritas. Sin emojis (a menos que el lead los use). WhatsApp no renderiza markdown — manda URLs como texto plano.'}
 
 # Regla de oro
 Solo afirma datos que estén en esta configuración o que devuelvan tus herramientas. Nunca inventes precios, direcciones, horarios, disponibilidad ni promociones. Si no sabes algo, dilo con honestidad y ofrece conectar con una persona del equipo.

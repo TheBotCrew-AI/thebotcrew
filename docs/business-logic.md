@@ -199,6 +199,10 @@ persona**, controlled by keywords — useful for showing the bot to a prospect o
 - **How it's wired.** `handleInboundWebhook` calls `setActiveRole` on a keyword match (logs a
   `demo_toggled` event); the turn reads `active_role` fresh (`getActiveRole`) and
   `buildFrontDeskInstructions` swaps in `demo_prompt_overrides` when `active_role='demo'`.
+- **Clean start.** Flipping into demo stamps `conversations.demo_started_at`; the turn then loads
+  **only** messages since activation (`loadRecentMessages(..., sinceTs)`), so the demo persona
+  doesn't inherit pre-demo history (e.g. a completed booking). The demo prompt also greets on the
+  activation keyword instead of treating it as a question.
 - **Off by default & safe.** If a tenant sets no demo keywords, nothing changes. `off` returns to
   the normal front-desk (to fully silence a thread, use the `bot-off` tag instead). Follow-ups and
   classification still apply during demo (same engine).

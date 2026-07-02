@@ -127,7 +127,8 @@ supabase/
                                # 0015 tag_handoff, 0016 channel_control+test_mode, 0017 trigger_keyword_gate,
                                # 0020 turn_reconciliation, 0021 availability_event, 0022 follow_up_quiet_hours,
                                # 0023 follow_up_cadence_angles (decouple timing from angle pool), 0024 booking_failed_event,
-                               # 0025 booking_horizon, 0026 status_changed_event, 0027 turn_scheduled_event (DO path), 0028 demo_persona
+                               # 0025 booking_horizon, 0026 status_changed_event, 0027 turn_scheduled_event (DO path),
+                               # 0028 demo_persona, 0029 demo_started_at (demo clean-start history)
   clients.sql, seed-tenants.sql# seeds (run by `supabase db reset` per config.toml)
 ```
 

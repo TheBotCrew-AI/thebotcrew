@@ -105,18 +105,21 @@ function parseQuietHours(raw: unknown): QuietHours | null {
 /**
  * Load the most recent messages for a conversation (chronological order) from
  * OUR store, to rebuild the agent's history. Empty-content rows are skipped.
+ * `sinceTs` (ISO) restricts to messages at/after that time — used for a clean
+ * demo start so the persona doesn't inherit pre-demo history.
  */
 export async function loadRecentMessages(
   conversationId: string,
   limit = 20,
+  sinceTs?: string,
 ): Promise<ConversationMessage[]> {
   const supabase = getSupabase();
-  const { data, error } = await supabase
+  let query = supabase
     .from('messages')
     .select('direction, sender_type, content, agent_role, human_agent_id, model, sent_at')
-    .eq('conversation_id', conversationId)
-    .order('sent_at', { ascending: false })
-    .limit(limit);
+    .eq('conversation_id', conversationId);
+  if (sinceTs) query = query.gte('sent_at', sinceTs);
+  const { data, error } = await query.order('sent_at', { ascending: false }).limit(limit);
   fail('loadRecentMessages', error);
 
   const rows = (data ?? []) as MessageRow[];
@@ -159,16 +162,23 @@ export async function markDelivered(messageId: string): Promise<void> {
   fail('markDelivered', error);
 }
 
-/** The conversation's active persona role (null = normal front-desk; 'demo' = demo persona). */
-export async function getActiveRole(conversationId: string): Promise<string | null> {
+/** The conversation's persona: active role + when demo mode started (for clean-start history). */
+export interface ConversationPersona {
+  activeRole: string | null;
+  demoStartedAt: string | null;
+}
+
+/** Read the conversation's persona (null activeRole = normal front-desk; 'demo' = demo persona). */
+export async function getConversationPersona(conversationId: string): Promise<ConversationPersona> {
   const supabase = getSupabase();
   const { data, error } = await supabase
     .from('conversations')
-    .select('active_role')
+    .select('active_role, demo_started_at')
     .eq('id', conversationId)
     .maybeSingle();
-  fail('getActiveRole', error);
-  return (data as { active_role: string | null } | null)?.active_role ?? null;
+  fail('getConversationPersona', error);
+  const row = data as { active_role: string | null; demo_started_at: string | null } | null;
+  return { activeRole: row?.active_role ?? null, demoStartedAt: row?.demo_started_at ?? null };
 }
 
 /** Switch a conversation's persona. Pass null to return it to the normal front-desk agent. */

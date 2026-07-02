@@ -21,7 +21,7 @@ import {
   cancelFollowUps,
   botActivation,
   claimTurnForProcessing,
-  getActiveRole,
+  getConversationPersona,
   setActiveRole,
   isBotSuppressed,
   isHumanActive,
@@ -273,16 +273,20 @@ export async function runAgentTurn({
     console.error('[reconcile-claim] failed:', e instanceof Error ? e.message : String(e));
   }
 
-  const history = await loadRecentMessages(conversationId);
-  const messages = toModelMessages(history);
-
   // Read the persona fresh at turn time (a demo keyword may have flipped it since scheduling).
   let activeRole: string | null = null;
+  let demoStartedAt: string | null = null;
   try {
-    activeRole = await getActiveRole(conversationId);
+    ({ activeRole, demoStartedAt } = await getConversationPersona(conversationId));
   } catch (e) {
-    console.error('[demo] getActiveRole failed:', e instanceof Error ? e.message : String(e));
+    console.error('[demo] getConversationPersona failed:', e instanceof Error ? e.message : String(e));
   }
+
+  // In demo mode, start clean: only load history since demo was activated so the persona
+  // doesn't inherit pre-demo context (e.g. a completed booking).
+  const sinceTs = activeRole === 'demo' && demoStartedAt ? demoStartedAt : undefined;
+  const history = await loadRecentMessages(conversationId, 20, sinceTs);
+  const messages = toModelMessages(history);
 
   const turn: TurnContext = {
     ghlConversationId: parsed.conversationId,
