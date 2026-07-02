@@ -254,6 +254,49 @@ export async function logAppointment(params: LogAppointmentParams): Promise<{ ap
   return { appointmentId: data as string };
 }
 
+/** The contact's most recent appointment (any action), for reschedule/cancel. */
+export interface LatestAppointment {
+  ghlAppointmentId: string;
+  appointmentDatetime: string | null;
+  serviceType: string | null;
+  action: 'booked' | 'rescheduled' | 'cancelled';
+}
+
+/**
+ * Load the contact's most recent appointment row (joined via its conversation).
+ * Returns null when there is none or the newest row has no GHL id. Callers treat
+ * a newest action of 'cancelled' as "no active appointment".
+ */
+export async function loadLatestAppointment(
+  clientId: string,
+  ghlContactId: string,
+): Promise<LatestAppointment | null> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from('appointments')
+    .select('ghl_appointment_id, appointment_datetime, service_type, action, conversations!inner(ghl_contact_id)')
+    .eq('client_id', clientId)
+    .eq('conversations.ghl_contact_id', ghlContactId)
+    .not('ghl_appointment_id', 'is', null)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  fail('loadLatestAppointment', error);
+  if (!data) return null;
+  const row = data as unknown as {
+    ghl_appointment_id: string;
+    appointment_datetime: string | null;
+    service_type: string | null;
+    action: 'booked' | 'rescheduled' | 'cancelled';
+  };
+  return {
+    ghlAppointmentId: row.ghl_appointment_id,
+    appointmentDatetime: row.appointment_datetime,
+    serviceType: row.service_type,
+    action: row.action,
+  };
+}
+
 /** Record a value event (lead_qualified, out_of_hours_handled, …). Returns event uuid. */
 export async function logEvent(params: LogEventParams): Promise<{ eventId: string }> {
   const supabase = getSupabase();

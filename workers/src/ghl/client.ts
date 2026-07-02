@@ -206,4 +206,53 @@ export class GhlClient {
     const data = (await res.json()) as { id?: string };
     return { ghlAppointmentId: data.id ?? '' };
   }
+
+  /** Move an existing appointment to a new time. `endTime` is optional (GHL derives from the slot). */
+  async rescheduleAppointment(input: {
+    appointmentId: string;
+    calendarId: string;
+    startTime: string;
+    endTime?: string;
+  }): Promise<void> {
+    const token = await this.getAccessToken();
+    const body: Record<string, unknown> = {
+      calendarId: input.calendarId,
+      startTime: input.startTime,
+      appointmentStatus: 'confirmed',
+      toNotify: true,
+    };
+    if (input.endTime) body.endTime = input.endTime;
+
+    const res = await fetch(`${this.apiBase}/calendars/events/appointments/${input.appointmentId}`, {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Version: '2021-04-15',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const detail = await res.text();
+      throw new Error(`[ghl] rescheduleAppointment failed ${res.status}: ${detail}`);
+    }
+  }
+
+  /** Soft-cancel an appointment (sets appointmentStatus='cancelled'; does not delete the record). */
+  async cancelAppointment(appointmentId: string): Promise<void> {
+    const token = await this.getAccessToken();
+    const res = await fetch(`${this.apiBase}/calendars/events/appointments/${appointmentId}`, {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Version: '2021-04-15',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ appointmentStatus: 'cancelled', toNotify: true }),
+    });
+    if (!res.ok) {
+      const detail = await res.text();
+      throw new Error(`[ghl] cancelAppointment failed ${res.status}: ${detail}`);
+    }
+  }
 }

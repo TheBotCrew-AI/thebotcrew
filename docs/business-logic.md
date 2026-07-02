@@ -175,6 +175,16 @@ slots. Rules (also reinforced in the front-desk prompt):
   anything not in tenant config (no invented agenda, Zoom/Meet link, topics list, prep materials).
   It also calls `updateConversationStatus(completed)`, which cancels pending follow-ups so the bot
   doesn't keep poking a booked lead. (It still replies normally if the lead writes again.)
+- **Reschedule / cancel (tools).** `rescheduleAppointment` and `cancelAppointment` act on the
+  contact's **active appointment** (`loadLatestAppointment` = newest `appointments` row with a GHL
+  id; a newest action of `cancelled` = none active). Reschedule **re-validates** the new time
+  against real `getAvailability` (same anti-hallucination guard as booking, and within the booking
+  horizon) before moving it, then logs a `rescheduled` row. Cancel is a **soft** GHL cancel
+  (`appointmentStatus='cancelled'`, not a delete), logs a `cancelled` row, and **reopens** the
+  conversation (`reactivateConversation`) so the bot can offer to rebook. Prompt rules: the agent
+  must **confirm explicitly before cancelling** (never on an ambiguous message) and must call
+  `getAvailability` before rescheduling. No schema change — `appointments.action` already allowed
+  `rescheduled`/`cancelled`.
 - Booking is created via the GHL API (`bookAppointment` tool) and recorded in `appointments`.
   A GHL rejection logs a **`booking_failed`** event to `bot_events` with the GHL status/body +
   `startTime`/`calendarId`/`serviceName`, so a failed booking is diagnosable (the reason is not

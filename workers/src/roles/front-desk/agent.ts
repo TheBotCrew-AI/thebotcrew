@@ -16,6 +16,8 @@ import { parseFrontDeskConfig } from './config.js';
 import { lookupFaqTool } from './tools/lookup-faq.js';
 import { getAvailabilityTool } from './tools/get-availability.js';
 import { bookAppointmentTool } from './tools/book-appointment.js';
+import { rescheduleAppointmentTool } from './tools/reschedule-appointment.js';
+import { cancelAppointmentTool } from './tools/cancel-appointment.js';
 import { updateConversationStatusTool } from './tools/update-conversation-status.js';
 
 export const FRONT_DESK_ROLE = 'front-desk';
@@ -48,6 +50,8 @@ export function buildFrontDeskAgent(): Agent {
       lookupFaq: lookupFaqTool,
       getAvailability: getAvailabilityTool,
       bookAppointment: bookAppointmentTool,
+      rescheduleAppointment: rescheduleAppointmentTool,
+      cancelAppointment: cancelAppointmentTool,
       updateConversationStatus: updateConversationStatusTool,
     },
   });
