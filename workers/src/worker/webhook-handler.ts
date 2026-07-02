@@ -269,8 +269,9 @@ export async function runAgentTurn({
   console.log(`[agent] generating conv=${parsed.conversationId} model=${model} historyLen=${messages.length}`);
   let result;
   try {
-    // 8 steps: a booking turn can chain guardarWhatsapp + getAvailability + bookAppointment
-    // + updateConversationStatus and still leave room for the final written reply. Too low
+    // 8 steps: a booking turn can chain getAvailability + bookAppointment (which also saves
+    // the reminder number) + updateConversationStatus and still leave room for the final
+    // written reply. Too low
     // and the turn exhausts steps mid-flow and emits only a pre-tool intro (truncated reply).
     result = await agent.generate(messages, { requestContext, maxSteps: 8 });
   } catch (err) {

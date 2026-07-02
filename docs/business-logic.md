@@ -150,17 +150,21 @@ slots. Rules (also reinforced in the front-desk prompt):
   templates to the contact's `phone`. WhatsApp leads arrive with a number; **FB/IG leads carry
   no phone**. The turn resolves the number on file (`parsed.phone ?? getContactPhone(contactId)`)
   and the front-desk prompt is injected accordingly: if we have a number, the agent **confirms
-  it** with the lead before booking; if not, it **asks for it** (with country code). A given
-  number is written to the GHL contact via the `guardarWhatsapp` tool (`updateContactPhone`,
-  needs `contacts.write`). This keeps reminders on WhatsApp/SMS instead of depending on the
-  FB/IG messaging window.
+  it** with the lead before booking; if not, it **asks for it** (with country code). The number
+  is written to the GHL contact **only as the `whatsappPhone` argument of `bookAppointment`**
+  (`updateContactPhone`, needs `contacts.write`) — there is **no standalone save tool**, so the
+  phone can never be stored before an actual booking. This is deterministic: it removed a class
+  of bugs where gpt-5-mini scraped the number from a lead-form message and saved it on the first
+  turn (premature write → GHL dedup/merge → stale contactId). The save is no-op if unchanged and
+  non-blocking (a phone-write failure still lets the appointment go through). This keeps reminders
+  on WhatsApp/SMS instead of depending on the FB/IG messaging window.
 - **Booking sequence (prompt-enforced):** once the lead picks a time already validated by
   `getAvailability`, the agent must **not** re-run `getAvailability` or re-offer slots — it goes
   straight to confirm/capture the number → `bookAppointment` → confirm. When it *does* offer
   slots, the list must be in the **same message** as the intro (no bare "tengo estos horarios:"
-  with no slots). The turn runs with `maxSteps: 8` so a full booking chain (guardarWhatsapp +
-  getAvailability + bookAppointment + updateConversationStatus + final reply) doesn't exhaust
-  steps and emit only a truncated pre-tool intro.
+  with no slots). The turn runs with `maxSteps: 8` so a full booking chain (getAvailability +
+  bookAppointment [which also saves the reminder number] + updateConversationStatus + final
+  reply) doesn't exhaust steps and emit only a truncated pre-tool intro.
 - Booking is created via the GHL API (`bookAppointment` tool) and recorded in `appointments`.
   A GHL rejection logs a **`booking_failed`** event to `bot_events` with the GHL status/body +
   `startTime`/`calendarId`/`serviceName`, so a failed booking is diagnosable (the reason is not

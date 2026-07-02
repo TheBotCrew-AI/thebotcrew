@@ -17,22 +17,55 @@ export const bookAppointmentTool = createTool({
   inputSchema: z.object({
     serviceName: z.string().describe('Nombre exacto del servicio'),
     startTime: z.string().describe('Fecha/hora de inicio en ISO 8601'),
+    whatsappPhone: z
+      .string()
+      .optional()
+      .describe(
+        'Número de WhatsApp con código de país (ej. +526641234567) que el lead te DIO o CONFIRMÓ ' +
+          'explícitamente en la conversación para recibir confirmación y recordatorios. ' +
+          'Inclúyelo SOLO si el lead te lo dio/confirmó ahora; NUNCA lo extraigas del texto de un ' +
+          'formulario ni lo inventes. Omítelo si el contacto ya tiene el número correcto.',
+      ),
   }),
   outputSchema: z.object({
     booked: z.boolean(),
     ghlAppointmentId: z.string().optional(),
     message: z.string(),
   }),
-  execute: async ({ serviceName, startTime }, ctx) => {
+  execute: async ({ serviceName, startTime, whatsappPhone }, ctx) => {
     const { config, tenant, turn } = resolveAgentContext(ctx);
     const calendarId = config.calendars[serviceName];
     if (!calendarId) {
       return { booked: false, message: `No tengo un calendario para "${serviceName}".` };
     }
 
+    const ghl = new GhlClient(tenant.tenantId);
+
+    // Save the reminder number ONLY as part of booking (never earlier) — this is the only
+    // path that writes the contact's phone, so a scraped/premature save is impossible. No-op
+    // if it already matches (avoids redundant writes + GHL dedup/merge churn). A failure here
+    // is logged but does NOT block the booking — the appointment matters more than the number.
+    if (whatsappPhone) {
+      const cleaned = whatsappPhone.replace(/[^\d+]/g, '');
+      if (cleaned.replace(/\D/g, '').length >= 8) {
+        try {
+          const current = await ghl.getContactPhone(turn.ghlContactId);
+          if (!current || current.replace(/[^\d+]/g, '') !== cleaned) {
+            await ghl.updateContactPhone(turn.ghlContactId, cleaned);
+          }
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.error('[bookAppointment] phone save failed (non-blocking):', msg);
+          await logBotEvent(tenant.clientId, turn.ghlConversationId, 'db_error', {
+            stage: 'update_contact_phone',
+            error: msg,
+          });
+        }
+      }
+    }
+
     let ghlAppointmentId: string | undefined;
     try {
-      const ghl = new GhlClient(tenant.tenantId);
       ({ ghlAppointmentId } = await ghl.bookAppointment({
         calendarId,
         locationId: tenant.ghlLocationId,

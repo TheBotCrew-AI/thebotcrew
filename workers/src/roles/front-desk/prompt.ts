@@ -130,19 +130,21 @@ export function buildFrontDeskInstructions(
   }
 
   // Reminder-number handling: GHL sends confirmation/reminder templates to the contact's
-  // phone. WhatsApp leads arrive with a number; FB/IG leads usually don't. So: confirm the
-  // number on file before booking, or (if none) capture it — the agent saves it via guardarWhatsapp.
+  // phone. WhatsApp leads arrive with a number; FB/IG leads usually don't. The number is
+  // written ONLY as the whatsappPhone argument of bookAppointment (there is no standalone
+  // save tool), so it can never be stored before an actual booking.
   const reminderSection = contactPhone
     ? `\n\n# Número para confirmación y recordatorios
 Ya tenemos el número del lead en el sistema: ${contactPhone}.
-- Cuando el lead esté por agendar (justo antes de confirmar la cita), verifícalo verbalmente: "¿te mando la confirmación y los recordatorios a este WhatsApp: ${contactPhone}?". Si dice que sí, agenda.
-- NO uses la herramienta guardarWhatsapp si ya lo tenemos y es correcto — no lo vuelvas a guardar.
-- Usa guardarWhatsapp SOLO si el lead dice que ese número está mal y te da otro.
-- NUNCA extraigas ni guardes números del formulario ni de los mensajes por tu cuenta.`
+- Cuando el lead esté por agendar (justo antes de confirmar la cita), verifícalo verbalmente: "¿te mando la confirmación y los recordatorios a este WhatsApp: ${contactPhone}?".
+- Si el lead confirma que es correcto, agenda SIN pasar whatsappPhone (ya lo tenemos).
+- Solo pasa whatsappPhone a bookAppointment si el lead dice que ese número está mal y te da otro.
+- No tienes ninguna otra forma de guardar el número: solo se guarda al agendar. NUNCA lo extraigas del texto del formulario ni de los mensajes por tu cuenta.`
     : `\n\n# Número para confirmación y recordatorios
 No tenemos número de WhatsApp del lead en el sistema.
-- Cuando el lead esté por agendar (no antes), pídele su WhatsApp con código de país (ej. +52…) y, cuando te lo dé, guárdalo con la herramienta guardarWhatsapp. Es necesario para la confirmación y los recordatorios.
-- NUNCA lo saques automáticamente del texto del formulario ni lo guardes proactivamente al inicio; pídelo explícitamente al lead cuando vayan a agendar.`;
+- Cuando el lead esté por agendar (no antes), pídele su WhatsApp con código de país (ej. +52…). Es necesario para la confirmación y los recordatorios.
+- Cuando el lead te lo dé, pásalo como el argumento whatsappPhone al llamar bookAppointment — así se guarda al agendar. No hay otra forma de guardarlo.
+- NUNCA lo saques automáticamente del texto del formulario ni lo uses antes de agendar; pídelo explícitamente al lead cuando vayan a agendar.`;
 
   return `${identityLine}
 
