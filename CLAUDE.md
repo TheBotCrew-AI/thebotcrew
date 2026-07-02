@@ -8,11 +8,14 @@
 > hours, availability rules, handoff) live in [`docs/business-logic.md`](docs/business-logic.md).
 > Read it before changing agent behavior, and update it in the same change — same rule as here.
 >
-> ⏳ **SESSION-START REMINDER (do not remove until done):** There is an open, planned
-> architectural upgrade — the **Durable Objects migration** for turn/follow-up durability
-> (replaces the current durability patches; see [`docs/durable-objects-migration.md`](docs/durable-objects-migration.md)).
-> **At the start of each session, briefly remind Leo this is still pending** so it doesn't fall
-> off the radar. It's `PLANNED — not started`; stop reminding once that doc's Status flips to done.
+> ⏳ **SESSION-START REMINDER (do not remove until done):** The **Durable Objects migration**
+> for turn durability is **PAUSED mid-way** (see [`docs/durable-objects-migration.md`](docs/durable-objects-migration.md)).
+> **Phase 1 is DONE and rolled out to all tenants** (`DO_TURNS=*`) — turns run through
+> `ConversationDO` and the durability goal is achieved. What REMAINS is cleanup: **Phase 3**
+> (delete the now-redundant reconciliation/claim patches after a monitoring window) and the
+> optional Phase 2 (retire the follow-up cron). **At the start of each session, briefly remind
+> Leo the DO cleanup (Phase 3) is still pending** so it doesn't fall off the radar. Stop
+> reminding once that doc's Status flips to done.
 
 ## What this is
 
@@ -51,16 +54,23 @@ One Worker serves all clients. Request flow:
 6. Persist the outbound reply (with sender attribution: which AI role / model), then
    deliver it via the GHL API (transport only).
 
-Turn durability: the agent run is debounced 15s in `waitUntil` (coalesces rapid multi-message
-bursts into one reply). If that's dropped (isolate
-eviction, transient model/GHL failure), a **reconciliation cron** (`worker/reconciliation.ts`,
-runs each minute) finds conversations whose latest message is an unanswered inbound (>45s old,
-active, gates pass) and re-runs the turn — recovering within ~1 min. The atomic claim
-(`reconcile_claimed_at`, FOR UPDATE SKIP LOCKED + cooldown) + the latest-message gate prevent
-double-replies. The **live turn also claims** (`claimTurnForProcessing` at the top of
-`runAgentTurn`, before generate) so a slow in-flight turn — one that hasn't logged its reply
-before the sweep's min-age — isn't re-run and double-sent by the cron. (Cloudflare Queues would
-be the heavier "correct" upgrade — deferred.)
+Turn durability: **turns now run through a per-conversation Durable Object** (`ConversationDO`,
+`worker/conversation-do.ts`) — live for **all** tenants (`DO_TURNS=*`; see the flag
+`doTurnsEnabled` in `webhook-handler.ts`). The inbound webhook does the gates + logs the inbound,
+then calls `ConversationDO.scheduleTurn()`, which stores the turn and arms a **durable 15s Alarm**
+(each new inbound resets it → debounce/coalescing). On the alarm the DO runs `runAgentTurn`.
+Because a DO instance is single-threaded, all processing for a conversation is **serialized**
+(kills the double-run / self-block-on-booking class), and the Alarm is **durable** (kills the
+silent-drop class). This is the Durable Objects migration — Phase 1 done; see
+[`docs/durable-objects-migration.md`](docs/durable-objects-migration.md).
+
+The **legacy patches remain as nets during the monitoring window** (to be deleted in Phase 3):
+a **reconciliation cron** (`worker/reconciliation.ts`, each minute) re-runs a dropped turn
+(unanswered inbound >45s, gates pass), guarded by the atomic claim (`reconcile_claimed_at` +
+`claimTurnForProcessing`) + latest-message gate; and `handleInboundWebhook` still has a
+`waitUntil` **fall-through** used only if the DO call throws. The DO binding reaches the route via
+`workerEnvStorage` (AsyncLocalStorage) — `process.env` carries only string secrets, not binding
+objects.
 
 We own conversation history, including message content + who sent what (lead vs which AI
 role vs which human agent) — the foundation for future human-agent ↔ AI collaboration.
@@ -105,7 +115,7 @@ workers/                       # Mastra + Cloudflare Worker package (@thebotcrew
       reactivation/            # text-only follow-up/reactivation agent (no tools)
     ghl/                       # webhook parse/verify, OAuth, tags + transport-only API client (live)
     db/                        # service-role Supabase client, queries (config read + RPC writes)
-    worker/                    # webhook-handler (inbound) + outbound-handler (human takeover) + tag-handler (bot-off) + delivery-retry + followup-runner + reconciliation (dropped-turn backstop)
+    worker/                    # webhook-handler (inbound) + conversation-do (per-conversation Durable Object: durable-alarm debounce + serialized turn) + outbound-handler (human takeover) + tag-handler (bot-off) + delivery-retry + followup-runner + reconciliation (dropped-turn backstop, net during DO rollout)
   scripts/simulate-webhook.mjs # local dev: fire a fake GHL webhook
   fixtures/                    # sample webhook payloads
   wrangler.jsonc, vitest.config.ts, tsconfig.json
@@ -116,7 +126,7 @@ supabase/
                                # 0015 tag_handoff, 0016 channel_control+test_mode, 0017 trigger_keyword_gate,
                                # 0020 turn_reconciliation, 0021 availability_event, 0022 follow_up_quiet_hours,
                                # 0023 follow_up_cadence_angles (decouple timing from angle pool), 0024 booking_failed_event,
-                               # 0025 booking_horizon, 0026 status_changed_event
+                               # 0025 booking_horizon, 0026 status_changed_event, 0027 turn_scheduled_event (DO path)
   clients.sql, seed-tenants.sql# seeds (run by `supabase db reset` per config.toml)
 ```
 
