@@ -10,12 +10,13 @@
 import { Agent } from '@mastra/core/agent';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createAnthropic } from '@ai-sdk/anthropic';
-import type { AiProvider, TenantContext } from '../../core/types.js';
+import type { AiProvider, TenantContext, TurnContext } from '../../core/types.js';
 import { buildFrontDeskInstructions } from './prompt.js';
 import { parseFrontDeskConfig } from './config.js';
 import { lookupFaqTool } from './tools/lookup-faq.js';
 import { getAvailabilityTool } from './tools/get-availability.js';
 import { bookAppointmentTool } from './tools/book-appointment.js';
+import { saveWhatsappNumberTool } from './tools/save-whatsapp-number.js';
 import { updateConversationStatusTool } from './tools/update-conversation-status.js';
 
 export const FRONT_DESK_ROLE = 'front-desk';
@@ -30,11 +31,12 @@ export function buildFrontDeskAgent(): Agent {
     description: 'Recepcionista virtual multi-tenant: califica leads, responde FAQ y agenda citas.',
     instructions: ({ requestContext }) => {
       const tenant = requestContext.get('tenant') as TenantContext;
+      const turn = requestContext.get('turn') as TurnContext | undefined;
       const config = parseFrontDeskConfig(tenant.config);
       const nowLocal = new Date()
         .toLocaleString('sv-SE', { timeZone: config.timezone })
         .replace(' ', 'T');
-      return buildFrontDeskInstructions(config, nowLocal);
+      return buildFrontDeskInstructions(config, nowLocal, turn?.contactPhone);
     },
     model: ({ requestContext }) => {
       const provider = requestContext.get('provider') as AiProvider;
@@ -47,6 +49,7 @@ export function buildFrontDeskAgent(): Agent {
       lookupFaq: lookupFaqTool,
       getAvailability: getAvailabilityTool,
       bookAppointment: bookAppointmentTool,
+      guardarWhatsapp: saveWhatsappNumberTool,
       updateConversationStatus: updateConversationStatusTool,
     },
   });

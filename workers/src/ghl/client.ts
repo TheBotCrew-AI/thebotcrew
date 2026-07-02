@@ -132,6 +132,25 @@ export class GhlClient {
     return typeof phone === 'string' && phone && !phone.includes('@') ? phone : undefined;
   }
 
+  /** Write a phone number onto a GHL contact (for confirmations/reminders).
+   *  Requires the `contacts.write` scope. */
+  async updateContactPhone(contactId: string, phone: string): Promise<void> {
+    const token = await this.getAccessToken();
+    const res = await fetch(`${this.apiBase}/contacts/${contactId}`, {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Version: '2021-07-28',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ phone }),
+    });
+    if (!res.ok) {
+      const detail = await res.text();
+      throw new Error(`[ghl] updateContactPhone failed ${res.status}: ${detail}`);
+    }
+  }
+
   async getAvailability(calendarId: string, from: string, to: string): Promise<Slot[]> {
     const token = await this.getAccessToken();
     const url = new URL(`${this.apiBase}/calendars/${calendarId}/free-slots`);

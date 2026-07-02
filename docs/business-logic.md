@@ -146,6 +146,14 @@ slots. Rules (also reinforced in the front-desk prompt):
 - Every check logs the **raw slots GHL returned** to `bot_events`
   (`event_type = 'availability_checked'`), so an availability claim can be audited against
   ground truth instead of inferred. Query by `conversation_id`.
+- **Reminder number (confirm/capture before booking).** GHL sends confirmation/reminder
+  templates to the contact's `phone`. WhatsApp leads arrive with a number; **FB/IG leads carry
+  no phone**. The turn resolves the number on file (`parsed.phone ?? getContactPhone(contactId)`)
+  and the front-desk prompt is injected accordingly: if we have a number, the agent **confirms
+  it** with the lead before booking; if not, it **asks for it** (with country code). A given
+  number is written to the GHL contact via the `guardarWhatsapp` tool (`updateContactPhone`,
+  needs `contacts.write`). This keeps reminders on WhatsApp/SMS instead of depending on the
+  FB/IG messaging window.
 - Booking is created via the GHL API (`bookAppointment` tool) and recorded in `appointments`.
   A GHL rejection logs a **`booking_failed`** event to `bot_events` with the GHL status/body +
   `startTime`/`calendarId`/`serviceName`, so a failed booking is diagnosable (the reason is not

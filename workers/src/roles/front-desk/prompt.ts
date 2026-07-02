@@ -53,7 +53,11 @@ function renderHours(config: FrontDeskConfig): string {
     .join('\n');
 }
 
-export function buildFrontDeskInstructions(config: FrontDeskConfig, nowIso: string): string {
+export function buildFrontDeskInstructions(
+  config: FrontDeskConfig,
+  nowIso: string,
+  contactPhone?: string,
+): string {
   const { identity, offering, qualificationNotes, toolInstructions } = config.promptOverrides;
 
   const identityLine = identity?.trim()
@@ -125,6 +129,15 @@ export function buildFrontDeskInstructions(config: FrontDeskConfig, nowIso: stri
       `. Si el lead pide una fecha posterior (p. ej. "la próxima semana"), díselo con claridad —que solo hay cupo hasta esa fecha— y ofrécele el horario más pronto disponible; nunca agendes ni ofrezcas nada fuera de esa ventana.`;
   }
 
+  // Reminder-number handling: GHL sends confirmation/reminder templates to the contact's
+  // phone. WhatsApp leads arrive with a number; FB/IG leads usually don't. So: confirm the
+  // number on file before booking, or (if none) capture it — the agent saves it via guardarWhatsapp.
+  const reminderSection = contactPhone
+    ? `\n\n# Número para confirmación y recordatorios
+Tenemos este número del lead en el sistema: ${contactPhone}. ANTES de confirmar la cita, verifícalo: pregúntale al lead si le mandamos la confirmación y los recordatorios a ese número (léeselo tal cual). Si dice que sí, procede a agendar. Si no es correcto o te da otro, guárdalo con la herramienta guardarWhatsapp y luego agenda.`
+    : `\n\n# Número para confirmación y recordatorios
+NO tenemos el número de WhatsApp del lead (probablemente entró por Facebook o Instagram). ANTES de agendar, pídeselo —con código de país (ej. +52…)— y guárdalo con la herramienta guardarWhatsapp. Es obligatorio: sin número no podemos mandar confirmación ni recordatorios, así que no agendes hasta capturarlo.`;
+
   return `${identityLine}
 
 # Fecha y hora actuales
@@ -143,7 +156,7 @@ Solo afirma datos que estén en esta configuración o que devuelvan tus herramie
 ${offeringSection}
 
 # Horario (zona horaria: ${config.timezone})
-${renderHours(config)}${flowSection}${toolInstructionsSection}
+${renderHours(config)}${flowSection}${toolInstructionsSection}${reminderSection}
 
 # Uso de herramientas
 Cuando necesites llamar una herramienta, NO generes texto antes de la llamada. Llama la herramienta en silencio y escribe tu respuesta al lead ÚNICAMENTE después de tener el resultado final. Un solo mensaje, sin intermedios.
