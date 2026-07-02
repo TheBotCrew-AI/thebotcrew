@@ -154,6 +154,13 @@ slots. Rules (also reinforced in the front-desk prompt):
   number is written to the GHL contact via the `guardarWhatsapp` tool (`updateContactPhone`,
   needs `contacts.write`). This keeps reminders on WhatsApp/SMS instead of depending on the
   FB/IG messaging window.
+- **Booking sequence (prompt-enforced):** once the lead picks a time already validated by
+  `getAvailability`, the agent must **not** re-run `getAvailability` or re-offer slots — it goes
+  straight to confirm/capture the number → `bookAppointment` → confirm. When it *does* offer
+  slots, the list must be in the **same message** as the intro (no bare "tengo estos horarios:"
+  with no slots). The turn runs with `maxSteps: 8` so a full booking chain (guardarWhatsapp +
+  getAvailability + bookAppointment + updateConversationStatus + final reply) doesn't exhaust
+  steps and emit only a truncated pre-tool intro.
 - Booking is created via the GHL API (`bookAppointment` tool) and recorded in `appointments`.
   A GHL rejection logs a **`booking_failed`** event to `bot_events` with the GHL status/body +
   `startTime`/`calendarId`/`serviceName`, so a failed booking is diagnosable (the reason is not
