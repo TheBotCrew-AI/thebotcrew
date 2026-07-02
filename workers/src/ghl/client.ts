@@ -238,6 +238,27 @@ export class GhlClient {
     }
   }
 
+  /** Fetch an appointment's live details (start time + status) from GHL. */
+  async getAppointment(appointmentId: string): Promise<{ startTime?: string; status?: string; title?: string }> {
+    const token = await this.getAccessToken();
+    const res = await fetch(`${this.apiBase}/calendars/events/appointments/${appointmentId}`, {
+      headers: { Authorization: `Bearer ${token}`, Version: '2021-04-15' },
+    });
+    if (!res.ok) {
+      const detail = await res.text();
+      throw new Error(`[ghl] getAppointment failed ${res.status}: ${detail}`);
+    }
+    // GHL may wrap the object under `appointment`/`event` or return it flat — read defensively.
+    const data = (await res.json()) as Record<string, unknown>;
+    const appt = ((data.appointment ?? data.event ?? data) as Record<string, unknown>) ?? {};
+    const asStr = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined);
+    return {
+      startTime: asStr(appt.startTime),
+      status: asStr(appt.appointmentStatus) ?? asStr(appt.status),
+      title: asStr(appt.title),
+    };
+  }
+
   /** Soft-cancel an appointment (sets appointmentStatus='cancelled'; does not delete the record). */
   async cancelAppointment(appointmentId: string): Promise<void> {
     const token = await this.getAccessToken();

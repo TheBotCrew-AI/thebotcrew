@@ -1,0 +1,80 @@
+/**
+ * lookupAppointment — tell the lead when their appointment is.
+ *
+ * Resolves the contact's active appointment from our store, then reads its LIVE
+ * status/time from GHL (falling back to our recorded datetime if the GHL read
+ * fails). Use it when the lead asks about their existing appointment ("¿a qué hora
+ * era mi cita?") — never invent a time.
+ */
+
+import { createTool } from '@mastra/core/tools';
+import { z } from 'zod';
+import { GhlClient } from '../../../ghl/client.js';
+import { loadLatestAppointment } from '../../../db/queries.js';
+import { resolveAgentContext } from './agent-context.js';
+
+export const lookupAppointmentTool = createTool({
+  id: 'lookupAppointment',
+  description:
+    'Consulta la cita activa del contacto en el sistema (día y hora). Úsala cuando el lead pregunte ' +
+    'por su cita o no recuerde cuándo es. No inventes horarios: si no hay cita activa, lo indica.',
+  inputSchema: z.object({}),
+  outputSchema: z.object({
+    found: z.boolean(),
+    startTime: z.string().optional(),
+    label: z.string().optional(),
+    service: z.string().optional(),
+    message: z.string(),
+  }),
+  execute: async (_input, ctx) => {
+    const { tenant, turn, config } = resolveAgentContext(ctx);
+
+    const appt = await loadLatestAppointment(tenant.clientId, turn.ghlContactId);
+    if (!appt || appt.action === 'cancelled') {
+      return { found: false, message: 'No encuentro una cita activa a tu nombre.' };
+    }
+
+    // Prefer the live GHL value (someone may have moved/cancelled it directly in GHL);
+    // fall back to our recorded datetime if the read fails.
+    let startTime = appt.appointmentDatetime ?? undefined;
+    try {
+      const live = await new GhlClient(tenant.tenantId).getAppointment(appt.ghlAppointmentId);
+      if (live.status && live.status.toLowerCase() === 'cancelled') {
+        return { found: false, message: 'Tu cita aparece como cancelada en el sistema; no tienes una cita activa.' };
+      }
+      if (live.startTime) startTime = live.startTime;
+    } catch (e) {
+      console.error('[lookupAppointment] GHL read failed, using stored datetime:', e instanceof Error ? e.message : String(e));
+    }
+
+    if (!startTime) {
+      return { found: false, message: 'Tienes una cita registrada, pero no pude leer la fecha/hora. Contacta al equipo para confirmarla.' };
+    }
+
+    const label = formatLabel(startTime, config.timezone);
+    return {
+      found: true,
+      startTime,
+      label,
+      service: appt.serviceType ?? undefined,
+      message: `Tu cita es el ${label}. Preséntasela al lead usando EXACTAMENTE este texto; no recalcules la fecha.`,
+    };
+  },
+});
+
+/** Human, tenant-tz label for an ISO time (weekday + date + time in es-MX). */
+function formatLabel(iso: string, timeZone: string): string {
+  try {
+    return new Intl.DateTimeFormat('es-MX', {
+      timeZone,
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    }).format(new Date(iso));
+  } catch {
+    return iso;
+  }
+}

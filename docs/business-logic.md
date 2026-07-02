@@ -175,6 +175,11 @@ slots. Rules (also reinforced in the front-desk prompt):
   anything not in tenant config (no invented agenda, Zoom/Meet link, topics list, prep materials).
   It also calls `updateConversationStatus(completed)`, which cancels pending follow-ups so the bot
   doesn't keep poking a booked lead. (It still replies normally if the lead writes again.)
+- **Lookup (tool).** `lookupAppointment` answers "when is my appointment?" — it resolves the
+  contact's active appointment (`loadLatestAppointment`) and reads its **live** status/time from
+  GHL (`getAppointment`), falling back to our recorded datetime if the GHL read fails. It returns a
+  tenant-tz Spanish label the agent presents verbatim (no recomputing dates), and reports no active
+  appointment when the newest row is `cancelled` or GHL shows it cancelled.
 - **Reschedule / cancel (tools).** `rescheduleAppointment` and `cancelAppointment` act on the
   contact's **active appointment** (`loadLatestAppointment` = newest `appointments` row with a GHL
   id; a newest action of `cancelled` = none active). Reschedule **re-validates** the new time
