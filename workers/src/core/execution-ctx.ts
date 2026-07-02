@@ -15,3 +15,11 @@ export interface ExecutionCtx {
  *   Handler: const ctx = executionCtxStorage.getStore()
  */
 export const executionCtxStorage = new AsyncLocalStorage<ExecutionCtx>();
+
+/**
+ * Threads the Worker `env` (bindings) down to route handlers. Needed for BINDING objects
+ * like the Durable Object namespace, which — unlike string secrets/vars — are NOT mirrored
+ * into process.env and are not reliably on Hono's c.env under Mastra's server. Populated in
+ * the entry wrapper: workerEnvStorage.run(env, () => app.fetch(...)).
+ */
+export const workerEnvStorage = new AsyncLocalStorage<Record<string, unknown>>();

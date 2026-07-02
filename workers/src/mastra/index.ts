@@ -21,11 +21,11 @@ import { runReconciliationSweep } from '../worker/reconciliation.js';
 import { exchangeCode, getInstallUrl } from '../ghl/oauth.js';
 import { upsertOAuthToken } from '../db/queries.js';
 import { resolveTenant } from '../core/tenant.js';
-import { executionCtxStorage } from '../core/execution-ctx.js';
+import { executionCtxStorage, workerEnvStorage } from '../core/execution-ctx.js';
 import type { GhlContactTagWebhook, GhlInboundWebhook, GhlOutboundWebhook } from '../ghl/types.js';
 
 // Re-export so the getEntry() template can import them via '#mastra'.
-export { executionCtxStorage };
+export { executionCtxStorage, workerEnvStorage };
 export { runPendingFollowUps } from '../worker/followup-runner.js';
 export { retryPendingDeliveries } from '../worker/delivery-retry.js';
 export { runReconciliationSweep } from '../worker/reconciliation.js';
@@ -152,8 +152,10 @@ export const mastra = new Mastra({
           // executionCtxStorage is populated by the entry point wrapper; falls back
           // to undefined (sync path) in test environments without a CF context.
           const execCtx = executionCtxStorage.getStore();
-          // DO namespace binding (Phase 1 durable-turn path); absent in local/test envs.
-          const doNamespace = (c.env as { CONVERSATION_DO?: TurnDONamespace }).CONVERSATION_DO;
+          // DO namespace binding (Phase 1 durable-turn path) — read from the real Worker env
+          // threaded via workerEnvStorage; absent in local/test envs.
+          const workerEnv = workerEnvStorage.getStore() as { CONVERSATION_DO?: TurnDONamespace } | undefined;
+          const doNamespace = workerEnv?.CONVERSATION_DO;
           const result = await handleInboundWebhook(payload, agent, execCtx, doNamespace);
           return c.json(result.body, result.status);
         },
@@ -185,10 +187,12 @@ export const mastra = new Mastra({
           if (!expected || auth !== `Bearer ${expected}`) {
             return c.json({ error: 'unauthorized' }, 401);
           }
-          // Loose type: the strict DurableObjectStub RPC mapping is finicky; we only need ping.
-          const ns = (c.env as {
+          // Binding objects live on the real Worker env (threaded via workerEnvStorage), not
+          // on process.env or reliably on c.env. Loose type: we only need ping.
+          const workerEnv = workerEnvStorage.getStore() as {
             CONVERSATION_DO?: { idFromName(n: string): DurableObjectId; get(id: DurableObjectId): { ping(): Promise<string> } };
-          }).CONVERSATION_DO;
+          } | undefined;
+          const ns = workerEnv?.CONVERSATION_DO;
           if (!ns) return c.json({ error: 'CONVERSATION_DO binding missing' }, 500);
           const stub = ns.get(ns.idFromName('healthcheck'));
           const pong = await stub.ping();
@@ -244,7 +248,7 @@ export const mastra = new Mastra({
 
       export default {
         fetch: async (request, env, context) => {
-          const { mastra, executionCtxStorage } = await import('#mastra');
+          const { mastra, executionCtxStorage, workerEnvStorage } = await import('#mastra');
           const { tools } = await import('#tools');
           const { createHonoServer, getToolExports } = await import('#server');
           const _mastra = mastra();
@@ -254,7 +258,9 @@ export const mastra = new Mastra({
           }
 
           const app = await createHonoServer(_mastra, { tools: getToolExports(tools) });
-          return executionCtxStorage.run(context, () => app.fetch(request, env, context));
+          return executionCtxStorage.run(context, () =>
+            workerEnvStorage.run(env, () => app.fetch(request, env, context)),
+          );
         },
 
         scheduled: async (event, _env, ctx) => {
