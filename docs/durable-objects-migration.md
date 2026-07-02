@@ -1,12 +1,13 @@
 # Future Upgrade — Turn/Follow-up Durability via Durable Objects
 
-> **Status: IN PROGRESS — Phase 1 code DEPLOYED, flag-gated rollout STARTED (2026-07-01).**
-> Phase 0 done (version `89c6bee8`). Phase 1 (version `ee4f6507`): the durable-turn path is
-> live behind the `DO_TURNS` flag and **currently active for the The Bot Crew tenant only**
-> (`DO_TURNS` = its tenant id). Everyone else stays on the legacy `waitUntil` path; the
-> reconciliation cron stays on as the net. **Next: verify on the test conversation, then set
-> `DO_TURNS=*` to roll out to all tenants; then Phase 2.** Owner: Leo. Resume point + effort
-> at the bottom (§7). Read §1–§2 first when you pick this up cold.
+> **Status: IN PROGRESS — Phase 1 VERIFIED WORKING for The Bot Crew (2026-07-01).**
+> `wrangler tail` confirmed the full durable lifecycle: `ConversationDO.scheduleTurn → Alarm
+> fired → turn ran → reply delivered`. Active behind `DO_TURNS` = The Bot Crew tenant id;
+> everyone else on the legacy `waitUntil` path; reconciliation cron stays as net. Two fixes
+> were needed during rollout: (a) thread the Worker env via `workerEnvStorage` (the DO binding
+> isn't on process.env/c.env), (b) migration `0027` adds `turn_scheduled` to the
+> `bot_events_event_type_check` constraint. **Next: `DO_TURNS=*` to roll out to all tenants
+> (monitoring window), then Phase 2.** Owner: Leo. Resume point at §7.
 
 ---
 
