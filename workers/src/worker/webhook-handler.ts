@@ -525,7 +525,9 @@ export async function handleInboundWebhook(
     try {
       const stub = doNamespace.get(doNamespace.idFromName(conversationId));
       await stub.scheduleTurn({ conversationId, messageId, tenant, parsed, phone });
-      logBotEvent(tenant.clientId, parsed.conversationId, 'turn_scheduled', { via: 'durable-object' }).catch(() => {});
+      // Must be awaited: the request returns immediately after, and a fire-and-forget
+      // event promise gets killed before it writes (see db/queries.ts logBotEvent note).
+      await logBotEvent(tenant.clientId, parsed.conversationId, 'turn_scheduled', { via: 'durable-object' });
       console.log(`[DO] scheduled conv=${parsed.conversationId}`);
       return { status: 200, body: { scheduled: 'durable-object', conversationId } };
     } catch (err) {
