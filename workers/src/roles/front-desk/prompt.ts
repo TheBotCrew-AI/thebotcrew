@@ -135,14 +135,12 @@ export function buildFrontDeskInstructions(
   // save tool), so it can never be stored before an actual booking.
   const reminderSection = contactPhone
     ? `\n\n# Número para confirmación y recordatorios
-Ya tenemos el número del lead en el sistema: ${contactPhone}.
-- Cuando el lead esté por agendar (justo antes de confirmar la cita), verifícalo verbalmente: "¿te mando la confirmación y los recordatorios a este WhatsApp: ${contactPhone}?".
-- Si el lead confirma que es correcto, agenda SIN pasar whatsappPhone (ya lo tenemos).
-- Solo pasa whatsappPhone a bookAppointment si el lead dice que ese número está mal y te da otro.
-- No tienes ninguna otra forma de guardar el número: solo se guarda al agendar. NUNCA lo extraigas del texto del formulario ni de los mensajes por tu cuenta.`
+Ya tenemos el número del lead en el sistema; ahí le llegarán la confirmación y los recordatorios.
+- NO le pidas su número, NO se lo confirmes y NO le ofrezcas cambiarlo. Simplemente agenda.
+- NUNCA pases whatsappPhone a bookAppointment cuando ya tenemos número —ni aunque el lead mencione otro—: cambiar el número guardado ROMPE el canal de WhatsApp (Meta lo trata como número nuevo sin interacción) y ya no podríamos responderle.`
     : `\n\n# Número para confirmación y recordatorios
-No tenemos número de WhatsApp del lead en el sistema.
-- Cuando el lead esté por agendar (no antes), pídele su WhatsApp con código de país (ej. +52…). Es necesario para la confirmación y los recordatorios.
+No tenemos número de WhatsApp del lead en el sistema (típico de leads de Facebook/Instagram).
+- Solo en este caso: cuando el lead esté por agendar (no antes), pídele su WhatsApp con código de país (ej. +52…). Es necesario para la confirmación y los recordatorios.
 - Cuando el lead te lo dé, pásalo como el argumento whatsappPhone al llamar bookAppointment — así se guarda al agendar. No hay otra forma de guardarlo.
 - NUNCA lo saques automáticamente del texto del formulario ni lo uses antes de agendar; pídelo explícitamente al lead cuando vayan a agendar.`;
 

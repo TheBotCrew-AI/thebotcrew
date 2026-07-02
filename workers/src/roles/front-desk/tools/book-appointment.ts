@@ -41,18 +41,20 @@ export const bookAppointmentTool = createTool({
 
     const ghl = new GhlClient(tenant.tenantId);
 
-    // Save the reminder number ONLY as part of booking (never earlier) — this is the only
-    // path that writes the contact's phone, so a scraped/premature save is impossible. No-op
-    // if it already matches (avoids redundant writes + GHL dedup/merge churn). A failure here
-    // is logged but does NOT block the booking — the appointment matters more than the number.
+    // Save the reminder number ONLY as part of booking (never earlier), and ONLY when the
+    // contact has NO phone yet (the FB/IG case). We NEVER overwrite an existing phone:
+    // changing a WhatsApp contact's number breaks the 24h messaging window — GHL/Meta treat it
+    // as a new number with no lead interaction, so the bot can no longer reply (templates only).
+    // A failure here is logged but does NOT block the booking.
     if (whatsappPhone) {
       const cleaned = whatsappPhone.replace(/[^\d+]/g, '');
       if (cleaned.replace(/\D/g, '').length >= 8) {
         try {
           const current = await ghl.getContactPhone(turn.ghlContactId);
-          if (!current || current.replace(/[^\d+]/g, '') !== cleaned) {
+          if (!current) {
             await ghl.updateContactPhone(turn.ghlContactId, cleaned);
           }
+          // else: already has a number — leave it untouched (see comment above).
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           console.error('[bookAppointment] phone save failed (non-blocking):', msg);

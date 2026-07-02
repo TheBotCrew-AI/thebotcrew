@@ -149,15 +149,19 @@ slots. Rules (also reinforced in the front-desk prompt):
 - **Reminder number (confirm/capture before booking).** GHL sends confirmation/reminder
   templates to the contact's `phone`. WhatsApp leads arrive with a number; **FB/IG leads carry
   no phone**. The turn resolves the number on file (`parsed.phone ?? getContactPhone(contactId)`)
-  and the front-desk prompt is injected accordingly: if we have a number, the agent **confirms
-  it** with the lead before booking; if not, it **asks for it** (with country code). The number
-  is written to the GHL contact **only as the `whatsappPhone` argument of `bookAppointment`**
-  (`updateContactPhone`, needs `contacts.write`) — there is **no standalone save tool**, so the
-  phone can never be stored before an actual booking. This is deterministic: it removed a class
-  of bugs where gpt-5-mini scraped the number from a lead-form message and saved it on the first
-  turn (premature write → GHL dedup/merge → stale contactId). The save is no-op if unchanged and
-  non-blocking (a phone-write failure still lets the appointment go through). This keeps reminders
-  on WhatsApp/SMS instead of depending on the FB/IG messaging window.
+  and the front-desk prompt is injected accordingly: **if the contact already has a phone, the
+  agent leaves it untouched** — it does NOT ask, confirm, or offer to change it, just books; **if
+  there's no phone (typical FB/IG lead), it asks for it** (with country code) at booking. The
+  number is written **only as the `whatsappPhone` argument of `bookAppointment`**
+  (`updateContactPhone`, needs `contacts.write`) — no standalone save tool, so it can't be stored
+  before an actual booking. **The tool NEVER overwrites an existing phone** (writes only when the
+  contact has none): changing a WhatsApp contact's number breaks the 24h messaging window — Meta
+  treats it as a new number with no lead interaction, so the bot can no longer reply (templates
+  only). Two layers enforce this: the prompt (don't pass `whatsappPhone` when a number exists) and
+  the tool (skip the write if `getContactPhone` returns anything). The write is non-blocking (a
+  failure still lets the appointment go through). This also removed an earlier class of bugs where
+  gpt-5-mini scraped the number from a lead-form message and saved it prematurely (→ GHL
+  dedup/merge → stale contactId).
 - **Booking sequence (prompt-enforced):** once the lead picks a time already validated by
   `getAvailability`, the agent must **not** re-run `getAvailability` or re-offer slots — it goes
   straight to confirm/capture the number → `bookAppointment` → confirm. When it *does* offer
