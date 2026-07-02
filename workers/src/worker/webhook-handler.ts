@@ -67,6 +67,30 @@ export interface AgentRunParams {
   debounced: boolean;
 }
 
+/** The turn payload handed to the DO — everything runAgentTurn needs except the agent
+ *  (rebuilt inside the DO) and the debounce flag (always true on the DO path). Must be
+ *  structured-clone-serializable (DO storage + RPC): tenant/parsed are plain data. */
+export type ScheduledTurn = Omit<AgentRunParams, 'agent' | 'debounced'>;
+
+/** Minimal shape of the ConversationDO namespace we need — avoids a value import cycle. */
+export interface TurnDONamespace {
+  idFromName(name: string): DurableObjectId;
+  get(id: DurableObjectId): { scheduleTurn(params: ScheduledTurn): Promise<void> };
+}
+
+/**
+ * Rollout flag for the Durable-Object turn path. `process.env.DO_TURNS`:
+ *   unset/empty → off (legacy waitUntil path, zero risk)
+ *   "*" or "all" → every tenant
+ *   comma list of tenantIds → only those tenants
+ */
+function doTurnsEnabled(tenant: TenantContext): boolean {
+  const flag = process.env.DO_TURNS?.trim();
+  if (!flag) return false;
+  if (flag === '*' || flag === 'all') return true;
+  return flag.split(',').map((s) => s.trim()).includes(tenant.tenantId);
+}
+
 type ChatMessage = { role: 'user'; content: string } | { role: 'assistant'; content: string };
 
 /** Outcome of a send: whether GHL accepted it, its id if we could read one, and the
@@ -410,6 +434,7 @@ export async function handleInboundWebhook(
   payload: GhlInboundWebhook,
   agent: Agent,
   ctx?: ExecutionCtx,
+  doNamespace?: TurnDONamespace,
 ): Promise<WebhookResult> {
   // Signature already verified at the route handler (raw body, before parse).
   const parsed = parseInboundWebhook(payload);
@@ -493,6 +518,23 @@ export async function handleInboundWebhook(
   }
 
   const runParams: AgentRunParams = { agent, conversationId, messageId, tenant, parsed, phone, debounced: true };
+
+  // Durable-turn path (flagged rollout): hand the turn to the conversation's DO, which
+  // debounces via a durable Alarm and runs it serialized — no waitUntil drop, no double-run.
+  if (doNamespace && ctx && doTurnsEnabled(tenant)) {
+    try {
+      const stub = doNamespace.get(doNamespace.idFromName(conversationId));
+      await stub.scheduleTurn({ conversationId, messageId, tenant, parsed, phone });
+      logBotEvent(tenant.clientId, parsed.conversationId, 'turn_scheduled', { via: 'durable-object' }).catch(() => {});
+      console.log(`[DO] scheduled conv=${parsed.conversationId}`);
+      return { status: 200, body: { scheduled: 'durable-object', conversationId } };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('[DO] scheduleTurn failed, falling back to waitUntil:', msg);
+      logError(tenant.clientId, parsed.conversationId, 'db_error', { stage: 'do_schedule', error: msg });
+      // fall through to the legacy waitUntil path below
+    }
+  }
 
   if (ctx) {
     ctx.waitUntil(

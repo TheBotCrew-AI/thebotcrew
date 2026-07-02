@@ -11,7 +11,7 @@ import { registerApiRoute } from '@mastra/core/server';
 import { CloudflareDeployer } from '@mastra/deployer-cloudflare';
 import { buildFrontDeskAgent } from '../roles/front-desk/index.js';
 import { buildReactivationAgent } from '../roles/reactivation/index.js';
-import { handleInboundWebhook } from '../worker/webhook-handler.js';
+import { handleInboundWebhook, type TurnDONamespace } from '../worker/webhook-handler.js';
 import { handleOutboundWebhook } from '../worker/outbound-handler.js';
 import { handleTagWebhook } from '../worker/tag-handler.js';
 import { verifyGhlWebhook, webhookAuthDisabled } from '../ghl/webhook.js';
@@ -32,9 +32,6 @@ export { runReconciliationSweep } from '../worker/reconciliation.js';
 // The Durable Object class MUST be exported from the built Worker entry (index.mjs) for the
 // runtime to instantiate it. The getEntry() override below re-exports it from '#mastra'.
 export { ConversationDO } from '../worker/conversation-do.js';
-
-// Type-only import for typing the DO namespace binding (RPC method surface).
-import type { ConversationDO } from '../worker/conversation-do.js';
 
 const frontDesk = buildFrontDeskAgent();
 const reactivation = buildReactivationAgent();
@@ -155,7 +152,9 @@ export const mastra = new Mastra({
           // executionCtxStorage is populated by the entry point wrapper; falls back
           // to undefined (sync path) in test environments without a CF context.
           const execCtx = executionCtxStorage.getStore();
-          const result = await handleInboundWebhook(payload, agent, execCtx);
+          // DO namespace binding (Phase 1 durable-turn path); absent in local/test envs.
+          const doNamespace = (c.env as { CONVERSATION_DO?: TurnDONamespace }).CONVERSATION_DO;
+          const result = await handleInboundWebhook(payload, agent, execCtx, doNamespace);
           return c.json(result.body, result.status);
         },
       }),
@@ -186,7 +185,10 @@ export const mastra = new Mastra({
           if (!expected || auth !== `Bearer ${expected}`) {
             return c.json({ error: 'unauthorized' }, 401);
           }
-          const ns = (c.env as { CONVERSATION_DO?: DurableObjectNamespace<ConversationDO> }).CONVERSATION_DO;
+          // Loose type: the strict DurableObjectStub RPC mapping is finicky; we only need ping.
+          const ns = (c.env as {
+            CONVERSATION_DO?: { idFromName(n: string): DurableObjectId; get(id: DurableObjectId): { ping(): Promise<string> } };
+          }).CONVERSATION_DO;
           if (!ns) return c.json({ error: 'CONVERSATION_DO binding missing' }, 500);
           const stub = ns.get(ns.idFromName('healthcheck'));
           const pong = await stub.ping();

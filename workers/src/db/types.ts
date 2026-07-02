@@ -163,7 +163,9 @@ export type BotEventType =
   // Booking observability — GHL rejected a bookAppointment call (status/body in metadata)
   | 'booking_failed'
   // Conversation state changed via app_update_conversation_status ({from,to} in metadata)
-  | 'status_changed';
+  | 'status_changed'
+  // Turn handed to the per-conversation Durable Object (Phase 1 durable-turn path)
+  | 'turn_scheduled';
 
 export interface LogAppointmentParams {
   p_client_id: string;

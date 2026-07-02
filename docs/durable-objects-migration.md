@@ -1,11 +1,12 @@
 # Future Upgrade — Turn/Follow-up Durability via Durable Objects
 
-> **Status: IN PROGRESS — Phase 0 DONE & DEPLOYED (2026-07-01).** Workers Paid enabled;
-> `wrangler deploy` (version `89c6bee8`) applied the `v1` migration and the deploy output
-> confirms the binding is live: `env.CONVERSATION_DO (ConversationDO) — Durable Object`.
-> **Next: Phase 1.** Owner: Leo. This is the "correct" architectural fix that replaces the
-> accumulating durability patches. Resume point + effort are at the bottom (§7). Read §1–§2
-> first when you pick this up cold.
+> **Status: IN PROGRESS — Phase 1 code DEPLOYED, flag-gated rollout STARTED (2026-07-01).**
+> Phase 0 done (version `89c6bee8`). Phase 1 (version `ee4f6507`): the durable-turn path is
+> live behind the `DO_TURNS` flag and **currently active for the The Bot Crew tenant only**
+> (`DO_TURNS` = its tenant id). Everyone else stays on the legacy `waitUntil` path; the
+> reconciliation cron stays on as the net. **Next: verify on the test conversation, then set
+> `DO_TURNS=*` to roll out to all tenants; then Phase 2.** Owner: Leo. Resume point + effort
+> at the bottom (§7). Read §1–§2 first when you pick this up cold.
 
 ---
 
@@ -103,9 +104,15 @@ without a new sweep.
   63/63 unit tests green. **✅ Deployed (version `89c6bee8`): Workers Paid enabled, `v1`
   migration applied, deploy output confirms `env.CONVERSATION_DO (ConversationDO)` bound.**
   No behavior change.
-- **Phase 1 — Turn into the DO.** Route inbound → DO; move the debounce + turn from `waitUntil`
-  into a DO Alarm. Keep the reconciliation cron running as a safety net during rollout.
-  *(~2–3 days)*
+- **Phase 1 — Turn into the DO.** 🚧 *Code done + deployed (2026-07-01, version `ee4f6507`),
+  flag-gated rollout in progress.* `ConversationDO.scheduleTurn()` stores the turn + arms a
+  durable 15s Alarm (each inbound resets it → debounce); `alarm()` rebuilds the agent and runs
+  the existing `runAgentTurn`. `handleInboundWebhook` routes to the DO when `doTurnsEnabled(tenant)`
+  (env `DO_TURNS`: empty=off, `*`/`all`=every tenant, else comma list of tenant ids), with a
+  **fall-through to the legacy `waitUntil` path** if the DO call throws. DO constructor mirrors
+  string bindings into `process.env` so `core/env.ts` secret reads work in the isolate. Currently
+  `DO_TURNS` = The Bot Crew tenant id (rollout of one). **Reconciliation cron stays as the net.**
+  **⏳ Remaining: verify on the test conversation → `DO_TURNS=*` for all tenants.** *(~2–3 days)*
 - **Phase 2 — Follow-ups into the DO.** Move follow-up scheduling to DO Alarms; retire the
   follow-up cron + `app_load_due_follow_ups`. *(~1–2 days)*
 - **Phase 3 — Remove the patches.** Delete reconciliation, the claim, `reconcile_claimed_at`,
@@ -127,11 +134,12 @@ and reversible; the safety net stays until Phase 3).
   after a clean monitoring window, so a bug can't cause a regression with no net.
 - **Test locally** with `scripts/simulate-webhook.mjs` (DO works under `wrangler dev`).
 
-**▶ Where to resume (next action):** Phase 0 is done and deployed. Start **Phase 1**:
-route inbound → the conversation's DO (`env.CONVERSATION_DO.idFromName(conversationId)`);
-move the 15s debounce + turn (`runAgentTurn` in `worker/webhook-handler.ts`) out of
-`waitUntil`+`setTimeout` and into a **DO Alarm** (buffer inbounds, set alarm ~15s out, run
-generate→send→persist→schedule-follow-up in `alarm()`); re-check suppression inside the DO
-before send. **Keep the reconciliation cron running as the safety net until Phase 3.** The DO
-class + binding + entry export already exist. Update this **Status** line and the phase
-checkboxes as you go.
+**▶ Where to resume (next action):** Phase 1 is deployed and active for The Bot Crew only.
+**(1) Verify** on the test conversation: send a message, confirm a `turn_scheduled` bot_event
+(`via: durable-object`) and that the reply lands (~15s later, no drop), and that a rapid burst
+coalesces into one reply. **(2) Roll out:** `echo -n "*" | wrangler secret put DO_TURNS` to
+enable all tenants; watch for a monitoring window. **(3) Phase 2:** move follow-up scheduling to
+a DO alarm (add a second alarm purpose or a follow-up-specific key) and retire the follow-up cron
++ `app_load_due_follow_ups`. Note: `ConversationDO` currently uses a single alarm for the debounce;
+Phase 2 needs the alarm to distinguish "debounced turn due" vs "follow-up due" (store the alarm
+purpose alongside the pending state). Update this **Status** line + checkboxes as you go.
