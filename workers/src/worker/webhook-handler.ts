@@ -69,8 +69,9 @@ export interface AgentRunParams {
 
 type ChatMessage = { role: 'user'; content: string } | { role: 'assistant'; content: string };
 
-/** Outcome of a send: whether GHL accepted it, and its id if we could read one. */
-type SendOutcome = { delivered: boolean; ghlMessageId: string | null };
+/** Outcome of a send: whether GHL accepted it, its id if we could read one, and the
+ *  GHL error (status + body) on failure so a dropped delivery is diagnosable. */
+type SendOutcome = { delivered: boolean; ghlMessageId: string | null; error?: string };
 
 /**
  * One send attempt. A 2xx from GHL (sendMessage returns) means the message was
@@ -82,8 +83,8 @@ async function trySend(ghl: GhlClient, params: Parameters<GhlClient['sendMessage
   try {
     const { ghlMessageId } = await ghl.sendMessage(params);
     return { delivered: true, ghlMessageId: ghlMessageId || null };
-  } catch {
-    return { delivered: false, ghlMessageId: null };
+  } catch (e) {
+    return { delivered: false, ghlMessageId: null, error: e instanceof Error ? e.message : String(e) };
   }
 }
 
@@ -351,7 +352,7 @@ export async function runAgentTurn({
       logError(tenant.clientId, parsed.conversationId, 'db_error', { error: msg, stage: 'outbound_log' });
     }
 
-    const { delivered, ghlMessageId } = await sendWithRetry(ghl, {
+    const { delivered, ghlMessageId, error: sendError } = await sendWithRetry(ghl, {
       contactId: parsed.contactId,
       channel: parsed.channel,
       text: part,
@@ -372,7 +373,8 @@ export async function runAgentTurn({
     } else if (!delivered) {
       console.error('[ghl] sendMessage failed after retry — leaving pending for cron');
       logError(tenant.clientId, parsed.conversationId, 'delivery_error', {
-        channel: parsed.channel, hasPhone: !!phone, part: i, parts: parts.length, note: 'inline retry exhausted',
+        channel: parsed.channel, hasPhone: !!phone, part: i, parts: parts.length,
+        note: 'inline retry exhausted', error: sendError,
       });
     }
   }
