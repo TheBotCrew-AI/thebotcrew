@@ -52,6 +52,12 @@ Hybrid human ↔ AI. Enforced by `isBotSuppressed`, re-checked again right befor
 
 - **Human reply** (`source:'app'` outbound webhook) opens a **5-minute sliding pause**
   (`conversations.human_active_until`). Each human message extends it.
+- **Cold-outreach opener exception.** If a `source:'app'` message is the conversation's
+  **first** message (`conversationMessageCount == 0`), it's an outreach opener — e.g. a WhatsApp
+  template Leo sends to open the 24h window on a **new** contact — not a human taking over an
+  ongoing thread. It's still logged (history context; maps to an assistant turn) but does **not**
+  open the pause, so the bot answers the lead's reply. A real takeover happens mid-thread and
+  still pauses. (Fixed the 2026-07-02 "template opener → lead replies → bot muted 5 min" bug.)
 - **`status='handed_off'`** is a **permanent** pause.
 - **`bot-off` tag** on a GHL contact = permanent handoff (contact-scoped, affects all their
   conversations); removing it resumes the bot. There is no `bot-on` tag — absence means on.

@@ -655,6 +655,21 @@ export async function botActivation(
  * anti-double check so the agent's OWN self-handoff (which sets handed_off during
  * generation) doesn't suppress its own farewell message.
  */
+/**
+ * How many messages the conversation already has (by GHL conversation id).
+ * Used to tell a cold-outreach opener (first message) from a mid-conversation
+ * human takeover. 0 = brand-new conversation.
+ */
+export async function conversationMessageCount(ghlConversationId: string): Promise<number> {
+  const supabase = getSupabase();
+  const { count, error } = await supabase
+    .from('messages')
+    .select('id, conversations!inner(ghl_conversation_id)', { count: 'exact', head: true })
+    .eq('conversations.ghl_conversation_id', ghlConversationId);
+  fail('conversationMessageCount', error);
+  return count ?? 0;
+}
+
 export async function isHumanActive(ghlConversationId: string): Promise<boolean> {
   const supabase = getSupabase();
   const { data, error } = await supabase

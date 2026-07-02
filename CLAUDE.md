@@ -213,7 +213,9 @@ for the retry cron.
   inbound (FB/IG/WhatsApp messaging window) must be open for GHL to deliver.
 - Human takeover (hybrid): a human reply (`source:'app'` outbound webhook) opens a 5-min
   sliding pause; `status='handed_off'` is a permanent pause. Both are enforced by
-  `isBotSuppressed`, re-checked again right before send (anti-double-message).
+  `isBotSuppressed`, re-checked again right before send (anti-double-message). **Exception:** a
+  `source:'app'` message that is the conversation's FIRST message is a cold-outreach opener (e.g.
+  a WhatsApp template on a new contact) — logged but no pause, so the bot answers the lead's reply.
 - Tag kill switch: the `bot-off` tag on a GHL contact = permanent handoff; removing it
   resumes the bot (no `bot-on` tag — absence means on). Wired via the **ContactTagUpdate**
   webhook → `/webhooks/ghl/tags` → `worker/tag-handler.ts` (contact-scoped: resolves by

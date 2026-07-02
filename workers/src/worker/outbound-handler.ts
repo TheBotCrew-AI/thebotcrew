@@ -13,14 +13,17 @@
  *   4. Resolve tenant.
  *   5. Resolve (or lazily create) the human_agents row for this GHL user.
  *   6. Log message to our store (sender_type='human_agent').
- *   7. Start/refresh the 5-min human-active timer.
- *   8. Cancel any pending follow-ups (human is in the conversation).
+ *   7. If this is the conversation's FIRST message, it's a cold-outreach opener
+ *      (e.g. a WhatsApp template) — log only, no pause. Otherwise:
+ *   8. Start/refresh the 5-min human-active timer + cancel pending follow-ups
+ *      (a human is in the conversation).
  */
 
 import { resolveTenant } from '../core/tenant.js';
 import type { TenantContext } from '../core/types.js';
 import {
   cancelFollowUps,
+  conversationMessageCount,
   findHumanAgentByGhlId,
   isBotMessageById,
   isRecentBotEcho,
@@ -63,6 +66,14 @@ export async function handleOutboundWebhook(
   const ghl = new GhlClient(tenant.tenantId);
   const humanAgentId = await resolveHumanAgent(tenant, parsed.ghlUserId, ghl);
 
+  // Cold-outreach opener vs. human takeover: if this 'app' message is the FIRST message in
+  // the conversation, it's an outreach opener (e.g. a WhatsApp template Leo sends to open the
+  // 24h window on a new contact) — NOT a human jumping into an ongoing thread. We still log it
+  // (history context, maps to an assistant turn) but must NOT open the 5-min human pause, or
+  // the bot would stay muted when the lead replies. A real takeover happens mid-thread
+  // (priorCount > 0) and still pauses the bot.
+  const isOpener = (await conversationMessageCount(parsed.conversationId)) === 0;
+
   const { conversationId, messageId } = await logMessage({
     p_ghl_conversation_id: parsed.conversationId,
     p_client_id: tenant.clientId,
@@ -82,6 +93,12 @@ export async function handleOutboundWebhook(
   if (!messageId) {
     // Duplicate message deduplicated by ghl_message_id unique constraint.
     return { status: 200, body: { ignored: 'duplicate', ghlMessageId: parsed.messageId } };
+  }
+
+  if (isOpener) {
+    // Outreach opener: logged for history, but no human pause — let the bot answer the reply.
+    console.log(`[outbound] cold-outreach opener conv=${parsed.conversationId} — not a human takeover`);
+    return { status: 200, body: { logged: true, conversationId, opener: true } };
   }
 
   // These must be awaited — fire-and-forget gets killed when the Worker response is sent
