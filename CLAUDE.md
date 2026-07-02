@@ -207,6 +207,12 @@ for the retry cron.
 - Inbound: parse the webhook payload; the subaccount/location id identifies the tenant.
 - Outbound: send replies and create bookings via the GHL API. **Transport only** — we do
   NOT read conversation history from GHL (it lives in our DB).
+- Contact-merge recovery on send: GHL dedups contacts by phone/email, which can **merge away**
+  the `contactId` a webhook gave us (Instant-Form lead whose number already exists as another
+  contact) → send fails `CONVERSATIONS_CONTACT_NOT_FOUND`. `sendMessage` catches that, re-resolves
+  the live contactId from the conversation (`getConversationContactId`, which survives merges),
+  retries once, and returns `resolvedContactId` so the caller persists it (`updateConversationContact`).
+  Wired on all three send paths (turn, delivery-retry cron, follow-up).
 - Channels: FB / IG / WhatsApp all work. Inbound channel comes from the webhook
   `messageType` (`FB`/`IG`/`WhatsApp`, normalized in `ghl/webhook.ts`); outbound sends with
   the matching `type`. FB/IG have no phone — delivery routes by `contactId`, and a real

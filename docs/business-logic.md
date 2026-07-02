@@ -70,6 +70,17 @@ Hybrid human ↔ AI. Enforced by `isBotSuppressed`, re-checked again right befor
   (b) catches an accepted send whose id we couldn't capture; without it that echo would open a
   false 5-min pause (see §7, 2026-07-01 double-send).
 
+- **Contact-merge recovery (send).** GHL dedups contacts by phone/email. An Instant-Form ad lead
+  whose number already exists as another contact (e.g. a prior WhatsApp contact) gets **merged**,
+  and the `contactId` from the inbound webhook is deleted → the outbound send fails
+  `CONVERSATIONS_CONTACT_NOT_FOUND`. `GhlClient.sendMessage` recovers: on that error it re-resolves
+  the conversation's **current** contactId (`GET /conversations/{id}`, which GHL re-parents to the
+  surviving contact), retries the send once, and reports `resolvedContactId`; the turn persists it
+  (`updateConversationContact`) so later parts/turns/follow-ups use the valid id. All three send
+  paths (turn, delivery-retry cron, follow-up) pass the conversationId so they self-heal. Note:
+  mostly a returning/cross-channel-lead case in production — self-tests that reuse one phone hit it
+  every time (all collapse into one contact).
+
 ## 4. Follow-ups (reactivation)
 
 Tenants **opt in** via two **decoupled** config fields (absent/null = no follow-ups). Runner:

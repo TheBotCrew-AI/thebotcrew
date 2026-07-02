@@ -181,6 +181,16 @@ export async function getConversationPersona(conversationId: string): Promise<Co
   return { activeRole: row?.active_role ?? null, demoStartedAt: row?.demo_started_at ?? null };
 }
 
+/** Persist a corrected GHL contact id on a conversation (after a merge re-resolve on send). */
+export async function updateConversationContact(ghlConversationId: string, ghlContactId: string): Promise<void> {
+  const supabase = getSupabase();
+  const { error } = await supabase
+    .from('conversations')
+    .update({ ghl_contact_id: ghlContactId })
+    .eq('ghl_conversation_id', ghlConversationId);
+  fail('updateConversationContact', error);
+}
+
 /** Switch a conversation's persona. Pass null to return it to the normal front-desk agent. */
 export async function setActiveRole(ghlConversationId: string, activeRole: string | null): Promise<void> {
   const supabase = getSupabase();

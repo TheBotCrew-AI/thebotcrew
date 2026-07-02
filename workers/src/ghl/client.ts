@@ -52,32 +52,74 @@ export class GhlClient {
     return stored.access_token;
   }
 
-  /** Returns the GHL message ID assigned to the sent message. */
-  async sendMessage(params: { contactId: string; channel: Channel; text: string; phone?: string }): Promise<{ ghlMessageId: string }> {
+  /** The contact id GHL currently associates with a conversation. Survives contact
+   *  merges (GHL re-parents the conversation to the surviving contact), so it's how we
+   *  recover when a webhook's contactId was merged away. Returns undefined on failure. */
+  async getConversationContactId(conversationId: string): Promise<string | undefined> {
+    const token = await this.getAccessToken();
+    const res = await fetch(`${this.apiBase}/conversations/${conversationId}`, {
+      headers: { Authorization: `Bearer ${token}`, Version: '2021-04-15' },
+    });
+    if (!res.ok) return undefined;
+    const data = (await res.json()) as { contactId?: string; conversation?: { contactId?: string } };
+    return data.contactId ?? data.conversation?.contactId ?? undefined;
+  }
+
+  /**
+   * Send a message. Returns the GHL message ID; `resolvedContactId` is set when the
+   * original contactId was stale (merged away in GHL) and we recovered the current one
+   * from the conversation — the caller should persist it.
+   */
+  async sendMessage(params: {
+    contactId: string;
+    channel: Channel;
+    text: string;
+    phone?: string;
+    conversationId?: string;
+  }): Promise<{ ghlMessageId: string; resolvedContactId?: string }> {
     const token = await this.getAccessToken();
     const ghlType = params.channel === 'instagram' ? 'IG' : params.channel === 'facebook' ? 'FB' : 'WhatsApp';
-    const body: Record<string, string> = {
-      type: ghlType,
-      contactId: params.contactId,
-      message: params.text,
+    const post = (contactId: string): Promise<Response> => {
+      const body: Record<string, string> = { type: ghlType, contactId, message: params.text };
+      if (params.phone) body.phone = params.phone;
+      return fetch(`${this.apiBase}/conversations/messages`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Version: '2023-02-21',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      });
     };
-    if (params.phone) body.phone = params.phone;
-    const res = await fetch(`${this.apiBase}/conversations/messages`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Version: '2023-02-21',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(body),
-    });
+
+    let res = await post(params.contactId);
+    let resolvedContactId: string | undefined;
     if (!res.ok) {
       const detail = await res.text();
-      throw new Error(`[ghl] sendMessage failed ${res.status}: ${detail}`);
+      // Merge recovery: the webhook contactId may have been merged away in GHL
+      // (dedup by phone/email). Re-resolve the live contact from the conversation and retry once.
+      const merged = res.status === 400 && detail.includes('CONVERSATIONS_CONTACT_NOT_FOUND');
+      if (merged && params.conversationId) {
+        const current = await this.getConversationContactId(params.conversationId);
+        if (current && current !== params.contactId) {
+          const retry = await post(current);
+          if (!retry.ok) {
+            const rdetail = await retry.text();
+            throw new Error(`[ghl] sendMessage failed after contact re-resolve ${retry.status}: ${rdetail}`);
+          }
+          res = retry;
+          resolvedContactId = current;
+        } else {
+          throw new Error(`[ghl] sendMessage failed ${res.status}: ${detail}`);
+        }
+      } else {
+        throw new Error(`[ghl] sendMessage failed ${res.status}: ${detail}`);
+      }
     }
     const data = (await res.json()) as { messageId?: string; message?: { id?: string } };
     const ghlMessageId = data.messageId ?? data.message?.id ?? '';
-    return { ghlMessageId };
+    return resolvedContactId ? { ghlMessageId, resolvedContactId } : { ghlMessageId };
   }
 
   /** Add tags to a GHL contact. Requires the `contacts.write` scope. */

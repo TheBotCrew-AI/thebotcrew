@@ -40,6 +40,7 @@ export async function retryPendingDeliveries(): Promise<RetryResult> {
         channel: msg.channel as Channel,
         text: msg.content,
         phone: msg.contactPhone ?? undefined,
+        conversationId: msg.ghlConversationId,
       }));
     } catch (err) {
       console.error(

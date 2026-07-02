@@ -146,6 +146,7 @@ async function processOne(
       channel: followUp.channel as Channel,
       text: reply,
       phone: followUp.contactPhone ?? undefined,
+      conversationId: followUp.ghlConversationId,
     }));
   } catch (err) {
     console.error('[followup] sendMessage failed:', err instanceof Error ? err.message : String(err));

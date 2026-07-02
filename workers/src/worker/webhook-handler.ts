@@ -34,6 +34,7 @@ import {
   reactivateConversation,
   scheduleFollowUp,
   setGhlMessageId,
+  updateConversationContact,
   updateConversationStatus,
 } from '../db/queries.js';
 import { GhlClient } from '../ghl/client.js';
@@ -97,7 +98,7 @@ type ChatMessage = { role: 'user'; content: string } | { role: 'assistant'; cont
 
 /** Outcome of a send: whether GHL accepted it, its id if we could read one, and the
  *  GHL error (status + body) on failure so a dropped delivery is diagnosable. */
-type SendOutcome = { delivered: boolean; ghlMessageId: string | null; error?: string };
+type SendOutcome = { delivered: boolean; ghlMessageId: string | null; error?: string; resolvedContactId?: string | null };
 
 /**
  * One send attempt. A 2xx from GHL (sendMessage returns) means the message was
@@ -107,8 +108,8 @@ type SendOutcome = { delivered: boolean; ghlMessageId: string | null; error?: st
  */
 async function trySend(ghl: GhlClient, params: Parameters<GhlClient['sendMessage']>[0]): Promise<SendOutcome> {
   try {
-    const { ghlMessageId } = await ghl.sendMessage(params);
-    return { delivered: true, ghlMessageId: ghlMessageId || null };
+    const { ghlMessageId, resolvedContactId } = await ghl.sendMessage(params);
+    return { delivered: true, ghlMessageId: ghlMessageId || null, resolvedContactId: resolvedContactId ?? null };
   } catch (e) {
     return { delivered: false, ghlMessageId: null, error: e instanceof Error ? e.message : String(e) };
   }
@@ -370,6 +371,8 @@ export async function runAgentTurn({
   // Split into separate messages on paragraph breaks; send each with a short
   // human-like gap. Each part is its own logged + tracked outbound message.
   const parts = splitIntoMessages(reply);
+  // May be corrected mid-loop if GHL merged the webhook contactId away (see resolvedContactId).
+  let sendContactId = parsed.contactId;
   for (const [i, part] of parts.entries()) {
     if (i > 0) await new Promise<void>((r) => setTimeout(r, typingDelayMs(part)));
 
@@ -395,12 +398,22 @@ export async function runAgentTurn({
       logError(tenant.clientId, parsed.conversationId, 'db_error', { error: msg, stage: 'outbound_log' });
     }
 
-    const { delivered, ghlMessageId, error: sendError } = await sendWithRetry(ghl, {
-      contactId: parsed.contactId,
+    const { delivered, ghlMessageId, error: sendError, resolvedContactId } = await sendWithRetry(ghl, {
+      contactId: sendContactId,
       channel: parsed.channel,
       text: part,
       phone: phone ?? undefined,
+      conversationId: parsed.conversationId,
     });
+
+    // GHL merged the webhook contactId away and we recovered the live one: reuse it for
+    // the remaining parts and persist it so future turns/follow-ups don't hit the same wall.
+    if (resolvedContactId && resolvedContactId !== sendContactId) {
+      sendContactId = resolvedContactId;
+      updateConversationContact(parsed.conversationId, resolvedContactId).catch((e: unknown) =>
+        console.error('[ghl] updateConversationContact failed:', e instanceof Error ? e.message : String(e)),
+      );
+    }
 
     if (delivered && outId) {
       // Mark delivered so the pending-delivery cron never re-sends it (that would
