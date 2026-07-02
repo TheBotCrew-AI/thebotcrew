@@ -14,13 +14,15 @@
 
 import type { Agent } from '@mastra/core/agent';
 import { getAiApiKey } from '../core/env.js';
-import { channelEnabled, hasTriggerKeywords, inTestMode, messageMatchesTrigger, resolveTenant, roleEnabled } from '../core/tenant.js';
+import { channelEnabled, hasTriggerKeywords, inTestMode, matchesDemoOff, matchesDemoOn, messageMatchesTrigger, resolveTenant, roleEnabled } from '../core/tenant.js';
 import { buildAgentRequestContext } from '../core/runtime-context.js';
 import type { AiProvider, ConversationMessage, ConversationStatus, TenantContext, TurnContext } from '../core/types.js';
 import {
   cancelFollowUps,
   botActivation,
   claimTurnForProcessing,
+  getActiveRole,
+  setActiveRole,
   isBotSuppressed,
   isHumanActive,
   isLatestInboundMessage,
@@ -274,11 +276,20 @@ export async function runAgentTurn({
   const history = await loadRecentMessages(conversationId);
   const messages = toModelMessages(history);
 
+  // Read the persona fresh at turn time (a demo keyword may have flipped it since scheduling).
+  let activeRole: string | null = null;
+  try {
+    activeRole = await getActiveRole(conversationId);
+  } catch (e) {
+    console.error('[demo] getActiveRole failed:', e instanceof Error ? e.message : String(e));
+  }
+
   const turn: TurnContext = {
     ghlConversationId: parsed.conversationId,
     ghlContactId: parsed.contactId,
     contactPhone: phone ?? undefined,
     channel: parsed.channel,
+    activeRole: activeRole ?? undefined,
   };
   const provider = (tenant.config.provider ?? DEFAULT_PROVIDER) as AiProvider;
   const model = tenant.config.model ?? DEFAULT_MODEL;
@@ -515,6 +526,26 @@ export async function handleInboundWebhook(
     // Shouldn't happen with migration 0011 applied, but fail safe: run immediately without debounce.
     console.error('[webhook] logMessage returned null messageId — skipping debounce');
     return runAgentTurn({ agent, conversationId, messageId: '', tenant, parsed, phone, debounced: false });
+  }
+
+  // Demo persona toggle: a control keyword flips this conversation between the tenant's
+  // normal front-desk agent and the demo persona (any sender). Absolute set, not a toggle:
+  // on-keyword → 'demo', off-keyword → null. The flip is written BEFORE the turn is scheduled,
+  // so the turn (which reads active_role fresh) already answers with the selected persona.
+  if (matchesDemoOn(tenant, parsed.text)) {
+    try {
+      await setActiveRole(parsed.conversationId, 'demo');
+      await logBotEvent(tenant.clientId, parsed.conversationId, 'demo_toggled', { to: 'demo' });
+    } catch (e) {
+      console.error('[demo] setActiveRole(demo) failed:', e instanceof Error ? e.message : String(e));
+    }
+  } else if (matchesDemoOff(tenant, parsed.text)) {
+    try {
+      await setActiveRole(parsed.conversationId, null);
+      await logBotEvent(tenant.clientId, parsed.conversationId, 'demo_toggled', { to: 'front-desk' });
+    } catch (e) {
+      console.error('[demo] setActiveRole(null) failed:', e instanceof Error ? e.message : String(e));
+    }
   }
 
   const runParams: AgentRunParams = { agent, conversationId, messageId, tenant, parsed, phone, debounced: true };

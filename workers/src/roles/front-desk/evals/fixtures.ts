@@ -13,6 +13,8 @@ export const demoTenant: TenantContext = {
   enabledChannels: ['whatsapp', 'instagram', 'facebook'],
   testContactIds: null,
   triggerKeywords: null,
+  demoOnKeywords: null,
+  demoOffKeywords: null,
   config: {
     businessName: 'Clínica Demo',
     timezone: 'America/Mexico_City',

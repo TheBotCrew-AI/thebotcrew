@@ -36,6 +36,11 @@ export interface TenantConfigRow {
   /** Entry-gate keywords: when non-empty, the bot only enters a conversation whose
    *  first message contains one of these. NULL/empty = no gating. */
   trigger_keywords: string[] | null;
+  /** Keywords that switch a conversation into / out of the demo persona. */
+  demo_on_keywords: string[] | null;
+  demo_off_keywords: string[] | null;
+  /** Prompt overrides for the demo persona (same shape as prompt_overrides). */
+  demo_prompt_overrides: unknown;
 }
 
 /** One unanswered inbound turn returned by app_load_unanswered_turns (reconciliation). */
@@ -165,7 +170,9 @@ export type BotEventType =
   // Conversation state changed via app_update_conversation_status ({from,to} in metadata)
   | 'status_changed'
   // Turn handed to the per-conversation Durable Object (Phase 1 durable-turn path)
-  | 'turn_scheduled';
+  | 'turn_scheduled'
+  // Conversation switched into / out of the demo persona ({to} in metadata)
+  | 'demo_toggled';
 
 export interface LogAppointmentParams {
   p_client_id: string;

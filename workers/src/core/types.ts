@@ -33,6 +33,8 @@ export interface RawTenantConfig {
   calendars: unknown;
   faq: unknown;
   promptOverrides: unknown;
+  /** Prompt overrides for the demo persona (same shape as promptOverrides); null = no demo persona. */
+  demoPromptOverrides?: unknown;
   /** Overrides the platform-default provider (env-driven). */
   provider?: AiProvider | null;
   /** Overrides the platform-default model for this tenant. */
@@ -65,6 +67,10 @@ export interface TenantContext {
   /** Entry-gate keywords: when non-empty, the bot only enters a conversation whose
    *  first message contains one of these. null/empty = no gating. */
   triggerKeywords: string[] | null;
+  /** Keywords that switch a conversation into the demo persona (any sender). */
+  demoOnKeywords: string[] | null;
+  /** Keywords that switch a conversation back to the normal front-desk agent. */
+  demoOffKeywords: string[] | null;
   config: RawTenantConfig;
 }
 
@@ -74,6 +80,8 @@ export interface TurnContext {
   ghlContactId: string;
   contactPhone?: string;
   channel: Channel;
+  /** Which persona handles this turn: undefined/'front-desk' = normal; 'demo' = demo persona. */
+  activeRole?: string;
 }
 
 /** A turn in our own conversation store, used to rebuild agent history. */

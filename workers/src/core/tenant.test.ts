@@ -11,6 +11,8 @@ function tenant(overrides: Partial<TenantContext> = {}): TenantContext {
     enabledChannels: ['facebook'],
     testContactIds: null,
     triggerKeywords: null,
+    demoOnKeywords: null,
+    demoOffKeywords: null,
     config: {} as TenantContext['config'],
     ...overrides,
   };

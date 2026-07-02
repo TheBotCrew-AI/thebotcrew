@@ -49,6 +49,8 @@ export const frontDeskConfigSchema = z.object({
   calendars: z.record(z.string(), z.string()).default({}),
   faq: faqSchema.default([]),
   promptOverrides: promptOverridesSchema.default({ toolInstructions: {} }),
+  /** Persona overrides used when the conversation is in demo mode (active_role='demo'). null = none. */
+  demoPromptOverrides: promptOverridesSchema.nullable().default(null),
   /** Max days ahead the bot may look for / offer slots. null = no cap. Enforced in getAvailability. */
   bookingHorizonDays: z.number().int().positive().nullable().default(null),
 });
@@ -68,6 +70,7 @@ export function parseFrontDeskConfig(raw: RawTenantConfig): FrontDeskConfig {
     calendars: raw.calendars,
     faq: raw.faq,
     promptOverrides: raw.promptOverrides ?? {},
+    demoPromptOverrides: raw.demoPromptOverrides ?? null,
     bookingHorizonDays: raw.bookingHorizonDays ?? null,
   });
 }

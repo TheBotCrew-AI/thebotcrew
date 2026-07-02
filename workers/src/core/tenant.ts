@@ -37,6 +37,16 @@ export function hasTriggerKeywords(tenant: TenantContext): boolean {
   return (tenant.triggerKeywords?.length ?? 0) > 0;
 }
 
+/** True if this message should switch the conversation INTO the demo persona. */
+export function matchesDemoOn(tenant: TenantContext, text: string): boolean {
+  return messageMatchesTrigger(text, tenant.demoOnKeywords ?? []);
+}
+
+/** True if this message should switch the conversation OUT of the demo persona. */
+export function matchesDemoOff(tenant: TenantContext, text: string): boolean {
+  return messageMatchesTrigger(text, tenant.demoOffKeywords ?? []);
+}
+
 /**
  * Whole-word/phrase, case- and accent-insensitive keyword match. Punctuation is
  * flattened to spaces and the text is space-padded, so "Agente" matches

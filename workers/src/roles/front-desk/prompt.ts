@@ -57,8 +57,13 @@ export function buildFrontDeskInstructions(
   config: FrontDeskConfig,
   nowIso: string,
   contactPhone?: string,
+  activeRole?: string,
 ): string {
-  const { identity, offering, qualificationNotes, toolInstructions } = config.promptOverrides;
+  // In demo mode use the demo persona overrides (same engine/tools, different brain);
+  // fall back to the normal overrides if demo mode is off or no demo persona is configured.
+  const overrides =
+    activeRole === 'demo' && config.demoPromptOverrides ? config.demoPromptOverrides : config.promptOverrides;
+  const { identity, offering, qualificationNotes, toolInstructions } = overrides;
 
   const identityLine = identity?.trim()
     ? identity.trim()

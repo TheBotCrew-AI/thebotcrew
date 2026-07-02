@@ -86,9 +86,10 @@ bypasses RLS).
   timing ladder + `follow_up_angles` content pool — decoupled, see docs/business-logic.md §4),
   follow-up quiet hours (`quiet_hours` jsonb `{start,end}` local, NULL = platform default
   21:00–08:00), booking horizon (`booking_horizon_days` int, NULL = no cap — deterministically
-  clamps getAvailability), and the reply gates (`enabled_channels`, `test_contact_ids`,
-  `trigger_keywords` — see GHL notes) live in Supabase. Onboarding a client
-  is a DB row + config — no redeploy for the common case.
+  clamps getAvailability), the reply gates (`enabled_channels`, `test_contact_ids`,
+  `trigger_keywords` — see GHL notes), and the **demo persona** (`demo_on_keywords` /
+  `demo_off_keywords` control words + `demo_prompt_overrides` jsonb — see docs/business-logic.md)
+  live in Supabase. Onboarding a client is a DB row + config — no redeploy for the common case.
 
 Prompt templates carry placeholders; tenant config fills them at runtime. Agents only
 state facts present in tenant config or returned by tools (anti-hallucination rule).
@@ -126,7 +127,7 @@ supabase/
                                # 0015 tag_handoff, 0016 channel_control+test_mode, 0017 trigger_keyword_gate,
                                # 0020 turn_reconciliation, 0021 availability_event, 0022 follow_up_quiet_hours,
                                # 0023 follow_up_cadence_angles (decouple timing from angle pool), 0024 booking_failed_event,
-                               # 0025 booking_horizon, 0026 status_changed_event, 0027 turn_scheduled_event (DO path)
+                               # 0025 booking_horizon, 0026 status_changed_event, 0027 turn_scheduled_event (DO path), 0028 demo_persona
   clients.sql, seed-tenants.sql# seeds (run by `supabase db reset` per config.toml)
 ```
 

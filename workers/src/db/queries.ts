@@ -42,7 +42,7 @@ export async function loadTenantConfig(ghlLocationId: string): Promise<TenantCon
   const { data, error } = await supabase
     .from('tenant_config')
     .select(
-      'business_name, timezone, tone, services, hours, calendars, faq, enabled_roles, prompt_overrides, ai_provider, ai_model, follow_up_tiers, follow_up_cadence, follow_up_angles, quiet_hours, booking_horizon_days, enabled_channels, test_contact_ids, trigger_keywords,' +
+      'business_name, timezone, tone, services, hours, calendars, faq, enabled_roles, prompt_overrides, ai_provider, ai_model, follow_up_tiers, follow_up_cadence, follow_up_angles, quiet_hours, booking_horizon_days, enabled_channels, test_contact_ids, trigger_keywords, demo_on_keywords, demo_off_keywords, demo_prompt_overrides,' +
         'tenants!inner(id, client_id, ghl_location_id, is_active)',
     )
     .eq('tenants.ghl_location_id', ghlLocationId)
@@ -65,6 +65,8 @@ export async function loadTenantConfig(ghlLocationId: string): Promise<TenantCon
       : null,
     testContactIds: row.test_contact_ids ?? null,
     triggerKeywords: row.trigger_keywords ?? null,
+    demoOnKeywords: row.demo_on_keywords ?? null,
+    demoOffKeywords: row.demo_off_keywords ?? null,
     config: {
       businessName: row.business_name,
       timezone: row.timezone,
@@ -74,6 +76,7 @@ export async function loadTenantConfig(ghlLocationId: string): Promise<TenantCon
       calendars: row.calendars,
       faq: row.faq,
       promptOverrides: row.prompt_overrides,
+      demoPromptOverrides: row.demo_prompt_overrides ?? null,
       provider: (row.ai_provider as AiProvider) ?? undefined,
       model: row.ai_model ?? undefined,
       followUpCadence: Array.isArray(row.follow_up_cadence)
@@ -154,6 +157,28 @@ export async function markDelivered(messageId: string): Promise<void> {
   const supabase = getSupabase();
   const { error } = await supabase.rpc('app_mark_delivered', { p_message_id: messageId });
   fail('markDelivered', error);
+}
+
+/** The conversation's active persona role (null = normal front-desk; 'demo' = demo persona). */
+export async function getActiveRole(conversationId: string): Promise<string | null> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from('conversations')
+    .select('active_role')
+    .eq('id', conversationId)
+    .maybeSingle();
+  fail('getActiveRole', error);
+  return (data as { active_role: string | null } | null)?.active_role ?? null;
+}
+
+/** Switch a conversation's persona. Pass null to return it to the normal front-desk agent. */
+export async function setActiveRole(ghlConversationId: string, activeRole: string | null): Promise<void> {
+  const supabase = getSupabase();
+  const { error } = await supabase.rpc('app_set_active_role', {
+    p_ghl_conversation_id: ghlConversationId,
+    p_active_role: activeRole,
+  });
+  fail('setActiveRole', error);
 }
 
 /**

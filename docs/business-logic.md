@@ -181,6 +181,28 @@ slots. Rules (also reinforced in the front-desk prompt):
   left in ephemeral Cloudflare logs). A common cause is offering a slot the model didn't get
   verbatim from `getAvailability`, so GHL rejects the unrecognized `startTime`.
 
+## 5b. Demo persona (per-conversation role switch)
+
+A conversation can be flipped between the tenant's normal front-desk agent and a **demo
+persona**, controlled by keywords — useful for showing the bot to a prospect on your own number.
+
+- **Same engine, different brain.** The demo runs on the same front-desk agent (same tools:
+  availability, booking, etc.) — only the prompt/persona changes. Its persona comes from
+  `tenant_config.demo_prompt_overrides` (same shape as `prompt_overrides`: identity, offering,
+  qualificationNotes, tone, toolInstructions).
+- **Toggle by keyword (any sender).** An inbound matching `tenant_config.demo_on_keywords`
+  switches the conversation into demo (`conversations.active_role='demo'`); one matching
+  `demo_off_keywords` switches it back (`active_role=NULL`). Matching is whole-word/phrase,
+  case- & accent-insensitive (same `messageMatchesTrigger`). The flip happens **before** the turn
+  runs, so that same message is already answered by the selected persona. Anyone can turn it
+  on/off (the prospect enters via the keyword; the prospect or the operator can exit).
+- **How it's wired.** `handleInboundWebhook` calls `setActiveRole` on a keyword match (logs a
+  `demo_toggled` event); the turn reads `active_role` fresh (`getActiveRole`) and
+  `buildFrontDeskInstructions` swaps in `demo_prompt_overrides` when `active_role='demo'`.
+- **Off by default & safe.** If a tenant sets no demo keywords, nothing changes. `off` returns to
+  the normal front-desk (to fully silence a thread, use the `bot-off` tag instead). Follow-ups and
+  classification still apply during demo (same engine).
+
 ## 6. Models & factual grounding
 
 - **Platform default: `openai` / `gpt-5-mini`** (`DEFAULT_PROVIDER` / `DEFAULT_MODEL` in
