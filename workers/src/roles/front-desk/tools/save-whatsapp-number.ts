@@ -28,7 +28,14 @@ export const saveWhatsappNumberTool = createTool({
       return { saved: false, message: 'El número no parece válido; pídelo de nuevo con código de país.' };
     }
     try {
-      await new GhlClient(tenant.tenantId).updateContactPhone(turn.ghlContactId, cleaned);
+      const client = new GhlClient(tenant.tenantId);
+      // No-op if the contact already has this number — avoids a redundant write (and any
+      // needless dedup/merge churn on GHL's side).
+      const current = await client.getContactPhone(turn.ghlContactId);
+      if (current && current.replace(/[^\d+]/g, '') === cleaned) {
+        return { saved: true, phone: cleaned, message: 'El número ya estaba guardado; sin cambios.' };
+      }
+      await client.updateContactPhone(turn.ghlContactId, cleaned);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error('[guardarWhatsapp] GHL update failed:', msg);

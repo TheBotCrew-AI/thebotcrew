@@ -134,9 +134,15 @@ export function buildFrontDeskInstructions(
   // number on file before booking, or (if none) capture it — the agent saves it via guardarWhatsapp.
   const reminderSection = contactPhone
     ? `\n\n# Número para confirmación y recordatorios
-Tenemos este número del lead en el sistema: ${contactPhone}. ANTES de confirmar la cita, verifícalo: pregúntale al lead si le mandamos la confirmación y los recordatorios a ese número (léeselo tal cual). Si dice que sí, procede a agendar. Si no es correcto o te da otro, guárdalo con la herramienta guardarWhatsapp y luego agenda.`
+Ya tenemos el número del lead en el sistema: ${contactPhone}.
+- Cuando el lead esté por agendar (justo antes de confirmar la cita), verifícalo verbalmente: "¿te mando la confirmación y los recordatorios a este WhatsApp: ${contactPhone}?". Si dice que sí, agenda.
+- NO uses la herramienta guardarWhatsapp si ya lo tenemos y es correcto — no lo vuelvas a guardar.
+- Usa guardarWhatsapp SOLO si el lead dice que ese número está mal y te da otro.
+- NUNCA extraigas ni guardes números del formulario ni de los mensajes por tu cuenta.`
     : `\n\n# Número para confirmación y recordatorios
-NO tenemos el número de WhatsApp del lead (probablemente entró por Facebook o Instagram). ANTES de agendar, pídeselo —con código de país (ej. +52…)— y guárdalo con la herramienta guardarWhatsapp. Es obligatorio: sin número no podemos mandar confirmación ni recordatorios, así que no agendes hasta capturarlo.`;
+No tenemos número de WhatsApp del lead en el sistema.
+- Cuando el lead esté por agendar (no antes), pídele su WhatsApp con código de país (ej. +52…) y, cuando te lo dé, guárdalo con la herramienta guardarWhatsapp. Es necesario para la confirmación y los recordatorios.
+- NUNCA lo saques automáticamente del texto del formulario ni lo guardes proactivamente al inicio; pídelo explícitamente al lead cuando vayan a agendar.`;
 
   return `${identityLine}
 
