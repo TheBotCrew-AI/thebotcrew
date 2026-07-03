@@ -1,10 +1,13 @@
 # Future Upgrade — Turn/Follow-up Durability via Durable Objects
 
-> **Status: PAUSED — Phase 1 DONE & ROLLED OUT TO ALL TENANTS (2026-07-01).**
-> `DO_TURNS=*` — every tenant now runs turns through the per-conversation Durable Object
-> (durable Alarm debounce + serialized execution). Verified end-to-end via `wrangler tail`
-> (`scheduleTurn → Alarm fired → turn ran → reply delivered`). The legacy `waitUntil` path
-> remains as a fall-through; the reconciliation cron + follow-up cron stay as nets.
+> **Status: DONE — Phase 1 (2026-07-01) + Phase 3 cleanup (2026-07-03).**
+> `DO_TURNS=*` — every tenant runs turns through the per-conversation Durable Object
+> (durable Alarm debounce + serialized execution). **Phase 3 shipped (migration 0030):** the
+> reconciliation cron, the `reconcile_claimed_at` claim, and their RPC/column were deleted after
+> monitoring confirmed the DO handles 100% of turns (`turn_scheduled` ≈ front-desk turns, no
+> recovery re-runs). The legacy `waitUntil` fall-through + `DO_TURNS` flag stay as a cheap
+> rollback belt. **Only the optional Phase 2 (retire the follow-up polling cron) remains — defer
+> indefinitely unless the cron becomes a problem.** The turn-durability goal is fully met.
 >
 > **KEY INSIGHT (changes the remaining plan):** Phase 1 *already* closed the follow-up
 > durability gap — `scheduleFollowUp` is called inside `runAgentTurn`, which now runs inside the

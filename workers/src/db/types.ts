@@ -43,20 +43,6 @@ export interface TenantConfigRow {
   demo_prompt_overrides: unknown;
 }
 
-/** One unanswered inbound turn returned by app_load_unanswered_turns (reconciliation). */
-export interface UnansweredTurn {
-  conversationId: string;
-  messageId: string;
-  ghlConversationId: string;
-  ghlContactId: string;
-  contactPhone: string | null;
-  channel: string;
-  botActivated: boolean;
-  content: string;
-  ghlMessageId: string | null;
-  ghlLocationId: string;
-}
-
 /** One row returned by app_load_due_follow_ups. */
 export interface DueFollowUp {
   followUpId: string;

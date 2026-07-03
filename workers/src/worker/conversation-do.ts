@@ -6,9 +6,10 @@
  * by construction. The 15s debounce is a durable Alarm (survives isolate eviction), which
  * replaces the fragile `setTimeout`-in-`waitUntil` and closes the dropped-turn gap.
  *
- * Rollout is flag-gated (DO_TURNS, see webhook-handler.ts): only enabled tenants route here;
- * the reconciliation cron stays on as a safety net until Phase 3. Follow-up scheduling still
- * happens inside runAgentTurn (moves to a DO alarm in Phase 2).
+ * Rollout is flag-gated (DO_TURNS, see webhook-handler.ts): only enabled tenants route here.
+ * The old reconciliation cron was removed in Phase 3 (the DO's durable Alarm makes it redundant);
+ * a `waitUntil` fall-through remains only for the rare case scheduleTurn throws. Follow-up
+ * scheduling still happens inside runAgentTurn (would move to a DO alarm in the optional Phase 2).
  *
  * See docs/durable-objects-migration.md.
  */
@@ -56,7 +57,8 @@ export class ConversationDO extends DurableObject<ConversationDoEnv> {
       await runAgentTurn({ ...params, agent, debounced: true });
     } catch (err) {
       // Swallow so CF doesn't auto-retry the alarm and risk a double-send (the turn isn't
-      // idempotent yet). A genuine drop is still caught by the reconciliation cron.
+      // idempotent yet). The Alarm already fired durably, so this is a genuine terminal failure
+      // (logged) rather than a silent drop — the reconciliation net that used to catch it is gone.
       console.error('[ConversationDO] turn failed:', err instanceof Error ? err.message : String(err));
     }
   }

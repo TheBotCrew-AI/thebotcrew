@@ -8,14 +8,14 @@
 > hours, availability rules, handoff) live in [`docs/business-logic.md`](docs/business-logic.md).
 > Read it before changing agent behavior, and update it in the same change — same rule as here.
 >
-> ⏳ **SESSION-START REMINDER (do not remove until done):** The **Durable Objects migration**
-> for turn durability is **PAUSED mid-way** (see [`docs/durable-objects-migration.md`](docs/durable-objects-migration.md)).
-> **Phase 1 is DONE and rolled out to all tenants** (`DO_TURNS=*`) — turns run through
-> `ConversationDO` and the durability goal is achieved. What REMAINS is cleanup: **Phase 3**
-> (delete the now-redundant reconciliation/claim patches after a monitoring window) and the
-> optional Phase 2 (retire the follow-up cron). **At the start of each session, briefly remind
-> Leo the DO cleanup (Phase 3) is still pending** so it doesn't fall off the radar. Stop
-> reminding once that doc's Status flips to done.
+> ✅ **Durable Objects migration — turn durability: DONE.** Turns run through the
+> per-conversation `ConversationDO` (serialized + durable 15s Alarm) for all tenants
+> (`DO_TURNS=*`). **Phase 3 cleanup shipped (2026-07-03):** the redundant reconciliation cron,
+> the `reconcile_claimed_at` claim, and their RPC/column were deleted (migration 0030) after
+> monitoring confirmed the DO handles 100% of turns with no recovery re-runs. The `waitUntil`
+> fall-through + `DO_TURNS` flag stay as a cheap rollback belt. Only the **optional** Phase 2
+> (retire the follow-up polling cron) remains — defer indefinitely. See
+> [`docs/durable-objects-migration.md`](docs/durable-objects-migration.md).
 
 ## What this is
 
@@ -64,13 +64,13 @@ Because a DO instance is single-threaded, all processing for a conversation is *
 silent-drop class). This is the Durable Objects migration — Phase 1 done; see
 [`docs/durable-objects-migration.md`](docs/durable-objects-migration.md).
 
-The **legacy patches remain as nets during the monitoring window** (to be deleted in Phase 3):
-a **reconciliation cron** (`worker/reconciliation.ts`, each minute) re-runs a dropped turn
-(unanswered inbound >45s, gates pass), guarded by the atomic claim (`reconcile_claimed_at` +
-`claimTurnForProcessing`) + latest-message gate; and `handleInboundWebhook` still has a
-`waitUntil` **fall-through** used only if the DO call throws. The DO binding reaches the route via
-`workerEnvStorage` (AsyncLocalStorage) — `process.env` carries only string secrets, not binding
-objects.
+The old compensating patches were **deleted in Phase 3 (2026-07-03, migration 0030)** once the DO
+was proven: the per-minute **reconciliation cron**, the `reconcile_claimed_at` atomic claim
+(`claimTurnForProcessing` + its column/RPC). What remains is a **cheap rollback belt**:
+`handleInboundWebhook` still has a `waitUntil` **fall-through** used only if the DO call throws, and
+the `DO_TURNS` flag can be emptied to fall every tenant back to the legacy `waitUntil` path (no
+redeploy). The DO binding reaches the route via `workerEnvStorage` (AsyncLocalStorage) —
+`process.env` carries only string secrets, not binding objects.
 
 We own conversation history, including message content + who sent what (lead vs which AI
 role vs which human agent) — the foundation for future human-agent ↔ AI collaboration.
@@ -116,7 +116,7 @@ workers/                       # Mastra + Cloudflare Worker package (@thebotcrew
       reactivation/            # text-only follow-up/reactivation agent (no tools)
     ghl/                       # webhook parse/verify, OAuth, tags + transport-only API client (live)
     db/                        # service-role Supabase client, queries (config read + RPC writes)
-    worker/                    # webhook-handler (inbound) + conversation-do (per-conversation Durable Object: durable-alarm debounce + serialized turn) + outbound-handler (human takeover) + tag-handler (bot-off) + delivery-retry + followup-runner + reconciliation (dropped-turn backstop, net during DO rollout)
+    worker/                    # webhook-handler (inbound) + conversation-do (per-conversation Durable Object: durable-alarm debounce + serialized turn) + outbound-handler (human takeover) + tag-handler (bot-off) + delivery-retry + followup-runner
   scripts/simulate-webhook.mjs # local dev: fire a fake GHL webhook
   fixtures/                    # sample webhook payloads
   wrangler.jsonc, vitest.config.ts, tsconfig.json
@@ -268,14 +268,13 @@ for the retry cron.
 
 ## Planned upgrades (future work)
 
-- **Durable Objects migration — turn/follow-up durability** *(PLANNED, not started)*. The root
-  fix for the double-message / dropped-follow-up class: move turn + follow-up processing off the
-  ephemeral `waitUntil`+`setTimeout` onto a per-conversation Durable Object with Alarms
-  (serialized + durable), and **delete** the compensating patches (reconciliation cron, the
-  `reconcile_claimed_at` claim, the follow-up polling cron). Requires the Workers Paid plan.
-  Full plan, phases, effort, and resume point: [`docs/durable-objects-migration.md`](docs/durable-objects-migration.md).
-  Until this ships, the durability patches stay and a follow-up nudge is occasionally missed
-  (minor). See the session-start reminder at the top of this file.
+- **Durable Objects migration — turn durability** *(DONE — Phase 1 + Phase 3 shipped)*. Turns run
+  on a per-conversation Durable Object with a durable Alarm (serialized + durable), and the
+  compensating patches (reconciliation cron + `reconcile_claimed_at` claim) were deleted
+  (2026-07-03, migration 0030). Only the **optional** Phase 2 remains — retire the follow-up
+  **polling** cron in favour of exact-time DO alarms (elegance, not durability; requires
+  multiplexing the DO's single alarm between turn-due and follow-up-due). Recommendation: defer
+  indefinitely unless the cron becomes a problem. Full history: [`docs/durable-objects-migration.md`](docs/durable-objects-migration.md).
 
 ## Working with me (Leo)
 

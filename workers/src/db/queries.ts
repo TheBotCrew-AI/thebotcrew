@@ -13,7 +13,6 @@ import type { GhlTokenResponse } from '../ghl/oauth.js';
 import type {
   BotEventType,
   DueFollowUp,
-  UnansweredTurn,
   LogAppointmentParams,
   LogEventParams,
   LogMessageParams,
@@ -435,42 +434,6 @@ export async function isLatestInboundMessage(
   return (data as { last_inbound_message_id: string | null } | null)?.last_inbound_message_id === messageId;
 }
 
-
-/**
- * Reconciliation: atomically claim + return unanswered inbound turns (latest
- * message is an unanswered inbound, past the debounce window). The caller still
- * re-applies tenant gates before re-running the agent.
- */
-export async function loadUnansweredTurns(limit = 20): Promise<UnansweredTurn[]> {
-  const supabase = getSupabase();
-  const { data, error } = await supabase.rpc('app_load_unanswered_turns', { p_limit: limit });
-  fail('loadUnansweredTurns', error);
-  type Row = {
-    conversation_id: string;
-    message_id: string;
-    ghl_conversation_id: string;
-    ghl_contact_id: string;
-    contact_phone: string | null;
-    channel: string;
-    bot_activated: boolean;
-    content: string;
-    ghl_message_id: string | null;
-    ghl_location_id: string;
-  };
-  return ((data ?? []) as Row[]).map((r) => ({
-    conversationId: r.conversation_id,
-    messageId: r.message_id,
-    ghlConversationId: r.ghl_conversation_id,
-    ghlContactId: r.ghl_contact_id,
-    contactPhone: r.contact_phone,
-    channel: r.channel,
-    botActivated: r.bot_activated,
-    content: r.content,
-    ghlMessageId: r.ghl_message_id,
-    ghlLocationId: r.ghl_location_id,
-  }));
-}
-
 /** Cancel all pending follow-ups for a conversation. Call on every inbound message. */
 export async function cancelFollowUps(conversationId: string): Promise<void> {
   const supabase = getSupabase();
@@ -731,22 +694,6 @@ export async function isRecentBotEcho(
     .limit(1);
   fail('isRecentBotEcho', error);
   return Array.isArray(data) && data.length > 0;
-}
-
-/**
- * Claim a conversation's turn as in-flight by bumping `reconcile_claimed_at`. The
- * reconciliation sweep skips conversations claimed within its cooldown, so this closes
- * the race where a slow in-flight turn (not yet reflected as an answered inbound) is
- * re-run — and double-sent — by the cron. Best-effort: on failure we fall back to the
- * pre-existing isLatestInboundMessage guard.
- */
-export async function claimTurnForProcessing(conversationId: string): Promise<void> {
-  const supabase = getSupabase();
-  const { error } = await supabase
-    .from('conversations')
-    .update({ reconcile_claimed_at: new Date().toISOString() })
-    .eq('id', conversationId);
-  fail('claimTurnForProcessing', error);
 }
 
 /**
