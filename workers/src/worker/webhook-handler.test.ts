@@ -5,6 +5,8 @@ import type { TenantContext } from '../core/types.js';
 // ── Mock the seams: DB, GHL transport, env. No DB, no network, no model. ──────
 const ghl = {
   getContactPhone: vi.fn(),
+  getContact: vi.fn(),
+  updateContactName: vi.fn(),
   sendMessage: vi.fn(),
   addContactTags: vi.fn(),
 };
@@ -48,6 +50,7 @@ function agentReplying(text = '¿En qué te puedo ayudar?'): Agent {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.unstubAllGlobals();
   vi.mocked(getAiApiKey).mockReturnValue('test-key');
   vi.mocked(q.loadTenantConfig).mockResolvedValue(tenant());
   vi.mocked(q.logMessage).mockResolvedValue({ conversationId: 'cv-uuid', messageId: 'msg-uuid' });
@@ -64,6 +67,8 @@ beforeEach(() => {
   vi.mocked(q.updateConversationStatus).mockResolvedValue(undefined);
   vi.mocked(q.botActivation).mockResolvedValue('already');
   ghl.getContactPhone.mockResolvedValue(undefined);
+  ghl.getContact.mockResolvedValue(undefined);
+  ghl.updateContactName.mockResolvedValue(undefined);
   ghl.sendMessage.mockResolvedValue({ ghlMessageId: 'out-ghl-1' });
   ghl.addContactTags.mockResolvedValue(undefined);
 });
@@ -178,5 +183,98 @@ describe('handleInboundWebhook — accepted without id', () => {
     expect(q.markDelivered).toHaveBeenCalledWith('msg-uuid'); // delivered → cron won't re-send
     expect(q.logError).not.toHaveBeenCalledWith('client1', 'conv1', 'delivery_error', expect.anything());
     expect(res.status).toBe(200);
+  });
+});
+
+describe('handleInboundWebhook — contact-name backstop', () => {
+  // Tenant that opted into the deterministic name-correction backstop.
+  const nameConfirmTenant = () =>
+    tenant({ config: { ...tenant().config, promptOverrides: { confirmContactName: true } } });
+
+  // Opening window: the bot already asked for the name (1 prior bot msg), lead just replied.
+  const openingHistory = [
+    { direction: 'outbound', senderType: 'bot', content: '¿Te llamas X, o con quién tengo el gusto?', sentAt: '' },
+    { direction: 'inbound', senderType: 'lead', content: 'Carlos', sentAt: '' },
+  ] as Awaited<ReturnType<typeof q.loadRecentMessages>>;
+
+  // Stub the extractor's model call (the only fetch on this path — the agent reply has a '?',
+  // so classifyConversationOutcome short-circuits without fetching).
+  const mockExtractor = (name: string | null) =>
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ choices: [{ message: { content: JSON.stringify({ name }) } }] }),
+      }),
+    );
+
+  it('flag on + opening window + new name → updates the GHL contact name', async () => {
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(nameConfirmTenant());
+    vi.mocked(q.loadRecentMessages).mockResolvedValue(openingHistory);
+    ghl.getContact.mockResolvedValue({ name: 'Gimnasio FitZone' });
+    mockExtractor('Carlos');
+
+    await handleInboundWebhook(inbound, agentReplying());
+
+    expect(ghl.updateContactName).toHaveBeenCalledWith('c1', { firstName: 'Carlos', lastName: '' });
+  });
+
+  it('splits a full name into firstName/lastName', async () => {
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(nameConfirmTenant());
+    vi.mocked(q.loadRecentMessages).mockResolvedValue(openingHistory);
+    ghl.getContact.mockResolvedValue({ name: 'Gimnasio FitZone' });
+    mockExtractor('Ana López');
+
+    await handleInboundWebhook(inbound, agentReplying());
+
+    expect(ghl.updateContactName).toHaveBeenCalledWith('c1', { firstName: 'Ana', lastName: 'López' });
+  });
+
+  it('extracted name equals stored name (case-insensitive) → no update', async () => {
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(nameConfirmTenant());
+    vi.mocked(q.loadRecentMessages).mockResolvedValue(openingHistory);
+    ghl.getContact.mockResolvedValue({ name: 'Carlos' });
+    mockExtractor('carlos');
+
+    await handleInboundWebhook(inbound, agentReplying());
+
+    expect(ghl.updateContactName).not.toHaveBeenCalled();
+  });
+
+  it('extractor returns null (no personal name given) → no update', async () => {
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(nameConfirmTenant());
+    vi.mocked(q.loadRecentMessages).mockResolvedValue(openingHistory);
+    ghl.getContact.mockResolvedValue({ name: 'Gimnasio FitZone' });
+    mockExtractor(null);
+
+    await handleInboundWebhook(inbound, agentReplying());
+
+    expect(ghl.updateContactName).not.toHaveBeenCalled();
+  });
+
+  it('flag OFF → backstop never runs, even in the opening window', async () => {
+    // default tenant has confirmContactName unset
+    vi.mocked(q.loadRecentMessages).mockResolvedValue(openingHistory);
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+
+    await handleInboundWebhook(inbound, agentReplying());
+
+    expect(ghl.updateContactName).not.toHaveBeenCalled();
+    expect(fetchSpy).not.toHaveBeenCalled(); // no extractor call
+  });
+
+  it('flag on but bot has not spoken yet (priorBotMessages=0) → skipped', async () => {
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(nameConfirmTenant());
+    vi.mocked(q.loadRecentMessages).mockResolvedValue([
+      { direction: 'inbound', senderType: 'lead', content: 'Carlos', sentAt: '' },
+    ] as Awaited<ReturnType<typeof q.loadRecentMessages>>);
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+
+    await handleInboundWebhook(inbound, agentReplying());
+
+    expect(ghl.updateContactName).not.toHaveBeenCalled();
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 });
