@@ -37,6 +37,13 @@ export const promptOverridesSchema = z.object({
    * and present each tool's results for this specific tenant.
    */
   toolInstructions: z.record(z.string(), z.string()).default({}),
+  /**
+   * When true, a deterministic post-turn backstop corrects the GHL contact name during the
+   * opening exchanges (page-form leads often arrive named after their business). The prompt
+   * also asks the agent to confirm the name, but the backstop is what guarantees the write —
+   * OpenAI models routinely skip the side-effect-only updateContactName tool.
+   */
+  confirmContactName: z.boolean().default(false),
 });
 
 export const frontDeskConfigSchema = z.object({
@@ -48,7 +55,7 @@ export const frontDeskConfigSchema = z.object({
   /** Map of service name -> GHL calendar id. */
   calendars: z.record(z.string(), z.string()).default({}),
   faq: faqSchema.default([]),
-  promptOverrides: promptOverridesSchema.default({ toolInstructions: {} }),
+  promptOverrides: promptOverridesSchema.default({ toolInstructions: {}, confirmContactName: false }),
   /** Persona overrides used when the conversation is in demo mode (active_role='demo'). null = none. */
   demoPromptOverrides: promptOverridesSchema.nullable().default(null),
   /** Max days ahead the bot may look for / offer slots. null = no cap. Enforced in getAvailability. */

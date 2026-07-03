@@ -20,6 +20,7 @@ import { rescheduleAppointmentTool } from './tools/reschedule-appointment.js';
 import { cancelAppointmentTool } from './tools/cancel-appointment.js';
 import { lookupAppointmentTool } from './tools/lookup-appointment.js';
 import { updateConversationStatusTool } from './tools/update-conversation-status.js';
+import { updateContactNameTool } from './tools/update-contact-name.js';
 
 export const FRONT_DESK_ROLE = 'front-desk';
 
@@ -38,7 +39,7 @@ export function buildFrontDeskAgent(): Agent {
       const nowLocal = new Date()
         .toLocaleString('sv-SE', { timeZone: config.timezone })
         .replace(' ', 'T');
-      return buildFrontDeskInstructions(config, nowLocal, turn?.contactPhone, turn?.activeRole);
+      return buildFrontDeskInstructions(config, nowLocal, turn?.contactPhone, turn?.activeRole, turn?.contactName);
     },
     model: ({ requestContext }) => {
       const provider = requestContext.get('provider') as AiProvider;
@@ -55,6 +56,7 @@ export function buildFrontDeskAgent(): Agent {
       rescheduleAppointment: rescheduleAppointmentTool,
       cancelAppointment: cancelAppointmentTool,
       updateConversationStatus: updateConversationStatusTool,
+      updateContactName: updateContactNameTool,
     },
   });
 }

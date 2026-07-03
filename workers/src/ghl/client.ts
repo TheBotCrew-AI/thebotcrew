@@ -193,6 +193,48 @@ export class GhlClient {
     }
   }
 
+  /** Fetch a contact's stored name from GHL. Returns undefined on failure or if absent. */
+  async getContact(
+    contactId: string,
+  ): Promise<{ firstName?: string; lastName?: string; name?: string } | undefined> {
+    const token = await this.getAccessToken();
+    const res = await fetch(`${this.apiBase}/contacts/${contactId}`, {
+      headers: { Authorization: `Bearer ${token}`, Version: '2021-07-28' },
+    });
+    if (!res.ok) return undefined;
+    const data = (await res.json()) as {
+      contact?: { firstName?: string; lastName?: string; contactName?: string; name?: string };
+    };
+    const c = data?.contact;
+    if (!c) return undefined;
+    return { firstName: c.firstName, lastName: c.lastName, name: c.name ?? c.contactName };
+  }
+
+  /** Overwrite a GHL contact's name — used when a lead corrects a mis-saved name (e.g. the
+   *  business name captured by a page form). Sends firstName + lastName together so a single
+   *  first name clears the stale surname instead of leaving a "Carlos FitZone" hybrid.
+   *  Requires the `contacts.write` scope. */
+  async updateContactName(
+    contactId: string,
+    name: { firstName: string; lastName: string },
+  ): Promise<void> {
+    const token = await this.getAccessToken();
+    const fullName = [name.firstName, name.lastName].filter(Boolean).join(' ').trim();
+    const res = await fetch(`${this.apiBase}/contacts/${contactId}`, {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Version: '2021-07-28',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ firstName: name.firstName, lastName: name.lastName, name: fullName }),
+    });
+    if (!res.ok) {
+      const detail = await res.text();
+      throw new Error(`[ghl] updateContactName failed ${res.status}: ${detail}`);
+    }
+  }
+
   async getAvailability(calendarId: string, from: string, to: string): Promise<Slot[]> {
     const token = await this.getAccessToken();
     const url = new URL(`${this.apiBase}/calendars/${calendarId}/free-slots`);

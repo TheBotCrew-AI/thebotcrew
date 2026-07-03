@@ -20,7 +20,6 @@ import type { AiProvider, ConversationMessage, ConversationStatus, TenantContext
 import {
   cancelFollowUps,
   botActivation,
-  claimTurnForProcessing,
   getConversationPersona,
   setActiveRole,
   isBotSuppressed,
@@ -223,6 +222,82 @@ async function classifyConversationOutcome(
   }
 }
 
+const EXTRACT_NAME_PROMPT = (assistantQuestion: string, leadMessage: string, storedName: string) =>
+  `El asistente le pidió su nombre al usuario. Extrae el NOMBRE DE LA PERSONA si lo dio.
+
+Nombre guardado hoy en el sistema: "${storedName}"
+El asistente preguntó: "${assistantQuestion.slice(0, 300)}"
+El usuario respondió: "${leadMessage.slice(0, 200)}"
+
+Devuelve el nombre propio de la persona (nombre y, si lo da, apellido). Reglas:
+- Si el usuario NO dio un nombre de persona (solo saludó, hizo una pregunta, dio el nombre de su NEGOCIO, o solo confirmó el que ya estaba), devuelve null.
+- Si solo confirmó que el nombre guardado es correcto, devuelve ese mismo nombre.
+- No inventes ni completes apellidos que no dijo.
+
+Responde SOLO con JSON: {"name":"<nombre>"} o {"name":null}. Sin explicaciones.`;
+
+/**
+ * Deterministic backstop for the contact-name correction: OpenAI models routinely skip the
+ * side-effect-only updateContactName tool, so we don't rely on the agent calling it. When a
+ * tenant opts in (promptOverrides.confirmContactName) and we're in the opening exchanges, we
+ * extract the personal name from the lead's reply with a cheap model call and write it to GHL
+ * directly if it differs from what's stored. Best-effort — never blocks or fails the turn.
+ */
+async function correctContactName(
+  ghl: GhlClient,
+  contactId: string,
+  assistantQuestion: string,
+  leadMessage: string,
+  provider: AiProvider,
+  apiKey: string,
+  modelId: string,
+): Promise<void> {
+  try {
+    const current = await ghl.getContact(contactId);
+    const storedName = current?.name?.trim() ?? '';
+
+    let raw: string;
+    if (provider === 'anthropic') {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+        body: JSON.stringify({
+          model: modelId,
+          max_tokens: 32,
+          messages: [{ role: 'user', content: EXTRACT_NAME_PROMPT(assistantQuestion, leadMessage, storedName) }],
+        }),
+      });
+      if (!res.ok) throw new Error(`anthropic extract-name ${res.status}`);
+      const data = await res.json() as { content: { text: string }[] };
+      raw = data.content[0]?.text ?? '';
+    } else {
+      const res = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          model: modelId,
+          max_tokens: 32,
+          response_format: { type: 'json_object' },
+          messages: [{ role: 'user', content: EXTRACT_NAME_PROMPT(assistantQuestion, leadMessage, storedName) }],
+        }),
+      });
+      if (!res.ok) throw new Error(`openai extract-name ${res.status}`);
+      const data = await res.json() as { choices: { message: { content: string } }[] };
+      raw = data.choices[0]?.message?.content ?? '';
+    }
+
+    const extracted = (JSON.parse(raw) as { name?: string | null }).name?.trim();
+    if (!extracted) return; // no personal name given
+    if (storedName && extracted.toLowerCase() === storedName.toLowerCase()) return; // already correct
+
+    const parts = extracted.replace(/\s+/g, ' ').split(' ');
+    await ghl.updateContactName(contactId, { firstName: parts[0] ?? extracted, lastName: parts.slice(1).join(' ') });
+    console.log(`[contact-name] corrected "${storedName}" → "${extracted}"`);
+  } catch (err) {
+    console.error('[contact-name] backstop failed (non-blocking):', err instanceof Error ? err.message : String(err));
+  }
+}
+
 /** Map our stored turns into the model's user/assistant view. */
 function toModelMessages(history: ConversationMessage[]): ChatMessage[] {
   return history.map((m): ChatMessage =>
@@ -264,16 +339,6 @@ export async function runAgentTurn({
     return { status: 200, body: { ignored: 'bot suppressed (handoff or human active)', conversationId } };
   }
 
-  // Claim the turn so the reconciliation sweep skips it while in flight. A slow
-  // generation can exceed the sweep's min-age before we log a reply; without this
-  // the cron would re-run — and double-send — the same turn. Best-effort: on failure
-  // the isLatestInboundMessage guard above still applies.
-  try {
-    await claimTurnForProcessing(conversationId);
-  } catch (e) {
-    console.error('[reconcile-claim] failed:', e instanceof Error ? e.message : String(e));
-  }
-
   // Read the persona fresh at turn time (a demo keyword may have flipped it since scheduling).
   let activeRole: string | null = null;
   let demoStartedAt: string | null = null;
@@ -289,10 +354,25 @@ export async function runAgentTurn({
   const history = await loadRecentMessages(conversationId, 20, sinceTs);
   const messages = toModelMessages(history);
 
+  const ghl = new GhlClient(tenant.tenantId);
+
+  // Fetch the contact's stored name only while the bot hasn't spoken yet — the opening
+  // name-confirmation window. Avoids an extra GHL call on every later turn.
+  let contactName: string | undefined;
+  if (!history.some((m) => m.senderType === 'bot')) {
+    try {
+      const contact = await ghl.getContact(parsed.contactId);
+      contactName = contact?.name?.trim() || undefined;
+    } catch (e) {
+      console.error('[contact-name] fetch failed (non-blocking):', e instanceof Error ? e.message : String(e));
+    }
+  }
+
   const turn: TurnContext = {
     ghlConversationId: parsed.conversationId,
     ghlContactId: parsed.contactId,
     contactPhone: phone ?? undefined,
+    contactName,
     channel: parsed.channel,
     activeRole: activeRole ?? undefined,
   };
@@ -344,7 +424,19 @@ export async function runAgentTurn({
     return { status: 200, body: { ignored: 'suppressed during generation', conversationId } };
   }
 
-  const ghl = new GhlClient(tenant.tenantId);
+  // Deterministic name-correction backstop (opt-in per tenant). Runs only in the opening
+  // exchanges — after the bot has asked for the name (>=1 prior bot message) but before the
+  // conversation moves on (<=2) — so we don't pay an extra model call every turn. We don't
+  // rely on the agent's updateContactName tool: OpenAI models skip it (no result needed).
+  const confirmContactName =
+    (tenant.config.promptOverrides as { confirmContactName?: boolean } | null | undefined)?.confirmContactName === true;
+  if (confirmContactName) {
+    const priorBotMessages = history.filter((m) => m.senderType === 'bot').length;
+    if (priorBotMessages >= 1 && priorBotMessages <= 2) {
+      const lastBotMessage = history.slice().reverse().find((m) => m.senderType === 'bot')?.content ?? '';
+      await correctContactName(ghl, parsed.contactId, lastBotMessage, parsed.text, provider, getAiApiKey(provider), model);
+    }
+  }
 
   // Classify conversation outcome — runs only when reply has no question (cheap path).
   // This is the reliable fallback for when the agent doesn't call updateConversationStatus itself.

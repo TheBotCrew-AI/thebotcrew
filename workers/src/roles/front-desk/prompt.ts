@@ -58,6 +58,7 @@ export function buildFrontDeskInstructions(
   nowIso: string,
   contactPhone?: string,
   activeRole?: string,
+  contactName?: string,
 ): string {
   // In demo mode use the demo persona overrides (same engine/tools, different brain);
   // fall back to the normal overrides if demo mode is off or no demo persona is configured.
@@ -149,6 +150,12 @@ No tenemos número de WhatsApp del lead en el sistema (típico de leads de Faceb
 - Cuando el lead te lo dé, pásalo como el argumento whatsappPhone al llamar bookAppointment — así se guarda al agendar. No hay otra forma de guardarlo.
 - NUNCA lo saques automáticamente del texto del formulario ni lo uses antes de agendar; pídelo explícitamente al lead cuando vayan a agendar.`;
 
+  // Neutral datum available to any tenant; only tenants whose flow asks to confirm the name
+  // (via qualificationNotes) act on it. Page-form leads often arrive named after their business.
+  const contactNameSection = contactName?.trim()
+    ? `\n\n# Nombre del contacto\nEl contacto está registrado en el sistema como: "${contactName.trim()}". Puede ser su nombre real o el de su negocio (así llegan a veces los registros).`
+    : '';
+
   return `${identityLine}
 
 # Fecha y hora actuales
@@ -169,7 +176,7 @@ Solo afirma datos que estén en esta configuración o que devuelvan tus herramie
 ${offeringSection}
 
 # Horario (zona horaria: ${config.timezone})
-${renderHours(config)}${flowSection}${toolInstructionsSection}${reminderSection}
+${renderHours(config)}${flowSection}${toolInstructionsSection}${reminderSection}${contactNameSection}
 
 # Uso de herramientas
 Cuando necesites llamar una herramienta, NO generes texto antes de la llamada. Llama la herramienta en silencio y escribe tu respuesta al lead ÚNICAMENTE después de tener el resultado final. Un solo mensaje, sin intermedios.

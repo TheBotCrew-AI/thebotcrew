@@ -79,6 +79,9 @@ export interface TurnContext {
   ghlConversationId: string;
   ghlContactId: string;
   contactPhone?: string;
+  /** Name the contact is stored under in GHL. Fetched only during the opening turns so the
+   *  agent can confirm/correct it (page-form leads often arrive named after their business). */
+  contactName?: string;
   channel: Channel;
   /** Which persona handles this turn: undefined/'front-desk' = normal; 'demo' = demo persona. */
   activeRole?: string;
