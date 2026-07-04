@@ -9,6 +9,7 @@
 import { getSupabase } from './client.js';
 import type { AiProvider, Channel, ConversationMessage, ConversationStatus, QuietHours, TenantContext } from '../core/types.js';
 import { clampToActiveHours, DEFAULT_QUIET_HOURS } from '../core/active-hours.js';
+import { isAppointmentActive } from './appointment-active.js';
 import type { GhlTokenResponse } from '../ghl/oauth.js';
 import type {
   BotEventType,
@@ -304,6 +305,23 @@ export async function loadLatestAppointment(
     serviceType: row.service_type,
     action: row.action,
   };
+}
+
+/**
+ * The contact's active (not cancelled, not past) appointment, if any — deterministic
+ * turn-start guard input so the agent knows it already has a booking and never re-checks
+ * availability against its own just-created appointment (the self-block class).
+ * Reads our store only (fresh in the exact self-block scenario); GHL truth still governs
+ * reschedule/cancel. Returns null when there is no active appointment.
+ */
+export async function loadActiveAppointment(
+  clientId: string,
+  ghlContactId: string,
+): Promise<{ startTime: string; service: string | null } | null> {
+  const appt = await loadLatestAppointment(clientId, ghlContactId);
+  if (!isAppointmentActive(appt, Date.now())) return null;
+  // isAppointmentActive guarantees appt and appointmentDatetime are non-null here.
+  return { startTime: appt!.appointmentDatetime!, service: appt!.serviceType };
 }
 
 /** Record a value event (lead_qualified, out_of_hours_handled, …). Returns event uuid. */

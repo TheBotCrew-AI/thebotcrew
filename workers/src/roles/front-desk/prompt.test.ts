@@ -48,6 +48,20 @@ describe('buildFrontDeskInstructions', () => {
     expect(buildFrontDeskInstructions(cfg(), NOW)).not.toContain('# Nombre del contacto');
   });
 
+  it('renders the existing-appointment guard only when an active appointment is passed', () => {
+    const withAppt = buildFrontDeskInstructions(cfg(), NOW, undefined, undefined, undefined, {
+      startTime: '2026-07-04T14:30:00-07:00',
+      service: 'Corte',
+    });
+    expect(withAppt).toContain('# Este contacto YA tiene una cita agendada');
+    expect(withAppt).toContain('de "Corte"');
+    // Label is formatted in the tenant tz (America/Mexico_City = -06:00 → 3:30 p.m.).
+    expect(withAppt).toContain('3:30');
+    expect(withAppt).toContain('NUNCA digas que esa hora "ya no está libre"');
+    // No active appointment → section absent.
+    expect(buildFrontDeskInstructions(cfg(), NOW)).not.toContain('# Este contacto YA tiene una cita agendada');
+  });
+
   it('custom qualificationNotes replaces the default flow', () => {
     const out = buildFrontDeskInstructions(cfg({ promptOverrides: { qualificationNotes: 'MI FLUJO PERSONALIZADO' } }), NOW);
     expect(out).toContain('MI FLUJO PERSONALIZADO');

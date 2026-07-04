@@ -59,6 +59,7 @@ export function buildFrontDeskInstructions(
   contactPhone?: string,
   activeRole?: string,
   contactName?: string,
+  activeAppointment?: { startTime: string; service?: string },
 ): string {
   // In demo mode use the demo persona overrides (same engine/tools, different brain);
   // fall back to the normal overrides if demo mode is off or no demo persona is configured.
@@ -156,6 +157,21 @@ No tenemos número de WhatsApp del lead en el sistema (típico de leads de Faceb
     ? `\n\n# Nombre del contacto\nEl contacto está registrado en el sistema como: "${contactName.trim()}". Puede ser su nombre real o el de su negocio (así llegan a veces los registros).`
     : '';
 
+  // Hard guard against the self-block class: when the contact ALREADY has an active
+  // appointment, the agent must not re-check availability — its own booking makes that
+  // slot disappear from getAvailability, which the model would misread as "ya no está libre".
+  let existingAppointmentSection = '';
+  if (activeAppointment) {
+    const apptLabel = formatApptLabel(activeAppointment.startTime, config.timezone);
+    const svc = activeAppointment.service?.trim();
+    existingAppointmentSection = `\n\n# Este contacto YA tiene una cita agendada (regla estricta)
+El contacto ya tiene una cita activa${svc ? ` de "${svc}"` : ''}: ${apptLabel}.
+- NO llames getAvailability ni re-ofrezcas horarios. La cita ya existe; no hay nada que volver a consultar.
+- Si el lead solo saluda, aclara algo (p. ej. su zona horaria) o charla, RECONFIRMA esa misma cita usando EXACTAMENTE ese texto. No la muevas ni ofrezcas otra hora.
+- NUNCA digas que esa hora "ya no está libre" ni "está ocupada": es SU cita. Confírmasela.
+- SOLO si el lead pide EXPLÍCITAMENTE mover o cancelar su cita, sigue las reglas de "Reagendar o cancelar".`;
+  }
+
   return `${identityLine}
 
 # Fecha y hora actuales
@@ -176,7 +192,7 @@ Solo afirma datos que estén en esta configuración o que devuelvan tus herramie
 ${offeringSection}
 
 # Horario (zona horaria: ${config.timezone})
-${renderHours(config)}${flowSection}${toolInstructionsSection}${reminderSection}${contactNameSection}
+${renderHours(config)}${flowSection}${toolInstructionsSection}${reminderSection}${contactNameSection}${existingAppointmentSection}
 
 # Uso de herramientas
 Cuando necesites llamar una herramienta, NO generes texto antes de la llamada. Llama la herramienta en silencio y escribe tu respuesta al lead ÚNICAMENTE después de tener el resultado final. Un solo mensaje, sin intermedios.
@@ -234,4 +250,21 @@ Si el lead simplemente no responde o hace una pausa, NO actualices el estado —
 Dilo con claridad: una persona del equipo va a continuar.
 
 Responde siempre en español.`;
+}
+
+/** Human, tenant-tz label for an appointment's ISO start (weekday + date + time, es-MX). */
+function formatApptLabel(iso: string, timeZone: string): string {
+  try {
+    return new Intl.DateTimeFormat('es-MX', {
+      timeZone,
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    }).format(new Date(iso));
+  } catch {
+    return iso;
+  }
 }

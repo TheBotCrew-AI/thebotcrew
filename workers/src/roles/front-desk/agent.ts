@@ -39,7 +39,14 @@ export function buildFrontDeskAgent(): Agent {
       const nowLocal = new Date()
         .toLocaleString('sv-SE', { timeZone: config.timezone })
         .replace(' ', 'T');
-      return buildFrontDeskInstructions(config, nowLocal, turn?.contactPhone, turn?.activeRole, turn?.contactName);
+      return buildFrontDeskInstructions(
+        config,
+        nowLocal,
+        turn?.contactPhone,
+        turn?.activeRole,
+        turn?.contactName,
+        turn?.activeAppointment,
+      );
     },
     model: ({ requestContext }) => {
       const provider = requestContext.get('provider') as AiProvider;

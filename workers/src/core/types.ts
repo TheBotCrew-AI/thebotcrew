@@ -85,6 +85,10 @@ export interface TurnContext {
   channel: Channel;
   /** Which persona handles this turn: undefined/'front-desk' = normal; 'demo' = demo persona. */
   activeRole?: string;
+  /** The contact's active (not cancelled, not past) appointment, resolved at turn start.
+   *  Present so the agent knows it already booked and never re-offers availability against
+   *  its own appointment (the self-block class). Skipped in demo mode (clean-start). */
+  activeAppointment?: { startTime: string; service?: string };
 }
 
 /** A turn in our own conversation store, used to rebuild agent history. */

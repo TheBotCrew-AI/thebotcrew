@@ -117,6 +117,39 @@ describe('handleInboundWebhook — happy path', () => {
   });
 });
 
+describe('handleInboundWebhook — active appointment guard', () => {
+  const turnFrom = (agent: Agent) => {
+    const call = vi.mocked(agent.generate).mock.calls[0] as unknown as [
+      unknown,
+      { requestContext: { get(k: string): unknown } },
+    ];
+    return call[1].requestContext.get('turn') as { activeAppointment?: { startTime: string; service?: string } };
+  };
+
+  it("injects the contact's active appointment into the turn context", async () => {
+    vi.mocked(q.loadActiveAppointment).mockResolvedValue({ startTime: '2026-07-04T14:30:00-07:00', service: 'Corte' });
+    const agent = agentReplying();
+    await handleInboundWebhook(inbound, agent);
+    expect(turnFrom(agent).activeAppointment).toEqual({ startTime: '2026-07-04T14:30:00-07:00', service: 'Corte' });
+  });
+
+  it('leaves activeAppointment undefined when there is no active appointment', async () => {
+    vi.mocked(q.loadActiveAppointment).mockResolvedValue(null);
+    const agent = agentReplying();
+    await handleInboundWebhook(inbound, agent);
+    expect(turnFrom(agent).activeAppointment).toBeUndefined();
+  });
+
+  it('skips the appointment lookup in demo mode (clean-start)', async () => {
+    vi.mocked(q.getConversationPersona).mockResolvedValue({ activeRole: 'demo', demoStartedAt: null });
+    vi.mocked(q.loadActiveAppointment).mockResolvedValue({ startTime: '2026-07-04T14:30:00-07:00', service: 'Corte' });
+    const agent = agentReplying();
+    await handleInboundWebhook(inbound, agent);
+    expect(q.loadActiveAppointment).not.toHaveBeenCalled();
+    expect(turnFrom(agent).activeAppointment).toBeUndefined();
+  });
+});
+
 describe('handleInboundWebhook — gates', () => {
   it('dedup: null conversationId → ignored, no agent run', async () => {
     vi.mocked(q.logMessage).mockResolvedValueOnce({ conversationId: null, messageId: null });

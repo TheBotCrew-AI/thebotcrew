@@ -192,6 +192,19 @@ slots. Rules (also reinforced in the front-desk prompt):
   anything not in tenant config (no invented agenda, Zoom/Meet link, topics list, prep materials).
   It also calls `updateConversationStatus(completed)`, which cancels pending follow-ups so the bot
   doesn't keep poking a booked lead. (It still replies normally if the lead writes again.)
+- **Already-booked guard (turn-start, deterministic — anti self-block).** Before generating,
+  the turn resolves the contact's **active** appointment (`loadActiveAppointment` = newest
+  `appointments` row that is **not cancelled AND whose start time is still in the future** — past
+  appointments never count, so a lead who booked earlier in the year isn't blocked from booking
+  again) and injects it into the prompt. When present, the agent is told: **do not call
+  `getAvailability` or re-offer times; if the lead just chats/clarifies, reconfirm that same
+  appointment; never say that time "ya no está libre" — it's the lead's own booking.** This kills
+  the self-block class (see §7): a second turn firing right after a booking would otherwise
+  re-check availability, see its own just-created appointment missing from GHL's open slots, and
+  "correct" itself with alternatives. The guard reads **our store** (fresh in exactly that
+  scenario; no live GHL call per turn) and is **skipped in demo mode** (clean-start — the demo
+  must not inherit a real prior booking). Reschedule/cancel still override it on an explicit
+  request.
 - **Lookup (tool).** `lookupAppointment` answers "when is my appointment?" — it resolves the
   contact's active appointment (`loadLatestAppointment`) and reads its **live** status/time from
   GHL (`getAppointment`), falling back to our recorded datetime if the GHL read fails. It returns a
@@ -277,3 +290,16 @@ Short log of *why* certain rules exist, so they aren't "simplified away" later.
   so the sweep's cooldown skips an in-flight turn (§2 / CLAUDE.md turn-durability). Also, a
   swallowed `scheduleFollowUp` failure (a delivered reply left with no follow-up) now emits a
   `db_error` event (`stage:'schedule_follow_up'`) instead of vanishing into Cloudflare logs.
+- **2026-07-04 — self-block on own booking (sequential re-run).** The bot offered 2:30 p.m.,
+  booked it, confirmed ("Nos vemos… 2:30"), then **24s later contradicted itself**: "el 2:30 ya
+  no está libre" and offered 3:30/3:45/4:00. Timeline from `bot_events`: the lead's pick "2.30"
+  fired turn A (booked 2:30, `lead_qualified` at 15:59:06); her two trailing clarifications
+  ("Para mí", "Es hora pacífico") arrived **17s** after "2.30" — past the DO's 15s debounce — so
+  they fired a **second turn B**. Turn B re-ran `getAvailability`, and because turn A had **just
+  booked 2:30**, GHL no longer returned that slot (89 → 82 slots); the model read the gap as
+  "taken" and self-corrected. Note: the Durable Object killed the *concurrent* double-run (B
+  waited for A), but **serialization does not prevent a sequential re-run** contradicting the
+  first. Root causes: (1) a post-booking turn re-checking availability, and (2)
+  `getAvailability` can't tell "taken by someone else" from "taken because I just booked it."
+  Fix: the **already-booked guard** (§5) — inject the contact's active future appointment at
+  turn start and forbid re-checking/re-offering. Conversation `8pfXVxb3mTjh9j49RCXE`.

@@ -81,4 +81,29 @@ describe.skipIf(!evalApiKey)('front-desk agent (live)', () => {
     expect(res.text).not.toMatch(/\$\s?\d/);
     expect(res.text).not.toMatch(/\d+\s?(pesos|mxn)/i);
   });
+
+  // Golden case for the self-block regression (conv 8pfXVxb3mTjh9j49RCXE): when the contact
+  // ALREADY has an active appointment, a trailing clarification must NOT make the agent
+  // re-check availability and declare its own just-booked slot "ya no está libre".
+  it('does not self-block on its own booking when an appointment already exists', async () => {
+    const startTime = new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString();
+    const rc = buildAgentRequestContext({
+      tenant: demoTenant,
+      turn: { ...turn, activeAppointment: { startTime, service: 'Consulta general' } },
+      provider: evalProvider,
+      model: DEFAULT_MODEL,
+      llmApiKey: evalApiKey,
+    });
+    const agent = buildFrontDeskAgent();
+    const res = await agent.generate(
+      [
+        { role: 'assistant', content: 'Listo, tu cita quedó agendada. Te llegará la confirmación por WhatsApp.' },
+        { role: 'user', content: 'ok pero ojo, es hora del pacífico, para mí' },
+      ],
+      { requestContext: rc },
+    );
+    // Crux of the bug: it must not claim its own slot is taken/unavailable, and it must not
+    // re-offer a list of alternative times.
+    expect(res.text.toLowerCase()).not.toMatch(/no est[áa] (libre|disponible)|ya (está|no está) (tomad|libre)|ocupad|no la tengo/);
+  });
 });

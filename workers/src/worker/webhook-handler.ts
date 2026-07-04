@@ -25,6 +25,7 @@ import {
   isBotSuppressed,
   isHumanActive,
   isLatestInboundMessage,
+  loadActiveAppointment,
   loadRecentMessages,
   logBotEvent,
   logError,
@@ -368,6 +369,19 @@ export async function runAgentTurn({
     }
   }
 
+  // Surface the contact's active appointment so the agent knows it already booked and never
+  // re-checks availability against its own just-created appointment (the self-block class).
+  // Skipped in demo mode: the demo starts clean and must not inherit a real prior booking.
+  let activeAppointment: { startTime: string; service?: string } | undefined;
+  if (activeRole !== 'demo') {
+    try {
+      const appt = await loadActiveAppointment(tenant.clientId, parsed.contactId);
+      if (appt) activeAppointment = { startTime: appt.startTime, service: appt.service ?? undefined };
+    } catch (e) {
+      console.error('[active-appointment] load failed (non-blocking):', e instanceof Error ? e.message : String(e));
+    }
+  }
+
   const turn: TurnContext = {
     ghlConversationId: parsed.conversationId,
     ghlContactId: parsed.contactId,
@@ -375,6 +389,7 @@ export async function runAgentTurn({
     contactName,
     channel: parsed.channel,
     activeRole: activeRole ?? undefined,
+    activeAppointment,
   };
   const provider = (tenant.config.provider ?? DEFAULT_PROVIDER) as AiProvider;
   const model = tenant.config.model ?? DEFAULT_MODEL;
