@@ -64,3 +64,7 @@ Dos capas (ver `supabase/migrations/`):
 |---|---|
 | `client_summary` | KPIs por cliente: conversaciones, bookings, tasa de conversión |
 | `monthly_activity` | Volumen mensual agregado |
+
+Ambas vistas se consultan con el rol `postgres` (SQL editor). Desde la migración 0032 no son
+accesibles vía la Data API (`anon` / `authenticated`) y corren con `security_invoker = on`,
+o sea que respetan el RLS de sus tablas base en vez de bypasearlo.

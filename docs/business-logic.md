@@ -205,14 +205,26 @@ slots. Rules (also reinforced in the front-desk prompt):
   scenario; no live GHL call per turn) and is **skipped in demo mode** (clean-start — the demo
   must not inherit a real prior booking). Reschedule/cancel still override it on an explicit
   request.
+- **Appointment resolution (store-first, GHL fallback).** The lookup / reschedule / cancel tools
+  resolve the contact's appointment via `resolveActiveAppointment` (`roles/front-desk/tools/`): it
+  reads **our store** first (`loadLatestAppointment` — the bot's own bookings, freshest right after
+  it books), and when the store has none it **falls back to GHL** (`getContactAppointments` →
+  soonest upcoming, not cancelled/deleted). This is why an appointment **booked or moved directly in
+  the GHL calendar** (by the client's staff, or a lead via GHL's own widget) is now visible to the
+  bot — a store-only lookup used to answer "no tienes cita" even when GHL had one (bug found
+  2026-07-06 on a test contact). The two sources return different keys: store → `serviceType`
+  (mapped to a configured calendar); GHL → `calendarId` (reverse-mapped to a service for
+  duration/logging). **Note:** the self-block turn guard (`loadActiveAppointment`) is still
+  store-only by design — it only needs to catch the bot's own just-made booking.
 - **Lookup (tool).** `lookupAppointment` answers "when is my appointment?" — it resolves the
-  contact's active appointment (`loadLatestAppointment`) and reads its **live** status/time from
-  GHL (`getAppointment`), falling back to our recorded datetime if the GHL read fails. It returns a
-  tenant-tz Spanish label the agent presents verbatim (no recomputing dates), and reports no active
-  appointment when the newest row is `cancelled` or GHL shows it cancelled.
+  contact's appointment (store or GHL, above) and, for a store-sourced one, reads its **live**
+  status/time from GHL (`getAppointment`), falling back to our recorded datetime if that read fails
+  (a GHL-sourced one is already live). It returns a tenant-tz Spanish label the agent presents
+  verbatim (no recomputing dates), and reports no active appointment when the row is `cancelled` or
+  GHL shows it cancelled.
 - **Reschedule / cancel (tools).** `rescheduleAppointment` and `cancelAppointment` act on the
-  contact's **active appointment** (`loadLatestAppointment` = newest `appointments` row with a GHL
-  id; a newest action of `cancelled` = none active). Reschedule **re-validates** the new time
+  contact's **active appointment** (resolved store-first with the GHL fallback above; a newest
+  store action of `cancelled` falls through to GHL). Reschedule **re-validates** the new time
   against real `getAvailability` (same anti-hallucination guard as booking, and within the booking
   horizon) before moving it, then logs a `rescheduled` row. Cancel is a **soft** GHL cancel
   (`appointmentStatus='cancelled'`, not a delete), logs a `cancelled` row, and **reopens** the

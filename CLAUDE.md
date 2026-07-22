@@ -74,9 +74,19 @@ redeploy). The DO binding reaches the route via `workerEnvStorage` (AsyncLocalSt
 
 We own conversation history, including message content + who sent what (lead vs which AI
 role vs which human agent) — the foundation for future human-agent ↔ AI collaboration.
-Tenant data is isolated with Postgres row-level security (deny-by-default on `tenants`,
-`tenant_config`, `conversations`, `messages`; the Worker uses the service-role key, which
-bypasses RLS).
+Tenant data is isolated with Postgres row-level security: **deny-by-default (RLS on, zero
+policies) on every table in `public`** — migration 0032 closed the last six (`clients`,
+`appointments`, `bot_events`, `human_agents`, `follow_ups`, `n8n_chat_histories`). The Worker
+uses the service-role key, which bypasses RLS. Three rules to keep it shut:
+- The reporting views (`client_summary`, `monthly_activity`) are `security_invoker = on` and
+  revoked from `anon`/`authenticated`. A view owned by `postgres` **without** `security_invoker`
+  bypasses the RLS of its base tables — that was a real leak until 0032.
+- The `app_*` RPCs are `SECURITY INVOKER`; EXECUTE is revoked from **`PUBLIC`** (not just from
+  `anon` — Postgres grants EXECUTE to `PUBLIC` by default, so revoking from `anon` alone is a
+  no-op) and granted explicitly to `service_role`.
+- `alter default privileges` revokes table/function grants from `anon`/`authenticated`, so a new
+  table doesn't silently reopen the hole. **When the dashboard ships**, add explicit policies +
+  grants; don't hand it the service-role key.
 
 ### Hybrid config: code vs database
 - **Code = the product.** Role definitions, system-prompt templates, tool
@@ -128,7 +138,9 @@ supabase/
                                # 0020 turn_reconciliation, 0021 availability_event, 0022 follow_up_quiet_hours,
                                # 0023 follow_up_cadence_angles (decouple timing from angle pool), 0024 booking_failed_event,
                                # 0025 booking_horizon, 0026 status_changed_event, 0027 turn_scheduled_event (DO path),
-                               # 0028 demo_persona, 0029 demo_started_at (demo clean-start history)
+                               # 0028 demo_persona, 0029 demo_started_at (demo clean-start history),
+                               # 0030 drop_turn_reconciliation, 0031 conversation_contact_email (merge-recovery key),
+                               # 0032 rls_close_data_api (RLS on the last 6 tables + views + RPC grants)
   clients.sql, seed-tenants.sql# seeds (run by `supabase db reset` per config.toml)
 ```
 
@@ -157,11 +169,18 @@ go through the `app_log_*` RPCs; `app_log_message` (0005) stores content + attri
 
 ## How to onboard a new tenant
 
-1. Insert a `tenants` row and a `tenant_config` row in Supabase.
+> Full procedure, SQL templates, column gotchas and the live-tenant table:
+> [`docs/onboarding.md`](docs/onboarding.md). Read that instead of re-deriving it.
+
+Worker base URL (no custom domain yet): `https://thebotcrew-agents.floral-credit-be7e.workers.dev`
+
+1. Insert a `clients` row, a `tenants` row and a `tenant_config` row in Supabase.
 2. Fill config: business name, services, hours, calendar IDs, FAQ, tone, enabled roles.
-3. Install/authorize the GHL Marketplace app for the subaccount (`/oauth/ghl/install`) so a
-   per-location OAuth token lands in `ghl_oauth_tokens`. The shared webhook routes by
-   `locationId` — no per-tenant webhook config needed.
+3. Install/authorize the GHL Marketplace app for the subaccount (`<base>/oauth/ghl/install`)
+   so a per-location OAuth token lands in `ghl_oauth_tokens`. The shared webhook routes by
+   `locationId` — no per-tenant webhook config needed. **Order matters:** the callback
+   resolves the tenant by `locationId`, so step 1 must exist first or it 404s
+   `unknown_location` and stores no token.
 4. **Go-live gates** (a new tenant is silent by default — `enabled_channels` is NULL):
    test with `test_contact_ids` (your own contacts) first, then set `enabled_channels`
    (e.g. `{facebook}`) to go live. Optionally set `trigger_keywords` for ad-CTA flows.
@@ -207,12 +226,32 @@ for the retry cron.
 - Inbound: parse the webhook payload; the subaccount/location id identifies the tenant.
 - Outbound: send replies and create bookings via the GHL API. **Transport only** — we do
   NOT read conversation history from GHL (it lives in our DB).
+- Timezone-safe booking (`bookAppointment` + `tools/booking-time.ts`): the model is NOT trusted
+  to build a valid `startTime`. Before booking, the tool **re-queries live availability** and
+  books the exact, offset-carrying slot string GHL returned that matches the lead's pick — never
+  the model's re-typed string. A request WITH an explicit offset is matched by instant; one
+  WITHOUT (the bug class) is matched by tenant-tz **wall-clock**, so a dropped `-07:00` can't be
+  read as UTC. No match → the booking is **refused** (`booking_failed` reason `slot_unavailable`),
+  the horizon is re-enforced, and the model is told to re-offer a real slot. Fixes the 2026-07-06
+  demo bug where "5:15 p.m." (offset dropped) was booked as 10:15 a.m. (read as UTC).
 - Contact-merge recovery on send: GHL dedups contacts by phone/email, which can **merge away**
   the `contactId` a webhook gave us (Instant-Form lead whose number already exists as another
-  contact) → send fails `CONVERSATIONS_CONTACT_NOT_FOUND`. `sendMessage` catches that, re-resolves
-  the live contactId from the conversation (`getConversationContactId`, which survives merges),
-  retries once, and returns `resolvedContactId` so the caller persists it (`updateConversationContact`).
-  Wired on all three send paths (turn, delivery-retry cron, follow-up).
+  contact) → send fails `CONVERSATIONS_CONTACT_NOT_FOUND`. Crucially the merge **also destroys the
+  old `conversationId`** (GHL re-parents the contact to a single new unified conversation), so the
+  survivor is found by the keys the merge preserves. `sendMessage` catches the 400 and re-resolves
+  the live contactId in order of reliability: **phone → email** (exact `POST /contacts/search`,
+  `resolveContactByPhoneOrEmail`) → the conversation object (`getConversationContactId`, last resort
+  since it dies with the old contact). It retries once and returns `resolvedContactId` so callers
+  persist it (`updateConversationContact`). Wired on all three send paths (turn, delivery-retry cron,
+  follow-up). The merge keys are **captured while the contact is still alive** — at inbound and again
+  on the first turn's `getContact` — and stored on the conversation (`contact_phone`, `contact_email`
+  migration 0031; `setConversationContactKeys`). **Requires the `conversations.readonly` scope**
+  (`ghl/oauth.ts`, for the last-resort `GET /conversations/{id}` read — a *different* scope than
+  `conversations/message.*`) and `contacts.readonly` (for the search). Tokens issued before
+  `conversations.readonly` was added 401 on that read; adding a scope means tenants must
+  **re-authorize** the app. This whole path was the bug found 2026-07-06 on The Bot Crew's own FB
+  Instant-Form leads: recovery relied only on the (now-dead) conversation lookup **and** lacked the
+  scope, so every merged FB lead went unanswered.
 - Channels: FB / IG / WhatsApp all work. Inbound channel comes from the webhook
   `messageType` (`FB`/`IG`/`WhatsApp`, normalized in `ghl/webhook.ts`); outbound sends with
   the matching `type`. FB/IG have no phone — delivery routes by `contactId`, and a real
@@ -246,8 +285,24 @@ for the retry cron.
 - Resolved: inbound payload shape (`type=InboundMessage`, `direction=inbound`,
   `locationId/contactId/conversationId/body/messageType`), send/calendar/tag endpoints
   (live in `ghl/client.ts`), and the **auth model** — per-location **OAuth** via the GHL App
-  Marketplace, tokens in `ghl_oauth_tokens`, install/authorize at `/oauth/ghl/install`,
+  Marketplace, tokens in `ghl_oauth_tokens`, install/authorize at `/oauth/ghl/install`
+  (the redirect lands on `/oauth/callback` — that is the path registered in
+  `mastra/index.ts` and the one the Marketplace app's `redirect_uri` must match),
   auto-refreshed. Scopes in `ghl/oauth.ts`.
+- **Calendar read scopes** (both added 2026-07-22). `calendars/events.write` books/moves/cancels
+  and reads `/free-slots`, but grants **no** calendar read — GHL splits those:
+  - `calendars.readonly` — lists a location's calendars (`GET /calendars?locationId=`) so
+    onboarding can fill `tenant_config.calendars` automatically. Onboarding-only.
+  - `calendars/events.readonly` — reads one appointment (`GET /calendars/events/appointments/{id}`
+    = `GhlClient.getAppointment`). **This was a live latent bug:** without it that call 401s on
+    every tenant, and `lookupAppointment` swallows the error and falls back to our stored
+    datetime — so an appointment moved or cancelled directly in the GHL UI was reported to the
+    lead at its stale time. (`getContactAppointments`, the newer GHL-sourced fallback, is a
+    *contacts* endpoint and works on `contacts.readonly` — only store-sourced appointments went
+    stale.)
+
+  Both take effect on new installs after a deploy. Tenants installed earlier keep working but
+  keep the stale-appointment behaviour until they **re-authorize**.
 - **Webhook verification (live):** every webhook is verified over its RAW body in the route
   handler **before** parse — Ed25519 (`x-ghl-signature`, current) with RSA-SHA256
   (`x-wh-signature`, legacy, GHL-deprecated 2026-07-01) fallback, against GHL's published
