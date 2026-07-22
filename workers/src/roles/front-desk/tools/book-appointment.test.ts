@@ -1,7 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { TenantContext, TurnContext } from '../../../core/types.js';
 
-const ghl = { getContactPhone: vi.fn(), updateContactPhone: vi.fn(), bookAppointment: vi.fn() };
+const ghl = {
+  getContactPhone: vi.fn(),
+  updateContactPhone: vi.fn(),
+  bookAppointment: vi.fn(),
+  getAvailability: vi.fn(),
+};
 vi.mock('../../../ghl/client.js', () => ({ GhlClient: vi.fn(() => ghl) }));
 vi.mock('../../../db/queries.js');
 
@@ -36,6 +41,8 @@ beforeEach(() => {
   ghl.getContactPhone.mockResolvedValue(undefined);
   ghl.updateContactPhone.mockResolvedValue(undefined);
   ghl.bookAppointment.mockResolvedValue({ ghlAppointmentId: 'appt1' });
+  // By default the requested slot IS available (start === START), so validation passes.
+  ghl.getAvailability.mockResolvedValue([{ start: START, end: START }]);
   vi.mocked(q.logAppointment).mockResolvedValue({ appointmentId: 'a-uuid' } as never);
   vi.mocked(q.logEvent).mockResolvedValue({ eventId: 'e-uuid' } as never);
   vi.mocked(q.logBotEvent).mockResolvedValue(undefined);
@@ -91,5 +98,82 @@ describe('bookAppointment', () => {
     const res = await run({ serviceName: 'Consulta', startTime: START });
     expect(res.booked).toBe(false);
     expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'booking_failed', expect.objectContaining({ serviceName: 'Consulta', calendarId: 'cal1' }));
+  });
+
+  it('validates against real availability: unavailable slot → not booked, GHL booking never called', async () => {
+    // getAvailability returns a DIFFERENT time than requested → no match.
+    ghl.getAvailability.mockResolvedValue([{ start: '2026-07-10T18:00:00.000Z', end: '2026-07-10T18:00:00.000Z' }]);
+    const res = await run({ serviceName: 'Consulta', startTime: START });
+    expect(res.booked).toBe(false);
+    expect(res.message).toContain('ya no está disponible');
+    expect(ghl.bookAppointment).not.toHaveBeenCalled();
+    expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'booking_failed', expect.objectContaining({ reason: 'slot_unavailable' }));
+  });
+
+  it('availability lookup throws → not booked, surfaced as booking_failed(validate_availability)', async () => {
+    ghl.getAvailability.mockRejectedValue(new Error('ghl 500'));
+    const res = await run({ serviceName: 'Consulta', startTime: START });
+    expect(res.booked).toBe(false);
+    expect(ghl.bookAppointment).not.toHaveBeenCalled();
+    expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'booking_failed', expect.objectContaining({ stage: 'validate_availability' }));
+  });
+
+  // Regression: the demo bug where the lead picked 5:15 p.m. (Tijuana) but the model handed
+  // bookAppointment an offset-less string. GHL read it as UTC and booked 10:15 a.m. The tool
+  // must instead book the canonical slot string GHL returned (with the correct -07:00 offset).
+  describe('timezone offset preservation (5:15 → 10:15 regression)', () => {
+    const tijuanaTenant = {
+      tenantId: 't1',
+      clientId: 'client1',
+      ghlLocationId: 'loc1',
+      config: {
+        businessName: 'The Bot Crew',
+        timezone: 'America/Tijuana',
+        tone: null,
+        services: [{ name: 'Sesión de instalación', durationMin: 30 }],
+        hours: {},
+        calendars: { 'Sesión de instalación': 'cal-tj' },
+        faq: [],
+        promptOverrides: {},
+      },
+    } as unknown as TenantContext;
+    const tjCtx = { requestContext: { get: (k: string) => (k === 'tenant' ? tijuanaTenant : k === 'turn' ? turn : undefined) } };
+    const runTj = (input: { serviceName: string; startTime: string }) =>
+      (bookAppointmentTool.execute as (i: typeof input, c: typeof tjCtx) => Promise<{ booked: boolean; ghlAppointmentId?: string; message: string }>)(input, tjCtx);
+
+    const CANONICAL_515 = '2026-07-08T17:15:00-07:00';
+
+    beforeEach(() => {
+      // GHL offers the real 5:15 p.m. Tijuana slot, carrying the correct -07:00 offset.
+      ghl.getAvailability.mockResolvedValue([
+        { start: '2026-07-08T17:00:00-07:00', end: '2026-07-08T17:00:00-07:00' },
+        { start: CANONICAL_515, end: CANONICAL_515 },
+        { start: '2026-07-08T17:30:00-07:00', end: '2026-07-08T17:30:00-07:00' },
+      ]);
+    });
+
+    it('offset-less model string (the bug) → books the canonical -07:00 slot, not UTC', async () => {
+      // This is exactly what the model handed the tool in the demo: no timezone offset.
+      const res = await runTj({ serviceName: 'Sesión de instalación', startTime: '2026-07-08T17:15:00' });
+      expect(res.booked).toBe(true);
+      expect(ghl.bookAppointment).toHaveBeenCalledWith(
+        expect.objectContaining({ startTime: CANONICAL_515 }),
+      );
+      // The offset-less string parsed as UTC would be this — assert we did NOT send it.
+      expect(ghl.bookAppointment).not.toHaveBeenCalledWith(
+        expect.objectContaining({ startTime: '2026-07-08T17:15:00' }),
+      );
+      // And 10:15 a.m. Tijuana (17:15Z) never reaches GHL either.
+      const sent = (ghl.bookAppointment.mock.calls[0]![0] as { startTime: string }).startTime;
+      expect(new Date(sent).getTime()).toBe(new Date(CANONICAL_515).getTime());
+    });
+
+    it('model string that already carries the correct offset → still books the canonical slot', async () => {
+      const res = await runTj({ serviceName: 'Sesión de instalación', startTime: CANONICAL_515 });
+      expect(res.booked).toBe(true);
+      expect(ghl.bookAppointment).toHaveBeenCalledWith(
+        expect.objectContaining({ startTime: CANONICAL_515 }),
+      );
+    });
   });
 });

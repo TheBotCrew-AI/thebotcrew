@@ -8,6 +8,9 @@ import { z } from 'zod';
 import { GhlClient } from '../../../ghl/client.js';
 import { logAppointment, logBotEvent, logEvent } from '../../../db/queries.js';
 import { resolveAgentContext } from './agent-context.js';
+import { bookingQueryWindow, resolveBookableSlot } from './booking-time.js';
+
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 export const bookAppointmentTool = createTool({
   id: 'bookAppointment',
@@ -41,6 +44,71 @@ export const bookAppointmentTool = createTool({
 
     const ghl = new GhlClient(tenant.tenantId);
 
+    // Validate + normalize the requested time against REAL availability BEFORE anything else.
+    // The model builds `startTime` and is not reliable at preserving the timezone offset (it
+    // dropped the `-07:00`, which GHL read as UTC → booked 7h off: 5:15 p.m. became 10:15 a.m.).
+    // So we never trust the raw string as an instant: we re-query availability and book the
+    // exact, offset-correct slot string GHL returned that matches the wall-clock the lead picked.
+    const now = Date.now();
+    const { fromMs, toMs } = bookingQueryWindow(startTime, now);
+    let canonicalStart: string;
+    try {
+      const slots = await ghl.getAvailability(
+        calendarId,
+        new Date(fromMs).toISOString(),
+        new Date(toMs).toISOString(),
+      );
+      const resolved = resolveBookableSlot(slots, startTime, config.timezone);
+      if (!resolved) {
+        await logBotEvent(tenant.clientId, turn.ghlConversationId, 'booking_failed', {
+          serviceName,
+          calendarId,
+          startTime,
+          reason: 'slot_unavailable',
+        });
+        return {
+          booked: false,
+          message:
+            'Ese horario ya no está disponible. Consulta de nuevo los horarios con getAvailability y ' +
+            'ofrécele al lead ÚNICAMENTE uno de los slots que devuelva.',
+        };
+      }
+      canonicalStart = resolved;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('[bookAppointment] availability check failed:', msg);
+      await logBotEvent(tenant.clientId, turn.ghlConversationId, 'booking_failed', {
+        serviceName,
+        calendarId,
+        startTime,
+        stage: 'validate_availability',
+        error: msg,
+      });
+      return {
+        booked: false,
+        message: 'No pude verificar la disponibilidad en este momento. Intenta de nuevo en un momento.',
+      };
+    }
+
+    // Deterministic booking horizon (business rule, per-tenant): never book past now + horizon,
+    // even if GHL still offers the slot. Mirrors the clamp in getAvailability.
+    const horizon = config.bookingHorizonDays ?? null;
+    if (horizon != null && Date.parse(canonicalStart) > now + horizon * DAY_MS) {
+      await logBotEvent(tenant.clientId, turn.ghlConversationId, 'booking_failed', {
+        serviceName,
+        calendarId,
+        startTime: canonicalStart,
+        reason: 'out_of_horizon',
+        horizonDays: horizon,
+      });
+      return {
+        booked: false,
+        message:
+          `Ese horario queda fuera de la ventana de agendado (${horizon} días). ` +
+          'Ofrécele al lead un horario más cercano.',
+      };
+    }
+
     // Save the reminder number ONLY as part of booking (never earlier), and ONLY when the
     // contact has NO phone yet (the FB/IG case). We NEVER overwrite an existing phone:
     // changing a WhatsApp contact's number breaks the 24h messaging window — GHL/Meta treat it
@@ -72,7 +140,7 @@ export const bookAppointmentTool = createTool({
         calendarId,
         locationId: tenant.ghlLocationId,
         contactId: turn.ghlContactId,
-        startTime,
+        startTime: canonicalStart,
         title: serviceName,
       }));
     } catch (err) {
@@ -83,7 +151,7 @@ export const bookAppointmentTool = createTool({
       await logBotEvent(tenant.clientId, turn.ghlConversationId, 'booking_failed', {
         serviceName,
         calendarId,
-        startTime,
+        startTime: canonicalStart,
         error: msg,
       });
       return { booked: false, message: 'No se pudo confirmar la cita en este momento. Intenta de nuevo o contacta al equipo.' };
@@ -94,7 +162,7 @@ export const bookAppointmentTool = createTool({
       p_client_id: tenant.clientId,
       p_ghl_contact_id: turn.ghlContactId,
       p_action: 'booked',
-      p_appointment_datetime: startTime,
+      p_appointment_datetime: canonicalStart,
       p_service_type: serviceName,
       p_source: 'front-desk',
       p_ghl_appointment_id: ghlAppointmentId ?? null,
@@ -103,13 +171,13 @@ export const bookAppointmentTool = createTool({
       p_client_id: tenant.clientId,
       p_ghl_conversation_id: turn.ghlConversationId,
       p_event_type: 'lead_qualified',
-      p_metadata: { service: serviceName, startTime },
+      p_metadata: { service: serviceName, startTime: canonicalStart },
     }).catch((e: unknown) => console.error('[bookAppointment] logEvent failed:', e));
 
     return {
       booked: true,
       ghlAppointmentId,
-      message: `Cita agendada: ${serviceName} el ${startTime}.`,
+      message: `Cita agendada: ${serviceName} el ${canonicalStart}.`,
     };
   },
 });
