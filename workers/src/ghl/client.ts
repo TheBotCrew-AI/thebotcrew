@@ -11,7 +11,7 @@
 
 import { getGhlEnv } from '../core/env.js';
 import type { Channel } from '../core/types.js';
-import { getOAuthToken, upsertOAuthToken } from '../db/queries.js';
+import { getOAuthToken, getTenantGhlLocationId, upsertOAuthToken } from '../db/queries.js';
 import { refreshAccessToken } from './oauth.js';
 import type { BookAppointmentInput, BookAppointmentResult, Slot } from './types.js';
 
@@ -20,6 +20,8 @@ const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000;
 export class GhlClient {
   private readonly apiBase: string;
   private readonly tenantId: string | undefined;
+  // Cached tenant location id (null = looked up, none found; undefined = not yet looked up).
+  private locationId: string | null | undefined;
 
   constructor(tenantId?: string) {
     this.apiBase = getGhlEnv().apiBase;
@@ -75,6 +77,7 @@ export class GhlClient {
     channel: Channel;
     text: string;
     phone?: string;
+    email?: string;
     conversationId?: string;
   }): Promise<{ ghlMessageId: string; resolvedContactId?: string }> {
     const token = await this.getAccessToken();
@@ -97,11 +100,16 @@ export class GhlClient {
     let resolvedContactId: string | undefined;
     if (!res.ok) {
       const detail = await res.text();
-      // Merge recovery: the webhook contactId may have been merged away in GHL
-      // (dedup by phone/email). Re-resolve the live contact from the conversation and retry once.
+      // Merge recovery: GHL dedups contacts by phone/email, which can merge away the
+      // webhook's contactId (and its conversation) → send 400s CONVERSATIONS_CONTACT_NOT_FOUND.
+      // Re-resolve the live (surviving) contact and retry once. Resolution order, most to
+      // least reliable across a merge: phone → email (the merge keys, which the survivor
+      // keeps) → the conversation object (dies with the old contact, so last resort).
       const merged = res.status === 400 && detail.includes('CONVERSATIONS_CONTACT_NOT_FOUND');
-      if (merged && params.conversationId) {
-        const current = await this.getConversationContactId(params.conversationId);
+      if (merged) {
+        const current =
+          (await this.resolveContactByPhoneOrEmail({ phone: params.phone, email: params.email })) ??
+          (params.conversationId ? await this.getConversationContactId(params.conversationId) : undefined);
         if (current && current !== params.contactId) {
           const retry = await post(current);
           if (!retry.ok) {
@@ -193,21 +201,71 @@ export class GhlClient {
     }
   }
 
-  /** Fetch a contact's stored name from GHL. Returns undefined on failure or if absent. */
+  /** Fetch a contact's stored name — plus its phone/email, the keys GHL merges on, so the
+   *  caller can persist them and later re-resolve a merged-away contact (see
+   *  resolveContactByPhoneOrEmail). Returns undefined on failure or if absent. */
   async getContact(
     contactId: string,
-  ): Promise<{ firstName?: string; lastName?: string; name?: string } | undefined> {
+  ): Promise<{ firstName?: string; lastName?: string; name?: string; phone?: string; email?: string } | undefined> {
     const token = await this.getAccessToken();
     const res = await fetch(`${this.apiBase}/contacts/${contactId}`, {
       headers: { Authorization: `Bearer ${token}`, Version: '2021-07-28' },
     });
     if (!res.ok) return undefined;
     const data = (await res.json()) as {
-      contact?: { firstName?: string; lastName?: string; contactName?: string; name?: string };
+      contact?: { firstName?: string; lastName?: string; contactName?: string; name?: string; phone?: string; email?: string };
     };
     const c = data?.contact;
     if (!c) return undefined;
-    return { firstName: c.firstName, lastName: c.lastName, name: c.name ?? c.contactName };
+    // GHL sometimes stores an email in the phone field — keep phone phone-shaped.
+    const phone = typeof c.phone === 'string' && c.phone && !c.phone.includes('@') ? c.phone : undefined;
+    const email = typeof c.email === 'string' && c.email.includes('@') ? c.email : undefined;
+    return { firstName: c.firstName, lastName: c.lastName, name: c.name ?? c.contactName, phone, email };
+  }
+
+  /** The GHL location id for this client's tenant, resolved once and cached. Recovery
+   *  searches are location-scoped; undefined when there's no tenant (agency-token path). */
+  private async getLocationId(): Promise<string | undefined> {
+    if (!this.tenantId) return undefined;
+    if (this.locationId === undefined) {
+      this.locationId = (await getTenantGhlLocationId(this.tenantId)) ?? null;
+    }
+    return this.locationId ?? undefined;
+  }
+
+  /** Re-resolve the live contact id after a merge, by the keys GHL dedups on: phone first,
+   *  then email. A merged-away contactId 404s, but the survivor still carries the same
+   *  phone/email, so an exact search finds it. Returns undefined when neither key is given
+   *  or nothing matches. Requires the `contacts.readonly` scope. */
+  async resolveContactByPhoneOrEmail(params: { phone?: string; email?: string }): Promise<string | undefined> {
+    if (!params.phone && !params.email) return undefined;
+    const token = await this.getAccessToken();
+    const locationId = await this.getLocationId();
+    const search = async (field: 'phone' | 'email', value: string): Promise<string | undefined> => {
+      const res = await fetch(`${this.apiBase}/contacts/search`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, Version: '2021-07-28', 'Content-Type': 'application/json' },
+        // locationId is included when known; a location-scoped token also infers it.
+        body: JSON.stringify({
+          ...(locationId ? { locationId } : {}),
+          page: 1,
+          pageLimit: 1,
+          filters: [{ field, operator: 'eq', value }],
+        }),
+      });
+      if (!res.ok) return undefined;
+      const data = (await res.json()) as { contacts?: Array<{ id?: string }> };
+      return data.contacts?.[0]?.id ?? undefined;
+    };
+    if (params.phone) {
+      const byPhone = await search('phone', params.phone);
+      if (byPhone) return byPhone;
+    }
+    if (params.email) {
+      const byEmail = await search('email', params.email);
+      if (byEmail) return byEmail;
+    }
+    return undefined;
   }
 
   /** Overwrite a GHL contact's name — used when a lead corrects a mis-saved name (e.g. the
@@ -341,6 +399,34 @@ export class GhlClient {
       status: asStr(appt.appointmentStatus) ?? asStr(appt.status),
       title: asStr(appt.title),
     };
+  }
+
+  /** A contact's appointments straight from GHL — the source of truth even for bookings the
+   *  bot never made (created/edited in the GHL calendar UI, or by a human). Lets the
+   *  appointment tools see appointments that were never mirrored into our store. Returns []
+   *  on failure. Works with the `calendars/events.write` scope. */
+  async getContactAppointments(
+    contactId: string,
+  ): Promise<Array<{ id: string; startTime?: string; endTime?: string; status?: string; calendarId?: string; title?: string; deleted?: boolean }>> {
+    const token = await this.getAccessToken();
+    const res = await fetch(`${this.apiBase}/contacts/${contactId}/appointments`, {
+      headers: { Authorization: `Bearer ${token}`, Version: '2021-07-28' },
+    });
+    if (!res.ok) return [];
+    const data = (await res.json()) as { events?: Array<Record<string, unknown>> };
+    const asStr = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined);
+    return (data.events ?? [])
+      .map((e) => ({
+        id: asStr(e.id) ?? '',
+        startTime: asStr(e.startTime),
+        endTime: asStr(e.endTime),
+        // GHL ships both `appointmentStatus` and the misspelled `appoinmentStatus` — read either.
+        status: asStr(e.appointmentStatus) ?? asStr(e.appoinmentStatus),
+        calendarId: asStr(e.calendarId),
+        title: asStr(e.title),
+        deleted: e.deleted === true,
+      }))
+      .filter((e) => e.id);
   }
 
   /** Soft-cancel an appointment (sets appointmentStatus='cancelled'; does not delete the record). */

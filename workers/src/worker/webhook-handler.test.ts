@@ -66,6 +66,9 @@ beforeEach(() => {
   vi.mocked(q.markDelivered).mockResolvedValue(undefined);
   vi.mocked(q.updateConversationStatus).mockResolvedValue(undefined);
   vi.mocked(q.botActivation).mockResolvedValue('already');
+  vi.mocked(q.setConversationContactKeys).mockResolvedValue(undefined);
+  vi.mocked(q.getConversationContactKeys).mockResolvedValue({ phone: null, email: null });
+  vi.mocked(q.updateConversationContact).mockResolvedValue(undefined);
   ghl.getContactPhone.mockResolvedValue(undefined);
   ghl.getContact.mockResolvedValue(undefined);
   ghl.updateContactName.mockResolvedValue(undefined);
@@ -114,6 +117,34 @@ describe('handleInboundWebhook — happy path', () => {
     expect(q.markDelivered).toHaveBeenCalledWith('msg-uuid');
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ replied: true });
+  });
+});
+
+describe('handleInboundWebhook — merge-key capture & recovery', () => {
+  const fbNoPhone = { ...inbound, messageType: 'FB', phone: undefined };
+
+  it('turn: captures phone/email from the live contact → passes email to sendMessage and persists the keys', async () => {
+    ghl.getContact.mockResolvedValue({ name: 'Ana', phone: '+5215550000', email: 'ana@x.com' });
+    await handleInboundWebhook(inbound, agentReplying());
+    expect(ghl.sendMessage).toHaveBeenCalledWith(expect.objectContaining({ email: 'ana@x.com' }));
+    expect(q.setConversationContactKeys).toHaveBeenCalledWith('conv1', { phone: '+5215550000', email: 'ana@x.com' });
+  });
+
+  it('early capture: FB inbound with no phone → fetches the contact, logs its phone, persists its email', async () => {
+    ghl.getContact.mockResolvedValue({ name: 'Ana', phone: '+5215550000', email: 'ana@x.com' });
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(tenant({ enabledChannels: ['facebook'] }));
+    await handleInboundWebhook(fbNoPhone, agentReplying());
+    expect(ghl.getContact).toHaveBeenCalledWith('c1');
+    expect(q.logMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ p_direction: 'inbound', p_contact_phone: '+5215550000' }),
+    );
+    expect(q.setConversationContactKeys).toHaveBeenCalledWith('conv1', { email: 'ana@x.com' });
+  });
+
+  it('send recovers a merged-away contact → persists the survivor id on the conversation', async () => {
+    ghl.sendMessage.mockResolvedValue({ ghlMessageId: 'm', resolvedContactId: 'survivor' });
+    await handleInboundWebhook(inbound, agentReplying());
+    expect(q.updateConversationContact).toHaveBeenCalledWith('conv1', 'survivor');
   });
 });
 

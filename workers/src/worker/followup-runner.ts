@@ -24,6 +24,7 @@ import {
   scheduleFollowUp,
   setGhlMessageId,
   updateConversationStatus,
+  updateConversationContact,
   loadRecentMessages,
 } from '../db/queries.js';
 import { parseAngleSelection } from '../roles/reactivation/angle-select.js';
@@ -141,13 +142,20 @@ async function processOne(
   const ghl = new GhlClient(tenant.tenantId);
   let ghlMessageId: string | null = null;
   try {
-    ({ ghlMessageId } = await ghl.sendMessage({
+    const sent = await ghl.sendMessage({
       contactId: followUp.ghlContactId,
       channel: followUp.channel as Channel,
       text: reply,
       phone: followUp.contactPhone ?? undefined,
       conversationId: followUp.ghlConversationId,
-    }));
+    });
+    ghlMessageId = sent.ghlMessageId;
+    // Recovered a merged-away contact: persist the survivor so future sends skip recovery.
+    if (sent.resolvedContactId && sent.resolvedContactId !== followUp.ghlContactId) {
+      updateConversationContact(followUp.ghlConversationId, sent.resolvedContactId).catch((e: unknown) =>
+        console.error('[followup] updateConversationContact failed:', e instanceof Error ? e.message : String(e)),
+      );
+    }
   } catch (err) {
     console.error('[followup] sendMessage failed:', err instanceof Error ? err.message : String(err));
   }

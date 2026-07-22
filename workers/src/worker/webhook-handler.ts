@@ -36,6 +36,8 @@ import {
   setGhlMessageId,
   updateConversationContact,
   updateConversationStatus,
+  setConversationContactKeys,
+  getConversationContactKeys,
 } from '../db/queries.js';
 import { GhlClient } from '../ghl/client.js';
 import { parseInboundWebhook } from '../ghl/webhook.js';
@@ -358,14 +360,42 @@ export async function runAgentTurn({
   const ghl = new GhlClient(tenant.tenantId);
 
   // Fetch the contact's stored name only while the bot hasn't spoken yet — the opening
-  // name-confirmation window. Avoids an extra GHL call on every later turn.
+  // name-confirmation window. Avoids an extra GHL call on every later turn. The same fetch
+  // also grabs the contact's phone/email — the keys GHL merges on — so if GHL merges this
+  // contact away moments later (Instant-Form dedup by phone), the send can still re-resolve
+  // the surviving contact (see sendMessage merge recovery). Empirically this fetch succeeds
+  // right before the send that then 404s, so it's our reliable capture point.
   let contactName: string | undefined;
+  let contactPhone: string | undefined = phone ?? undefined;
+  let contactEmail: string | undefined;
+  let fetchedContact = false;
   if (!history.some((m) => m.senderType === 'bot')) {
     try {
       const contact = await ghl.getContact(parsed.contactId);
-      contactName = contact?.name?.trim() || undefined;
+      if (contact) {
+        fetchedContact = true;
+        contactName = contact.name?.trim() || undefined;
+        contactPhone = contactPhone ?? contact.phone;
+        contactEmail = contact.email;
+        if (contact.phone || contact.email) {
+          setConversationContactKeys(parsed.conversationId, { phone: contact.phone, email: contact.email }).catch(
+            (e: unknown) => console.error('[merge-keys] persist failed (non-blocking):', e instanceof Error ? e.message : String(e)),
+          );
+        }
+      }
     } catch (e) {
       console.error('[contact-name] fetch failed (non-blocking):', e instanceof Error ? e.message : String(e));
+    }
+  }
+  // Later turns (bot already spoke) or a failed fetch: fall back to the merge keys captured
+  // at inbound / turn 1, so a send that hits CONTACT_NOT_FOUND can still recover.
+  if (!fetchedContact && (!contactPhone || !contactEmail)) {
+    try {
+      const keys = await getConversationContactKeys(parsed.conversationId);
+      contactPhone = contactPhone ?? keys.phone ?? undefined;
+      contactEmail = contactEmail ?? keys.email ?? undefined;
+    } catch (e) {
+      console.error('[merge-keys] read failed (non-blocking):', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -490,7 +520,7 @@ export async function runAgentTurn({
         p_client_id: tenant.clientId,
         p_channel: parsed.channel,
         p_ghl_contact_id: parsed.contactId,
-        p_contact_phone: phone ?? null,
+        p_contact_phone: contactPhone ?? null,
         p_direction: 'outbound',
         p_sender_type: 'bot',
         p_content: part,
@@ -509,7 +539,8 @@ export async function runAgentTurn({
       contactId: sendContactId,
       channel: parsed.channel,
       text: part,
-      phone: phone ?? undefined,
+      phone: contactPhone ?? undefined,
+      email: contactEmail,
       conversationId: parsed.conversationId,
     });
 
@@ -536,7 +567,7 @@ export async function runAgentTurn({
     } else if (!delivered) {
       console.error('[ghl] sendMessage failed after retry — leaving pending for cron');
       logError(tenant.clientId, parsed.conversationId, 'delivery_error', {
-        channel: parsed.channel, hasPhone: !!phone, part: i, parts: parts.length,
+        channel: parsed.channel, hasPhone: !!contactPhone, hasEmail: !!contactEmail, part: i, parts: parts.length,
         note: 'inline retry exhausted', error: sendError,
       });
     }
@@ -582,8 +613,17 @@ export async function handleInboundWebhook(
     return { status: 200, body: { ignored: 'unknown or inactive tenant', locationId: parsed.locationId } };
   }
 
-  // GHL WhatsApp webhooks omit the phone — fetch it from the Contacts API if needed.
-  const phone = parsed.phone ?? await new GhlClient(tenant.tenantId).getContactPhone(parsed.contactId);
+  // GHL FB/IG (and WhatsApp) webhooks omit phone/email — fetch them from the contact while
+  // it's still alive. Besides giving WhatsApp its phone, this is the EARLY capture of the
+  // merge keys: if GHL later merges this contact away, the send re-resolves the survivor by
+  // phone/email (persisted just below). Only fetched when the payload didn't already carry a phone.
+  let phone = parsed.phone;
+  let inboundEmail: string | undefined;
+  if (!phone) {
+    const contact = await new GhlClient(tenant.tenantId).getContact(parsed.contactId);
+    phone = contact?.phone;
+    inboundEmail = contact?.email;
+  }
 
   console.log(`[webhook] inbound conv=${parsed.conversationId} contact=${parsed.contactId} channel=${parsed.channel} hasPhone=${!!phone}`);
 
@@ -604,6 +644,14 @@ export async function handleInboundWebhook(
   });
   if (!conversationId) {
     return { status: 200, body: { ignored: 'duplicate message', messageId: parsed.messageId } };
+  }
+
+  // Persist the contact's email as a merge key (phone already went in via logMessage above)
+  // so a later send can re-resolve a merged-away contact. Fire-and-forget; non-blocking.
+  if (inboundEmail) {
+    setConversationContactKeys(parsed.conversationId, { email: inboundEmail }).catch((e: unknown) =>
+      console.error('[merge-keys] inbound persist failed (non-blocking):', e instanceof Error ? e.message : String(e)),
+    );
   }
 
   // Cancel any pending follow-ups — the lead is back. Fire-and-forget; non-blocking.

@@ -94,6 +94,20 @@ export async function loadTenantConfig(ghlLocationId: string): Promise<TenantCon
   };
 }
 
+/** The GHL location id for a tenant. Used by contact-merge recovery (which searches
+ *  contacts within a location) when only the tenantId is in scope. Returns undefined if
+ *  the tenant is unknown. */
+export async function getTenantGhlLocationId(tenantId: string): Promise<string | undefined> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from('tenants')
+    .select('ghl_location_id')
+    .eq('id', tenantId)
+    .maybeSingle();
+  fail('getTenantGhlLocationId', error);
+  return (data as { ghl_location_id?: string } | null)?.ghl_location_id ?? undefined;
+}
+
 /** Validate the stored quiet_hours jsonb; anything malformed falls back to null (platform default). */
 function parseQuietHours(raw: unknown): QuietHours | null {
   if (!raw || typeof raw !== 'object') return null;
@@ -189,6 +203,40 @@ export async function updateConversationContact(ghlConversationId: string, ghlCo
     .update({ ghl_contact_id: ghlContactId })
     .eq('ghl_conversation_id', ghlConversationId);
   fail('updateConversationContact', error);
+}
+
+/** Persist the contact's merge keys (phone/email) on a conversation so a later send can
+ *  re-resolve a merged-away contact. Only writes keys that are provided and non-empty —
+ *  never clobbers a stored value with null. No-op when nothing to write. */
+export async function setConversationContactKeys(
+  ghlConversationId: string,
+  keys: { phone?: string | null; email?: string | null },
+): Promise<void> {
+  const patch: { contact_phone?: string; contact_email?: string } = {};
+  if (keys.phone) patch.contact_phone = keys.phone;
+  if (keys.email) patch.contact_email = keys.email;
+  if (Object.keys(patch).length === 0) return;
+  const supabase = getSupabase();
+  const { error } = await supabase
+    .from('conversations')
+    .update(patch)
+    .eq('ghl_conversation_id', ghlConversationId);
+  fail('setConversationContactKeys', error);
+}
+
+/** Read a conversation's stored contact merge keys (phone/email). Both may be null. */
+export async function getConversationContactKeys(
+  ghlConversationId: string,
+): Promise<{ phone: string | null; email: string | null }> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from('conversations')
+    .select('contact_phone, contact_email')
+    .eq('ghl_conversation_id', ghlConversationId)
+    .maybeSingle();
+  fail('getConversationContactKeys', error);
+  const row = data as { contact_phone: string | null; contact_email: string | null } | null;
+  return { phone: row?.contact_phone ?? null, email: row?.contact_email ?? null };
 }
 
 /** Switch a conversation's persona. Pass null to return it to the normal front-desk agent. */

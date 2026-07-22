@@ -108,6 +108,18 @@ describe('GhlClient — getContact / updateContactName', () => {
     expect((await new GhlClient().getContact('c1'))?.name).toBe('Gimnasio X');
   });
 
+  it('returns the contact phone + email (the merge keys)', async () => {
+    stubFetch().mockResolvedValue(ok({ contact: { name: 'Ana', phone: '+5215550000', email: 'ana@x.com' } }));
+    expect(await new GhlClient().getContact('c1')).toEqual({ name: 'Ana', phone: '+5215550000', email: 'ana@x.com' });
+  });
+
+  it('drops an email stored in the phone field and a phone stored in the email field', async () => {
+    stubFetch().mockResolvedValue(ok({ contact: { phone: 'ana@x.com', email: '+5215550000' } }));
+    const c = await new GhlClient().getContact('c1');
+    expect(c?.phone).toBeUndefined();
+    expect(c?.email).toBeUndefined();
+  });
+
   it('updateContactName sends firstName/lastName/name', async () => {
     const f = stubFetch();
     f.mockResolvedValue(ok({}));
@@ -160,6 +172,53 @@ describe('GhlClient — sendMessage', () => {
     const res = await new GhlClient().sendMessage({ contactId: 'c1', channel: 'whatsapp', text: 'hola', conversationId: 'conv1' });
     expect(res).toEqual({ ghlMessageId: 'm2', resolvedContactId: 'c2' });
   });
+
+  it('merge recovery: re-resolves the survivor by PHONE (search) and retries', async () => {
+    const f = stubFetch();
+    f.mockResolvedValueOnce(err(400, 'CONVERSATIONS_CONTACT_NOT_FOUND')) // first post (merged-away contact)
+      .mockResolvedValueOnce(ok({ contacts: [{ id: 'survivor' }] }))     // POST /contacts/search by phone
+      .mockResolvedValueOnce(ok({ messageId: 'm3' }));                    // retry post to survivor
+    const res = await new GhlClient('t1').sendMessage({
+      contactId: 'dead', channel: 'facebook', text: 'hola', phone: '+5215550000', conversationId: 'conv1',
+    });
+    expect(res).toEqual({ ghlMessageId: 'm3', resolvedContactId: 'survivor' });
+    // The recovery search must hit /contacts/search with an exact phone filter.
+    expect((f.mock.calls[1]![0] as string)).toContain('/contacts/search');
+    expect(bodyOf(f, 1).filters).toEqual([{ field: 'phone', operator: 'eq', value: '+5215550000' }]);
+    // Retry posted to the survivor, not the dead id.
+    expect(bodyOf(f, 2).contactId).toBe('survivor');
+  });
+
+  it('merge recovery: PHONE search empty → falls back to EMAIL search', async () => {
+    const f = stubFetch();
+    f.mockResolvedValueOnce(err(400, 'CONVERSATIONS_CONTACT_NOT_FOUND')) // first post
+      .mockResolvedValueOnce(ok({ contacts: [] }))                        // phone search: no hit
+      .mockResolvedValueOnce(ok({ contacts: [{ id: 'survivor' }] }))     // email search: hit
+      .mockResolvedValueOnce(ok({ messageId: 'm4' }));                    // retry post
+    const res = await new GhlClient('t1').sendMessage({
+      contactId: 'dead', channel: 'facebook', text: 'hola', phone: '+5215550000', email: 'ana@x.com', conversationId: 'conv1',
+    });
+    expect(res).toEqual({ ghlMessageId: 'm4', resolvedContactId: 'survivor' });
+    expect(bodyOf(f, 2).filters).toEqual([{ field: 'email', operator: 'eq', value: 'ana@x.com' }]);
+  });
+
+  it('merge recovery: phone/email both miss → falls back to the conversation lookup', async () => {
+    const f = stubFetch();
+    f.mockResolvedValueOnce(err(400, 'CONVERSATIONS_CONTACT_NOT_FOUND')) // first post
+      .mockResolvedValueOnce(ok({ contacts: [] }))                        // phone search: miss
+      .mockResolvedValueOnce(ok({ conversation: { contactId: 'fromConv' } })) // getConversationContactId
+      .mockResolvedValueOnce(ok({ messageId: 'm5' }));                    // retry post
+    const res = await new GhlClient('t1').sendMessage({
+      contactId: 'dead', channel: 'facebook', text: 'hola', phone: '+5215550000', conversationId: 'conv1',
+    });
+    expect(res).toEqual({ ghlMessageId: 'm5', resolvedContactId: 'fromConv' });
+  });
+
+  it('resolveContactByPhoneOrEmail: no keys → returns undefined without any network call', async () => {
+    const f = stubFetch();
+    expect(await new GhlClient('t1').resolveContactByPhoneOrEmail({})).toBeUndefined();
+    expect(f).not.toHaveBeenCalled();
+  });
 });
 
 describe('GhlClient — getAppointment', () => {
@@ -171,5 +230,29 @@ describe('GhlClient — getAppointment', () => {
   it('reads a flat payload and its status field', async () => {
     stubFetch().mockResolvedValue(ok({ startTime: 'S', status: 'cancelled' }));
     expect((await new GhlClient().getAppointment('a1')).status).toBe('cancelled');
+  });
+});
+
+describe('GhlClient — getContactAppointments', () => {
+  it('maps events and reads the misspelled appoinmentStatus field', async () => {
+    stubFetch().mockResolvedValue(ok({
+      events: [
+        { id: 'e1', startTime: 'S1', endTime: 'E1', appointmentStatus: 'confirmed', calendarId: 'cal', title: 'Leo' },
+        { id: 'e2', startTime: 'S2', appoinmentStatus: 'cancelled', calendarId: 'cal', deleted: true },
+      ],
+    }));
+    const out = await new GhlClient().getContactAppointments('c1');
+    expect(out).toEqual([
+      { id: 'e1', startTime: 'S1', endTime: 'E1', status: 'confirmed', calendarId: 'cal', title: 'Leo', deleted: false },
+      { id: 'e2', startTime: 'S2', endTime: undefined, status: 'cancelled', calendarId: 'cal', title: undefined, deleted: true },
+    ]);
+  });
+
+  it('drops events with no id and returns [] on a non-ok response', async () => {
+    const f = stubFetch();
+    f.mockResolvedValueOnce(ok({ events: [{ startTime: 'S' }, { id: 'keep', startTime: 'S2' }] }));
+    expect((await new GhlClient().getContactAppointments('c1')).map((e) => e.id)).toEqual(['keep']);
+    f.mockResolvedValueOnce(err(404));
+    expect(await new GhlClient().getContactAppointments('c1')).toEqual([]);
   });
 });
