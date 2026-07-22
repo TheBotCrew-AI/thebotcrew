@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { TenantContext, TurnContext } from '../../../core/types.js';
 
-const ghl = { getAvailability: vi.fn(), rescheduleAppointment: vi.fn() };
+const ghl = { getAvailability: vi.fn(), rescheduleAppointment: vi.fn(), getContactAppointments: vi.fn() };
 vi.mock('../../../ghl/client.js', () => ({ GhlClient: vi.fn(() => ghl) }));
 vi.mock('../../../db/queries.js');
 
@@ -44,6 +44,7 @@ beforeEach(() => {
   vi.mocked(q.logBotEvent).mockResolvedValue(undefined);
   ghl.getAvailability.mockResolvedValue([{ start: START, end: START }]);
   ghl.rescheduleAppointment.mockResolvedValue(undefined);
+  ghl.getContactAppointments.mockResolvedValue([]);
 });
 
 describe('rescheduleAppointment', () => {
@@ -97,6 +98,17 @@ describe('rescheduleAppointment', () => {
     );
     expect(res.rescheduled).toBe(true);
     expect(q.logAppointment).toHaveBeenCalledWith(expect.objectContaining({ p_action: 'rescheduled', p_ghl_appointment_id: 'appt1' }));
+  });
+
+  it('store miss but GHL has the appointment (booked in GHL) → reschedules it via GHL data', async () => {
+    vi.mocked(q.loadLatestAppointment).mockResolvedValue(null);
+    ghl.getContactAppointments.mockResolvedValue([{ id: 'ghl-appt', startTime: inDays(1), status: 'confirmed', calendarId: 'cal1' }]);
+    const res = await run(START);
+    expect(res.rescheduled).toBe(true);
+    // Uses the GHL appointment id + its own calendarId, reverse-mapped to the configured service.
+    expect(ghl.rescheduleAppointment).toHaveBeenCalledWith(
+      expect.objectContaining({ appointmentId: 'ghl-appt', calendarId: 'cal1', startTime: START, endTime: expect.any(String) }),
+    );
   });
 
   it('GHL reschedule fails → not rescheduled + booking_failed event', async () => {

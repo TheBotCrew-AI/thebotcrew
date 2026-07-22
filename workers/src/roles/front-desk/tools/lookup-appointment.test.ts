@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { TenantContext, TurnContext } from '../../../core/types.js';
 
-const ghl = { getAppointment: vi.fn() };
+const ghl = { getAppointment: vi.fn(), getContactAppointments: vi.fn() };
 vi.mock('../../../ghl/client.js', () => ({ GhlClient: vi.fn(() => ghl) }));
 vi.mock('../../../db/queries.js');
 
@@ -28,6 +28,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(q.loadLatestAppointment).mockResolvedValue(appt() as never);
   ghl.getAppointment.mockResolvedValue({ startTime: LIVE, status: 'confirmed' });
+  ghl.getContactAppointments.mockResolvedValue([]);
 });
 
 describe('lookupAppointment', () => {
@@ -64,6 +65,16 @@ describe('lookupAppointment', () => {
     const res = await run();
     expect(res.found).toBe(true);
     expect(res.startTime).toBe(STORED);
+  });
+
+  it('store miss but GHL has an upcoming appointment (booked outside the bot) → found', async () => {
+    vi.mocked(q.loadLatestAppointment).mockResolvedValue(null);
+    const ghlTime = new Date(Date.now() + 20 * 86_400_000).toISOString();
+    ghl.getContactAppointments.mockResolvedValue([{ id: 'ext-1', startTime: ghlTime, status: 'confirmed', calendarId: 'cal' }]);
+    const res = await run();
+    expect(res.found).toBe(true);
+    expect(res.startTime).toBe(ghlTime);
+    expect(ghl.getAppointment).not.toHaveBeenCalled(); // GHL-sourced → no redundant live read
   });
 
   it('no stored time AND GHL read fails → cannot read date, not found', async () => {

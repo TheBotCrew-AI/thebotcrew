@@ -10,8 +10,8 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { GhlClient } from '../../../ghl/client.js';
-import { loadLatestAppointment } from '../../../db/queries.js';
 import { resolveAgentContext } from './agent-context.js';
+import { resolveActiveAppointment } from './resolve-appointment.js';
 
 export const lookupAppointmentTool = createTool({
   id: 'lookupAppointment',
@@ -29,22 +29,25 @@ export const lookupAppointmentTool = createTool({
   execute: async (_input, ctx) => {
     const { tenant, turn, config } = resolveAgentContext(ctx);
 
-    const appt = await loadLatestAppointment(tenant.clientId, turn.ghlContactId);
-    if (!appt || appt.action === 'cancelled') {
+    const ghl = new GhlClient(tenant.tenantId);
+    const appt = await resolveActiveAppointment(ghl, tenant.clientId, turn.ghlContactId, Date.now());
+    if (!appt) {
       return { found: false, message: 'No encuentro una cita activa a tu nombre.' };
     }
 
-    // Prefer the live GHL value (someone may have moved/cancelled it directly in GHL);
-    // fall back to our recorded datetime if the read fails.
-    let startTime = appt.appointmentDatetime ?? undefined;
-    try {
-      const live = await new GhlClient(tenant.tenantId).getAppointment(appt.ghlAppointmentId);
-      if (live.status && live.status.toLowerCase() === 'cancelled') {
-        return { found: false, message: 'Tu cita aparece como cancelada en el sistema; no tienes una cita activa.' };
+    let startTime = appt.startTime ?? undefined;
+    // Store-sourced: read GHL live in case it was moved/cancelled there since we booked it.
+    // GHL-sourced already came from GHL live, so trust it as-is (no redundant read).
+    if (appt.source === 'store') {
+      try {
+        const live = await ghl.getAppointment(appt.ghlAppointmentId);
+        if (live.status && live.status.toLowerCase() === 'cancelled') {
+          return { found: false, message: 'Tu cita aparece como cancelada en el sistema; no tienes una cita activa.' };
+        }
+        if (live.startTime) startTime = live.startTime;
+      } catch (e) {
+        console.error('[lookupAppointment] GHL read failed, using stored datetime:', e instanceof Error ? e.message : String(e));
       }
-      if (live.startTime) startTime = live.startTime;
-    } catch (e) {
-      console.error('[lookupAppointment] GHL read failed, using stored datetime:', e instanceof Error ? e.message : String(e));
     }
 
     if (!startTime) {

@@ -9,8 +9,9 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { GhlClient } from '../../../ghl/client.js';
-import { loadLatestAppointment, logAppointment, logBotEvent, reactivateConversation } from '../../../db/queries.js';
+import { logAppointment, logBotEvent, reactivateConversation } from '../../../db/queries.js';
 import { resolveAgentContext } from './agent-context.js';
+import { resolveActiveAppointment } from './resolve-appointment.js';
 
 export const cancelAppointmentTool = createTool({
   id: 'cancelAppointment',
@@ -25,12 +26,12 @@ export const cancelAppointmentTool = createTool({
   execute: async (_input, ctx) => {
     const { tenant, turn } = resolveAgentContext(ctx);
 
-    const appt = await loadLatestAppointment(tenant.clientId, turn.ghlContactId);
-    if (!appt || appt.action === 'cancelled') {
+    const ghl = new GhlClient(tenant.tenantId);
+    const appt = await resolveActiveAppointment(ghl, tenant.clientId, turn.ghlContactId, Date.now());
+    if (!appt) {
       return { cancelled: false, message: 'No encuentro una cita activa para cancelar.' };
     }
 
-    const ghl = new GhlClient(tenant.tenantId);
     try {
       await ghl.cancelAppointment(appt.ghlAppointmentId);
     } catch (err) {
@@ -49,7 +50,7 @@ export const cancelAppointmentTool = createTool({
       p_client_id: tenant.clientId,
       p_ghl_contact_id: turn.ghlContactId,
       p_action: 'cancelled',
-      p_appointment_datetime: appt.appointmentDatetime,
+      p_appointment_datetime: appt.startTime,
       p_service_type: appt.serviceType,
       p_source: 'front-desk',
       p_ghl_appointment_id: appt.ghlAppointmentId,

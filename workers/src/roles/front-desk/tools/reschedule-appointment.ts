@@ -10,8 +10,9 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { GhlClient } from '../../../ghl/client.js';
-import { loadLatestAppointment, logAppointment, logBotEvent } from '../../../db/queries.js';
+import { logAppointment, logBotEvent } from '../../../db/queries.js';
 import { resolveAgentContext } from './agent-context.js';
+import { resolveActiveAppointment } from './resolve-appointment.js';
 import { resolveBookingWindow } from './booking-window.js';
 
 export const rescheduleAppointmentTool = createTool({
@@ -32,16 +33,21 @@ export const rescheduleAppointmentTool = createTool({
   execute: async ({ startTime }, ctx) => {
     const { tenant, turn, config } = resolveAgentContext(ctx);
 
-    const appt = await loadLatestAppointment(tenant.clientId, turn.ghlContactId);
-    if (!appt || appt.action === 'cancelled') {
+    const ghl = new GhlClient(tenant.tenantId);
+    const appt = await resolveActiveAppointment(ghl, tenant.clientId, turn.ghlContactId, Date.now());
+    if (!appt) {
       return { rescheduled: false, message: 'No encuentro una cita activa para reagendar.' };
     }
 
-    const serviceName = appt.serviceType;
-    const calendarId = serviceName ? config.calendars[serviceName] : undefined;
-    if (!serviceName || !calendarId) {
+    // Resolve the calendar: store-sourced appts map serviceType→calendar; GHL-sourced carry
+    // the calendarId directly. Reverse-map the calendarId back to a service name for the
+    // duration + logging (null if it's a calendar we don't have configured).
+    const calendarId = appt.calendarId ?? (appt.serviceType ? config.calendars[appt.serviceType] : undefined);
+    if (!calendarId) {
       return { rescheduled: false, message: 'No pude identificar el calendario de la cita para reagendarla.' };
     }
+    const serviceName =
+      appt.serviceType ?? Object.keys(config.calendars).find((n) => config.calendars[n] === calendarId) ?? null;
 
     // Validate the requested time is a REAL free slot (within the booking horizon).
     const horizon = config.bookingHorizonDays ?? null;
@@ -54,7 +60,6 @@ export const rescheduleAppointmentTool = createTool({
     }
 
     const targetMs = new Date(startTime).getTime();
-    const ghl = new GhlClient(tenant.tenantId);
     let isFree = false;
     try {
       const slots = await ghl.getAvailability(

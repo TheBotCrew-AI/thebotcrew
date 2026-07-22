@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { TenantContext, TurnContext } from '../../../core/types.js';
 
-const ghl = { cancelAppointment: vi.fn() };
+const ghl = { cancelAppointment: vi.fn(), getContactAppointments: vi.fn() };
 vi.mock('../../../ghl/client.js', () => ({ GhlClient: vi.fn(() => ghl) }));
 vi.mock('../../../db/queries.js');
 
@@ -28,6 +28,7 @@ beforeEach(() => {
   vi.mocked(q.logBotEvent).mockResolvedValue(undefined);
   vi.mocked(q.reactivateConversation).mockResolvedValue(undefined);
   ghl.cancelAppointment.mockResolvedValue(undefined);
+  ghl.getContactAppointments.mockResolvedValue([]);
 });
 
 describe('cancelAppointment', () => {
@@ -50,6 +51,15 @@ describe('cancelAppointment', () => {
     expect(ghl.cancelAppointment).toHaveBeenCalledWith('appt1');
     expect(q.logAppointment).toHaveBeenCalledWith(expect.objectContaining({ p_action: 'cancelled', p_ghl_appointment_id: 'appt1' }));
     expect(q.reactivateConversation).toHaveBeenCalledWith('conv1');
+    expect(res).toMatchObject({ cancelled: true });
+  });
+
+  it('store miss but GHL has an upcoming appointment (booked in GHL) → cancels it via GHL', async () => {
+    vi.mocked(q.loadLatestAppointment).mockResolvedValue(null);
+    const ghlTime = new Date(Date.now() + 20 * 86_400_000).toISOString();
+    ghl.getContactAppointments.mockResolvedValue([{ id: 'ghl-appt', startTime: ghlTime, status: 'confirmed', calendarId: 'cal' }]);
+    const res = await run();
+    expect(ghl.cancelAppointment).toHaveBeenCalledWith('ghl-appt');
     expect(res).toMatchObject({ cancelled: true });
   });
 
