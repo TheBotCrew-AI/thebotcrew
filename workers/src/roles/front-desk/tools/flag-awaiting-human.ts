@@ -41,10 +41,12 @@ export const flagAwaitingHumanTool = createTool({
   execute: async ({ summary }, ctx) => {
     const { tenant, turn, config } = resolveAgentContext(ctx);
 
-    // Stops follow-ups without muting the bot. A lead's next message flips this back to
-    // 'active' (app_reactivate_conversation), which is exactly what we want: questions
-    // still get answered while the person handles the scheduling.
-    await updateConversationStatus(turn.ghlConversationId, 'standby');
+    // Stops follow-ups without muting the bot, and — unlike standby — a lead reply does
+    // NOT re-arm them (app_reactivate_conversation excludes this status). That's the point:
+    // we owe THEM an answer, so nudging them would be backwards. Questions still get
+    // answered normally; only the automated reminders stay off, until the person clears
+    // the tag in GHL.
+    await updateConversationStatus(turn.ghlConversationId, 'awaiting_human');
 
     const tag = tenant.awaitingHumanTag?.trim();
     if (tag) {

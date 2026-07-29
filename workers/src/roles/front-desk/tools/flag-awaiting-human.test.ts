@@ -45,10 +45,11 @@ beforeEach(() => {
 });
 
 describe('flagAwaitingHuman', () => {
-  it('sets standby — NOT handed_off, which would mute the bot for good', async () => {
+  it('sets awaiting_human — not handed_off (mutes the bot) nor standby (a reply re-arms nudges)', async () => {
     await run(ctx('esperando-agenda'));
-    expect(q.updateConversationStatus).toHaveBeenCalledWith('conv1', 'standby');
+    expect(q.updateConversationStatus).toHaveBeenCalledWith('conv1', 'awaiting_human');
     expect(q.updateConversationStatus).not.toHaveBeenCalledWith('conv1', 'handed_off');
+    expect(q.updateConversationStatus).not.toHaveBeenCalledWith('conv1', 'standby');
   });
 
   it("writes the tenant's own tag on the GHL contact", async () => {
@@ -60,7 +61,7 @@ describe('flagAwaitingHuman', () => {
     await run(ctx(null));
     expect(ghl.addContactTags).not.toHaveBeenCalled();
     // still records the request — the status change is the part that must not be lost
-    expect(q.updateConversationStatus).toHaveBeenCalledWith('conv1', 'standby');
+    expect(q.updateConversationStatus).toHaveBeenCalledWith('conv1', 'awaiting_human');
   });
 
   it('logs an awaiting_human event with the summary, for measuring response time', async () => {

@@ -241,6 +241,36 @@ slots. Rules (also reinforced in the front-desk prompt):
   left in ephemeral Cloudflare logs). A common cause is offering a slot the model didn't get
   verbatim from `getAvailability`, so GHL rejects the unrecognized `startTime`.
 
+## 2a. What `status` actually controls (read this before touching it)
+
+`conversations.status` looks like a lifecycle enum but only **two** of its values change
+behavior, and no TypeScript reads it — the logic lives in three RPCs:
+
+| Value | Bot may reply? | Follow-ups? | A lead reply re-arms follow-ups? |
+| --- | --- | --- | --- |
+| `active` | yes | **yes** | — |
+| `standby` | yes | no | **yes** |
+| `completed` | yes | no | **yes** |
+| `opted_out` | yes | no | **no** (consent) |
+| `awaiting_human` | yes | no | **no** (we owe them) |
+| `handed_off` | **no** | no | **no** (only a human releases it) |
+
+- `app_is_bot_suppressed` mutes on **`handed_off` only** (plus the human 5-min timer).
+- `app_schedule_follow_up` and `app_load_due_follow_ups` both require **`status = 'active'`**.
+
+So "reactivating" is **not** resuming the conversation — the bot was never stopped. It is
+**re-arming automated nudges**, and that is the only question worth asking when adding a
+value: *may we message this lead unprompted again?* (Migration 0035 fixed the answer for two
+cases; `opted_out` used to reactivate, which meant a lead who said "stop" could re-enter the
+nudge ladder just by writing again.)
+
+**Known overlap, not yet resolved:** `status` still conflates three orthogonal things — who
+may speak, the commercial outcome (duplicating the `outcome` column: 196 rows are
+`active` + `appointment_booked`), and follow-up eligibility. A refactor into separate fields
+(`bot_muted_until`, `outcome`, `awaiting_human_since`) is on the table but deliberately
+deferred. Until then, resist adding values: only add one if its **reactivation semantics**
+differ from every existing value, which is the bar `awaiting_human` met.
+
 ## 5a. Tenants that don't book through the bot (`bookingEnabled: false`)
 
 Some tenants have **no calendar the bot can trust**. MADI Skin Care is the reference case:
@@ -256,10 +286,22 @@ request and hands off** instead of booking:
    with no day, no hour, and no promised response time.
 3. Call `updateConversationStatus('handed_off')` as the last step of the turn.
 
-That status is what makes it work operationally: it pauses the bot **permanently** (so it
-can't talk over the owner mid-negotiation), cancels pending follow-ups, and writes the
-`bot-off` tag on the GHL contact — which is how the owner finds the lead and takes over.
-Removing the tag hands control back.
+That is the `flagAwaitingHuman` tool, and it does three things: sets `awaiting_human`
+(follow-ups off, **bot NOT muted**), writes the tenant's `awaiting_human_tag` on the GHL
+contact, and logs an `awaiting_human` event with the request summary so time-to-attention is
+measurable.
+
+**Closing the loop:** the owner **removing the tag** in GHL is what returns the conversation
+to `active` (ContactTagUpdate → `worker/tag-handler.ts` → `app_set_awaiting_human_by_contact`).
+The real "I've handled this" action drives the state, instead of the model guessing when a
+request stops being pending. It never overrides `handed_off` or `opted_out` — stronger signals.
+
+**Do not use `handed_off` for this.** It mutes the bot permanently *and* is excluded from
+`app_reactivate_conversation`, so the lead's next message hits silence with no way back except
+a human. That combination produced a real dead end on 2026-07-29: the bot asked "¿mañana o
+tarde?" and muted itself in the same turn, so the answer — and a follow-up pricing question it
+could have answered from config — went unanswered. Hence the two-turn rule in the prompt, and
+hence this flow never touching a muting status.
 
 **Two layers enforce it**, because a prompt instruction alone is not a guarantee:
 - **Prompt (`bookingEnabled: false`)** — strips the booking sections from the shared prompt
@@ -272,11 +314,16 @@ Removing the tag hands control back.
   mapped, `getAvailability` and `bookAppointment` structurally cannot return or reserve
   anything even if the model calls them anyway.
 
-Trade-offs to know, both by design:
-- **No follow-ups on these leads.** `handed_off` cancels them, so if the owner never gets back
-  to the lead, nobody nudges. That's the cost of guaranteeing the bot won't talk over her.
-- **`standby` would NOT work here.** It doesn't suppress the bot — the lead's next message
-  would get an agent reply, which would loop right back into asking about the appointment.
+Trade-off to know, by design: **these leads get no automated nudges** while the tag is on. If
+the owner never gets back to them, nobody chases. That is deliberate — we owe them the answer,
+so a "¿sigues interesada?" would be backwards — but it means the tag is a **work queue that
+someone has to actually work**. Measure it:
+
+```sql
+select created_at, metadata->>'summary' as pidio
+from bot_events where event_type = 'awaiting_human'
+order by created_at desc;
+```
 
 ## 5b. Demo persona (per-conversation role switch)
 

@@ -18,6 +18,7 @@ beforeEach(() => {
   vi.mocked(resolveTenant).mockResolvedValue(tenant);
   vi.mocked(parseContactTagWebhook).mockReturnValue({ locationId: 'loc1', contactId: 'c1', tags: [] });
   vi.mocked(q.setBotOffByContact).mockResolvedValue(0);
+  vi.mocked(q.setAwaitingHumanByContact).mockResolvedValue(0);
   vi.mocked(q.logBotEvent).mockResolvedValue(undefined);
 });
 
@@ -73,5 +74,50 @@ describe('handleTagWebhook', () => {
     const res = await handleTagWebhook({} as never);
     expect(res.status).toBe(500);
     expect(res.body).toMatchObject({ error: 'tag_handoff_failed' });
+  });
+
+  describe("the tenant's awaiting-human tag", () => {
+    const withTag = { ...tenant, awaitingHumanTag: 'esperando-agenda' } as unknown as TenantContext;
+
+    it('tenant has no tag configured → that switch is never touched', async () => {
+      vi.mocked(parseContactTagWebhook).mockReturnValue({ locationId: 'loc1', contactId: 'c1', tags: ['whatever'] });
+      await handleTagWebhook({} as never);
+      expect(q.setAwaitingHumanByContact).not.toHaveBeenCalled();
+    });
+
+    it('tag present → marks the contact as awaiting a person', async () => {
+      vi.mocked(resolveTenant).mockResolvedValue(withTag);
+      vi.mocked(parseContactTagWebhook).mockReturnValue({ locationId: 'loc1', contactId: 'c1', tags: ['esperando-agenda'] });
+      vi.mocked(q.setAwaitingHumanByContact).mockResolvedValue(1);
+
+      const res = await handleTagWebhook({} as never);
+
+      expect(q.setAwaitingHumanByContact).toHaveBeenCalledWith('c1', true);
+      expect(res.body).toMatchObject({ awaitingAffected: 1 });
+    });
+
+    it('tag removed → back to active, which is what re-arms follow-ups', async () => {
+      // The owner clearing the tag IS the "I handled it" action; it drives the state.
+      vi.mocked(resolveTenant).mockResolvedValue(withTag);
+      vi.mocked(parseContactTagWebhook).mockReturnValue({ locationId: 'loc1', contactId: 'c1', tags: [] });
+      vi.mocked(q.setAwaitingHumanByContact).mockResolvedValue(1);
+
+      await handleTagWebhook({} as never);
+
+      expect(q.setAwaitingHumanByContact).toHaveBeenCalledWith('c1', false);
+    });
+
+    it('a failure here does not 500 the webhook — the bot-off switch already applied', async () => {
+      // GHL retries on 500; re-running a kill-switch that already landed is worse than
+      // losing this secondary write.
+      vi.mocked(resolveTenant).mockResolvedValue(withTag);
+      vi.mocked(parseContactTagWebhook).mockReturnValue({ locationId: 'loc1', contactId: 'c1', tags: ['esperando-agenda'] });
+      vi.mocked(q.setAwaitingHumanByContact).mockRejectedValue(new Error('db down'));
+
+      const res = await handleTagWebhook({} as never);
+
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({ ok: true });
+    });
   });
 });

@@ -10,7 +10,11 @@ export type Direction = 'inbound' | 'outbound';
 export type SenderType = 'lead' | 'bot' | 'human_agent';
 export type Channel = 'whatsapp' | 'instagram' | 'facebook';
 export type AiProvider = 'openai' | 'anthropic';
-export type ConversationStatus = 'active' | 'handed_off' | 'completed' | 'opted_out' | 'standby';
+/** `active` is the only value that permits follow-ups (see app_schedule_follow_up).
+ *  `handed_off` is the only one that mutes the bot. `awaiting_human` does neither:
+ *  the bot keeps answering, but nudges stay off and a lead reply won't re-arm them. */
+export type ConversationStatus =
+  | 'active' | 'handed_off' | 'completed' | 'opted_out' | 'standby' | 'awaiting_human';
 
 /** Quiet (DND) window in tenant-local hours; follow-ups never fire inside it. */
 export interface QuietHours {

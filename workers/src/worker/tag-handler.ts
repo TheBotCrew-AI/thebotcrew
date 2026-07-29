@@ -1,17 +1,25 @@
 /**
- * GHL ContactTagUpdate webhook — manual bot kill-switch via the `bot-off` tag.
+ * GHL ContactTagUpdate webhook — two contact-scoped tag switches.
  *
- * The tag is contact-scoped (no conversationId), so we resolve by ghl_contact_id:
- *   bot-off present  → handed_off (bot stays silent until the tag is removed)
- *   bot-off absent   → reactivate any handed_off conversation back to active
+ * `bot-off` (global) — manual bot kill-switch:
+ *   present → handed_off (bot stays silent until the tag is removed)
+ *   absent  → reactivate any handed_off conversation back to active
  *
- * No double-write loop: when the bot itself adds `bot-off` (on self-handoff),
- * GHL fires this webhook too, but the conversation is already handed_off so the
- * RPC's `status <> 'handed_off'` guard makes it a no-op.
+ * The tenant's `awaiting_human_tag` (per-tenant, e.g. `esperando-agenda`) — the
+ * "a person owes this lead an answer" switch:
+ *   present → awaiting_human (bot still answers; automated nudges off)
+ *   absent  → back to active, which is what re-arms follow-ups
+ *
+ * The second one closes the loop on the booking-by-hand flow: the owner removing
+ * the tag *is* the "I've handled this" action, so it drives the state instead of
+ * the model guessing when the request stops being pending.
+ *
+ * Neither loops on the bot's own writes: both RPCs no-op when the conversation is
+ * already in the target state, and GHL fires this webhook for bot-written tags too.
  */
 
 import { resolveTenant } from '../core/tenant.js';
-import { logBotEvent, setBotOffByContact } from '../db/queries.js';
+import { logBotEvent, setAwaitingHumanByContact, setBotOffByContact } from '../db/queries.js';
 import { BOT_OFF_TAG } from '../ghl/tags.js';
 import type { GhlContactTagWebhook } from '../ghl/types.js';
 import { parseContactTagWebhook } from '../ghl/webhook.js';
@@ -50,5 +58,23 @@ export async function handleTagWebhook(
     console.log(`[tags] contact=${parsed.contactId} bot-off=${botOff} affected=${affected}`);
   }
 
-  return { status: 200, body: { ok: true, botOff, affected } };
+  // Per-tenant awaiting-human tag. Only for tenants that configured one; everyone
+  // else skips this entirely. Non-fatal: the bot-off switch above is the critical
+  // one, so a failure here must not turn the whole webhook into a 500 and make GHL
+  // retry a kill-switch that already applied.
+  let awaitingAffected = 0;
+  const awaitingTag = tenant.awaitingHumanTag?.trim();
+  if (awaitingTag) {
+    const awaiting = parsed.tags.includes(awaitingTag);
+    try {
+      awaitingAffected = await setAwaitingHumanByContact(parsed.contactId, awaiting);
+      if (awaitingAffected > 0) {
+        console.log(`[tags] contact=${parsed.contactId} ${awaitingTag}=${awaiting} affected=${awaitingAffected}`);
+      }
+    } catch (e) {
+      console.error('[tags] setAwaitingHumanByContact failed:', e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  return { status: 200, body: { ok: true, botOff, affected, awaitingAffected } };
 }

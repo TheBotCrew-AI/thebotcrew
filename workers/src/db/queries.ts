@@ -465,6 +465,28 @@ export async function setBotOffByContact(ghlContactId: string, off: boolean): Pr
 }
 
 /**
+ * Contact-scoped awaiting-human toggle, driven by the tenant's GHL tag.
+ *
+ * Mirrors `setBotOffByContact`: the tag is the operational source of truth, so the
+ * person clearing it — the real "I've handled this" action — is what returns the
+ * conversation to `active` and makes follow-ups available again. Returns how many
+ * conversations changed (0 when it was already in that state, so the bot adding the
+ * tag itself doesn't loop). Never overrides handed_off or opted_out: stronger signals.
+ */
+export async function setAwaitingHumanByContact(
+  ghlContactId: string,
+  awaiting: boolean,
+): Promise<number> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase.rpc('app_set_awaiting_human_by_contact', {
+    p_ghl_contact_id: ghlContactId,
+    p_awaiting: awaiting,
+  });
+  fail('setAwaitingHumanByContact', error);
+  return (data as number | null) ?? 0;
+}
+
+/**
  * Observability event (run outcome, suppression, …). Never throws — swallows its
  * own errors. AWAIT it in request handlers: on Cloudflare a detached promise is
  * killed once the response is sent (no waitUntil in the route), so fire-and-forget

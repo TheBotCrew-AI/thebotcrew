@@ -141,7 +141,8 @@ supabase/
                                # 0028 demo_persona, 0029 demo_started_at (demo clean-start history),
                                # 0030 drop_turn_reconciliation, 0031 conversation_contact_email (merge-recovery key),
                                # 0032 rls_close_data_api (RLS on the last 6 tables + views + RPC grants),
-                               # 0033 per_tenant_ai_key_and_llm_usage (ai_key_ref slug + llm_usage/model_pricing + cost view)
+                               # 0033 per_tenant_ai_key_and_llm_usage (ai_key_ref slug + llm_usage/model_pricing + cost view),
+                               # 0034 awaiting_human_tag, 0035 reactivation_rules (awaiting_human status + selective reactivation)
   clients.sql, seed-tenants.sql# seeds (run by `supabase db reset` per config.toml)
 sites/                         # client marketing sites: static HTML, no build step, no deps
   _template/                   # starting point for a new client
