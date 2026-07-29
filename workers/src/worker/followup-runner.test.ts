@@ -10,7 +10,7 @@ vi.mock('../roles/reactivation/angle-select.js', () => ({ parseAngleSelection: v
 const ghl = { sendMessage: vi.fn() };
 vi.mock('../ghl/client.js', () => ({ GhlClient: vi.fn(() => ghl) }));
 
-import { getAiApiKey } from '../core/env.js';
+import { getAiApiKey, resolveAiApiKey } from '../core/env.js';
 import * as q from '../db/queries.js';
 import { runPendingFollowUps } from './followup-runner.js';
 
@@ -40,6 +40,7 @@ const agent = { generate: vi.fn() } as unknown as Agent;
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(getAiApiKey).mockReturnValue('test-key');
+  vi.mocked(resolveAiApiKey).mockReturnValue({ apiKey: 'test-key', source: 'platform', fellBack: false });
   vi.mocked(q.loadDueFollowUps).mockResolvedValue([due()]);
   vi.mocked(q.loadTenantConfig).mockResolvedValue(tenant());
   vi.mocked(q.loadSentAngleIndexes).mockResolvedValue([]);

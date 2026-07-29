@@ -11,12 +11,15 @@
  */
 
 import type { Agent } from '@mastra/core/agent';
-import { getAiApiKey } from '../core/env.js';
+import { resolveAiApiKey } from '../core/env.js';
+import { usageFromAgentResult } from '../core/llm-usage.js';
 import { loadTenantConfig } from '../db/queries.js';
 import {
   cancelFollowUps,
   loadDueFollowUps,
   loadSentAngleIndexes,
+  logBotEvent,
+  logLlmUsage,
   logMessage,
   markDelivered,
   markFollowUpFailed,
@@ -89,12 +92,26 @@ async function processOne(
     channel: followUp.channel as Channel,
   };
 
+  // Same per-tenant key as a live turn: follow-ups are real spend and must be
+  // attributed to the same client, not to the platform key.
+  const aiKey = resolveAiApiKey(provider, tenant.config.aiKeyRef);
+  if (aiKey.fellBack) {
+    console.error(
+      `[ai-key] tenant=${tenant.tenantId} ai_key_ref="${tenant.config.aiKeyRef}" has no Worker secret — using the platform key`,
+    );
+    await logBotEvent(tenant.clientId, followUp.ghlConversationId, 'ai_key_fallback', {
+      keyRef: tenant.config.aiKeyRef,
+      provider,
+      stage: 'followup',
+    });
+  }
+
   const requestContext = buildAgentRequestContext({
     tenant,
     turn,
     provider,
     model,
-    llmApiKey: getAiApiKey(provider),
+    llmApiKey: aiKey.apiKey,
     reactivationCandidates: remaining.map((a) => a.text),
   });
 
@@ -105,6 +122,18 @@ async function processOne(
   let chosenAngleIndex: number | null = null;
   try {
     const result = await reactivationAgent.generate(messages, { requestContext, maxSteps: 3 });
+    const usage = usageFromAgentResult(result);
+    if (usage) {
+      void logLlmUsage({
+        clientId: tenant.clientId,
+        ghlConversationId: followUp.ghlConversationId,
+        callKind: REACTIVATION_ROLE,
+        provider,
+        model,
+        usage,
+        keySource: aiKey.source,
+      });
+    }
     const selection = parseAngleSelection(result.text, remaining.length);
     reply = selection.message;
     const picked = selection.angleChoice != null

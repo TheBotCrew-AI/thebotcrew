@@ -5,10 +5,17 @@
 SUPABASE_URL="http://127.0.0.1:54321"
 SUPABASE_SERVICE_ROLE_KEY="<local-service-role-key-from-`supabase start`>"
 
-# AI providers — set whichever you have. Default provider is OpenAI (gpt-4o-mini).
+# AI providers — set whichever you have. Default provider is OpenAI (gpt-5-mini).
 # Per-tenant overrides are stored in tenant_config.ai_provider / ai_model.
 OPENAI_API_KEY="sk-..."
 # ANTHROPIC_API_KEY="sk-ant-..."
+
+# Optional per-tenant keys, so a client's spend lands on its own key/project.
+# Name: <PROVIDER>_API_KEY__<SLUG>, where <SLUG> matches tenant_config.ai_key_ref
+# (uppercased, non-alphanumerics → `_`). The DB stores only the slug, never the key.
+# A ref with no matching secret does NOT silence the tenant: it falls back to the
+# platform key above and logs a `ai_key_fallback` bot_event. See docs/onboarding.md §6.
+# OPENAI_API_KEY__MADI="sk-..."
 
 # GoHighLevel — outbound transport + calendar (live, per-location OAuth).
 GHL_API_BASE="https://services.leadconnectorhq.com"

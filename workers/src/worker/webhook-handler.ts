@@ -13,7 +13,12 @@
  */
 
 import type { Agent } from '@mastra/core/agent';
-import { getAiApiKey } from '../core/env.js';
+import { resolveAiApiKey } from '../core/env.js';
+import {
+  usageFromAgentResult,
+  usageFromAnthropicResponse,
+  usageFromOpenAiResponse,
+} from '../core/llm-usage.js';
 import { channelEnabled, hasTriggerKeywords, inTestMode, matchesDemoOff, matchesDemoOn, messageMatchesTrigger, resolveTenant, roleEnabled } from '../core/tenant.js';
 import { buildAgentRequestContext } from '../core/runtime-context.js';
 import type { AiProvider, ConversationMessage, ConversationStatus, TenantContext, TurnContext } from '../core/types.js';
@@ -29,6 +34,7 @@ import {
   loadRecentMessages,
   logBotEvent,
   logError,
+  logLlmUsage,
   logMessage,
   markDelivered,
   reactivateConversation,
@@ -165,6 +171,39 @@ Responde SOLO con JSON: {"status":"active"} o {"status":"standby"} o {"status":"
 const VALID_STATUSES = new Set(['active', 'standby', 'opted_out', 'completed']);
 
 /**
+ * Everything an auxiliary (non-agent) model call needs: which key to use, and
+ * where to bill the tokens. These helpers hit the provider REST APIs directly
+ * rather than going through Mastra, so they'd otherwise be invisible spend —
+ * they run on every turn and add up.
+ */
+interface AuxLlmCall {
+  clientId: string;
+  ghlConversationId: string;
+  provider: AiProvider;
+  apiKey: string;
+  model: string;
+  /** 'platform' or the tenant's ai_key_ref — recorded on the usage row. */
+  keySource: string;
+}
+
+/** Record an auxiliary call's tokens. Never throws; usage must not break a turn. */
+function recordAuxUsage(llm: AuxLlmCall, callKind: string, body: unknown): void {
+  const usage = llm.provider === 'anthropic'
+    ? usageFromAnthropicResponse(body)
+    : usageFromOpenAiResponse(body);
+  if (!usage) return;
+  void logLlmUsage({
+    clientId: llm.clientId,
+    ghlConversationId: llm.ghlConversationId,
+    callKind,
+    provider: llm.provider,
+    model: llm.model,
+    usage,
+    keySource: llm.keySource,
+  });
+}
+
+/**
  * Classify whether the conversation reached a terminal state after this turn.
  * Only runs when the bot's reply has no question (optimization — most active
  * turns end with a question). Returns null if still active or on error.
@@ -172,38 +211,37 @@ const VALID_STATUSES = new Set(['active', 'standby', 'opted_out', 'completed']);
 async function classifyConversationOutcome(
   leadMessage: string,
   botReply: string,
-  provider: AiProvider,
-  apiKey: string,
-  modelId: string,
+  llm: AuxLlmCall,
 ): Promise<Exclude<ConversationStatus, 'active' | 'handed_off'> | null> {
   if (botReply.includes('?')) return null; // has a question → still active
 
   try {
     let raw: string;
 
-    if (provider === 'anthropic') {
+    if (llm.provider === 'anthropic') {
       const res = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: {
-          'x-api-key': apiKey,
+          'x-api-key': llm.apiKey,
           'anthropic-version': '2023-06-01',
           'content-type': 'application/json',
         },
         body: JSON.stringify({
-          model: modelId,
+          model: llm.model,
           max_tokens: 32,
           messages: [{ role: 'user', content: CLASSIFY_PROMPT(leadMessage, botReply) }],
         }),
       });
       if (!res.ok) throw new Error(`anthropic classify ${res.status}`);
       const data = await res.json() as { content: { text: string }[] };
+      recordAuxUsage(llm, 'classify', data);
       raw = data.content[0]?.text ?? '';
     } else {
       const res = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
-        headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
+        headers: { authorization: `Bearer ${llm.apiKey}`, 'content-type': 'application/json' },
         body: JSON.stringify({
-          model: modelId,
+          model: llm.model,
           max_tokens: 32,
           response_format: { type: 'json_object' },
           messages: [{ role: 'user', content: CLASSIFY_PROMPT(leadMessage, botReply) }],
@@ -211,6 +249,7 @@ async function classifyConversationOutcome(
       });
       if (!res.ok) throw new Error(`openai classify ${res.status}`);
       const data = await res.json() as { choices: { message: { content: string } }[] };
+      recordAuxUsage(llm, 'classify', data);
       raw = data.choices[0]?.message?.content ?? '';
     }
 
@@ -251,34 +290,33 @@ async function correctContactName(
   contactId: string,
   assistantQuestion: string,
   leadMessage: string,
-  provider: AiProvider,
-  apiKey: string,
-  modelId: string,
+  llm: AuxLlmCall,
 ): Promise<void> {
   try {
     const current = await ghl.getContact(contactId);
     const storedName = current?.name?.trim() ?? '';
 
     let raw: string;
-    if (provider === 'anthropic') {
+    if (llm.provider === 'anthropic') {
       const res = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
-        headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+        headers: { 'x-api-key': llm.apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
         body: JSON.stringify({
-          model: modelId,
+          model: llm.model,
           max_tokens: 32,
           messages: [{ role: 'user', content: EXTRACT_NAME_PROMPT(assistantQuestion, leadMessage, storedName) }],
         }),
       });
       if (!res.ok) throw new Error(`anthropic extract-name ${res.status}`);
       const data = await res.json() as { content: { text: string }[] };
+      recordAuxUsage(llm, 'extract-name', data);
       raw = data.content[0]?.text ?? '';
     } else {
       const res = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
-        headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
+        headers: { authorization: `Bearer ${llm.apiKey}`, 'content-type': 'application/json' },
         body: JSON.stringify({
-          model: modelId,
+          model: llm.model,
           max_tokens: 32,
           response_format: { type: 'json_object' },
           messages: [{ role: 'user', content: EXTRACT_NAME_PROMPT(assistantQuestion, leadMessage, storedName) }],
@@ -286,6 +324,7 @@ async function correctContactName(
       });
       if (!res.ok) throw new Error(`openai extract-name ${res.status}`);
       const data = await res.json() as { choices: { message: { content: string } }[] };
+      recordAuxUsage(llm, 'extract-name', data);
       raw = data.choices[0]?.message?.content ?? '';
     }
 
@@ -423,12 +462,34 @@ export async function runAgentTurn({
   };
   const provider = (tenant.config.provider ?? DEFAULT_PROVIDER) as AiProvider;
   const model = tenant.config.model ?? DEFAULT_MODEL;
+  // Per-tenant key when the tenant has one, so provider-side spend lands on that
+  // client's own key/project. Falls back to the platform key rather than going
+  // silent (see resolveAiApiKey) — but a fallback is logged, never swallowed,
+  // because from here on every usage row would be misattributed.
+  const aiKey = resolveAiApiKey(provider, tenant.config.aiKeyRef);
+  if (aiKey.fellBack) {
+    console.error(
+      `[ai-key] tenant=${tenant.tenantId} ai_key_ref="${tenant.config.aiKeyRef}" has no Worker secret — using the platform key`,
+    );
+    await logBotEvent(tenant.clientId, parsed.conversationId, 'ai_key_fallback', {
+      keyRef: tenant.config.aiKeyRef,
+      provider,
+    });
+  }
+  const aux: AuxLlmCall = {
+    clientId: tenant.clientId,
+    ghlConversationId: parsed.conversationId,
+    provider,
+    apiKey: aiKey.apiKey,
+    model,
+    keySource: aiKey.source,
+  };
   const requestContext = buildAgentRequestContext({
     tenant,
     turn,
     provider,
     model,
-    llmApiKey: getAiApiKey(provider),
+    llmApiKey: aiKey.apiKey,
   });
 
   console.log(`[agent] generating conv=${parsed.conversationId} model=${model} historyLen=${messages.length}`);
@@ -451,6 +512,21 @@ export async function runAgentTurn({
     return { status: 500, body: { error: 'agent_generate_failed', conversationId } };
   }
   console.log(`[agent] reply conv=${parsed.conversationId} replyLen=${result.text?.length ?? 0}`);
+  // The agent turn is the bulk of the spend — record it before any of the
+  // early-return paths below (human takeover, etc.) can skip it. The tokens were
+  // burned whether or not we end up sending the reply.
+  const turnUsage = usageFromAgentResult(result);
+  if (turnUsage) {
+    void logLlmUsage({
+      clientId: tenant.clientId,
+      ghlConversationId: parsed.conversationId,
+      callKind: FRONT_DESK_ROLE,
+      provider,
+      model,
+      usage: turnUsage,
+      keySource: aiKey.source,
+    });
+  }
   // result.text concatenates text from every step when the agent makes multiple tool calls
   // (the model generates narration before each call). Use only the last step's text.
   const steps = (result as { steps?: Array<{ text?: string }> }).steps;
@@ -479,7 +555,7 @@ export async function runAgentTurn({
     const priorBotMessages = history.filter((m) => m.senderType === 'bot').length;
     if (priorBotMessages >= 1 && priorBotMessages <= 2) {
       const lastBotMessage = history.slice().reverse().find((m) => m.senderType === 'bot')?.content ?? '';
-      await correctContactName(ghl, parsed.contactId, lastBotMessage, parsed.text, provider, getAiApiKey(provider), model);
+      await correctContactName(ghl, parsed.contactId, lastBotMessage, parsed.text, aux);
     }
   }
 
@@ -487,7 +563,7 @@ export async function runAgentTurn({
   // This is the reliable fallback for when the agent doesn't call updateConversationStatus itself.
   const hasQuestion = reply.includes('?');
   console.log(`[classify] conv=${parsed.conversationId} hasQuestion=${hasQuestion}`);
-  const outcome = await classifyConversationOutcome(parsed.text, reply, provider, getAiApiKey(provider), model);
+  const outcome = await classifyConversationOutcome(parsed.text, reply, aux);
   console.log(`[classify] outcome=${outcome ?? 'null (active or error)'}`);
   if (outcome) {
     try {

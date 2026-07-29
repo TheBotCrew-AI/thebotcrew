@@ -41,6 +41,8 @@ export interface TenantConfigRow {
   demo_off_keywords: string[] | null;
   /** Prompt overrides for the demo persona (same shape as prompt_overrides). */
   demo_prompt_overrides: unknown;
+  /** Slug of the Worker secret with this tenant's AI key. NULL = platform key. */
+  ai_key_ref: string | null;
 }
 
 /** One row returned by app_load_due_follow_ups. */
@@ -157,6 +159,8 @@ export type BotEventType =
   | 'status_changed'
   // Turn handed to the per-conversation Durable Object (Phase 1 durable-turn path)
   | 'turn_scheduled'
+  // Tenant has ai_key_ref but its Worker secret is missing → platform key used
+  | 'ai_key_fallback'
   // Conversation switched into / out of the demo persona ({to} in metadata)
   | 'demo_toggled';
 

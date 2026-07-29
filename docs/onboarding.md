@@ -222,6 +222,65 @@ the keyword.
 
 ---
 
+## 6. Optional: give the tenant its own AI key
+
+Only when you want provider-side spend attribution (and a spend cap) for this client.
+Skip it and the tenant runs on the platform key — token accounting in `llm_usage`
+still works either way, tagged `key_source='platform'`.
+
+**This is the one onboarding step that is NOT just a DB row**, because key material
+never goes in the database.
+
+1. In the OpenAI dashboard create a **project** for the client (a project, not just a
+   loose key — that's what gives you cost breakdown *and* a per-project spend limit),
+   and issue a key inside it.
+2. Store it as a Worker secret named `OPENAI_API_KEY__<SLUG>` (or
+   `ANTHROPIC_API_KEY__<SLUG>`). The slug is uppercase A–Z0–9, other characters become `_`:
+
+   ```bash
+   pnpm --filter @thebotcrew/workers exec wrangler secret put OPENAI_API_KEY__MADI
+   ```
+
+3. Point the tenant at it — the DB stores the **slug only**, never the key:
+
+   ```sql
+   update tenant_config set ai_key_ref = 'MADI' where tenant_id = '<tenant uuid>';
+   ```
+
+**Order matters:** set the secret *before* the `ai_key_ref`. A ref with no matching
+secret does not break the tenant — `resolveAiApiKey` falls back to the platform key so
+the bot keeps answering — but every turn in between is billed to the platform key and
+logs a `bot_events` row:
+
+```sql
+select created_at, metadata from bot_events
+where event_type = 'ai_key_fallback' order by created_at desc limit 20;
+```
+
+Verify the key is actually being used (should read `MADI`, not `platform`):
+
+```sql
+select key_source, count(*), sum(input_tokens + output_tokens) as tokens
+from llm_usage u join conversations c on c.id = u.conversation_id
+where u.client_id = '<client uuid>' and u.created_at > now() - interval '1 day'
+group by key_source;
+```
+
+### Costs per client
+
+`llm_usage` stores tokens; USD needs prices, and `model_pricing` ships **empty on
+purpose** so nothing invents a number. Fill it from the provider's pricing page:
+
+```sql
+insert into model_pricing (model, input_usd_per_1m, output_usd_per_1m, cached_input_usd_per_1m)
+values ('gpt-5-mini', <input>, <output>, <cached>);
+```
+
+Then read `llm_cost_monthly` (per client / month / model / call kind). Rows for a model
+with no price row show `cost_usd = NULL` — that's a missing price, not a free call.
+
+---
+
 ## Live tenants
 
 | Client | `ghl_location_id` | tenant_id | Channels |

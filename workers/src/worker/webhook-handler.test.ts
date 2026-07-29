@@ -15,7 +15,7 @@ vi.mock('../core/env.js');
 vi.mock('../db/queries.js');
 
 import * as q from '../db/queries.js';
-import { getAiApiKey } from '../core/env.js';
+import { getAiApiKey, resolveAiApiKey } from '../core/env.js';
 import { handleInboundWebhook, splitIntoMessages } from './webhook-handler.js';
 
 function tenant(overrides: Partial<TenantContext> = {}): TenantContext {
@@ -52,6 +52,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.unstubAllGlobals();
   vi.mocked(getAiApiKey).mockReturnValue('test-key');
+  vi.mocked(resolveAiApiKey).mockReturnValue({ apiKey: 'test-key', source: 'platform', fellBack: false });
   vi.mocked(q.loadTenantConfig).mockResolvedValue(tenant());
   vi.mocked(q.logMessage).mockResolvedValue({ conversationId: 'cv-uuid', messageId: 'msg-uuid' });
   vi.mocked(q.isBotSuppressed).mockResolvedValue(false);
@@ -117,6 +118,81 @@ describe('handleInboundWebhook — happy path', () => {
     expect(q.markDelivered).toHaveBeenCalledWith('msg-uuid');
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ replied: true });
+  });
+});
+
+describe('handleInboundWebhook — per-tenant AI key & token accounting', () => {
+  /** Agent result carrying usage, as Mastra returns it. */
+  function agentWithUsage(text = '¿En qué te puedo ayudar?', usage = { inputTokens: 1500, outputTokens: 40 }): Agent {
+    return { generate: vi.fn().mockResolvedValue({ text, steps: [{ text }], usage }) } as unknown as Agent;
+  }
+
+  it("resolves the key using the tenant's ai_key_ref", async () => {
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(
+      tenant({ config: { ...tenant().config, aiKeyRef: 'MADI' } }),
+    );
+    vi.mocked(resolveAiApiKey).mockReturnValue({ apiKey: 'madi-key', source: 'MADI', fellBack: false });
+
+    await handleInboundWebhook(inbound, agentWithUsage());
+
+    expect(resolveAiApiKey).toHaveBeenCalledWith('openai', 'MADI');
+  });
+
+  it("bills the turn's tokens to the client, tagged with the key it ran on", async () => {
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(
+      tenant({ config: { ...tenant().config, aiKeyRef: 'MADI' } }),
+    );
+    vi.mocked(resolveAiApiKey).mockReturnValue({ apiKey: 'madi-key', source: 'MADI', fellBack: false });
+
+    await handleInboundWebhook(inbound, agentWithUsage());
+
+    expect(q.logLlmUsage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clientId: 'client1',
+        ghlConversationId: 'conv1',
+        callKind: 'front-desk',
+        model: 'gpt-5-mini',
+        keySource: 'MADI',
+        usage: { inputTokens: 1500, outputTokens: 40, cachedInputTokens: 0 },
+      }),
+    );
+  });
+
+  it('a missing tenant secret still answers the lead, but logs the fallback', async () => {
+    // The deliberate trade-off: misattributed spend beats a silent tenant. The
+    // event is what keeps the degradation from being invisible.
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(
+      tenant({ config: { ...tenant().config, aiKeyRef: 'MADI' } }),
+    );
+    vi.mocked(resolveAiApiKey).mockReturnValue({ apiKey: 'platform-key', source: 'platform', fellBack: true });
+
+    const res = await handleInboundWebhook(inbound, agentWithUsage());
+
+    expect(res.body).toMatchObject({ replied: true });
+    expect(ghl.sendMessage).toHaveBeenCalled();
+    expect(q.logBotEvent).toHaveBeenCalledWith(
+      'client1',
+      'conv1',
+      'ai_key_fallback',
+      expect.objectContaining({ keyRef: 'MADI', provider: 'openai' }),
+    );
+    // and the spend is honestly recorded against the platform key, not 'MADI'
+    expect(q.logLlmUsage).toHaveBeenCalledWith(expect.objectContaining({ keySource: 'platform' }));
+  });
+
+  it('no usage in the result → no usage row (never invents numbers)', async () => {
+    await handleInboundWebhook(inbound, agentReplying());
+    expect(q.logLlmUsage).not.toHaveBeenCalled();
+  });
+
+  it('records the turn even when a human takes over mid-generation (tokens were burned)', async () => {
+    vi.mocked(q.isHumanActive).mockResolvedValue(true);
+
+    const res = await handleInboundWebhook(inbound, agentWithUsage());
+
+    expect(res.body).toMatchObject({ ignored: 'suppressed during generation' });
+    expect(ghl.sendMessage).not.toHaveBeenCalled();
+    expect(q.logLlmUsage).toHaveBeenCalledWith(expect.objectContaining({ callKind: 'front-desk' }));
   });
 });
 

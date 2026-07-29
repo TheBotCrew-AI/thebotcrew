@@ -49,6 +49,9 @@ export interface RawTenantConfig {
   quietHours?: QuietHours | null;
   /** Max days ahead the bot may look for / offer appointment slots; null = no cap. */
   bookingHorizonDays?: number | null;
+  /** Slug of the Worker secret holding this tenant's own provider key
+   *  (`'MADI'` → `OPENAI_API_KEY__MADI`). Never the key itself. null = platform key. */
+  aiKeyRef?: string | null;
 }
 
 /**

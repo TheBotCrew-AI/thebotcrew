@@ -120,7 +120,7 @@ The agent runtime is a pnpm workspace package in `workers/` (the monorepo also h
 workers/                       # Mastra + Cloudflare Worker package (@thebotcrew/workers)
   src/
     mastra/index.ts            # Mastra instance: agents + GHL webhook route + CloudflareDeployer
-    core/                      # role interface + registry, tenant resolver, request-context, env, types
+    core/                      # role interface + registry, tenant resolver, request-context, env (incl. per-tenant AI key resolution), llm-usage (token normalization), types
     roles/
       front-desk/              # config (zod), prompt (es template), agent, tools/, evals/
       reactivation/            # text-only follow-up/reactivation agent (no tools)
@@ -140,7 +140,8 @@ supabase/
                                # 0025 booking_horizon, 0026 status_changed_event, 0027 turn_scheduled_event (DO path),
                                # 0028 demo_persona, 0029 demo_started_at (demo clean-start history),
                                # 0030 drop_turn_reconciliation, 0031 conversation_contact_email (merge-recovery key),
-                               # 0032 rls_close_data_api (RLS on the last 6 tables + views + RPC grants)
+                               # 0032 rls_close_data_api (RLS on the last 6 tables + views + RPC grants),
+                               # 0033 per_tenant_ai_key_and_llm_usage (ai_key_ref slug + llm_usage/model_pricing + cost view)
   clients.sql, seed-tenants.sql# seeds (run by `supabase db reset` per config.toml)
 ```
 
@@ -318,8 +319,31 @@ for the retry cron.
   contradicted its own availability slot list; see `bot_events.availability_checked`).
   Per-tenant override stored in `tenant_config.ai_provider` + `tenant_config.ai_model`.
 - Both `@ai-sdk/openai` and `@ai-sdk/anthropic` are installed. The agent creates the right
-  provider at request time via `getAiApiKey(provider)` reading `OPENAI_API_KEY` or
-  `ANTHROPIC_API_KEY` from Worker secrets. Keys never touch the DB.
+  provider at request time from the key in the request context.
+- **Per-tenant API keys + token accounting** (migration 0033). Goal: know what each client
+  costs. Two halves:
+  - **Key per tenant.** `tenant_config.ai_key_ref` holds a *slug*, never key material —
+    `'MADI'` → Worker secret `OPENAI_API_KEY__MADI` (`aiKeySecretName` normalizes the slug
+    into a legal env-var name). `resolveAiApiKey(provider, keyRef)` in `core/env.ts` returns
+    `{apiKey, source, fellBack}`; NULL ref = platform key. **Keys still never touch the DB.**
+    Recommended provider-side setup: one OpenAI **project** per client (gives cost breakdown
+    *and* a per-project spend cap), each issuing its own key.
+    - **Missing secret → falls back to the platform key and logs `ai_key_fallback`.** Chosen
+      deliberately: a tenant going silent over a misconfigured secret is worse than a month of
+      misattributed spend. The fallback is loud, never silent — and the usage row records
+      `key_source='platform'`, so reports never claim spend landed on the client's key.
+    - Onboarding a tenant with its own key now needs a `wrangler secret put` in addition to
+      the DB row — the one case that isn't purely a DB change. See `docs/onboarding.md`.
+  - **Token accounting.** `llm_usage` gets one row per model call (`app_log_llm_usage`), with
+    input/output/cached tokens, `call_kind`, and `key_source`. All four calls a turn can make
+    are covered: the agent, the status classifier, the name extractor, and the reactivation
+    follow-up — the last three hit the provider REST APIs directly and were invisible spend.
+    `core/llm-usage.ts` normalizes the three usage shapes (AI SDK, OpenAI REST, Anthropic
+    REST; Anthropic reports cache reads *outside* `input_tokens`, so they're folded in).
+    Writes are fire-and-forget: a lost usage row is a reporting gap, a blocked turn is an outage.
+  - **Cost needs prices.** `model_pricing` (USD per 1M tokens, with `effective_from`) ships
+    **empty on purpose** — fill it from the provider's pricing page. The `llm_cost_monthly`
+    view reports `cost_usd = NULL` for any model with no price row rather than inventing one.
 
 ## Planned upgrades (future work)
 

@@ -9,6 +9,7 @@
 import { getSupabase } from './client.js';
 import type { AiProvider, Channel, ConversationMessage, ConversationStatus, QuietHours, TenantContext } from '../core/types.js';
 import { clampToActiveHours, DEFAULT_QUIET_HOURS } from '../core/active-hours.js';
+import type { TokenUsage } from '../core/llm-usage.js';
 import { isAppointmentActive } from './appointment-active.js';
 import type { GhlTokenResponse } from '../ghl/oauth.js';
 import type {
@@ -42,7 +43,7 @@ export async function loadTenantConfig(ghlLocationId: string): Promise<TenantCon
   const { data, error } = await supabase
     .from('tenant_config')
     .select(
-      'business_name, timezone, tone, services, hours, calendars, faq, enabled_roles, prompt_overrides, ai_provider, ai_model, follow_up_tiers, follow_up_cadence, follow_up_angles, quiet_hours, booking_horizon_days, enabled_channels, test_contact_ids, trigger_keywords, demo_on_keywords, demo_off_keywords, demo_prompt_overrides,' +
+      'business_name, timezone, tone, services, hours, calendars, faq, enabled_roles, prompt_overrides, ai_provider, ai_model, ai_key_ref, follow_up_tiers, follow_up_cadence, follow_up_angles, quiet_hours, booking_horizon_days, enabled_channels, test_contact_ids, trigger_keywords, demo_on_keywords, demo_off_keywords, demo_prompt_overrides,' +
         'tenants!inner(id, client_id, ghl_location_id, is_active)',
     )
     .eq('tenants.ghl_location_id', ghlLocationId)
@@ -90,6 +91,7 @@ export async function loadTenantConfig(ghlLocationId: string): Promise<TenantCon
         typeof row.booking_horizon_days === 'number' && row.booking_horizon_days > 0
           ? row.booking_horizon_days
           : null,
+      aiKeyRef: row.ai_key_ref?.trim() ? row.ai_key_ref.trim() : null,
     },
   };
 }
@@ -378,6 +380,42 @@ export async function logEvent(params: LogEventParams): Promise<{ eventId: strin
   const { data, error } = await supabase.rpc('app_log_event', params);
   fail('logEvent', error);
   return { eventId: data as string };
+}
+
+/**
+ * Fire-and-forget token accounting — one row per model call, never throws.
+ *
+ * This is what answers "how much does each client cost us": the provider
+ * dashboard only gives coarse daily totals per project, while these rows give
+ * cost per conversation, per role and per lead. Failures are swallowed on
+ * purpose — losing a usage row is a reporting gap, blocking a turn is an outage.
+ */
+export async function logLlmUsage(params: {
+  clientId: string;
+  ghlConversationId: string | null;
+  callKind: string;
+  provider: AiProvider;
+  model: string;
+  usage: TokenUsage;
+  keySource: string;
+}): Promise<void> {
+  try {
+    const supabase = getSupabase();
+    const { error } = await supabase.rpc('app_log_llm_usage', {
+      p_client_id: params.clientId,
+      p_ghl_conversation_id: params.ghlConversationId,
+      p_call_kind: params.callKind,
+      p_provider: params.provider,
+      p_model: params.model,
+      p_input_tokens: params.usage.inputTokens,
+      p_output_tokens: params.usage.outputTokens,
+      p_cached_input_tokens: params.usage.cachedInputTokens,
+      p_key_source: params.keySource,
+    });
+    fail('logLlmUsage', error);
+  } catch (err) {
+    console.error('[logLlmUsage] failed:', err instanceof Error ? err.message : String(err));
+  }
 }
 
 /**
