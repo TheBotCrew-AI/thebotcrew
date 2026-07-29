@@ -266,18 +266,67 @@ where u.client_id = '<client uuid>' and u.created_at > now() - interval '1 day'
 group by key_source;
 ```
 
-### Costs per client
+---
 
-`llm_usage` stores tokens; USD needs prices, and `model_pricing` ships **empty on
-purpose** so nothing invents a number. Fill it from the provider's pricing page:
+## Costs per client — the pricing table
+
+`llm_usage` records **tokens**, which we measure. Turning tokens into USD needs
+**prices**, which we don't — so `model_pricing` ships empty and is filled by hand from
+the provider's pricing page. A model with no price row reports `cost_usd = NULL` in
+`llm_cost_monthly`: that is a *missing price*, never a free call. Nothing in this
+system guesses a price.
+
+### Adding a model
+
+Prices are **USD per 1 million tokens**, exactly as the provider lists them.
 
 ```sql
-insert into model_pricing (model, input_usd_per_1m, output_usd_per_1m, cached_input_usd_per_1m)
-values ('gpt-5-mini', <input>, <output>, <cached>);
+insert into model_pricing (model, effective_from, input_usd_per_1m, output_usd_per_1m, cached_input_usd_per_1m)
+values ('<model id>', '<ISO timestamp>', <input>, <output>, <cached>);
 ```
 
-Then read `llm_cost_monthly` (per client / month / model / call kind). Rows for a model
-with no price row show `cost_usd = NULL` — that's a missing price, not a free call.
+- `model` must match `tenant_config.ai_model` (and `DEFAULT_MODEL`) **character for
+  character** — it's the join key. A typo silently yields NULL costs forever.
+- `effective_from` should be **backdated** past the oldest usage you want costed.
+  Rows older than the earliest price stay NULL.
+- `cached_input_usd_per_1m` may be NULL; then cached tokens bill at the full input rate.
+
+Currently loaded:
+
+| model | effective_from | input | cached input | output |
+| --- | --- | ---: | ---: | ---: |
+| `gpt-5-mini` | 2026-01-01 | $0.25 | $0.025 | $2.00 |
+
+### When a price changes — insert, don't update
+
+**Never edit an existing row.** Insert a new one with a new `effective_from`:
+
+```sql
+insert into model_pricing (model, effective_from, input_usd_per_1m, output_usd_per_1m, cached_input_usd_per_1m)
+values ('gpt-5-mini', '2026-09-01T00:00:00Z', 0.30, 2.50, 0.030);
+```
+
+The view prices each usage row at the rate in force **when the tokens were burned**, so
+last month's reports don't silently change. `update` rewrites history — the one thing
+that makes a cost report untrustworthy. (The primary key is `(model, effective_from)`,
+so re-running the same insert is a conflict, not a duplicate.)
+
+### Reading it
+
+```sql
+-- What each client cost this month
+select client_name, model, call_kind, calls, input_tokens, output_tokens, cost_usd
+from llm_cost_monthly
+where month = date_trunc('month', now())
+order by cost_usd desc nulls last;
+```
+
+`call_kind` splits the spend by what caused it: `front-desk` (the agent turn — the bulk),
+`reactivation` (follow-ups), `classify` and `extract-name` (the cheap per-turn helpers).
+If `classify` ever rivals `front-desk`, that's the signal to stop running it every turn.
+
+To go per-conversation (cost per lead, cost per booked appointment), join `llm_usage`
+straight to `conversations` — the view aggregates by month, `llm_usage` doesn't.
 
 ---
 

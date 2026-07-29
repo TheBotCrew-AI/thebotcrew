@@ -143,7 +143,18 @@ supabase/
                                # 0032 rls_close_data_api (RLS on the last 6 tables + views + RPC grants),
                                # 0033 per_tenant_ai_key_and_llm_usage (ai_key_ref slug + llm_usage/model_pricing + cost view)
   clients.sql, seed-tenants.sql# seeds (run by `supabase db reset` per config.toml)
+sites/                         # client marketing sites: static HTML, no build step, no deps
+  _template/                   # starting point for a new client
+  madi-skincare/               # first client — reference for how far to push identity, not a mold
 ```
+
+**Migration numbering:** files are `NNNN[a-z]_name.sql` and the CLI keys the ledger on the
+`NNNN[a-z]` prefix — **two files sharing a prefix break `supabase start` / `db reset`
+outright** (duplicate key on `schema_migrations_pkey`). That was the state of the repo until
+2026-07-28, which is why local dry-runs had been impossible and every migration since 0006 was
+validated straight against prod. Use a letter suffix (`0013a`, `0014a–d`) when inserting
+between numbers. Renaming is safe for prod: prod's ledger uses timestamp versions
+(`20260613171711`), not these filenames.
 
 Two DB layers: **config read-layer** (`tenants`, `tenant_config`) + **conversation/stats
 write-layer** (`conversations`, `messages`, `appointments`, `bot_events`, views). Writes
@@ -341,9 +352,14 @@ for the retry cron.
     `core/llm-usage.ts` normalizes the three usage shapes (AI SDK, OpenAI REST, Anthropic
     REST; Anthropic reports cache reads *outside* `input_tokens`, so they're folded in).
     Writes are fire-and-forget: a lost usage row is a reporting gap, a blocked turn is an outage.
-  - **Cost needs prices.** `model_pricing` (USD per 1M tokens, with `effective_from`) ships
-    **empty on purpose** — fill it from the provider's pricing page. The `llm_cost_monthly`
-    view reports `cost_usd = NULL` for any model with no price row rather than inventing one.
+  - **Cost needs prices.** `model_pricing` (USD per 1M tokens, with `effective_from`) is
+    filled **by hand** from the provider's pricing page — nothing here guesses a price, and
+    `llm_cost_monthly` reports `cost_usd = NULL` for a model with no price row rather than
+    inventing one. Loaded so far: `gpt-5-mini` @ $0.25 / $0.025 cached / $2.00 output.
+    **A price change is a new row with a new `effective_from`, never an `update`** — the view
+    prices each call at the rate in force when the tokens were burned, so an update would
+    silently rewrite last month's reports. How to add/read prices:
+    [`docs/onboarding.md` § Costs per client](docs/onboarding.md).
 
 ## Planned upgrades (future work)
 
