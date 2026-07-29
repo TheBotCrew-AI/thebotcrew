@@ -336,5 +336,5 @@ straight to `conversations` — the view aggregates by month, `llm_usage` doesn'
 | --- | --- | --- | --- |
 | The Bot Crew | `wRMDr6h3anwYpM64XAUe` | `04385692-5c0d-436e-af77-4b1aa3fcc223` | whatsapp, instagram, facebook |
 | happy Naty Nat | `X8zdJcQaVckHuF3W4grr` | `ceb2b145-e644-432e-b48d-3f92ba4a49bf` | facebook (test mode) |
-| MADI Skin Care | `lIpNJhsKoGK8fPuDHeIn` | `19cf934b-2e36-4f4b-aa77-d3287e8d38fb` | test mode (Leo only) — calendar `fW2lw3VcAoa9Ns6jwaII` |
+| MADI Skin Care | `lIpNJhsKoGK8fPuDHeIn` | `19cf934b-2e36-4f4b-aa77-d3287e8d38fb` | test mode (Leo only) — **no bot booking** (`bookingEnabled: false`, `calendars` cleared; see business-logic § 5a). Own AI key (`ai_key_ref='MADI'`). Original calendar id, if booking is ever restored: `fW2lw3VcAoa9Ns6jwaII` |
 | Cliente Demo | `loc_demo_0001` | `73e8d3c3-0fdb-44e4-9e1a-3995c5d73bf4` | local dev seed |

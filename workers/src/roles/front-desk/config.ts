@@ -44,6 +44,18 @@ export const promptOverridesSchema = z.object({
    * OpenAI models routinely skip the side-effect-only updateContactName tool.
    */
   confirmContactName: z.boolean().default(false),
+  /**
+   * Whether this tenant books through the bot at all. Default true = current behavior.
+   *
+   * Set false for tenants with no calendar the bot can trust — e.g. MADI, who rents a
+   * shared laser booth on a third party's calendar. It strips every booking instruction
+   * from the prompt (the availability sequence, the strict-availability rules, the
+   * reschedule/cancel rules) instead of leaving them to contradict a tenant override that
+   * says "don't book". Those sections are emphatic ("Cuando el lead pida cita, llama
+   * getAvailability") and render AFTER the tenant's own notes, so config alone can't
+   * reliably override them — which is how a bot ends up promising a slot it can't hold.
+   */
+  bookingEnabled: z.boolean().default(true),
 });
 
 export const frontDeskConfigSchema = z.object({
@@ -55,7 +67,7 @@ export const frontDeskConfigSchema = z.object({
   /** Map of service name -> GHL calendar id. */
   calendars: z.record(z.string(), z.string()).default({}),
   faq: faqSchema.default([]),
-  promptOverrides: promptOverridesSchema.default({ toolInstructions: {}, confirmContactName: false }),
+  promptOverrides: promptOverridesSchema.default({ toolInstructions: {}, confirmContactName: false, bookingEnabled: true }),
   /** Persona overrides used when the conversation is in demo mode (active_role='demo'). null = none. */
   demoPromptOverrides: promptOverridesSchema.nullable().default(null),
   /** Max days ahead the bot may look for / offer slots. null = no cap. Enforced in getAvailability. */

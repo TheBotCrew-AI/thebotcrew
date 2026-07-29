@@ -68,6 +68,58 @@ describe('buildFrontDeskInstructions', () => {
     expect(out).not.toContain('# Tu objetivo');
   });
 
+  describe('bookingEnabled = false (tenant books by hand)', () => {
+    const noBooking = () => cfg({ promptOverrides: { bookingEnabled: false } });
+
+    it('strips every booking section from the base prompt', () => {
+      const out = buildFrontDeskInstructions(noBooking(), NOW);
+      expect(out).not.toContain('# Secuencia para agendar');
+      expect(out).not.toContain('# Disponibilidad (regla estricta)');
+      expect(out).not.toContain('# Reagendar o cancelar una cita');
+      expect(out).not.toContain('# Después de agendar');
+    });
+
+    it('replaces them with the hand-off-to-a-human rules', () => {
+      const out = buildFrontDeskInstructions(noBooking(), NOW);
+      expect(out).toContain('# Las citas las agenda una persona');
+      expect(out).toContain('updateConversationStatus(handed_off)');
+      expect(out).toContain('NUNCA llames getAvailability');
+    });
+
+    it('leaves no instruction to call getAvailability anywhere', () => {
+      // The whole point of the flag: a leftover "llama getAvailability" would contradict
+      // the tenant's own rules and is exactly how the bot ends up inventing a slot.
+      const out = buildFrontDeskInstructions(noBooking(), NOW);
+      expect(out).not.toMatch(/llama getAvailability/);
+    });
+
+    it('drops the booking-horizon line, which only means anything when booking', () => {
+      const out = buildFrontDeskInstructions(cfg({ bookingHorizonDays: 7, promptOverrides: { bookingEnabled: false } }), NOW);
+      expect(out).not.toContain('Solo puedes agendar dentro de los próximos 7 días');
+    });
+
+    it('stops asking for a WhatsApp number it has no way to store', () => {
+      // The number is only ever persisted as a bookAppointment argument.
+      const out = buildFrontDeskInstructions(noBooking(), NOW, undefined);
+      expect(out).not.toContain('No tenemos número de WhatsApp');
+      expect(out).not.toContain('# Número para confirmación y recordatorios');
+    });
+
+    it('suppresses the existing-appointment section', () => {
+      const out = buildFrontDeskInstructions(noBooking(), NOW, undefined, undefined, undefined, {
+        startTime: '2026-07-03T17:00:00-06:00',
+        service: 'Corte',
+      });
+      expect(out).not.toContain('# Este contacto YA tiene una cita agendada');
+    });
+
+    it('defaults to booking ENABLED when the flag is absent (no tenant is affected)', () => {
+      const out = buildFrontDeskInstructions(cfg(), NOW);
+      expect(out).toContain('# Secuencia para agendar');
+      expect(out).not.toContain('# Las citas las agenda una persona');
+    });
+  });
+
   it('demo mode uses the demo persona overrides', () => {
     const out = buildFrontDeskInstructions(
       cfg({ demoPromptOverrides: { identity: 'SOY SOFÍA DE LA CLÍNICA', toolInstructions: {} } }),

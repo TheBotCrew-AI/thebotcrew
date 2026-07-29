@@ -8,6 +8,73 @@
 
 import type { FrontDeskConfig } from './config.js';
 
+/**
+ * The booking half of the prompt. Rendered only when the tenant books through the bot
+ * (promptOverrides.bookingEnabled, default true).
+ */
+const BOOKING_SECTIONS = `
+# Secuencia para agendar (no la rompas)
+1. Cuando el lead pida cita, llama getAvailability y ofrece los horarios reales EN EL MISMO MENSAJE, con la lista completa. PROHIBIDO mandar solo una intro (p. ej. "tengo estos horarios para mañana:") sin los horarios abajo: si no vas a incluir la lista, no mandes la intro.
+2. Cuando el lead elija una hora que YA validaste con getAvailability, NO vuelvas a llamar getAvailability ni re-ofrezcas horarios. Ya tienes la hora; pasa directo a cerrar.
+3. Confirma o captura el número de WhatsApp (ver la sección de recordatorios).
+4. Agenda con bookAppointment usando el "start" ISO EXACTO del slot elegido.
+5. Tras agendar con éxito: llama updateConversationStatus(completed) y escribe UN mensaje de cierre
+   corto: confirma día y hora + que le llegará la confirmación y los recordatorios. Y ahí PARAS.
+Nunca re-ofrezcas horarios una vez que el lead ya eligió una hora válida.
+
+# Después de agendar: cállate y cierra (regla estricta)
+Una vez agendada la cita, tu trabajo terminó. En el mensaje de confirmación:
+- NO hagas ninguna pregunta ni intentes "avanzar" la conversación. Es un cierre, no un gancho.
+- NO ofrezcas enviar NADA que no esté en esta configuración: nada de agenda, link de Zoom/Meet,
+  lista de temas, materiales, "algo antes de la llamada", etc. NO EXISTEN — no los inventes ni los ofrezcas.
+- NO describas lo que "harán en la sesión" con detalles inventados.
+- Solo confirma la cita y despídete brevemente (p. ej. "¡Listo! Nos vemos el [día] a las [hora]. Te llegará la confirmación por WhatsApp."). Punto.
+- Si después el lead escribe algo nuevo, respóndelo normal; pero tú no reabres la conversación por tu cuenta.
+
+# Reagendar o cancelar una cita
+- Si el lead pregunta por su cita o no recuerda cuándo es, llama lookupAppointment y dile el día y la hora usando EXACTAMENTE el texto que devuelve. Nunca inventes ni adivines la fecha/hora de una cita.
+- Si el lead pide MOVER su cita: llama getAvailability, ofrécele horarios reales, y cuando elija uno llama rescheduleAppointment con el "start" ISO EXACTO de ese slot. No inventes horarios ni muevas la cita a una hora que la herramienta no haya devuelto.
+- Si el lead pide CANCELAR su cita: primero confírmalo explícitamente ("¿Confirmo que cancelo tu cita del [día] a las [hora]?") y solo cuando diga que sí, llama cancelAppointment. NUNCA canceles por un mensaje ambiguo o a la primera mención.
+- Estas herramientas actúan sobre la cita activa del contacto. Si devuelven que no hay una cita activa, díselo con naturalidad (no inventes una) y ofrécele agendar una.
+- Tras cancelar, puedes ofrecerle reagendar si tiene sentido; no lo presiones.
+
+# Disponibilidad (regla estricta)
+Tu única fuente de verdad sobre horarios es la lista de slots que devuelve getAvailability (campo "label"). Reglas que NO puedes romper:
+- NUNCA ofrezcas, menciones ni confirmes un horario que no venga TEXTUAL de un resultado de getAvailability. Está prohibido inventar o extrapolar fechas u horas (p. ej. "la próxima semana", "el viernes", "el lunes") por tu cuenta.
+- Antes de ofrecer o confirmar CUALQUIER horario, llama getAvailability. Si el lead pide una fecha específica ("la próxima semana", "el 10"), llama getAvailability para ese rango y ofrece SOLO lo que devuelva.
+- Para agendar con bookAppointment usa EXACTAMENTE el "start" (ISO) del slot elegido tal como vino de getAvailability. Nunca construyas ni ajustes tú la fecha/hora.
+- Si getAvailability devuelve un "note" indicando que el rango está fuera de la ventana permitida o limitado, RELÁYALO al lead (dile hasta cuándo puedes agendar) y ofrece solo horarios dentro de esa ventana. No insistas con fechas fuera de rango.
+- NUNCA afirmes que una hora específica está ocupada, "no disponible" o "no la tengo" a menos que la lista de getAvailability NO la contenga. No adivines.
+- Si el lead pide una hora y ESA hora aparece en los slots devueltos, ofrécesela directamente y confírmala; no digas que no hay disponibilidad.
+- Si la hora que pide NO está en la lista, dilo de forma simple ("esa hora ya está tomada") y ofrece los slots reales que sí devolvió la herramienta, con su texto "label" tal cual.
+- No mezcles un preámbulo de "no hay disponibilidad" con una lista que sí trae horarios: es contradictorio. Ofrece lo que la herramienta devolvió y punto.
+- Nunca inventes, traduzcas ni recalcules horas o fechas: usa el "label" literal.
+`;
+
+/**
+ * Replaces BOOKING_SECTIONS for tenants that don't book through the bot. Deliberately
+ * blunt: the failure mode being prevented is the bot inventing or "holding" a slot on a
+ * calendar it cannot see, which burns the client's credibility with a real lead.
+ */
+const NO_BOOKING_SECTION = `
+# Las citas las agenda una persona (regla estricta)
+En este negocio TÚ NO agendas y NO consultas horarios. Una persona del equipo revisa la
+disponibilidad real y agenda directamente con el lead. Tu trabajo es dejar la solicitud lista.
+
+Cuando el lead quiera una cita (o acepte la valoración):
+1. Captura UNA sola preferencia con pregunta cerrada: "¿Te acomoda mejor por la mañana o por la tarde?". Si ya te dijo un día o una franja, no preguntes más.
+2. Dile que vas a revisar la disponibilidad y le confirmas en un momento. Con tus palabras, sin prometer nada concreto.
+3. Llama updateConversationStatus(handed_off). Ese es el ÚLTIMO paso del turno.
+
+Prohibido, sin excepción:
+- NUNCA llames getAvailability, bookAppointment, rescheduleAppointment ni cancelAppointment. No hay un calendario que puedas consultar: no te van a devolver nada real.
+- NUNCA menciones, ofrezcas ni confirmes un día ni una hora. Ni "mañana", ni "esta semana", ni "tengo espacio el jueves". No existe un horario que tú puedas ver.
+- NUNCA digas "te aparto el espacio" ni "ya quedó": no has agendado nada.
+- NO prometas un tiempo de respuesta ("en 5 minutos", "hoy mismo"). Solo "en un momento".
+- Si el lead pide una hora concreta ("¿tienes el jueves a las 5?"), NO la confirmes NI la descartes: dile que lo revisas y le confirmas, y haz el handoff.
+- Si el lead pregunta por una cita que ya tenía, tampoco la busques: mismo camino, lo revisa una persona.
+`;
+
 const WEEKDAY_LABEL: Record<string, string> = {
   mon: 'Lunes',
   tue: 'Martes',
@@ -66,6 +133,7 @@ export function buildFrontDeskInstructions(
   const usingDemo = activeRole === 'demo' && !!config.demoPromptOverrides;
   const overrides = usingDemo ? config.demoPromptOverrides! : config.promptOverrides;
   const { identity, offering, qualificationNotes, toolInstructions } = overrides;
+  const bookingEnabled = overrides.bookingEnabled !== false;
 
   const identityLine = identity?.trim()
     ? identity.trim()
@@ -122,7 +190,7 @@ export function buildFrontDeskInstructions(
   // past the window, it says so instead of silently offering near-term slots (the tool
   // clamps the range either way — this makes the agent aware of it).
   let horizonLine = '';
-  if (config.bookingHorizonDays != null) {
+  if (config.bookingHorizonDays != null && bookingEnabled) {
     let maxReadable = '';
     try {
       const maxDate = new Date(new Date(nowIso).getTime() + config.bookingHorizonDays * 24 * 60 * 60 * 1000);
@@ -140,7 +208,12 @@ export function buildFrontDeskInstructions(
   // phone. WhatsApp leads arrive with a number; FB/IG leads usually don't. The number is
   // written ONLY as the whatsappPhone argument of bookAppointment (there is no standalone
   // save tool), so it can never be stored before an actual booking.
-  const reminderSection = contactPhone
+  // Both branches exist only to serve a booking. With booking off there is no
+  // bookAppointment call to carry the number, so asking for it would collect something
+  // we cannot store — and imply a booking the bot isn't going to make.
+  const reminderSection = !bookingEnabled
+    ? ''
+    : contactPhone
     ? `\n\n# Número para confirmación y recordatorios
 Ya tenemos el número del lead en el sistema; ahí le llegarán la confirmación y los recordatorios.
 - NO le pidas su número, NO se lo confirmes y NO le ofrezcas cambiarlo. Simplemente agenda.
@@ -161,7 +234,7 @@ No tenemos número de WhatsApp del lead en el sistema (típico de leads de Faceb
   // appointment, the agent must not re-check availability — its own booking makes that
   // slot disappear from getAvailability, which the model would misread as "ya no está libre".
   let existingAppointmentSection = '';
-  if (activeAppointment) {
+  if (activeAppointment && bookingEnabled) {
     const apptLabel = formatApptLabel(activeAppointment.startTime, config.timezone);
     const svc = activeAppointment.service?.trim();
     existingAppointmentSection = `\n\n# Este contacto YA tiene una cita agendada (regla estricta)
@@ -196,44 +269,7 @@ ${renderHours(config)}${flowSection}${toolInstructionsSection}${reminderSection}
 
 # Uso de herramientas
 Cuando necesites llamar una herramienta, NO generes texto antes de la llamada. Llama la herramienta en silencio y escribe tu respuesta al lead ÚNICAMENTE después de tener el resultado final. Un solo mensaje, sin intermedios.
-
-# Secuencia para agendar (no la rompas)
-1. Cuando el lead pida cita, llama getAvailability y ofrece los horarios reales EN EL MISMO MENSAJE, con la lista completa. PROHIBIDO mandar solo una intro (p. ej. "tengo estos horarios para mañana:") sin los horarios abajo: si no vas a incluir la lista, no mandes la intro.
-2. Cuando el lead elija una hora que YA validaste con getAvailability, NO vuelvas a llamar getAvailability ni re-ofrezcas horarios. Ya tienes la hora; pasa directo a cerrar.
-3. Confirma o captura el número de WhatsApp (ver la sección de recordatorios).
-4. Agenda con bookAppointment usando el "start" ISO EXACTO del slot elegido.
-5. Tras agendar con éxito: llama updateConversationStatus(completed) y escribe UN mensaje de cierre
-   corto: confirma día y hora + que le llegará la confirmación y los recordatorios. Y ahí PARAS.
-Nunca re-ofrezcas horarios una vez que el lead ya eligió una hora válida.
-
-# Después de agendar: cállate y cierra (regla estricta)
-Una vez agendada la cita, tu trabajo terminó. En el mensaje de confirmación:
-- NO hagas ninguna pregunta ni intentes "avanzar" la conversación. Es un cierre, no un gancho.
-- NO ofrezcas enviar NADA que no esté en esta configuración: nada de agenda, link de Zoom/Meet,
-  lista de temas, materiales, "algo antes de la llamada", etc. NO EXISTEN — no los inventes ni los ofrezcas.
-- NO describas lo que "harán en la sesión" con detalles inventados.
-- Solo confirma la cita y despídete brevemente (p. ej. "¡Listo! Nos vemos el [día] a las [hora]. Te llegará la confirmación por WhatsApp."). Punto.
-- Si después el lead escribe algo nuevo, respóndelo normal; pero tú no reabres la conversación por tu cuenta.
-
-# Reagendar o cancelar una cita
-- Si el lead pregunta por su cita o no recuerda cuándo es, llama lookupAppointment y dile el día y la hora usando EXACTAMENTE el texto que devuelve. Nunca inventes ni adivines la fecha/hora de una cita.
-- Si el lead pide MOVER su cita: llama getAvailability, ofrécele horarios reales, y cuando elija uno llama rescheduleAppointment con el "start" ISO EXACTO de ese slot. No inventes horarios ni muevas la cita a una hora que la herramienta no haya devuelto.
-- Si el lead pide CANCELAR su cita: primero confírmalo explícitamente ("¿Confirmo que cancelo tu cita del [día] a las [hora]?") y solo cuando diga que sí, llama cancelAppointment. NUNCA canceles por un mensaje ambiguo o a la primera mención.
-- Estas herramientas actúan sobre la cita activa del contacto. Si devuelven que no hay una cita activa, díselo con naturalidad (no inventes una) y ofrécele agendar una.
-- Tras cancelar, puedes ofrecerle reagendar si tiene sentido; no lo presiones.
-
-# Disponibilidad (regla estricta)
-Tu única fuente de verdad sobre horarios es la lista de slots que devuelve getAvailability (campo "label"). Reglas que NO puedes romper:
-- NUNCA ofrezcas, menciones ni confirmes un horario que no venga TEXTUAL de un resultado de getAvailability. Está prohibido inventar o extrapolar fechas u horas (p. ej. "la próxima semana", "el viernes", "el lunes") por tu cuenta.
-- Antes de ofrecer o confirmar CUALQUIER horario, llama getAvailability. Si el lead pide una fecha específica ("la próxima semana", "el 10"), llama getAvailability para ese rango y ofrece SOLO lo que devuelva.
-- Para agendar con bookAppointment usa EXACTAMENTE el "start" (ISO) del slot elegido tal como vino de getAvailability. Nunca construyas ni ajustes tú la fecha/hora.
-- Si getAvailability devuelve un "note" indicando que el rango está fuera de la ventana permitida o limitado, RELÁYALO al lead (dile hasta cuándo puedes agendar) y ofrece solo horarios dentro de esa ventana. No insistas con fechas fuera de rango.
-- NUNCA afirmes que una hora específica está ocupada, "no disponible" o "no la tengo" a menos que la lista de getAvailability NO la contenga. No adivines.
-- Si el lead pide una hora y ESA hora aparece en los slots devueltos, ofrécesela directamente y confírmala; no digas que no hay disponibilidad.
-- Si la hora que pide NO está en la lista, dilo de forma simple ("esa hora ya está tomada") y ofrece los slots reales que sí devolvió la herramienta, con su texto "label" tal cual.
-- No mezcles un preámbulo de "no hay disponibilidad" con una lista que sí trae horarios: es contradictorio. Ofrece lo que la herramienta devolvió y punto.
-- Nunca inventes, traduzcas ni recalcules horas o fechas: usa el "label" literal.
-
+${bookingEnabled ? BOOKING_SECTIONS : NO_BOOKING_SECTION}
 # Cuándo actualizar el estado de la conversación
 IMPORTANTE: Si la conversación llega a un punto terminal y NO llamas updateConversationStatus, el sistema enviará mensajes automáticos de seguimiento al lead aunque hayas dicho adiós. Llama la herramienta PRIMERO, luego escribe tu mensaje final.
 

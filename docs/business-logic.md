@@ -137,6 +137,9 @@ single scheduling choke point `scheduleFollowUp` via the pure helper
 
 ## 5. Availability & booking
 
+> **Opt-out per tenant:** `prompt_overrides.bookingEnabled = false` turns this entire
+> section off for one tenant. See § 5a — everything below assumes the default (`true`).
+
 Tool: `getAvailability` (`roles/front-desk/tools/get-availability.ts`) → real GHL calendar
 slots. Rules (also reinforced in the front-desk prompt):
 
@@ -237,6 +240,43 @@ slots. Rules (also reinforced in the front-desk prompt):
   `startTime`/`calendarId`/`serviceName`, so a failed booking is diagnosable (the reason is not
   left in ephemeral Cloudflare logs). A common cause is offering a slot the model didn't get
   verbatim from `getAvailability`, so GHL rejects the unrecognized `startTime`.
+
+## 5a. Tenants that don't book through the bot (`bookingEnabled: false`)
+
+Some tenants have **no calendar the bot can trust**. MADI Skin Care is the reference case:
+she has no premises of her own — she rents a laser booth on a third party's shared calendar,
+which several other renters also book. There is nothing for `getAvailability` to read, so any
+time the bot offered would be a guess.
+
+For these tenants set `prompt_overrides.bookingEnabled = false`. The bot then **collects the
+request and hands off** instead of booking:
+
+1. Capture ONE preference with a closed question ("¿mañana o tarde?").
+2. Tell the lead availability is being checked and a confirmation is coming shortly —
+   with no day, no hour, and no promised response time.
+3. Call `updateConversationStatus('handed_off')` as the last step of the turn.
+
+That status is what makes it work operationally: it pauses the bot **permanently** (so it
+can't talk over the owner mid-negotiation), cancels pending follow-ups, and writes the
+`bot-off` tag on the GHL contact — which is how the owner finds the lead and takes over.
+Removing the tag hands control back.
+
+**Two layers enforce it**, because a prompt instruction alone is not a guarantee:
+- **Prompt (`bookingEnabled: false`)** — strips the booking sections from the shared prompt
+  entirely (`BOOKING_SECTIONS` → `NO_BOOKING_SECTION` in `roles/front-desk/prompt.ts`), along
+  with the booking horizon, the reminder-number ask (there's no `bookAppointment` call left to
+  carry the number) and the existing-appointment guard. Leaving them in place would have the
+  base prompt insisting *"cuando el lead pida cita, llama getAvailability"* **after** the
+  tenant's own "don't book" rules — the exact contradiction that makes a bot promise a slot.
+- **Config (`tenant_config.calendars = '{}'`)** — deterministic backstop. With no calendar
+  mapped, `getAvailability` and `bookAppointment` structurally cannot return or reserve
+  anything even if the model calls them anyway.
+
+Trade-offs to know, both by design:
+- **No follow-ups on these leads.** `handed_off` cancels them, so if the owner never gets back
+  to the lead, nobody nudges. That's the cost of guaranteeing the bot won't talk over her.
+- **`standby` would NOT work here.** It doesn't suppress the bot — the lead's next message
+  would get an agent reply, which would loop right back into asking about the appointment.
 
 ## 5b. Demo persona (per-conversation role switch)
 
