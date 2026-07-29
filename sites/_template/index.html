@@ -1,0 +1,530 @@
+<!doctype html>
+<html lang="es-MX">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- {{NOMBRE}} = nombre del negocio · {{CIUDAD}} = ciudad -->
+<title>{{NOMBRE}} — {{DESCRIPCION_CORTA}} en {{CIUDAD}}</title>
+<meta name="description" content="{{META_DESCRIPCION}}">
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     SCAFFOLD NEUTRO — no es un look terminado. Antes de rellenar, DECIDE para
+     ESTE cliente: (1) paleta, (2) par tipográfico, (3) el elemento firma.
+     No copies la escala de tonos de piel de Madi ni su malva: eso es de Madi.
+     Guía completa en README.md. Marcadores a resolver: {{ASI }} y ⚠️ COMPLETAR / SLOT.
+
+     COPIAR DESDE AQUÍ ↓ para pegar en el bloque de Custom Code de GHL
+     ══════════════════════════════════════════════════════════════════════════ -->
+
+<style>
+/* ⚠️ TIPOGRAFÍA: reemplaza estas familias por el par que elegiste para este cliente. */
+@import url('https://fonts.googleapis.com/css2?family={{FUENTE_DISPLAY}}&family={{FUENTE_TEXTO}}:wght@300;400;500;600&display=swap');
+
+/* Única regla global: scroll suave para los enlaces del menú. */
+html { scroll-behavior: smooth; }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   MARCA — edita SOLO estos valores para cambiar la identidad completa.
+   Los de abajo son placeholders grises a propósito: si publicas sin tocarlos,
+   se nota. Deriva la paleta del mundo del cliente, no de este gris.
+   ───────────────────────────────────────────────────────────────────────── */
+.site {
+  --base:      #F6F5F3;   /* fondo principal */
+  --campo:     #ECEAE6;   /* secciones/campos alternos */
+  --tarjeta:   #FFFFFF;   /* tarjetas */
+  --suave:     #E0DDD7;   /* rellenos suaves, chips */
+  --acento:    #6B6560;   /* ⚠️ el acento — cámbialo, es lo que da identidad */
+  --acento-osc:#4C4744;   /* acento en texto e hover */
+  --profundo:  #2C2A28;   /* bandas de contraste */
+  --profundo-2:#3A3835;   /* tarjetas sobre banda profunda */
+  --tinta:     #2C2A28;   /* texto principal */
+  --humo:      #6E6A66;   /* texto secundario */
+  --bruma:     #C9C5BF;   /* texto secundario sobre banda profunda */
+  --linea:     rgba(44,42,40,.12);
+  --linea-p:   rgba(255,255,255,.16);
+  --sombra:    0 20px 46px -30px rgba(44,42,40,.4);
+
+  /* ⚠️ Deben coincidir con el @import de arriba. */
+  --display: '{{FUENTE_DISPLAY}}', Georgia, serif;
+  --texto:   '{{FUENTE_TEXTO}}', 'Helvetica Neue', Arial, sans-serif;
+
+  --ancho: 1160px;
+  --radio: 20px;   /* 0–4px = serio/clínico · 16–24px = suave/cálido */
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Reset local — aísla el sitio del CSS que GHL inyecta en la página.
+   NO renombres .site sin renombrar todo; el aislamiento depende del prefijo.
+   ───────────────────────────────────────────────────────────────────────── */
+.site, .site * { box-sizing: border-box; margin: 0; padding: 0; }
+.site {
+  font-family: var(--texto);
+  font-weight: 400;
+  font-size: 17px;
+  line-height: 1.68;
+  color: var(--tinta);
+  background: var(--base);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+.site img { display: block; max-width: 100%; height: auto; }
+.site a { color: inherit; text-decoration: none; }
+.site ul { list-style: none; }
+.site h1, .site h2, .site h3, .site h4 { font-weight: 400; line-height: 1.14; }
+.site :focus-visible { outline: 2px solid var(--acento); outline-offset: 3px; border-radius: 4px; }
+
+/* ── Utilidades ─────────────────────────────────────────────────────────── */
+.site-wrap { width: 100%; max-width: var(--ancho); margin: 0 auto; padding: 0 28px; }
+.site-sec { padding: 104px 0; }
+.site-sec--base { background: var(--base); }
+.site-sec--campo { background: var(--campo); }
+.site-sec--profundo { background: var(--profundo); color: var(--bruma); }
+
+.site-eyebrow {
+  font-size: 11px; font-weight: 600; letter-spacing: .2em;
+  text-transform: uppercase; color: var(--acento);
+}
+.site-sec--profundo .site-eyebrow { color: var(--suave); }
+
+.site-h2 { font-family: var(--display); font-size: clamp(1.95rem, 4.3vw, 3rem); color: var(--tinta); margin: 16px 0 0; }
+.site-sec--profundo .site-h2 { color: var(--base); }
+.site-lede { max-width: 54ch; margin-top: 18px; font-size: 1.04rem; font-weight: 300; color: var(--humo); }
+.site-sec--profundo .site-lede { color: var(--bruma); }
+
+.site-precio { font-family: var(--display); font-size: 1.45rem; color: var(--tinta); white-space: nowrap; }
+.site-precio span { font-family: var(--texto); font-size: .66rem; font-weight: 500; letter-spacing: .12em; color: var(--humo); }
+
+/* ── Botones ────────────────────────────────────────────────────────────── */
+.site-btn {
+  display: inline-flex; align-items: center; gap: 9px;
+  padding: 15px 30px; border-radius: 999px; border: 1px solid transparent;
+  font-family: var(--texto); font-size: 13.5px; font-weight: 600;
+  letter-spacing: .06em; text-transform: uppercase; cursor: pointer;
+  transition: transform .25s ease, background-color .25s ease, color .25s ease,
+              border-color .25s ease, box-shadow .25s ease;
+}
+.site-btn--acento { background: var(--acento); color: #FFF; box-shadow: 0 12px 26px -16px rgba(44,42,40,.7); }
+.site-btn--acento:hover { background: var(--acento-osc); transform: translateY(-2px); }
+.site-btn--linea { border-color: rgba(44,42,40,.2); color: var(--tinta); }
+.site-btn--linea:hover { border-color: var(--acento); color: var(--acento-osc); transform: translateY(-2px); }
+.site-btn--claro { background: var(--base); color: var(--profundo); }
+.site-btn--claro:hover { background: #FFF; transform: translateY(-2px); }
+.site-btn svg { width: 16px; height: 16px; fill: currentColor; }
+
+/* ── Encabezado ─────────────────────────────────────────────────────────── */
+.site-head {
+  position: sticky; top: 0; z-index: 50;
+  background: rgba(246,245,243,.85);
+  -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--linea);
+}
+.site-head__in { display: flex; align-items: center; justify-content: space-between; gap: 24px; height: 76px; }
+.site-logo { display: flex; align-items: baseline; gap: 10px; }
+.site-logo__n { font-family: var(--display); font-size: 1.5rem; letter-spacing: .14em; color: var(--tinta); }
+.site-logo__s { font-size: 9.5px; font-weight: 600; letter-spacing: .28em; text-transform: uppercase; color: var(--acento); }
+.site-nav { display: flex; gap: 34px; }
+.site-nav a { font-size: 12.5px; font-weight: 500; letter-spacing: .1em; text-transform: uppercase; color: var(--humo); transition: color .2s ease; }
+.site-nav a:hover { color: var(--acento-osc); }
+.site-head .site-btn { padding: 11px 22px; font-size: 12px; }
+
+/* ── Hero ───────────────────────────────────────────────────────────────── */
+.site-hero { position: relative; overflow: hidden; background: var(--base); padding: 118px 0 92px; }
+/* Fondo del hero: aquí va el "gancho" visual del cliente (glow, textura, foto…).
+   El resplandor de abajo es genérico — reemplázalo por algo del mundo del cliente. */
+.site-hero__fondo {
+  position: absolute; top: -32%; left: 50%; width: min(1080px, 135vw); aspect-ratio: 1;
+  transform: translateX(-50%); pointer-events: none;
+  background: radial-gradient(circle, rgba(0,0,0,.05) 0%, rgba(0,0,0,.02) 40%, transparent 70%);
+  animation: site-respira 10s ease-in-out infinite alternate;
+}
+@keyframes site-respira {
+  from { transform: translateX(-50%) scale(1);    opacity: .8; }
+  to   { transform: translateX(-50%) scale(1.13); opacity: 1; }
+}
+.site-hero__in { position: relative; z-index: 1; text-align: center; }
+.site-hero h1 {
+  font-family: var(--display); font-size: clamp(2.4rem, 6.4vw, 4.7rem);
+  line-height: 1.16; color: var(--tinta); margin: 20px auto 0; max-width: 17ch;
+}
+.site-hero h1 span { color: var(--acento); }
+.site-hero__lede { max-width: 50ch; margin: 24px auto 0; color: var(--humo); font-size: 1.06rem; font-weight: 300; }
+.site-hero__cta { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; margin-top: 36px; }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   SLOT FIRMA — el elemento distintivo de ESTE cliente.
+   Aquí Madi tenía su escala de fototipos I–VI. Bórralo y pon lo que sea propio
+   del negocio: un antes/después, un mapa de zonas, una línea de proceso, un dato.
+   Si dejas esto vacío, el sitio se siente genérico. Es el punto, no el relleno.
+   ───────────────────────────────────────────────────────────────────────── */
+.site-firma { max-width: 640px; margin: 78px auto 0; }
+.site-firma__placeholder {
+  border: 1px dashed var(--acento); border-radius: var(--radio);
+  padding: 34px; text-align: center; color: var(--humo); font-weight: 300;
+}
+.site-firma__placeholder strong { display: block; color: var(--acento-osc); font-weight: 600; margin-bottom: 6px; }
+
+/* ── Tira de diferenciadores ────────────────────────────────────────────── */
+.site-tira { background: var(--campo); }
+.site-tira__in { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; padding: 56px 28px; }
+.site-tira__t { font-family: var(--display); font-size: 1.14rem; color: var(--tinta); margin-bottom: 8px; }
+.site-tira__d { font-size: .87rem; font-weight: 300; line-height: 1.6; color: var(--humo); }
+
+/* ── Servicios ──────────────────────────────────────────────────────────── */
+.site-grupo { margin-top: 64px; }
+.site-grupo__cab {
+  display: flex; align-items: baseline; gap: 18px;
+  padding-bottom: 16px; border-bottom: 1px solid var(--linea); margin-bottom: 32px;
+}
+.site-grupo__cab h3 { font-family: var(--display); font-size: 1.5rem; color: var(--tinta); }
+.site-grupo__cab p { font-size: .84rem; font-weight: 300; color: var(--humo); margin-left: auto; text-align: right; }
+
+.site-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+.site-card {
+  display: flex; flex-direction: column;
+  background: var(--tarjeta); border: 1px solid var(--linea); border-radius: var(--radio);
+  padding: 34px 30px 30px;
+  transition: transform .3s ease, box-shadow .3s ease, border-color .3s ease;
+}
+.site-card:hover { transform: translateY(-5px); border-color: var(--acento); box-shadow: var(--sombra); }
+.site-card--destacada { border-color: var(--acento); box-shadow: 0 0 0 1px var(--acento); }
+.site-card__tag {
+  align-self: flex-start; margin-bottom: 16px; padding: 5px 13px;
+  background: var(--suave); color: var(--profundo); border-radius: 999px;
+  font-size: 9.5px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
+}
+.site-card h4 { font-family: var(--display); font-size: 1.38rem; color: var(--tinta); }
+.site-card__lista { margin: 18px 0 26px; }
+.site-card__lista li {
+  position: relative; padding-left: 21px; padding-bottom: 8px;
+  font-size: .93rem; font-weight: 300; color: var(--humo);
+}
+.site-card__lista li::before {
+  content: ''; position: absolute; left: 2px; top: 10px;
+  width: 6px; height: 6px; border-radius: 50%; background: var(--suave);
+}
+.site-card__pie {
+  margin-top: auto; padding-top: 20px; border-top: 1px solid var(--linea);
+  display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+}
+.site-card__nota { font-size: .8rem; font-weight: 500; color: var(--acento); }
+
+/* Filas comparativas (paquetes, planes) */
+.site-filas { border-top: 1px solid var(--linea); }
+.site-fila {
+  display: grid; grid-template-columns: 190px 1fr auto; gap: 28px; align-items: center;
+  padding: 24px 18px; border-bottom: 1px solid var(--linea); border-radius: 14px;
+  transition: background-color .25s ease;
+}
+.site-fila:hover { background: var(--tarjeta); }
+.site-fila__n { font-family: var(--display); font-size: 1.28rem; color: var(--tinta); }
+.site-fila__z { display: flex; flex-wrap: wrap; gap: 8px; }
+.site-fila__z span {
+  padding: 5px 14px; border-radius: 999px; background: var(--campo);
+  font-size: .8rem; font-weight: 500; color: var(--profundo);
+}
+
+/* Servicios menores */
+.site-mini { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+.site-mini__i { padding: 30px 28px; background: var(--tarjeta); border: 1px solid var(--linea); border-radius: var(--radio); }
+.site-mini__i h4 { font-family: var(--display); font-size: 1.2rem; color: var(--tinta); }
+.site-mini__i p { font-size: .91rem; font-weight: 300; color: var(--humo); margin: 10px 0 16px; }
+.site-mini__p { font-size: .93rem; font-weight: 600; color: var(--acento); }
+
+/* ── Banda destacada (promo, oferta) ────────────────────────────────────── */
+.site-banda { position: relative; overflow: hidden; background: var(--profundo); padding: 96px 0; }
+.site-banda__in { position: relative; z-index: 1; text-align: center; }
+.site-banda__lista { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin: 50px 0 42px; }
+.site-banda__i { background: var(--profundo-2); border: 1px solid var(--linea-p); border-radius: var(--radio); padding: 34px 26px; }
+.site-banda__i strong { display: block; font-family: var(--display); font-size: 1.85rem; color: var(--base); margin-bottom: 10px; }
+.site-banda__i span { font-size: .9rem; font-weight: 300; color: var(--bruma); }
+.site-banda__nota { font-size: .8rem; font-weight: 300; color: var(--bruma); opacity: .72; margin-top: 26px; }
+
+/* ── Nosotros ───────────────────────────────────────────────────────────── */
+.site-dos { display: grid; grid-template-columns: 1fr 1fr; gap: 72px; align-items: start; }
+.site-dos p + p { margin-top: 14px; }
+.site-valores li { display: grid; grid-template-columns: 28px 1fr; gap: 14px; padding: 17px 0; border-bottom: 1px solid var(--linea); }
+.site-valores li:last-child { border-bottom: 0; }
+.site-valores__n { font-family: var(--display); font-size: .95rem; color: var(--acento); padding-top: 3px; }
+.site-valores__t { font-size: .99rem; font-weight: 500; color: var(--tinta); }
+.site-valores__d { font-size: .88rem; font-weight: 300; color: var(--humo); margin-top: 3px; }
+
+/* ── FAQ ────────────────────────────────────────────────────────────────── */
+.site-faq { max-width: 820px; margin: 46px auto 0; }
+.site-faq details { border-bottom: 1px solid var(--linea); }
+.site-faq summary {
+  display: flex; align-items: center; justify-content: space-between; gap: 20px;
+  padding: 22px 2px; cursor: pointer; list-style: none;
+  font-size: 1.03rem; font-weight: 500; color: var(--tinta); transition: color .2s ease;
+}
+.site-faq summary::-webkit-details-marker { display: none; }
+.site-faq summary:hover { color: var(--acento-osc); }
+.site-faq summary::after { content: '+'; font-size: 1.5rem; font-weight: 300; color: var(--acento); transition: transform .3s ease; flex-shrink: 0; line-height: 1; }
+.site-faq details[open] summary::after { transform: rotate(45deg); }
+.site-faq__r { padding: 0 58px 26px 2px; font-size: .96rem; font-weight: 300; color: var(--humo); }
+
+/* ── Contacto ───────────────────────────────────────────────────────────── */
+.site-contacto__in { display: grid; grid-template-columns: 1fr 1fr; gap: 72px; align-items: start; }
+.site-nap { margin-top: 36px; }
+.site-nap__f { padding: 19px 0; border-bottom: 1px solid var(--linea); }
+.site-nap__l { font-size: 10px; font-weight: 600; letter-spacing: .18em; text-transform: uppercase; color: var(--acento); margin-bottom: 6px; }
+.site-nap__v { font-size: 1.01rem; font-weight: 300; color: var(--tinta); line-height: 1.5; }
+.site-nap__v a { border-bottom: 1px solid var(--suave); }
+.site-nap__v a:hover { color: var(--acento-osc); border-color: var(--acento); }
+.site-cta-caja { background: var(--tarjeta); border: 1px solid var(--linea); border-radius: var(--radio); padding: 46px 40px; box-shadow: var(--sombra); }
+.site-cta-caja h3 { font-family: var(--display); font-size: 1.75rem; color: var(--tinta); }
+.site-cta-caja p { font-size: .96rem; font-weight: 300; color: var(--humo); margin: 14px 0 28px; }
+.site-cta-caja .site-btn { width: 100%; justify-content: center; }
+.site-cta-caja__nota { margin-top: 18px; font-size: .82rem; font-weight: 300; color: var(--humo); opacity: .8; text-align: center; }
+
+/* ── Pie ────────────────────────────────────────────────────────────────── */
+.site-pie { background: var(--profundo); color: var(--bruma); padding: 46px 0; }
+.site-pie__in { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 18px; font-size: .82rem; font-weight: 300; }
+.site-pie__links { display: flex; flex-wrap: wrap; gap: 24px; }
+.site-pie__links a:hover { color: var(--base); }
+
+/* ── Responsive ─────────────────────────────────────────────────────────── */
+@media (max-width: 940px) {
+  .site-nav { display: none; }
+  .site-sec { padding: 74px 0; }
+  .site-hero { padding: 80px 0 64px; }
+  .site-cards, .site-mini, .site-banda__lista { grid-template-columns: 1fr; }
+  .site-dos, .site-contacto__in { grid-template-columns: 1fr; gap: 46px; }
+  .site-tira__in { grid-template-columns: 1fr 1fr; gap: 30px; padding: 44px 28px; }
+  .site-fila { grid-template-columns: 1fr; gap: 14px; padding: 22px 14px; }
+  .site-faq__r { padding-right: 28px; }
+}
+@media (max-width: 560px) {
+  .site { font-size: 16px; }
+  .site-wrap { padding: 0 20px; }
+  .site-hero__cta .site-btn { width: 100%; justify-content: center; }
+  .site-tira__in { grid-template-columns: 1fr; padding: 40px 20px; }
+  .site-cta-caja { padding: 34px 26px; }
+}
+
+/* ── Entrada + accesibilidad ────────────────────────────────────────────── */
+.site-rise { animation: site-rise .9s cubic-bezier(.2,.7,.3,1) both; }
+@keyframes site-rise { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .site *, .site *::before, .site *::after { animation: none !important; transition: none !important; }
+  .site-rise { opacity: 1; transform: none; }
+}
+</style>
+
+<div class="site">
+
+  <!-- ── Encabezado ────────────────────────────────────────────────────── -->
+  <header class="site-head">
+    <div class="site-wrap site-head__in">
+      <a class="site-logo" href="#top" aria-label="{{NOMBRE}} — inicio">
+        <span class="site-logo__n">{{NOMBRE}}</span>
+        <span class="site-logo__s">{{BAJADA}}</span>
+      </a>
+      <nav class="site-nav" aria-label="Secciones">
+        <a href="#servicios">Servicios</a>
+        <a href="#destacado">Destacado</a>
+        <a href="#nosotros">Nosotros</a>
+        <a href="#faq">Preguntas</a>
+        <a href="#contacto">Contacto</a>
+      </nav>
+      <!-- {{WA}} = teléfono E.164 sin +, ej. 526640000000 -->
+      <a class="site-btn site-btn--acento"
+         href="https://wa.me/{{WA}}?text=Hola%2C%20quiero%20m%C3%A1s%20informaci%C3%B3n."
+         target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.5 14.4c-.3-.2-1.7-.9-2-1-.3-.1-.5-.1-.7.2-.2.3-.7 1-.9 1.2-.2.2-.3.2-.6.1-.3-.2-1.2-.5-2.3-1.4-.9-.8-1.4-1.7-1.6-2-.2-.3 0-.5.1-.6.1-.1.3-.3.4-.5.2-.2.2-.3.3-.5.1-.2 0-.4 0-.5 0-.2-.7-1.6-.9-2.2-.2-.6-.5-.5-.7-.5h-.6c-.2 0-.5.1-.8.4-.3.3-1 1-1 2.4s1.1 2.8 1.2 3c.2.2 2.1 3.2 5.1 4.5.7.3 1.3.5 1.7.6.7.2 1.4.2 1.9.1.6-.1 1.7-.7 2-1.4.2-.7.2-1.3.2-1.4-.1-.2-.3-.3-.6-.4zM12 2C6.5 2 2 6.5 2 12c0 1.8.5 3.4 1.3 4.9L2 22l5.3-1.4c1.4.8 3 1.2 4.7 1.2 5.5 0 10-4.5 10-10S17.5 2 12 2z"/></svg>
+        WhatsApp
+      </a>
+    </div>
+  </header>
+
+  <!-- ── Hero ──────────────────────────────────────────────────────────── -->
+  <section class="site-hero" id="top">
+    <div class="site-hero__fondo" aria-hidden="true"></div>
+    <div class="site-wrap site-hero__in">
+      <p class="site-eyebrow site-rise" style="animation-delay:.05s">{{UBICACION_CORTA}}</p>
+      <!-- El titular es la tesis del sitio. Que no sea genérico ("Bienvenido"). -->
+      <h1 class="site-rise" style="animation-delay:.15s">{{TITULAR}} <span>{{TITULAR_ACENTO}}</span></h1>
+      <p class="site-hero__lede site-rise" style="animation-delay:.28s">{{SUBTITULAR}}</p>
+      <div class="site-hero__cta site-rise" style="animation-delay:.4s">
+        <a class="site-btn site-btn--acento"
+           href="https://wa.me/{{WA}}?text=Hola%2C%20quiero%20agendar."
+           target="_blank" rel="noopener">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.5 14.4c-.3-.2-1.7-.9-2-1-.3-.1-.5-.1-.7.2-.2.3-.7 1-.9 1.2-.2.2-.3.2-.6.1-.3-.2-1.2-.5-2.3-1.4-.9-.8-1.4-1.7-1.6-2-.2-.3 0-.5.1-.6.1-.1.3-.3.4-.5.2-.2.2-.3.3-.5.1-.2 0-.4 0-.5 0-.2-.7-1.6-.9-2.2-.2-.6-.5-.5-.7-.5h-.6c-.2 0-.5.1-.8.4-.3.3-1 1-1 2.4s1.1 2.8 1.2 3c.2.2 2.1 3.2 5.1 4.5.7.3 1.3.5 1.7.6.7.2 1.4.2 1.9.1.6-.1 1.7-.7 2-1.4.2-.7.2-1.3.2-1.4-.1-.2-.3-.3-.6-.4zM12 2C6.5 2 2 6.5 2 12c0 1.8.5 3.4 1.3 4.9L2 22l5.3-1.4c1.4.8 3 1.2 4.7 1.2 5.5 0 10-4.5 10-10S17.5 2 12 2z"/></svg>
+          {{CTA_PRIMARIO}}
+        </a>
+        <a class="site-btn site-btn--linea" href="#servicios">{{CTA_SECUNDARIO}}</a>
+      </div>
+
+      <!-- SLOT FIRMA — reemplaza este placeholder por el elemento propio del cliente. -->
+      <div class="site-firma site-rise" style="animation-delay:.55s">
+        <div class="site-firma__placeholder">
+          <strong>SLOT FIRMA</strong>
+          Aquí va el elemento distintivo de este negocio. Bórrame.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Diferenciadores ───────────────────────────────────────────────── -->
+  <section class="site-tira">
+    <div class="site-wrap site-tira__in">
+      <div class="site-tira__i"><p class="site-tira__t">{{DIF_1_T}}</p><p class="site-tira__d">{{DIF_1_D}}</p></div>
+      <div class="site-tira__i"><p class="site-tira__t">{{DIF_2_T}}</p><p class="site-tira__d">{{DIF_2_D}}</p></div>
+      <div class="site-tira__i"><p class="site-tira__t">{{DIF_3_T}}</p><p class="site-tira__d">{{DIF_3_D}}</p></div>
+      <div class="site-tira__i"><p class="site-tira__t">{{DIF_4_T}}</p><p class="site-tira__d">{{DIF_4_D}}</p></div>
+    </div>
+  </section>
+
+  <!-- ── Servicios ─────────────────────────────────────────────────────── -->
+  <section class="site-sec site-sec--base" id="servicios">
+    <div class="site-wrap">
+      <p class="site-eyebrow">Servicios</p>
+      <h2 class="site-h2">{{SERVICIOS_TITULO}}</h2>
+      <p class="site-lede">{{SERVICIOS_LEDE}}</p>
+
+      <!-- Grupo de cards con precio -->
+      <div class="site-grupo">
+        <div class="site-grupo__cab"><h3>{{GRUPO_1}}</h3><p>{{GRUPO_1_NOTA}}</p></div>
+        <div class="site-cards">
+          <article class="site-card">
+            <h4>{{SERV_1}}</h4>
+            <ul class="site-card__lista"><li>{{SERV_1_A}}</li><li>{{SERV_1_B}}</li></ul>
+            <div class="site-card__pie"><span class="site-precio">${{SERV_1_P}} <span>MXN</span></span></div>
+          </article>
+          <article class="site-card site-card--destacada">
+            <span class="site-card__tag">{{SERV_2_TAG}}</span>
+            <h4>{{SERV_2}}</h4>
+            <ul class="site-card__lista"><li>{{SERV_2_A}}</li><li>{{SERV_2_B}}</li><li>{{SERV_2_C}}</li></ul>
+            <div class="site-card__pie"><span class="site-precio">${{SERV_2_P}} <span>MXN</span></span><span class="site-card__nota">{{SERV_2_NOTA}}</span></div>
+          </article>
+          <article class="site-card">
+            <h4>{{SERV_3}}</h4>
+            <ul class="site-card__lista"><li>{{SERV_3_A}}</li><li>{{SERV_3_B}}</li></ul>
+            <div class="site-card__pie"><span class="site-precio">${{SERV_3_P}} <span>MXN</span></span></div>
+          </article>
+        </div>
+      </div>
+
+      <!-- Grupo de filas comparativas (opcional: paquetes/planes) -->
+      <div class="site-grupo">
+        <div class="site-grupo__cab"><h3>{{GRUPO_2}}</h3><p>{{GRUPO_2_NOTA}}</p></div>
+        <div class="site-filas">
+          <div class="site-fila"><p class="site-fila__n">{{PACK_1}}</p><div class="site-fila__z"><span>{{PACK_1_Z1}}</span><span>{{PACK_1_Z2}}</span></div><span class="site-precio">${{PACK_1_P}} <span>MXN</span></span></div>
+          <div class="site-fila"><p class="site-fila__n">{{PACK_2}}</p><div class="site-fila__z"><span>{{PACK_2_Z1}}</span><span>{{PACK_2_Z2}}</span></div><span class="site-precio">${{PACK_2_P}} <span>MXN</span></span></div>
+        </div>
+      </div>
+
+      <!-- Grupo de servicios menores (opcional) -->
+      <div class="site-grupo">
+        <div class="site-grupo__cab"><h3>{{GRUPO_3}}</h3></div>
+        <div class="site-mini">
+          <div class="site-mini__i"><h4>{{MINI_1}}</h4><p>{{MINI_1_D}}</p><p class="site-mini__p">{{MINI_1_P}}</p></div>
+          <div class="site-mini__i"><h4>{{MINI_2}}</h4><p>{{MINI_2_D}}</p><p class="site-mini__p">{{MINI_2_P}}</p></div>
+          <div class="site-mini__i"><h4>{{MINI_3}}</h4><p>{{MINI_3_D}}</p><p class="site-mini__p">{{MINI_3_P}}</p></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Banda destacada (promo/oferta) — borra la sección si el cliente no tiene ── -->
+  <section class="site-banda" id="destacado">
+    <div class="site-wrap site-banda__in">
+      <p class="site-eyebrow">{{BANDA_EYEBROW}}</p>
+      <h2 class="site-h2">{{BANDA_TITULO}}</h2>
+      <div class="site-banda__lista">
+        <div class="site-banda__i"><strong>{{BANDA_1_N}}</strong><span>{{BANDA_1_D}}</span></div>
+        <div class="site-banda__i"><strong>{{BANDA_2_N}}</strong><span>{{BANDA_2_D}}</span></div>
+        <div class="site-banda__i"><strong>{{BANDA_3_N}}</strong><span>{{BANDA_3_D}}</span></div>
+      </div>
+      <a class="site-btn site-btn--claro" href="https://wa.me/{{WA}}?text=Hola%2C%20vi%20la%20promoci%C3%B3n." target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.5 14.4c-.3-.2-1.7-.9-2-1-.3-.1-.5-.1-.7.2-.2.3-.7 1-.9 1.2-.2.2-.3.2-.6.1-.3-.2-1.2-.5-2.3-1.4-.9-.8-1.4-1.7-1.6-2-.2-.3 0-.5.1-.6.1-.1.3-.3.4-.5.2-.2.2-.3.3-.5.1-.2 0-.4 0-.5 0-.2-.7-1.6-.9-2.2-.2-.6-.5-.5-.7-.5h-.6c-.2 0-.5.1-.8.4-.3.3-1 1-1 2.4s1.1 2.8 1.2 3c.2.2 2.1 3.2 5.1 4.5.7.3 1.3.5 1.7.6.7.2 1.4.2 1.9.1.6-.1 1.7-.7 2-1.4.2-.7.2-1.3.2-1.4-.1-.2-.3-.3-.6-.4zM12 2C6.5 2 2 6.5 2 12c0 1.8.5 3.4 1.3 4.9L2 22l5.3-1.4c1.4.8 3 1.2 4.7 1.2 5.5 0 10-4.5 10-10S17.5 2 12 2z"/></svg>
+        {{BANDA_CTA}}
+      </a>
+      <p class="site-banda__nota">{{BANDA_NOTA}}</p>
+    </div>
+  </section>
+
+  <!-- ── Nosotros ──────────────────────────────────────────────────────── -->
+  <section class="site-sec site-sec--campo" id="nosotros">
+    <div class="site-wrap site-dos">
+      <div>
+        <p class="site-eyebrow">Nosotros</p>
+        <h2 class="site-h2">{{NOSOTROS_TITULO}}</h2>
+        <p class="site-lede">{{NOSOTROS_P1}}</p>
+        <p class="site-lede">{{NOSOTROS_P2}}</p>
+      </div>
+      <ul class="site-valores">
+        <li><span class="site-valores__n">01</span><div><p class="site-valores__t">{{VAL_1_T}}</p><p class="site-valores__d">{{VAL_1_D}}</p></div></li>
+        <li><span class="site-valores__n">02</span><div><p class="site-valores__t">{{VAL_2_T}}</p><p class="site-valores__d">{{VAL_2_D}}</p></div></li>
+        <li><span class="site-valores__n">03</span><div><p class="site-valores__t">{{VAL_3_T}}</p><p class="site-valores__d">{{VAL_3_D}}</p></div></li>
+        <li><span class="site-valores__n">04</span><div><p class="site-valores__t">{{VAL_4_T}}</p><p class="site-valores__d">{{VAL_4_D}}</p></div></li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ── FAQ ───────────────────────────────────────────────────────────── -->
+  <section class="site-sec site-sec--base" id="faq">
+    <div class="site-wrap">
+      <p class="site-eyebrow">Preguntas frecuentes</p>
+      <h2 class="site-h2">{{FAQ_TITULO}}</h2>
+      <div class="site-faq">
+        <details><summary>{{FAQ_1_Q}}</summary><p class="site-faq__r">{{FAQ_1_A}}</p></details>
+        <details><summary>{{FAQ_2_Q}}</summary><p class="site-faq__r">{{FAQ_2_A}}</p></details>
+        <details><summary>{{FAQ_3_Q}}</summary><p class="site-faq__r">{{FAQ_3_A}}</p></details>
+        <details><summary>{{FAQ_4_Q}}</summary><p class="site-faq__r">{{FAQ_4_A}}</p></details>
+        <details><summary>{{FAQ_5_Q}}</summary><p class="site-faq__r">{{FAQ_5_A}}</p></details>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Contacto ──────────────────────────────────────────────────────── -->
+  <section class="site-sec site-sec--campo" id="contacto">
+    <div class="site-wrap site-contacto__in">
+      <div>
+        <p class="site-eyebrow">Contacto</p>
+        <h2 class="site-h2">{{CONTACTO_TITULO}}</h2>
+        <div class="site-nap">
+          <div class="site-nap__f"><p class="site-nap__l">Negocio</p><p class="site-nap__v">{{NOMBRE}}</p></div>
+          <!-- ⚠️ Meta exige dirección completa (calle, número, local, C.P.) para verificar. -->
+          <div class="site-nap__f"><p class="site-nap__l">Dirección</p><p class="site-nap__v">{{DIRECCION}}</p></div>
+          <div class="site-nap__f"><p class="site-nap__l">WhatsApp</p><p class="site-nap__v"><a href="https://wa.me/{{WA}}" target="_blank" rel="noopener">{{TELEFONO}}</a></p></div>
+          <div class="site-nap__f"><p class="site-nap__l">Instagram</p><p class="site-nap__v"><a href="https://instagram.com/{{IG}}" target="_blank" rel="noopener">@{{IG}}</a></p></div>
+          <div class="site-nap__f"><p class="site-nap__l">Horario</p><p class="site-nap__v">{{HORARIO}}</p></div>
+        </div>
+      </div>
+      <div class="site-cta-caja">
+        <h3>{{CTA_CAJA_TITULO}}</h3>
+        <p>{{CTA_CAJA_TEXTO}}</p>
+        <a class="site-btn site-btn--acento" href="https://wa.me/{{WA}}?text=Hola%2C%20quiero%20agendar." target="_blank" rel="noopener">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.5 14.4c-.3-.2-1.7-.9-2-1-.3-.1-.5-.1-.7.2-.2.3-.7 1-.9 1.2-.2.2-.3.2-.6.1-.3-.2-1.2-.5-2.3-1.4-.9-.8-1.4-1.7-1.6-2-.2-.3 0-.5.1-.6.1-.1.3-.3.4-.5.2-.2.2-.3.3-.5.1-.2 0-.4 0-.5 0-.2-.7-1.6-.9-2.2-.2-.6-.5-.5-.7-.5h-.6c-.2 0-.5.1-.8.4-.3.3-1 1-1 2.4s1.1 2.8 1.2 3c.2.2 2.1 3.2 5.1 4.5.7.3 1.3.5 1.7.6.7.2 1.4.2 1.9.1.6-.1 1.7-.7 2-1.4.2-.7.2-1.3.2-1.4-.1-.2-.3-.3-.6-.4zM12 2C6.5 2 2 6.5 2 12c0 1.8.5 3.4 1.3 4.9L2 22l5.3-1.4c1.4.8 3 1.2 4.7 1.2 5.5 0 10-4.5 10-10S17.5 2 12 2z"/></svg>
+          {{CTA_CAJA_BOTON}}
+        </a>
+        <p class="site-cta-caja__nota">{{CTA_CAJA_NOTA}}</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Pie ───────────────────────────────────────────────────────────── -->
+  <footer class="site-pie">
+    <div class="site-wrap">
+      <div class="site-pie__in">
+        <p>© 2026 {{NOMBRE}} · {{UBICACION_CORTA}}</p>
+        <div class="site-pie__links">
+          <a href="/privacidad">Aviso de privacidad</a>
+          <a href="/terminos">Términos y condiciones</a>
+          <a href="https://wa.me/{{WA}}" target="_blank" rel="noopener">WhatsApp</a>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     COPIAR HASTA AQUÍ ↑
+     ══════════════════════════════════════════════════════════════════════════ -->
+
+</body>
+</html>

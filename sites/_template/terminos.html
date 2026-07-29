@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="es-MX">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Términos y condiciones — {{NOMBRE}}</title>
+<meta name="robots" content="noindex">
+</head>
+<body>
+
+<!-- ══════════ COPIAR DESDE AQUÍ ↓ ══════════ -->
+
+<style>
+/* ⚠️ Usa el MISMO par tipográfico y los MISMOS colores que index.html de este cliente. */
+@import url('https://fonts.googleapis.com/css2?family={{FUENTE_DISPLAY}}&family={{FUENTE_TEXTO}}:wght@300;400;500;600&display=swap');
+
+.site-legal {
+  --base:#F6F5F3; --tinta:#2C2A28; --humo:#6E6A66;
+  --acento:#6B6560; --linea:rgba(44,42,40,.12);
+  --display:'{{FUENTE_DISPLAY}}',Georgia,serif; --texto:'{{FUENTE_TEXTO}}','Helvetica Neue',Arial,sans-serif;
+}
+.site-legal, .site-legal * { box-sizing:border-box; margin:0; padding:0; }
+.site-legal {
+  font-family:var(--texto); font-weight:400; font-size:16.5px; line-height:1.7;
+  color:var(--humo); background:var(--base);
+  padding:72px 24px 88px; -webkit-font-smoothing:antialiased;
+}
+.site-legal__in { max-width:760px; margin:0 auto; }
+.site-legal a { color:var(--acento); text-decoration:underline; text-underline-offset:3px; }
+.site-legal :focus-visible { outline:2px solid var(--acento); outline-offset:3px; }
+.site-legal__marca { display:flex; align-items:baseline; gap:9px; margin-bottom:44px; padding-bottom:24px; border-bottom:1px solid var(--linea); }
+.site-legal__marca b { font-family:var(--display); font-size:1.3rem; letter-spacing:.14em; color:var(--tinta); }
+.site-legal__marca span { font-size:9px; font-weight:600; letter-spacing:.28em; text-transform:uppercase; color:var(--acento); }
+.site-legal h1 { font-family:var(--display); font-size:clamp(1.9rem,5vw,2.7rem); font-weight:400; line-height:1.16; color:var(--tinta); }
+.site-legal__fecha { font-size:.82rem; letter-spacing:.1em; text-transform:uppercase; color:var(--humo); opacity:.75; margin-top:14px; }
+.site-legal h2 { font-family:var(--display); font-size:1.28rem; font-weight:400; color:var(--tinta); margin:44px 0 14px; padding-top:22px; border-top:1px solid var(--linea); }
+.site-legal p { margin-bottom:14px; }
+.site-legal ul { list-style:none; margin:0 0 16px; }
+.site-legal li { position:relative; padding-left:20px; margin-bottom:8px; }
+.site-legal li::before { content:''; position:absolute; left:2px; top:11px; width:5px; height:5px; border-radius:50%; background:var(--acento); }
+.site-legal__volver { display:inline-block; margin-top:52px; padding-top:24px; border-top:1px solid var(--linea); font-size:.9rem; }
+@media (max-width:560px){ .site-legal{ padding:48px 20px 64px; } }
+</style>
+
+<div class="site-legal">
+  <div class="site-legal__in">
+
+    <div class="site-legal__marca"><b>{{NOMBRE}}</b><span>{{BAJADA}}</span></div>
+
+    <h1>Términos y condiciones</h1>
+    <p class="site-legal__fecha">Última actualización: {{FECHA}}</p>
+
+    <p>
+      Estos términos aplican a los servicios que {{NOMBRE}} presta en su sucursal de {{DIRECCION}}
+      y a la información publicada en este sitio. Al agendar una cita aceptas lo aquí descrito.
+    </p>
+
+    <h2>Servicios</h2>
+    <!-- ⚠️ Ajusta esta descripción al giro real del cliente. -->
+    <p>{{TERMINOS_SERVICIOS}}</p>
+
+    <h2>Precios y promociones</h2>
+    <ul>
+      <li>Todos los precios están en pesos mexicanos (MXN) e incluyen impuestos.</li>
+      <li>Los precios publicados pueden cambiar sin previo aviso. El precio aplicable es el vigente
+        al momento de confirmar tu cita.</li>
+      <li>Las promociones tienen vigencia limitada, están sujetas a disponibilidad de agenda y no
+        son acumulables con otras ofertas.</li>
+    </ul>
+
+    <h2>Citas, cancelaciones y retardos</h2>
+    <!-- ⚠️ Sustituye los plazos por la política real del cliente. -->
+    <ul>
+      <li>Las citas se agendan y confirman por WhatsApp al {{TELEFONO}}.</li>
+      <li>Si necesitas cancelar o reprogramar, avísanos con al menos 24 horas de anticipación.</li>
+      <li>Llegar con más de 15 minutos de retraso puede acortar tu sesión o requerir reprogramarla.</li>
+    </ul>
+
+    <!-- ⚠️ Si el negocio NO es de salud/estética, borra estas dos secciones. -->
+    <h2>Valoración previa y responsabilidad del cliente</h2>
+    <p>
+      Antes de cualquier servicio que lo requiera realizamos una valoración. Es tu responsabilidad
+      informarnos con veracidad sobre condiciones de salud, alergias y tratamientos relevantes.
+      {{NOMBRE}} puede negar o posponer un servicio cuando exista una contraindicación o cuando la
+      información proporcionada sea incompleta o inexacta.
+    </p>
+
+    <h2>Resultados</h2>
+    <p>
+      Los resultados varían de una persona a otra y dependen de múltiples factores. {{NOMBRE}} no
+      garantiza un resultado específico ni un número exacto de sesiones.
+    </p>
+
+    <h2>Contenido del sitio</h2>
+    <p>
+      El nombre {{NOMBRE}}, su identidad visual y el contenido de este sitio son de su propiedad y
+      no pueden reproducirse sin autorización. La información publicada es meramente informativa y
+      puede actualizarse en cualquier momento.
+    </p>
+
+    <h2>Datos personales</h2>
+    <p>El tratamiento de tus datos se rige por nuestro <a href="/privacidad">aviso de privacidad</a>.</p>
+
+    <h2>Ley aplicable</h2>
+    <p>
+      Estos términos se rigen por las leyes de los Estados Unidos Mexicanos. Cualquier controversia
+      se someterá a los tribunales competentes de {{CIUDAD}}.
+    </p>
+
+    <a class="site-legal__volver" href="/">← Volver al inicio</a>
+
+  </div>
+</div>
+
+<!-- ══════════ COPIAR HASTA AQUÍ ↑ ══════════ -->
+
+</body>
+</html>

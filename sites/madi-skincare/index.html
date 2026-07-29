@@ -1,0 +1,779 @@
+<!doctype html>
+<html lang="es-MX">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MADI Skin Care — Faciales, depilación láser y retiro de tatuajes en Zona Río, Tijuana</title>
+<meta name="description" content="Centro de cuidado de la piel en Plaza Financiera, Zona Río, Tijuana. Diagnóstico facial digital sin costo, faciales con producto Janssen Cosmetics, depilación láser de diodo y retiro de tatuajes.">
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     COPIAR DESDE AQUÍ ↓ para pegar en el bloque de Custom Code de GHL
+     ══════════════════════════════════════════════════════════════════════════ -->
+
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Prata&family=Mulish:wght@300;400;500;600&display=swap');
+
+/* Única regla global: scroll suave para los enlaces del menú. */
+html { scroll-behavior: smooth; }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   MARCA — edita solo estos valores para cambiar la identidad completa
+   ───────────────────────────────────────────────────────────────────────── */
+.madi {
+  --nacar:     #FDF7F5;   /* base, blanco rosado */
+  --rosa:      #F6E7E3;   /* campo, rosa palo */
+  --blanco:    #FFFFFF;   /* tarjetas */
+  --rubor:     #EBC9C4;   /* rellenos suaves */
+  --malva:     #B0687A;   /* acento */
+  --malva-osc: #8E5063;   /* acento en texto e hover */
+  --vino:      #6E3A4A;   /* bandas profundas */
+  --vino-2:    #7E4657;   /* tarjetas sobre vino */
+  --tinta:     #3B2A2E;   /* texto principal */
+  --humo:      #8A7076;   /* texto secundario */
+  --bruma:     #E3C7CE;   /* texto secundario sobre vino */
+  --linea:     rgba(59,42,46,.12);
+  --linea-v:   rgba(255,255,255,.16);
+  --sombra:    0 20px 46px -30px rgba(110,58,74,.42);
+
+  --display: 'Prata', Georgia, serif;
+  --texto:   'Mulish', 'Helvetica Neue', Arial, sans-serif;
+
+  --ancho: 1160px;
+  --radio: 20px;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Reset local — aísla el sitio del CSS que GHL inyecta en la página
+   ───────────────────────────────────────────────────────────────────────── */
+.madi, .madi * { box-sizing: border-box; margin: 0; padding: 0; }
+.madi {
+  font-family: var(--texto);
+  font-weight: 400;
+  font-size: 17px;
+  line-height: 1.68;
+  color: var(--tinta);
+  background: var(--nacar);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+.madi img { display: block; max-width: 100%; height: auto; }
+.madi a { color: inherit; text-decoration: none; }
+.madi ul { list-style: none; }
+.madi h1, .madi h2, .madi h3, .madi h4 { font-weight: 400; line-height: 1.14; }
+.madi :focus-visible { outline: 2px solid var(--malva); outline-offset: 3px; border-radius: 4px; }
+
+/* ── Utilidades ─────────────────────────────────────────────────────────── */
+.madi-wrap { width: 100%; max-width: var(--ancho); margin: 0 auto; padding: 0 28px; }
+.madi-sec { padding: 104px 0; }
+.madi-sec--nacar { background: var(--nacar); }
+.madi-sec--rosa  { background: var(--rosa); }
+.madi-sec--vino  { background: var(--vino); color: var(--bruma); }
+
+.madi-eyebrow {
+  font-size: 11px; font-weight: 600; letter-spacing: .2em;
+  text-transform: uppercase; color: var(--malva);
+}
+.madi-sec--vino .madi-eyebrow { color: var(--rubor); }
+
+.madi-h2 { font-family: var(--display); font-size: clamp(1.95rem, 4.3vw, 3rem); color: var(--tinta); margin: 16px 0 0; }
+.madi-sec--vino .madi-h2 { color: var(--nacar); }
+.madi-lede { max-width: 54ch; margin-top: 18px; font-size: 1.04rem; font-weight: 300; color: var(--humo); }
+.madi-sec--vino .madi-lede { color: var(--bruma); }
+
+.madi-precio {
+  font-family: var(--display); font-size: 1.45rem; color: var(--tinta); white-space: nowrap;
+}
+.madi-precio span { font-family: var(--texto); font-size: .66rem; font-weight: 500; letter-spacing: .12em; color: var(--humo); }
+
+/* ── Botones ────────────────────────────────────────────────────────────── */
+.madi-btn {
+  display: inline-flex; align-items: center; gap: 9px;
+  padding: 15px 30px; border-radius: 999px; border: 1px solid transparent;
+  font-family: var(--texto); font-size: 13.5px; font-weight: 600;
+  letter-spacing: .06em; text-transform: uppercase; cursor: pointer;
+  transition: transform .25s ease, background-color .25s ease, color .25s ease,
+              border-color .25s ease, box-shadow .25s ease;
+}
+.madi-btn--malva { background: var(--malva); color: #FFF; box-shadow: 0 12px 26px -16px rgba(176,104,122,.9); }
+.madi-btn--malva:hover { background: var(--malva-osc); transform: translateY(-2px); }
+.madi-btn--linea { border-color: rgba(59,42,46,.2); color: var(--tinta); }
+.madi-btn--linea:hover { border-color: var(--malva); color: var(--malva-osc); transform: translateY(-2px); }
+.madi-btn--blanco { background: var(--nacar); color: var(--vino); }
+.madi-btn--blanco:hover { background: #FFF; transform: translateY(-2px); }
+.madi-btn svg { width: 16px; height: 16px; fill: currentColor; }
+
+/* ── Encabezado ─────────────────────────────────────────────────────────── */
+.madi-head {
+  position: sticky; top: 0; z-index: 50;
+  background: rgba(253,247,245,.85);
+  -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--linea);
+}
+.madi-head__in { display: flex; align-items: center; justify-content: space-between; gap: 24px; height: 76px; }
+.madi-logo { display: flex; align-items: baseline; gap: 10px; }
+.madi-logo__m { font-family: var(--display); font-size: 1.5rem; letter-spacing: .14em; color: var(--tinta); }
+.madi-logo__s {
+  font-size: 9.5px; font-weight: 600; letter-spacing: .28em;
+  text-transform: uppercase; color: var(--malva);
+}
+.madi-nav { display: flex; gap: 34px; }
+.madi-nav a {
+  font-size: 12.5px; font-weight: 500; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--humo); transition: color .2s ease;
+}
+.madi-nav a:hover { color: var(--malva-osc); }
+.madi-head .madi-btn { padding: 11px 22px; font-size: 12px; }
+
+/* ── Hero ───────────────────────────────────────────────────────────────── */
+.madi-hero { position: relative; overflow: hidden; background: var(--nacar); padding: 118px 0 92px; }
+.madi-hero__glow {
+  position: absolute; top: -32%; left: 50%; width: min(1080px, 135vw); aspect-ratio: 1;
+  transform: translateX(-50%); pointer-events: none;
+  background: radial-gradient(circle,
+    rgba(235,201,196,.72) 0%, rgba(240,214,208,.42) 30%,
+    rgba(246,231,227,.20) 50%, transparent 70%);
+  animation: madi-respira 10s ease-in-out infinite alternate;
+}
+@keyframes madi-respira {
+  from { transform: translateX(-50%) scale(1);    opacity: .8; }
+  to   { transform: translateX(-50%) scale(1.13); opacity: 1; }
+}
+.madi-hero__in { position: relative; z-index: 1; text-align: center; }
+.madi-hero h1 {
+  font-family: var(--display);
+  font-size: clamp(2.4rem, 6.4vw, 4.7rem);
+  line-height: 1.16; color: var(--tinta);
+  margin: 20px auto 0; max-width: 17ch;
+}
+.madi-hero h1 span { color: var(--malva); }
+.madi-hero__lede {
+  max-width: 50ch; margin: 24px auto 0; color: var(--humo);
+  font-size: 1.06rem; font-weight: 300;
+}
+.madi-hero__cta { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; margin-top: 36px; }
+
+/* ── FIRMA: escala de fototipos ─────────────────────────────────────────── */
+.madi-escala { max-width: 640px; margin: 78px auto 0; }
+.madi-escala__barras { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+.madi-escala__b {
+  height: 44px; border-radius: 999px; position: relative;
+  box-shadow: inset 0 0 0 1px rgba(59,42,46,.09);
+}
+.madi-escala__b::after {
+  content: attr(data-t); position: absolute; top: calc(100% + 10px); left: 50%;
+  transform: translateX(-50%);
+  font-size: 9.5px; font-weight: 600; letter-spacing: .14em; color: var(--humo); opacity: .7;
+}
+.madi-escala__pie {
+  margin-top: 40px; padding-top: 24px; border-top: 1px solid var(--linea);
+  font-size: .95rem; font-weight: 300; color: var(--humo);
+}
+.madi-escala__pie strong { color: var(--malva-osc); font-weight: 600; }
+
+/* ── Tira de diferenciadores ────────────────────────────────────────────── */
+.madi-tira { background: var(--rosa); }
+.madi-tira__in { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; padding: 56px 28px; }
+.madi-tira__i { }
+.madi-tira__t { font-family: var(--display); font-size: 1.14rem; color: var(--tinta); margin-bottom: 8px; }
+.madi-tira__d { font-size: .87rem; font-weight: 300; line-height: 1.6; color: var(--humo); }
+
+/* ── Servicios ──────────────────────────────────────────────────────────── */
+.madi-grupo { margin-top: 64px; }
+.madi-grupo__cab {
+  display: flex; align-items: baseline; gap: 18px;
+  padding-bottom: 16px; border-bottom: 1px solid var(--linea); margin-bottom: 32px;
+}
+.madi-grupo__cab h3 { font-family: var(--display); font-size: 1.5rem; color: var(--tinta); }
+.madi-grupo__cab p { font-size: .84rem; font-weight: 300; color: var(--humo); margin-left: auto; text-align: right; }
+
+.madi-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+.madi-card {
+  display: flex; flex-direction: column;
+  background: var(--blanco); border: 1px solid var(--linea); border-radius: var(--radio);
+  padding: 34px 30px 30px;
+  transition: transform .3s ease, box-shadow .3s ease, border-color .3s ease;
+}
+.madi-card:hover {
+  transform: translateY(-5px); border-color: rgba(176,104,122,.4); box-shadow: var(--sombra);
+}
+.madi-card--destacada { border-color: var(--malva); box-shadow: 0 0 0 1px var(--malva); }
+.madi-card__tag {
+  align-self: flex-start; margin-bottom: 16px; padding: 5px 13px;
+  background: var(--rubor); color: var(--vino); border-radius: 999px;
+  font-size: 9.5px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
+}
+.madi-card h4 { font-family: var(--display); font-size: 1.38rem; color: var(--tinta); }
+.madi-card__lista { margin: 18px 0 26px; }
+.madi-card__lista li {
+  position: relative; padding-left: 21px; padding-bottom: 8px;
+  font-size: .93rem; font-weight: 300; color: var(--humo);
+}
+.madi-card__lista li::before {
+  content: ''; position: absolute; left: 2px; top: 10px;
+  width: 6px; height: 6px; border-radius: 50%; background: var(--rubor);
+}
+.madi-card__pie {
+  margin-top: auto; padding-top: 20px; border-top: 1px solid var(--linea);
+  display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+}
+.madi-card__nota { font-size: .8rem; font-weight: 500; color: var(--malva); }
+
+/* Packs de láser — lista comparativa */
+.madi-packs { border-top: 1px solid var(--linea); }
+.madi-pack {
+  display: grid; grid-template-columns: 190px 1fr auto; gap: 28px; align-items: center;
+  padding: 24px 18px; border-bottom: 1px solid var(--linea); border-radius: 14px;
+  transition: background-color .25s ease;
+}
+.madi-pack:hover { background: var(--blanco); }
+.madi-pack__n { font-family: var(--display); font-size: 1.28rem; color: var(--tinta); }
+.madi-pack__z { display: flex; flex-wrap: wrap; gap: 8px; }
+.madi-pack__z span {
+  padding: 5px 14px; border-radius: 999px; background: var(--rosa);
+  font-size: .8rem; font-weight: 500; color: var(--vino);
+}
+
+/* Servicios menores */
+.madi-mini { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+.madi-mini__i {
+  padding: 30px 28px; background: var(--blanco);
+  border: 1px solid var(--linea); border-radius: var(--radio);
+}
+.madi-mini__i h4 { font-family: var(--display); font-size: 1.2rem; color: var(--tinta); }
+.madi-mini__i p { font-size: .91rem; font-weight: 300; color: var(--humo); margin: 10px 0 16px; }
+.madi-mini__p { font-size: .93rem; font-weight: 600; color: var(--malva); }
+
+/* ── Banda de apertura ──────────────────────────────────────────────────── */
+.madi-apertura { position: relative; overflow: hidden; background: var(--vino); padding: 96px 0; }
+.madi-apertura__glow {
+  position: absolute; bottom: -60%; left: 50%; width: min(920px, 125vw); aspect-ratio: 1;
+  transform: translateX(-50%); pointer-events: none;
+  background: radial-gradient(circle, rgba(235,201,196,.28) 0%, rgba(235,201,196,.08) 45%, transparent 68%);
+}
+.madi-apertura__in { position: relative; z-index: 1; text-align: center; }
+.madi-apertura__lista {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;
+  margin: 50px 0 42px;
+}
+.madi-apertura__i {
+  background: var(--vino-2); border: 1px solid var(--linea-v);
+  border-radius: var(--radio); padding: 34px 26px;
+}
+.madi-apertura__i strong {
+  display: block; font-family: var(--display); font-size: 1.85rem; font-weight: 400;
+  color: var(--nacar); margin-bottom: 10px;
+}
+.madi-apertura__i span { font-size: .9rem; font-weight: 300; color: var(--bruma); }
+.madi-apertura__nota { font-size: .8rem; font-weight: 300; color: var(--bruma); opacity: .72; margin-top: 26px; }
+
+/* ── Nosotros ───────────────────────────────────────────────────────────── */
+.madi-dos { display: grid; grid-template-columns: 1fr 1fr; gap: 72px; align-items: start; }
+.madi-dos p + p { margin-top: 14px; }
+.madi-valores li {
+  display: grid; grid-template-columns: 28px 1fr; gap: 14px;
+  padding: 17px 0; border-bottom: 1px solid var(--linea);
+}
+.madi-valores li:last-child { border-bottom: 0; }
+.madi-valores__n { font-family: var(--display); font-size: .95rem; color: var(--malva); padding-top: 3px; }
+.madi-valores__t { font-size: .99rem; font-weight: 500; color: var(--tinta); }
+.madi-valores__d { font-size: .88rem; font-weight: 300; color: var(--humo); margin-top: 3px; }
+
+/* ── FAQ ────────────────────────────────────────────────────────────────── */
+.madi-faq { max-width: 820px; margin: 46px auto 0; }
+.madi-faq details { border-bottom: 1px solid var(--linea); }
+.madi-faq summary {
+  display: flex; align-items: center; justify-content: space-between; gap: 20px;
+  padding: 22px 2px; cursor: pointer; list-style: none;
+  font-size: 1.03rem; font-weight: 500; color: var(--tinta); transition: color .2s ease;
+}
+.madi-faq summary::-webkit-details-marker { display: none; }
+.madi-faq summary:hover { color: var(--malva-osc); }
+.madi-faq summary::after {
+  content: '+'; font-size: 1.5rem; font-weight: 300; color: var(--malva);
+  transition: transform .3s ease; flex-shrink: 0; line-height: 1;
+}
+.madi-faq details[open] summary::after { transform: rotate(45deg); }
+.madi-faq__r { padding: 0 58px 26px 2px; font-size: .96rem; font-weight: 300; color: var(--humo); }
+
+/* ── Contacto ───────────────────────────────────────────────────────────── */
+.madi-contacto__in { display: grid; grid-template-columns: 1fr 1fr; gap: 72px; align-items: start; }
+.madi-nap { margin-top: 36px; }
+.madi-nap__f { padding: 19px 0; border-bottom: 1px solid var(--linea); }
+.madi-nap__l {
+  font-size: 10px; font-weight: 600; letter-spacing: .18em;
+  text-transform: uppercase; color: var(--malva); margin-bottom: 6px;
+}
+.madi-nap__v { font-size: 1.01rem; font-weight: 300; color: var(--tinta); line-height: 1.5; }
+.madi-nap__v a { border-bottom: 1px solid var(--rubor); }
+.madi-nap__v a:hover { color: var(--malva-osc); border-color: var(--malva); }
+.madi-cta-caja {
+  background: var(--blanco); border: 1px solid var(--linea);
+  border-radius: var(--radio); padding: 46px 40px; box-shadow: var(--sombra);
+}
+.madi-cta-caja h3 { font-family: var(--display); font-size: 1.75rem; color: var(--tinta); }
+.madi-cta-caja p { font-size: .96rem; font-weight: 300; color: var(--humo); margin: 14px 0 28px; }
+.madi-cta-caja .madi-btn { width: 100%; justify-content: center; }
+.madi-cta-caja__nota {
+  margin-top: 18px; font-size: .82rem; font-weight: 300;
+  color: var(--humo); opacity: .8; text-align: center;
+}
+
+/* ── Pie ────────────────────────────────────────────────────────────────── */
+.madi-pie { background: var(--vino); color: var(--bruma); padding: 46px 0; }
+.madi-pie__escala { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; margin-bottom: 34px; }
+.madi-pie__escala div { height: 4px; border-radius: 999px; }
+.madi-pie__in {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 18px;
+  font-size: .82rem; font-weight: 300;
+}
+.madi-pie__links { display: flex; flex-wrap: wrap; gap: 24px; }
+.madi-pie__links a:hover { color: var(--nacar); }
+
+/* ── Responsive ─────────────────────────────────────────────────────────── */
+@media (max-width: 940px) {
+  .madi-nav { display: none; }
+  .madi-sec { padding: 74px 0; }
+  .madi-hero { padding: 80px 0 64px; }
+  .madi-cards, .madi-mini, .madi-apertura__lista { grid-template-columns: 1fr; }
+  .madi-dos, .madi-contacto__in { grid-template-columns: 1fr; gap: 46px; }
+  .madi-tira__in { grid-template-columns: 1fr 1fr; gap: 30px; padding: 44px 28px; }
+  .madi-pack { grid-template-columns: 1fr; gap: 14px; padding: 22px 14px; }
+  .madi-faq__r { padding-right: 28px; }
+}
+@media (max-width: 560px) {
+  .madi { font-size: 16px; }
+  .madi-wrap { padding: 0 20px; }
+  .madi-escala__b { height: 34px; }
+  .madi-escala__barras { gap: 6px; }
+  .madi-hero__cta .madi-btn { width: 100%; justify-content: center; }
+  .madi-tira__in { grid-template-columns: 1fr; padding: 40px 20px; }
+  .madi-cta-caja { padding: 34px 26px; }
+}
+
+/* ── Entrada + accesibilidad ────────────────────────────────────────────── */
+.madi-rise { animation: madi-rise .9s cubic-bezier(.2,.7,.3,1) both; }
+@keyframes madi-rise { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .madi *, .madi *::before, .madi *::after { animation: none !important; transition: none !important; }
+  .madi-rise { opacity: 1; transform: none; }
+}
+</style>
+
+<div class="madi">
+
+  <!-- ── Encabezado ────────────────────────────────────────────────────── -->
+  <header class="madi-head">
+    <div class="madi-wrap madi-head__in">
+      <a class="madi-logo" href="#top" aria-label="MADI Skin Care — inicio">
+        <span class="madi-logo__m">MADI</span>
+        <span class="madi-logo__s">Skin Care</span>
+      </a>
+      <nav class="madi-nav" aria-label="Secciones">
+        <a href="#tratamientos">Tratamientos</a>
+        <a href="#apertura">Apertura</a>
+        <a href="#nosotros">Nosotros</a>
+        <a href="#faq">Preguntas</a>
+        <a href="#contacto">Contacto</a>
+      </nav>
+      <a class="madi-btn madi-btn--malva"
+         href="https://wa.me/526642459214?text=Hola%2C%20quiero%20agendar%20mi%20diagn%C3%B3stico%20facial%20en%20MADI."
+         target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.5 14.4c-.3-.2-1.7-.9-2-1-.3-.1-.5-.1-.7.2-.2.3-.7 1-.9 1.2-.2.2-.3.2-.6.1-.3-.2-1.2-.5-2.3-1.4-.9-.8-1.4-1.7-1.6-2-.2-.3 0-.5.1-.6.1-.1.3-.3.4-.5.2-.2.2-.3.3-.5.1-.2 0-.4 0-.5 0-.2-.7-1.6-.9-2.2-.2-.6-.5-.5-.7-.5h-.6c-.2 0-.5.1-.8.4-.3.3-1 1-1 2.4s1.1 2.8 1.2 3c.2.2 2.1 3.2 5.1 4.5.7.3 1.3.5 1.7.6.7.2 1.4.2 1.9.1.6-.1 1.7-.7 2-1.4.2-.7.2-1.3.2-1.4-.1-.2-.3-.3-.6-.4zM12 2C6.5 2 2 6.5 2 12c0 1.8.5 3.4 1.3 4.9L2 22l5.3-1.4c1.4.8 3 1.2 4.7 1.2 5.5 0 10-4.5 10-10S17.5 2 12 2z"/></svg>
+        WhatsApp
+      </a>
+    </div>
+  </header>
+
+  <!-- ── Hero ──────────────────────────────────────────────────────────── -->
+  <section class="madi-hero" id="top">
+    <div class="madi-hero__glow" aria-hidden="true"></div>
+    <div class="madi-wrap madi-hero__in">
+      <p class="madi-eyebrow madi-rise" style="animation-delay:.05s">Plaza Financiera · Zona Río · Tijuana</p>
+      <h1 class="madi-rise" style="animation-delay:.15s">Primero leemos tu piel. <span>Después</span> la tratamos.</h1>
+      <p class="madi-hero__lede madi-rise" style="animation-delay:.28s">
+        Diagnóstico facial digital sin costo. A partir de lo que muestra, armamos el
+        tratamiento — con producto profesional alemán y equipo calibrado para piel latina.
+      </p>
+      <div class="madi-hero__cta madi-rise" style="animation-delay:.4s">
+        <a class="madi-btn madi-btn--malva"
+           href="https://wa.me/526642459214?text=Hola%2C%20quiero%20agendar%20mi%20diagn%C3%B3stico%20facial%20sin%20costo."
+           target="_blank" rel="noopener">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.5 14.4c-.3-.2-1.7-.9-2-1-.3-.1-.5-.1-.7.2-.2.3-.7 1-.9 1.2-.2.2-.3.2-.6.1-.3-.2-1.2-.5-2.3-1.4-.9-.8-1.4-1.7-1.6-2-.2-.3 0-.5.1-.6.1-.1.3-.3.4-.5.2-.2.2-.3.3-.5.1-.2 0-.4 0-.5 0-.2-.7-1.6-.9-2.2-.2-.6-.5-.5-.7-.5h-.6c-.2 0-.5.1-.8.4-.3.3-1 1-1 2.4s1.1 2.8 1.2 3c.2.2 2.1 3.2 5.1 4.5.7.3 1.3.5 1.7.6.7.2 1.4.2 1.9.1.6-.1 1.7-.7 2-1.4.2-.7.2-1.3.2-1.4-.1-.2-.3-.3-.6-.4zM12 2C6.5 2 2 6.5 2 12c0 1.8.5 3.4 1.3 4.9L2 22l5.3-1.4c1.4.8 3 1.2 4.7 1.2 5.5 0 10-4.5 10-10S17.5 2 12 2z"/></svg>
+          Agendar diagnóstico
+        </a>
+        <a class="madi-btn madi-btn--linea" href="#tratamientos">Ver tratamientos y precios</a>
+      </div>
+
+      <!-- FIRMA: escala de fototipos -->
+      <div class="madi-escala madi-rise" style="animation-delay:.55s">
+        <div class="madi-escala__barras" aria-hidden="true">
+          <div class="madi-escala__b" data-t="I"   style="background:#F7E5D8"></div>
+          <div class="madi-escala__b" data-t="II"  style="background:#F0D2BA"></div>
+          <div class="madi-escala__b" data-t="III" style="background:#DFB08A"></div>
+          <div class="madi-escala__b" data-t="IV"  style="background:#C08C63"></div>
+          <div class="madi-escala__b" data-t="V"   style="background:#8E5C3C"></div>
+          <div class="madi-escala__b" data-t="VI"  style="background:#5A3529"></div>
+        </div>
+        <p class="madi-escala__pie">
+          Ajustamos el equipo a tu fototipo, del I al VI.
+          <strong>El láser de diodo es la tecnología indicada para piel morena</strong>,
+          donde otros equipos no lo son.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Diferenciadores ───────────────────────────────────────────────── -->
+  <section class="madi-tira">
+    <div class="madi-wrap madi-tira__in">
+      <div class="madi-tira__i">
+        <p class="madi-tira__t">Piel latina</p>
+        <p class="madi-tira__d">Protocolos pensados para el tono y la reactividad de nuestra piel, no adaptados de otra.</p>
+      </div>
+      <div class="madi-tira__i">
+        <p class="madi-tira__t">Janssen Cosmetics</p>
+        <p class="madi-tira__d">Línea profesional alemana. El mismo producto que usamos en cabina, no versión de mostrador.</p>
+      </div>
+      <div class="madi-tira__i">
+        <p class="madi-tira__t">Diagnóstico digital</p>
+        <p class="madi-tira__d">Vemos el estado real de tu piel antes de recomendar. Sin costo y sin compromiso.</p>
+      </div>
+      <div class="madi-tira__i">
+        <p class="madi-tira__t">Precios a la vista</p>
+        <p class="madi-tira__d">Lo que cuesta cada tratamiento está publicado aquí. Sin cotización sorpresa.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Tratamientos ──────────────────────────────────────────────────── -->
+  <section class="madi-sec madi-sec--nacar" id="tratamientos">
+    <div class="madi-wrap">
+      <p class="madi-eyebrow">Tratamientos</p>
+      <h2 class="madi-h2">Todo lo que hacemos, con su precio.</h2>
+      <p class="madi-lede">
+        Si no sabes por dónde empezar, empieza por el diagnóstico: es gratis y de ahí sale
+        la recomendación.
+      </p>
+
+      <!-- Faciales -->
+      <div class="madi-grupo">
+        <div class="madi-grupo__cab">
+          <h3>Faciales</h3>
+          <p>Cabina · producto Janssen Cosmetics</p>
+        </div>
+        <div class="madi-cards">
+          <article class="madi-card">
+            <h4>Facial Esencial</h4>
+            <ul class="madi-card__lista">
+              <li>Limpieza profunda</li>
+              <li>Hidratación</li>
+            </ul>
+            <div class="madi-card__pie">
+              <span class="madi-precio">$699 <span>MXN</span></span>
+            </div>
+          </article>
+
+          <article class="madi-card madi-card--destacada">
+            <span class="madi-card__tag">Promo de apertura</span>
+            <h4>Facial Glow MADI</h4>
+            <ul class="madi-card__lista">
+              <li>Limpieza profunda</li>
+              <li>Hidratación intensiva</li>
+              <li>Activos con efecto Glow</li>
+              <li>Fototerapia LED</li>
+            </ul>
+            <div class="madi-card__pie">
+              <span class="madi-precio">$999 <span>MXN</span></span>
+              <span class="madi-card__nota">Por tiempo limitado</span>
+            </div>
+          </article>
+
+          <article class="madi-card">
+            <h4>Facial Signature MADI</h4>
+            <ul class="madi-card__lista">
+              <!-- ⚠️ COMPLETAR: pedir a la clienta el detalle real de qué incluye este facial. -->
+              <li>Protocolo premium, armado a partir de tu diagnóstico</li>
+              <li>Personalizado sesión por sesión</li>
+            </ul>
+            <div class="madi-card__pie">
+              <span class="madi-precio">$1,399 <span>MXN</span></span>
+            </div>
+          </article>
+        </div>
+      </div>
+
+      <!-- Depilación láser -->
+      <div class="madi-grupo">
+        <div class="madi-grupo__cab">
+          <h3>Depilación láser de diodo</h3>
+          <p>Paquetes por zonas · precio por paquete completo</p>
+        </div>
+        <div class="madi-packs">
+          <div class="madi-pack">
+            <p class="madi-pack__n">Pack Ejecutivo</p>
+            <div class="madi-pack__z">
+              <span>Axilas</span><span>Bikini</span><span>Bozo</span>
+            </div>
+            <span class="madi-precio">$2,999 <span>MXN</span></span>
+          </div>
+          <div class="madi-pack">
+            <p class="madi-pack__n">Pack Playa</p>
+            <div class="madi-pack__z">
+              <span>Pierna completa</span><span>Axilas</span><span>Bikini</span>
+            </div>
+            <span class="madi-precio">$5,499 <span>MXN</span></span>
+          </div>
+          <div class="madi-pack">
+            <p class="madi-pack__n">Pack Total</p>
+            <div class="madi-pack__z">
+              <span>Pierna completa</span><span>Axilas</span><span>Bikini</span><span>Bozo</span><span>Brazos</span>
+            </div>
+            <span class="madi-precio">$7,499 <span>MXN</span></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Otros servicios -->
+      <div class="madi-grupo">
+        <div class="madi-grupo__cab">
+          <h3>También en cabina</h3>
+        </div>
+        <div class="madi-mini">
+          <div class="madi-mini__i">
+            <h4>Diagnóstico facial digital</h4>
+            <p>Evaluación con tecnología digital para saber qué necesita tu piel antes de gastar en un tratamiento.</p>
+            <p class="madi-mini__p">Sin costo · promoción de apertura</p>
+          </div>
+          <div class="madi-mini__i">
+            <h4>Retiro de tatuajes</h4>
+            <p>Plan por sesiones según tamaño, color y antigüedad del tatuaje. La valoración es gratis.</p>
+            <p class="madi-mini__p">Desde $700 MXN por sesión</p>
+          </div>
+          <div class="madi-mini__i">
+            <h4>Masajes</h4>
+            <!-- ⚠️ COMPLETAR: tipos de masaje, duración y precio. -->
+            <p>Masaje corporal de relajación. Se agenda por WhatsApp.</p>
+            <p class="madi-mini__p">Consultar disponibilidad</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Apertura ──────────────────────────────────────────────────────── -->
+  <section class="madi-apertura" id="apertura">
+    <div class="madi-apertura__glow" aria-hidden="true"></div>
+    <div class="madi-wrap madi-apertura__in">
+      <p class="madi-eyebrow">Estamos abriendo</p>
+      <h2 class="madi-h2">Tres cosas que solo aplican ahora.</h2>
+      <div class="madi-apertura__lista">
+        <div class="madi-apertura__i">
+          <strong>$999</strong>
+          <span>Facial Glow MADI a precio de apertura, por tiempo limitado.</span>
+        </div>
+        <div class="madi-apertura__i">
+          <strong>Sin costo</strong>
+          <span>Diagnóstico facial digital durante la promoción de apertura.</span>
+        </div>
+        <div class="madi-apertura__i">
+          <strong>Primeras 10</strong>
+          <span>Masaje relajante de 20 minutos de regalo para las primeras 10 reservas.</span>
+        </div>
+      </div>
+      <a class="madi-btn madi-btn--blanco"
+         href="https://wa.me/526642459214?text=Hola%2C%20vi%20la%20promoci%C3%B3n%20de%20apertura%20y%20quiero%20apartar%20mi%20lugar."
+         target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.5 14.4c-.3-.2-1.7-.9-2-1-.3-.1-.5-.1-.7.2-.2.3-.7 1-.9 1.2-.2.2-.3.2-.6.1-.3-.2-1.2-.5-2.3-1.4-.9-.8-1.4-1.7-1.6-2-.2-.3 0-.5.1-.6.1-.1.3-.3.4-.5.2-.2.2-.3.3-.5.1-.2 0-.4 0-.5 0-.2-.7-1.6-.9-2.2-.2-.6-.5-.5-.7-.5h-.6c-.2 0-.5.1-.8.4-.3.3-1 1-1 2.4s1.1 2.8 1.2 3c.2.2 2.1 3.2 5.1 4.5.7.3 1.3.5 1.7.6.7.2 1.4.2 1.9.1.6-.1 1.7-.7 2-1.4.2-.7.2-1.3.2-1.4-.1-.2-.3-.3-.6-.4zM12 2C6.5 2 2 6.5 2 12c0 1.8.5 3.4 1.3 4.9L2 22l5.3-1.4c1.4.8 3 1.2 4.7 1.2 5.5 0 10-4.5 10-10S17.5 2 12 2z"/></svg>
+        Apartar mi lugar
+      </a>
+      <!-- ⚠️ COMPLETAR: fecha exacta de vigencia de la promoción. -->
+      <p class="madi-apertura__nota">Promociones sujetas a disponibilidad de agenda. No acumulables con otras ofertas.</p>
+    </div>
+  </section>
+
+  <!-- ── Nosotros ──────────────────────────────────────────────────────── -->
+  <section class="madi-sec madi-sec--rosa" id="nosotros">
+    <div class="madi-wrap madi-dos">
+      <div>
+        <p class="madi-eyebrow">Nosotros</p>
+        <h2 class="madi-h2">Un centro de piel, no un catálogo de aparatos.</h2>
+        <p class="madi-lede">
+          MADI Skin Care abrió en Plaza Financiera, en Zona Río, para atender lo que
+          en Tijuana se resuelve casi siempre a ciegas: qué necesita realmente tu piel.
+        </p>
+        <p class="madi-lede">
+          Por eso el diagnóstico va primero y es gratis. Después viene el tratamiento —
+          faciales, láser de diodo, retiro de tatuajes o masaje — con producto profesional
+          y el equipo ajustado a tu tipo de piel. Sin paquetes que no necesitas.
+        </p>
+      </div>
+      <ul class="madi-valores">
+        <li>
+          <span class="madi-valores__n">01</span>
+          <div>
+            <p class="madi-valores__t">Diagnóstico antes de vender</p>
+            <p class="madi-valores__d">Puedes venir solo al diagnóstico y salir sin comprar nada.</p>
+          </div>
+        </li>
+        <li>
+          <span class="madi-valores__n">02</span>
+          <div>
+            <p class="madi-valores__t">Una sola persona te atiende</p>
+            <p class="madi-valores__d">La misma especialista que te evalúa es la que te trata.</p>
+          </div>
+        </li>
+        <li>
+          <span class="madi-valores__n">03</span>
+          <div>
+            <p class="madi-valores__t">Resultado visible o lo ajustamos</p>
+            <p class="madi-valores__d">Revisamos avance entre sesiones y cambiamos el protocolo si hace falta.</p>
+          </div>
+        </li>
+        <li>
+          <span class="madi-valores__n">04</span>
+          <div>
+            <p class="madi-valores__t">Espacio para desconectar</p>
+            <p class="madi-valores__d">Cabina privada, sin prisa y sin sala de espera llena.</p>
+          </div>
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ── FAQ ───────────────────────────────────────────────────────────── -->
+  <section class="madi-sec madi-sec--nacar" id="faq">
+    <div class="madi-wrap">
+      <p class="madi-eyebrow">Preguntas frecuentes</p>
+      <h2 class="madi-h2">Lo que más nos preguntan.</h2>
+      <div class="madi-faq">
+        <details>
+          <summary>¿Dónde están y cómo llego?</summary>
+          <p class="madi-faq__r">
+            Estamos en Plaza Financiera, Zona Río, Tijuana, Baja California. Escríbenos por
+            WhatsApp y te mandamos la ubicación exacta y las indicaciones de estacionamiento.
+          </p>
+        </details>
+        <details>
+          <summary>¿Cómo agendo una cita?</summary>
+          <p class="madi-faq__r">
+            Por WhatsApp al 664 245 9214. Nos dices qué tratamiento te interesa —o si prefieres
+            empezar por el diagnóstico— y te pasamos los horarios disponibles.
+          </p>
+        </details>
+        <details>
+          <summary>¿El diagnóstico facial de verdad es gratis?</summary>
+          <p class="madi-faq__r">
+            Sí, durante la promoción de apertura. Es una evaluación con tecnología digital que
+            muestra el estado real de tu piel; a partir de ahí te recomendamos tratamiento.
+            No estás obligada a contratar nada ese día.
+          </p>
+        </details>
+        <details>
+          <summary>¿Qué incluye el Facial Glow MADI?</summary>
+          <p class="madi-faq__r">
+            Limpieza profunda, hidratación intensiva, activos con efecto Glow y fototerapia LED.
+            Está diseñado para renovar e iluminar la piel. Precio de apertura: $999 MXN.
+          </p>
+        </details>
+        <details>
+          <summary>Tengo la piel morena. ¿El láser es seguro para mí?</summary>
+          <p class="madi-faq__r">
+            Sí. Usamos láser de diodo, que es precisamente la tecnología indicada para fototipos
+            altos, y calibramos la potencia según tu piel. En la valoración confirmamos tu fototipo
+            antes de la primera sesión.
+          </p>
+        </details>
+        <details>
+          <summary>¿Cuánto cuesta quitarme un tatuaje?</summary>
+          <p class="madi-faq__r">
+            Desde $700 MXN por sesión. El número de sesiones depende del tamaño, los colores y
+            qué tan antiguo es el tatuaje, así que primero hacemos una valoración sin costo y de
+            ahí sale el plan y el costo total.
+          </p>
+        </details>
+        <!-- ⚠️ COMPLETAR: agregar preguntas de horarios, formas de pago, cuidados previos/posteriores
+             y política de cancelación en cuanto la clienta confirme esa información. -->
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Contacto ──────────────────────────────────────────────────────── -->
+  <section class="madi-sec madi-sec--rosa" id="contacto">
+    <div class="madi-wrap madi-contacto__in">
+      <div>
+        <p class="madi-eyebrow">Contacto</p>
+        <h2 class="madi-h2">Estamos en Zona Río.</h2>
+        <div class="madi-nap">
+          <div class="madi-nap__f">
+            <p class="madi-nap__l">Negocio</p>
+            <p class="madi-nap__v">MADI Skin Care</p>
+          </div>
+          <div class="madi-nap__f">
+            <p class="madi-nap__l">Dirección</p>
+            <!-- ⚠️ COMPLETAR: calle, número y local. Meta exige dirección completa para verificar. -->
+            <p class="madi-nap__v">Plaza Financiera, Zona Río<br>Tijuana, Baja California, México</p>
+          </div>
+          <div class="madi-nap__f">
+            <p class="madi-nap__l">WhatsApp</p>
+            <p class="madi-nap__v"><a href="https://wa.me/526642459214" target="_blank" rel="noopener">664 245 9214</a></p>
+          </div>
+          <div class="madi-nap__f">
+            <p class="madi-nap__l">Instagram</p>
+            <!-- ⚠️ VERIFICAR que el usuario de Instagram sea exactamente este. -->
+            <p class="madi-nap__v"><a href="https://instagram.com/madiskincare_mx" target="_blank" rel="noopener">@madiskincare_mx</a></p>
+          </div>
+          <div class="madi-nap__f">
+            <p class="madi-nap__l">Horario</p>
+            <!-- ⚠️ COMPLETAR: horarios reales de atención. -->
+            <p class="madi-nap__v">Consulta disponibilidad por WhatsApp</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="madi-cta-caja">
+        <h3>Empieza por el diagnóstico.</h3>
+        <p>
+          Es gratis, toma pocos minutos y sales sabiendo qué necesita tu piel — con o sin
+          tratamiento el mismo día.
+        </p>
+        <a class="madi-btn madi-btn--malva"
+           href="https://wa.me/526642459214?text=Hola%2C%20quiero%20agendar%20mi%20diagn%C3%B3stico%20facial%20sin%20costo."
+           target="_blank" rel="noopener">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.5 14.4c-.3-.2-1.7-.9-2-1-.3-.1-.5-.1-.7.2-.2.3-.7 1-.9 1.2-.2.2-.3.2-.6.1-.3-.2-1.2-.5-2.3-1.4-.9-.8-1.4-1.7-1.6-2-.2-.3 0-.5.1-.6.1-.1.3-.3.4-.5.2-.2.2-.3.3-.5.1-.2 0-.4 0-.5 0-.2-.7-1.6-.9-2.2-.2-.6-.5-.5-.7-.5h-.6c-.2 0-.5.1-.8.4-.3.3-1 1-1 2.4s1.1 2.8 1.2 3c.2.2 2.1 3.2 5.1 4.5.7.3 1.3.5 1.7.6.7.2 1.4.2 1.9.1.6-.1 1.7-.7 2-1.4.2-.7.2-1.3.2-1.4-.1-.2-.3-.3-.6-.4zM12 2C6.5 2 2 6.5 2 12c0 1.8.5 3.4 1.3 4.9L2 22l5.3-1.4c1.4.8 3 1.2 4.7 1.2 5.5 0 10-4.5 10-10S17.5 2 12 2z"/></svg>
+          Escribir por WhatsApp
+        </a>
+        <p class="madi-cta-caja__nota">Te contestamos en el horario de atención.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Pie ───────────────────────────────────────────────────────────── -->
+  <footer class="madi-pie">
+    <div class="madi-wrap">
+      <div class="madi-pie__escala" aria-hidden="true">
+        <div style="background:#F7E5D8"></div><div style="background:#F0D2BA"></div>
+        <div style="background:#DFB08A"></div><div style="background:#C08C63"></div>
+        <div style="background:#8E5C3C"></div><div style="background:#5A3529"></div>
+      </div>
+      <div class="madi-pie__in">
+        <p>© 2026 MADI Skin Care · Plaza Financiera, Zona Río, Tijuana, B.C.</p>
+        <div class="madi-pie__links">
+          <a href="/privacidad">Aviso de privacidad</a>
+          <a href="/terminos">Términos y condiciones</a>
+          <a href="https://wa.me/526642459214" target="_blank" rel="noopener">WhatsApp</a>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     COPIAR HASTA AQUÍ ↑
+     ══════════════════════════════════════════════════════════════════════════ -->
+
+</body>
+</html>
