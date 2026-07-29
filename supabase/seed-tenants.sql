@@ -9,8 +9,11 @@
 -- ============================================================
 
 -- Tenant: maps GHL location 'loc_demo_0001' -> "Cliente Demo"
-insert into tenants (client_id, ghl_location_id, ghl_token_ref, is_active)
-select c.id, 'loc_demo_0001', 'GHL_API_TOKEN', true
+-- No ghl_token_ref: migration 0006 dropped that placeholder column when per-location
+-- OAuth replaced it (tokens now live in ghl_oauth_tokens). The seed kept inserting it
+-- and broke every `supabase start` / `db reset` from 0006 until this was fixed.
+insert into tenants (client_id, ghl_location_id, is_active)
+select c.id, 'loc_demo_0001', true
 from clients c
 where c.name = 'Cliente Demo'
 on conflict (ghl_location_id) do nothing;
