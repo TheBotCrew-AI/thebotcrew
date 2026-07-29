@@ -74,6 +74,9 @@ export interface TenantContext {
   demoOnKeywords: string[] | null;
   /** Keywords that switch a conversation back to the normal front-desk agent. */
   demoOffKeywords: string[] | null;
+  /** Tag written on the GHL contact when the bot leaves a request for a person to pick
+   *  up (flagAwaitingHuman). null = this tenant doesn't use that signal. */
+  awaitingHumanTag: string | null;
   config: RawTenantConfig;
 }
 

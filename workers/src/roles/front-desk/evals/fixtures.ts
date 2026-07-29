@@ -15,6 +15,7 @@ export const demoTenant: TenantContext = {
   triggerKeywords: null,
   demoOnKeywords: null,
   demoOffKeywords: null,
+  awaitingHumanTag: null,
   config: {
     businessName: 'Clínica Demo',
     timezone: 'America/Mexico_City',

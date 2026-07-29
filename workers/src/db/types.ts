@@ -43,6 +43,8 @@ export interface TenantConfigRow {
   demo_prompt_overrides: unknown;
   /** Slug of the Worker secret with this tenant's AI key. NULL = platform key. */
   ai_key_ref: string | null;
+  /** Tag applied when the bot leaves a request awaiting a human. NULL = unused. */
+  awaiting_human_tag: string | null;
 }
 
 /** One row returned by app_load_due_follow_ups. */
@@ -161,6 +163,8 @@ export type BotEventType =
   | 'turn_scheduled'
   // Tenant has ai_key_ref but its Worker secret is missing → platform key used
   | 'ai_key_fallback'
+  // Bot left a request ready for a person to pick up (flagAwaitingHuman)
+  | 'awaiting_human'
   // Conversation switched into / out of the demo persona ({to} in metadata)
   | 'demo_toggled';
 

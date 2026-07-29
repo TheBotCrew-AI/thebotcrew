@@ -113,6 +113,28 @@ describe('buildFrontDeskInstructions', () => {
       expect(out).not.toContain('# Este contacto YA tiene una cita agendada');
     });
 
+    it('splits the request into two turns and forbids closing on a question', () => {
+      // The 2026-07-29 dead end: the bot asked "¿mañana o tarde?" and set a terminal
+      // state in the same turn, so the lead's answer hit a muted bot.
+      const out = buildFrontDeskInstructions(noBooking(), NOW);
+      expect(out).toContain('TURNO 1');
+      expect(out).toContain('TURNO 2');
+      expect(out).toContain('NUNCA llames flagAwaitingHuman en un turno donde le haces una pregunta');
+    });
+
+    it('routes the request through flagAwaitingHuman, not handed_off', () => {
+      const out = buildFrontDeskInstructions(noBooking(), NOW);
+      expect(out).toContain('flagAwaitingHuman');
+      expect(out).toContain('NO uses updateConversationStatus(handed_off) para esto');
+    });
+
+    it('tells the agent it may keep answering after flagging', () => {
+      // standby does not suppress, so questions must still get answered.
+      const out = buildFrontDeskInstructions(noBooking(), NOW);
+      expect(out).toContain('CONTÉSTALE con normalidad');
+      expect(out).toContain('No estás bloqueada');
+    });
+
     it('defaults to booking ENABLED when the flag is absent (no tenant is affected)', () => {
       const out = buildFrontDeskInstructions(cfg(), NOW);
       expect(out).toContain('# Secuencia para agendar');

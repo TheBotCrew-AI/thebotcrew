@@ -21,6 +21,7 @@ import { cancelAppointmentTool } from './tools/cancel-appointment.js';
 import { lookupAppointmentTool } from './tools/lookup-appointment.js';
 import { updateConversationStatusTool } from './tools/update-conversation-status.js';
 import { updateContactNameTool } from './tools/update-contact-name.js';
+import { flagAwaitingHumanTool } from './tools/flag-awaiting-human.js';
 
 export const FRONT_DESK_ROLE = 'front-desk';
 
@@ -64,6 +65,7 @@ export function buildFrontDeskAgent(): Agent {
       cancelAppointment: cancelAppointmentTool,
       updateConversationStatus: updateConversationStatusTool,
       updateContactName: updateContactNameTool,
+      flagAwaitingHuman: flagAwaitingHumanTool,
     },
   });
 }
