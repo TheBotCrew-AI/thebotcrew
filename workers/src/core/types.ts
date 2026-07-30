@@ -99,6 +99,12 @@ export interface DemoHandoff {
   reason: 'exhausted' | 'expired';
   businessName?: string;
   businessType?: string;
+  /** The person's name, captured during intake — so the closer never re-asks it. */
+  leadName?: string;
+  /** Services the demo was configured with (what the lead told us about their business). */
+  services?: string[];
+  /** Whether the lead booked inside the demo — the strongest intent signal available. */
+  booked?: boolean;
 }
 
 /** Identifiers for the single inbound turn currently being handled. */

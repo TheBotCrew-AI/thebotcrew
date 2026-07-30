@@ -424,8 +424,18 @@ export async function runAgentTurn({
             reason,
             botMessagesUsed: used,
           });
-          const lead = session.leadData as { businessName?: string; businessType?: string };
-          demoHandoff = { reason, businessName: lead.businessName, businessType: lead.businessType };
+          const lead = session.leadData as {
+            businessName?: string; businessType?: string; leadName?: string; services?: string[];
+          };
+          demoHandoff = {
+            reason,
+            businessName: lead.businessName,
+            businessType: lead.businessType,
+            leadName: lead.leadName,
+            services: Array.isArray(lead.services) ? lead.services : undefined,
+            // Booking inside the demo is the strongest intent signal we have.
+            booked: !!session.simulatedBooking,
+          };
           console.log(`[demo-session] ended conv=${parsed.conversationId} reason=${reason} used=${used}`);
           // Funnel outcome onto the GHL contact: completed = used the full budget (hot);
           // incomplete = expired/abandoned (retargeting pool). Best-effort mirror.

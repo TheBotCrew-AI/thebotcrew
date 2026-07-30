@@ -22,6 +22,8 @@ export const demoIntakeSchema = z.object({
   businessName: z.string().min(1),
   businessType: z.string().min(1),
   services: z.array(z.string().min(1)).min(1).max(5),
+  /** The person's own name if they gave it during intake — carried to the closer. */
+  leadName: z.string().optional(),
   tone: z.string().optional(),
   hoursDescription: z.string().optional(),
   notes: z.string().optional(),
@@ -85,6 +87,7 @@ export function buildDemoPersona(intake: DemoIntake): DemoPersona {
       businessName: name,
       businessType: type,
       services,
+      ...(intake.leadName?.trim() ? { leadName: clean(intake.leadName, CAPS.name) } : {}),
       ...(tone ? { tone } : {}),
       ...(hours ? { hoursDescription: hours } : {}),
       ...(notes ? { notes } : {}),

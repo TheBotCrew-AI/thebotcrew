@@ -43,6 +43,10 @@ export const startDemoTool = createTool({
       .min(1)
       .max(5)
       .describe('Servicios principales que mencionó (máx. 5), con precio si lo dio'),
+    leadName: z
+      .string()
+      .optional()
+      .describe('El nombre de la PERSONA con la que hablas, si ya te lo dio. Pásalo siempre que lo sepas: así el cierre no se lo vuelve a preguntar.'),
     tone: z.string().optional().describe('Tono pedido por el lead para su asistente, si lo mencionó'),
     hoursDescription: z.string().optional().describe('Horario del negocio en texto libre, si lo mencionó'),
     notes: z.string().optional().describe('Cualquier otro dato relevante que el lead haya dado sobre su negocio'),

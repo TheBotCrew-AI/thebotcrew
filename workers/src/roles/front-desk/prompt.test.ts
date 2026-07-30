@@ -251,7 +251,7 @@ describe('buildFrontDeskInstructions — demo closer (setter flow)', () => {
   it("carries the lead's business into the soft pitch", () => {
     const out = closer();
     expect(out).toContain('"Inner Beauty" (MedSpa)');
-    expect(out).toContain('¿Te serviría algo así en Inner Beauty, respondiendo así a cada cliente 24/7?');
+    expect(out).toContain('¿Te serviría tener esto en Inner Beauty, contestando así a cada cliente 24/7?');
   });
 
   it('branches: yes → name + qualify + real booking; no → discovery with pain and dream framing', () => {
@@ -299,5 +299,48 @@ describe('buildFrontDeskInstructions — demo conversational variety', () => {
     const out = buildFrontDeskInstructions(cfg(), NOW);
     expect(out).not.toContain('Cómo llevas la conversación (demo)');
     expect(out).toContain('# Cuándo actualizar el estado de la conversación');
+  });
+});
+
+describe('buildFrontDeskInstructions — closer announces the handover clearly', () => {
+  const full: DemoHandoff = {
+    reason: 'exhausted',
+    businessName: 'SkinBeauty',
+    businessType: 'med spa',
+    leadName: 'Leo',
+    services: ['HydraFacial', 'Botox'],
+    booked: true,
+  };
+  const closer = (h: DemoHandoff = full) =>
+    buildFrontDeskInstructions(cfg(), NOW, undefined, undefined, undefined, undefined, undefined, h);
+
+  it('makes announcing the end of the demo mandatory and shows how', () => {
+    const out = closer();
+    expect(out).toContain('AVISA que la demo terminó. Es obligatorio');
+    expect(out).toContain('NO sabe que la prueba acabó');
+    expect(out).toContain('Hasta aquí llega la demo');
+    expect(out).toContain('Todo eso lo contestó el asistente de SkinBeauty');
+  });
+
+  it('forbids the exact failure seen live: pitching without announcing, or staying in character', () => {
+    const out = closer();
+    expect(out).toContain('PROHIBIDO en ese primer mensaje');
+    expect(out).toContain('saltar directo a proponer la llamada sin antes avisar que la demo terminó');
+  });
+
+  it('carries what intake already learned so nothing is asked twice', () => {
+    const out = closer();
+    expect(out).toContain('Se llama Leo — ya te lo dijo, NO se lo vuelvas a preguntar');
+    expect(out).toContain('HydraFacial, Botox');
+    expect(out).toContain('llegó hasta AGENDAR una cita de prueba');
+    expect(out).toContain('Solo si NO sabes su nombre');
+  });
+
+  it('overrides the tenant flow above it, and handles a bare handoff', () => {
+    expect(closer()).toContain('Esta sección MANDA sobre cualquier otro flujo');
+    const bare = closer({ reason: 'expired' });
+    expect(bare).toContain('Solo que probó la demo de su negocio');
+    expect(bare).toContain('tu negocio');
+    expect(bare).not.toContain('undefined');
   });
 });
