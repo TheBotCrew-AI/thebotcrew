@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import type { DemoHandoff } from '../../core/types.js';
 import { parseFrontDeskConfig } from './config.js';
 import { buildFrontDeskInstructions } from './prompt.js';
 
@@ -221,5 +222,50 @@ describe('buildFrontDeskInstructions — golden rule is demo-aware', () => {
     const c = cfg({ promptVariants: { promo: { offering: 'Promo' } } });
     const out = buildFrontDeskInstructions(c, NOW, undefined, undefined, undefined, undefined, 'promo');
     expect(out).toContain('Solo afirma datos que estén en esta configuración');
+  });
+});
+
+describe('buildFrontDeskInstructions — demo closer (setter flow)', () => {
+  const handoff: DemoHandoff = { reason: 'exhausted', businessName: 'Inner Beauty', businessType: 'MedSpa' };
+  const closer = (h: DemoHandoff = handoff) =>
+    buildFrontDeskInstructions(cfg(), NOW, undefined, undefined, undefined, undefined, undefined, h);
+
+  it('renders only after a demo ends, never during the demo or in a normal turn', () => {
+    expect(buildFrontDeskInstructions(cfg(), NOW)).not.toContain('CIERRE DE DEMO');
+    const demoCfg = cfg({ demoPromptOverrides: { identity: 'Demo' } });
+    // usingDemo wins: the closer block must not leak into the roleplay turn.
+    expect(buildFrontDeskInstructions(demoCfg, NOW, undefined, 'demo', undefined, undefined, undefined, handoff))
+      .not.toContain('CIERRE DE DEMO');
+    expect(closer()).toContain('CIERRE DE DEMO');
+  });
+
+  it("carries the lead's business into the soft pitch", () => {
+    const out = closer();
+    expect(out).toContain('"Inner Beauty" (MedSpa)');
+    expect(out).toContain('¿Te serviría algo así en Inner Beauty, respondiendo así a cada cliente 24/7?');
+  });
+
+  it('branches: yes → name + qualify + real booking; no → discovery with pain and dream framing', () => {
+    const out = closer();
+    expect(out).toContain('Si dice que SÍ');
+    expect(out).toContain('¿Con quién tengo el gusto?');
+    expect(out).toContain('getAvailability');
+    expect(out).toContain('Esa cita SÍ es real');
+    expect(out).toContain('Si dice que NO');
+    expect(out).toContain('menos de 5 minutos');
+    expect(out).toContain('sin contestar');           // pain
+    expect(out).toContain('cómo se vería su semana'); // dream outcome
+    expect(out).toContain('updateConversationStatus(standby)');
+  });
+
+  it('keeps the one-question-per-message discipline explicit', () => {
+    expect(closer()).toContain('UNA pregunta por mensaje');
+  });
+
+  it('degrades gracefully when the session carried no business name', () => {
+    const out = closer({ reason: 'expired', businessName: undefined, businessType: undefined });
+    expect(out).toContain('su negocio');
+    expect(out).toContain('pasó su tiempo límite');
+    expect(out).not.toContain('undefined');
   });
 });
