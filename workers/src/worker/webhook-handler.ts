@@ -19,7 +19,7 @@ import {
   usageFromAnthropicResponse,
   usageFromOpenAiResponse,
 } from '../core/llm-usage.js';
-import { channelEnabled, hasTriggerKeywords, inTestMode, matchesDemoOff, matchesDemoOn, messageMatchesTrigger, resolveTenant, roleEnabled } from '../core/tenant.js';
+import { channelEnabled, hasTriggerKeywords, inTestMode, matchesDemoOff, matchesDemoOn, matchVariantKeyword, messageMatchesTrigger, resolveTenant, roleEnabled } from '../core/tenant.js';
 import { buildAgentRequestContext } from '../core/runtime-context.js';
 import type { AiProvider, ConversationMessage, ConversationStatus, TenantContext, TurnContext } from '../core/types.js';
 import {
@@ -40,6 +40,7 @@ import {
   reactivateConversation,
   scheduleFollowUp,
   setGhlMessageId,
+  setPromptVariant,
   updateConversationContact,
   updateConversationStatus,
   setConversationContactKeys,
@@ -381,11 +382,13 @@ export async function runAgentTurn({
     return { status: 200, body: { ignored: 'bot suppressed (handoff or human active)', conversationId } };
   }
 
-  // Read the persona fresh at turn time (a demo keyword may have flipped it since scheduling).
+  // Read the persona fresh at turn time (a demo keyword may have flipped it since
+  // scheduling, and the campaign variant is pinned on the conversation row).
   let activeRole: string | null = null;
   let demoStartedAt: string | null = null;
+  let promptVariant: string | null = null;
   try {
-    ({ activeRole, demoStartedAt } = await getConversationPersona(conversationId));
+    ({ activeRole, demoStartedAt, promptVariant } = await getConversationPersona(conversationId));
   } catch (e) {
     console.error('[demo] getConversationPersona failed:', e instanceof Error ? e.message : String(e));
   }
@@ -458,6 +461,7 @@ export async function runAgentTurn({
     contactName,
     channel: parsed.channel,
     activeRole: activeRole ?? undefined,
+    promptVariant: promptVariant ?? undefined,
     activeAppointment,
   };
   const provider = (tenant.config.provider ?? DEFAULT_PROVIDER) as AiProvider;
@@ -767,6 +771,32 @@ export async function handleInboundWebhook(
     }
     if (state === 'activated') {
       await logBotEvent(tenant.clientId, parsed.conversationId, 'bot_activated', { via: 'keyword' });
+    }
+  }
+
+  // Campaign prompt variant (n:1 keyword → variant). Independent of the gate above:
+  // a tenant can flavor threads without gating them. First-touch sticky — enforced in
+  // SQL (COALESCE), so re-matches are no-ops and only the pinning call logs the event.
+  // Best-effort: a variant failure must never block the turn (lead gets the base prompt).
+  const variantMatch = matchVariantKeyword(tenant, parsed.text);
+  if (variantMatch) {
+    try {
+      const assigned = await setPromptVariant(parsed.conversationId, variantMatch.variant);
+      if (assigned) {
+        // known:false is the misconfiguration fingerprint — a keyword mapped to a
+        // variant key with no prompt_variants entry. The prompt falls back to base.
+        const known = !!(tenant.config.promptVariants as Record<string, unknown> | null)?.[variantMatch.variant];
+        if (!known) {
+          console.error(`[variant] keyword "${variantMatch.keyword}" maps to unknown variant "${variantMatch.variant}" tenant=${tenant.tenantId}`);
+        }
+        await logBotEvent(tenant.clientId, parsed.conversationId, 'variant_assigned', {
+          variant: variantMatch.variant,
+          keyword: variantMatch.keyword,
+          known,
+        });
+      }
+    } catch (e) {
+      console.error('[variant] setPromptVariant failed (non-blocking):', e instanceof Error ? e.message : String(e));
     }
   }
 

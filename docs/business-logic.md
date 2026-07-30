@@ -30,6 +30,32 @@ Inbound messages are **always stored**; only the *reply* is gated. Enforced in
 Each blocked turn is logged to `bot_events` (`channel_disabled`, `test_mode_skip`,
 `keyword_required`, `bot_activated`) so you can see *why* the bot stayed quiet.
 
+### 1.1 Campaign prompt variants (n:1 keyword → prompt)
+
+One tenant can run several ad campaigns, each with its own prompt flavor, without a
+monolithic prompt (migration 0036; `core/tenant.ts` `matchVariantKeyword`,
+`roles/front-desk/config.ts` `resolveEffectiveOverrides`).
+
+- **`keyword_variants jsonb`** — `{ "promo laser": "laser-promo", ... }`: inbound keyword →
+  variant key. Several keywords may share a variant (n:1). Same normalizer as the trigger
+  gate; when several keywords match one message, the **longest** wins.
+- **`prompt_variants jsonb`** — `{ "laser-promo": {offering, qualificationNotes, ...} }`:
+  variant key → **partial** overrides, merged **field-by-field** over `prompt_overrides` at
+  prompt-build time (`toolInstructions` merges per key). Tone/hours/services/FAQ stay
+  single-sourced. `confirmContactName` is NOT variant-overridable (it's a handler backstop
+  read from base config, not prompt content); `bookingEnabled` is.
+- **Orthogonal to the gate**: `trigger_keywords` decides IF the bot enters;
+  `keyword_variants` decides WHICH prompt flavors the thread. Use either or both (list a
+  keyword in both when gated).
+- **First-touch sticky**, enforced in SQL (`app_set_prompt_variant`, COALESCE): the first
+  matching message pins `conversations.prompt_variant`; later campaign keywords never switch
+  it (ad attribution; no mid-thread personality swap). Read fresh each turn alongside
+  `active_role`. The demo persona, when active, wins over the variant.
+- Observability: `variant_assigned` event `{variant, keyword, known}`. **`known:false` is the
+  misconfiguration fingerprint** — a keyword mapped to a variant key with no
+  `prompt_variants` entry; the prompt falls back to base, loudly, never silently. A variant
+  DB failure never blocks the turn (lead gets the base prompt).
+
 ## 2. Conversation lifecycle
 
 Statuses (`conversations.status`): `active`, `standby`, `completed`, `opted_out`,

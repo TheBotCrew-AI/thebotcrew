@@ -39,6 +39,9 @@ export interface RawTenantConfig {
   promptOverrides: unknown;
   /** Prompt overrides for the demo persona (same shape as promptOverrides); null = no demo persona. */
   demoPromptOverrides?: unknown;
+  /** Named partial override sets keyed by variant key (per-campaign prompts). A
+   *  variant merges field-by-field over promptOverrides at prompt-build time. */
+  promptVariants?: unknown;
   /** Overrides the platform-default provider (env-driven). */
   provider?: AiProvider | null;
   /** Overrides the platform-default model for this tenant. */
@@ -78,6 +81,9 @@ export interface TenantContext {
   demoOnKeywords: string[] | null;
   /** Keywords that switch a conversation back to the normal front-desk agent. */
   demoOffKeywords: string[] | null;
+  /** Campaign keyword → variant key (n:1; several keywords may share a variant).
+   *  Matching is first-touch sticky per conversation. null/empty = no variants. */
+  keywordVariants: Record<string, string> | null;
   /** Tag written on the GHL contact when the bot leaves a request for a person to pick
    *  up (flagAwaitingHuman). null = this tenant doesn't use that signal. */
   awaitingHumanTag: string | null;
@@ -95,6 +101,9 @@ export interface TurnContext {
   channel: Channel;
   /** Which persona handles this turn: undefined/'front-desk' = normal; 'demo' = demo persona. */
   activeRole?: string;
+  /** Campaign prompt variant pinned to this conversation (first-touch sticky);
+   *  undefined = base prompt. Ignored while the demo persona is active. */
+  promptVariant?: string;
   /** The contact's active (not cancelled, not past) appointment, resolved at turn start.
    *  Present so the agent knows it already booked and never re-offers availability against
    *  its own appointment (the self-block class). Skipped in demo mode (clean-start). */

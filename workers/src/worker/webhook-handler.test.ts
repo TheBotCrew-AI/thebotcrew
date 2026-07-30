@@ -248,7 +248,7 @@ describe('handleInboundWebhook — active appointment guard', () => {
   });
 
   it('skips the appointment lookup in demo mode (clean-start)', async () => {
-    vi.mocked(q.getConversationPersona).mockResolvedValue({ activeRole: 'demo', demoStartedAt: null });
+    vi.mocked(q.getConversationPersona).mockResolvedValue({ activeRole: 'demo', demoStartedAt: null, promptVariant: null });
     vi.mocked(q.loadActiveAppointment).mockResolvedValue({ startTime: '2026-07-04T14:30:00-07:00', service: 'Corte' });
     const agent = agentReplying();
     await handleInboundWebhook(inbound, agent);
@@ -416,5 +416,64 @@ describe('handleInboundWebhook — contact-name backstop', () => {
 
     expect(ghl.updateContactName).not.toHaveBeenCalled();
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('handleInboundWebhook — campaign prompt variants', () => {
+  const withVariants = () =>
+    tenant({
+      keywordVariants: { 'promo laser': 'laser-promo', 'laser ya': 'laser-promo' },
+      config: { ...tenant().config, promptVariants: { 'laser-promo': { offering: 'Promo' } } },
+    });
+
+  it('pins the variant on first touch and logs variant_assigned', async () => {
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(withVariants());
+    vi.mocked(q.setPromptVariant).mockResolvedValue(true);
+    await handleInboundWebhook({ ...inbound, body: 'Hola, vi su PROMO LASER' }, agentReplying());
+    expect(q.setPromptVariant).toHaveBeenCalledWith('conv1', 'laser-promo');
+    expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'variant_assigned',
+      expect.objectContaining({ variant: 'laser-promo', keyword: 'promo laser', known: true }));
+  });
+
+  it('an already-pinned conversation logs nothing (sticky no-op)', async () => {
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(withVariants());
+    vi.mocked(q.setPromptVariant).mockResolvedValue(false);
+    await handleInboundWebhook({ ...inbound, body: 'laser ya' }, agentReplying());
+    expect(q.setPromptVariant).toHaveBeenCalled();
+    expect(q.logBotEvent).not.toHaveBeenCalledWith('client1', 'conv1', 'variant_assigned', expect.anything());
+  });
+
+  it('a keyword mapped to a missing variant key logs known:false (misconfig fingerprint)', async () => {
+    const t = withVariants();
+    (t.config as { promptVariants: unknown }).promptVariants = {}; // key deleted, mapping left behind
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(t);
+    vi.mocked(q.setPromptVariant).mockResolvedValue(true);
+    await handleInboundWebhook({ ...inbound, body: 'promo laser' }, agentReplying());
+    expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'variant_assigned',
+      expect.objectContaining({ variant: 'laser-promo', known: false }));
+  });
+
+  it('no variant call at all when the message matches nothing', async () => {
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(withVariants());
+    await handleInboundWebhook(inbound, agentReplying()); // "hola"
+    expect(q.setPromptVariant).not.toHaveBeenCalled();
+  });
+
+  it('a setPromptVariant failure never blocks the turn', async () => {
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(withVariants());
+    vi.mocked(q.setPromptVariant).mockRejectedValue(new Error('db down'));
+    const agent = agentReplying();
+    const res = await handleInboundWebhook({ ...inbound, body: 'promo laser' }, agent);
+    expect(agent.generate).toHaveBeenCalled();
+    expect(res.body).toMatchObject({ replied: true });
+  });
+
+  it("threads the conversation's pinned variant into the turn context", async () => {
+    vi.mocked(q.getConversationPersona).mockResolvedValue({ activeRole: null, demoStartedAt: null, promptVariant: 'laser-promo' });
+    const agent = agentReplying();
+    await handleInboundWebhook(inbound, agent);
+    const call = vi.mocked(agent.generate).mock.calls[0] as unknown as [unknown, { requestContext: { get(k: string): unknown } }];
+    const turn = call[1].requestContext.get('turn') as { promptVariant?: string };
+    expect(turn.promptVariant).toBe('laser-promo');
   });
 });

@@ -6,7 +6,7 @@
  * sections are suppressed — the tenant's custom flow takes over entirely.
  */
 
-import type { FrontDeskConfig } from './config.js';
+import { resolveEffectiveOverrides, type FrontDeskConfig } from './config.js';
 
 /**
  * The booking half of the prompt. Rendered only when the tenant books through the bot
@@ -142,11 +142,10 @@ export function buildFrontDeskInstructions(
   activeRole?: string,
   contactName?: string,
   activeAppointment?: { startTime: string; service?: string },
+  promptVariant?: string,
 ): string {
-  // In demo mode use the demo persona overrides (same engine/tools, different brain);
-  // fall back to the normal overrides if demo mode is off or no demo persona is configured.
-  const usingDemo = activeRole === 'demo' && !!config.demoPromptOverrides;
-  const overrides = usingDemo ? config.demoPromptOverrides! : config.promptOverrides;
+  // Override precedence: demo persona > pinned campaign variant (merged over base) > base.
+  const { overrides, usingDemo } = resolveEffectiveOverrides(config, activeRole, promptVariant);
   const { identity, offering, qualificationNotes, toolInstructions } = overrides;
   const bookingEnabled = overrides.bookingEnabled !== false;
 

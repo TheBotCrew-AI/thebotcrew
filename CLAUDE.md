@@ -142,7 +142,8 @@ supabase/
                                # 0030 drop_turn_reconciliation, 0031 conversation_contact_email (merge-recovery key),
                                # 0032 rls_close_data_api (RLS on the last 6 tables + views + RPC grants),
                                # 0033 per_tenant_ai_key_and_llm_usage (ai_key_ref slug + llm_usage/model_pricing + cost view),
-                               # 0034 awaiting_human_tag, 0035 reactivation_rules (awaiting_human status + selective reactivation)
+                               # 0034 awaiting_human_tag, 0035 reactivation_rules (awaiting_human status + selective reactivation),
+                               # 0036 prompt_variants (per-campaign prompts: n:1 keyword→variant, first-touch sticky)
   clients.sql, seed-tenants.sql# seeds (run by `supabase db reset` per config.toml)
 sites/                         # client marketing sites: static HTML, no build step, no deps
   _template/                   # starting point for a new client
@@ -295,6 +296,11 @@ for the retry cron.
     once activated (`conversations.bot_activated`), the thread flows without the keyword.
     Helpers: `channelEnabled` / `inTestMode` / `hasTriggerKeywords` / `messageMatchesTrigger`
     (`core/tenant.ts`); gate order in `webhook-handler.ts`: channel/test → keyword.
+  - `keyword_variants` + `prompt_variants` (jsonb, 0036) — **per-campaign prompts**: keyword →
+    variant key (n:1, longest match wins), variant key → partial overrides merged field-by-field
+    over `prompt_overrides`. First-touch sticky per conversation (`conversations.prompt_variant`,
+    `app_set_prompt_variant`); orthogonal to the gate; demo persona wins over the variant.
+    See docs/business-logic.md §1.1.
 - Resolved: inbound payload shape (`type=InboundMessage`, `direction=inbound`,
   `locationId/contactId/conversationId/body/messageType`), send/calendar/tag endpoints
   (live in `ghl/client.ts`), and the **auth model** — per-location **OAuth** via the GHL App

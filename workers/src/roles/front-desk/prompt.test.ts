@@ -153,3 +153,49 @@ describe('buildFrontDeskInstructions', () => {
     expect(out).toContain('emojis'); // demo formatting note allows emojis
   });
 });
+
+describe('buildFrontDeskInstructions — campaign prompt variants', () => {
+  const variantCfg = () =>
+    cfg({
+      promptOverrides: { offering: 'Oferta base', qualificationNotes: 'Flujo base' },
+      promptVariants: {
+        'laser-promo': { offering: 'Promo de laser: primera sesión gratis' },
+      },
+    });
+
+  it('applies the pinned variant, keeping unset fields from base', () => {
+    const out = buildFrontDeskInstructions(variantCfg(), NOW, undefined, undefined, undefined, undefined, 'laser-promo');
+    expect(out).toContain('Promo de laser: primera sesión gratis'); // variant offering
+    expect(out).toContain('Flujo base');                            // base qualificationNotes survives
+    expect(out).not.toContain('Oferta base');
+  });
+
+  it('uses base overrides when no variant is pinned or the key is unknown', () => {
+    expect(buildFrontDeskInstructions(variantCfg(), NOW)).toContain('Oferta base');
+    expect(
+      buildFrontDeskInstructions(variantCfg(), NOW, undefined, undefined, undefined, undefined, 'gone'),
+    ).toContain('Oferta base');
+  });
+
+  it('demo persona ignores the pinned variant', () => {
+    const c = cfg({
+      promptOverrides: { offering: 'Oferta base' },
+      promptVariants: { 'laser-promo': { offering: 'Oferta variante' } },
+      demoPromptOverrides: { identity: 'Persona demo', offering: 'Oferta demo' },
+    });
+    const out = buildFrontDeskInstructions(c, NOW, undefined, 'demo', undefined, undefined, 'laser-promo');
+    expect(out).toContain('Oferta demo');
+    expect(out).not.toContain('Oferta variante');
+  });
+
+  it('a variant can disable booking (strips the booking sections)', () => {
+    const c = cfg({
+      promptOverrides: {},
+      promptVariants: { 'sin-agenda': { bookingEnabled: false } },
+    });
+    const withBooking = buildFrontDeskInstructions(c, NOW);
+    const without = buildFrontDeskInstructions(c, NOW, undefined, undefined, undefined, undefined, 'sin-agenda');
+    expect(withBooking).toContain('getAvailability');
+    expect(without).not.toContain('# Agendar citas');
+  });
+});

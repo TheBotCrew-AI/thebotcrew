@@ -47,6 +47,7 @@ export function buildFrontDeskAgent(): Agent {
         turn?.activeRole,
         turn?.contactName,
         turn?.activeAppointment,
+        turn?.promptVariant,
       );
     },
     model: ({ requestContext }) => {

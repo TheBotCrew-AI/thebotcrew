@@ -58,6 +58,23 @@ export const promptOverridesSchema = z.object({
   bookingEnabled: z.boolean().default(true),
 });
 
+/**
+ * A campaign prompt variant: a PARTIAL override set merged field-by-field over
+ * the base promptOverrides at prompt-build time. Deliberately has NO defaults —
+ * a zod default here would materialize on parse and clobber the base value in
+ * the merge. Only prompt-affecting fields are overridable; behavior toggles that
+ * live outside the prompt (confirmContactName) stay base-level on purpose, so a
+ * variant can never half-enable a backstop the handler reads from base config.
+ */
+export const promptVariantSchema = z.object({
+  identity: z.string().optional(),
+  offering: z.string().optional(),
+  qualificationNotes: z.string().optional(),
+  /** Merged PER-KEY over the base toolInstructions (base rules survive unless overridden). */
+  toolInstructions: z.record(z.string(), z.string()).optional(),
+  bookingEnabled: z.boolean().optional(),
+});
+
 export const frontDeskConfigSchema = z.object({
   businessName: z.string().min(1),
   timezone: z.string().min(1),
@@ -70,6 +87,8 @@ export const frontDeskConfigSchema = z.object({
   promptOverrides: promptOverridesSchema.default({ toolInstructions: {}, confirmContactName: false, bookingEnabled: true }),
   /** Persona overrides used when the conversation is in demo mode (active_role='demo'). null = none. */
   demoPromptOverrides: promptOverridesSchema.nullable().default(null),
+  /** Named campaign variants keyed by variant key (see keyword_variants). null = none. */
+  promptVariants: z.record(z.string(), promptVariantSchema).nullable().default(null),
   /** Max days ahead the bot may look for / offer slots. null = no cap. Enforced in getAvailability. */
   bookingHorizonDays: z.number().int().positive().nullable().default(null),
 });
@@ -77,6 +96,37 @@ export const frontDeskConfigSchema = z.object({
 export type FrontDeskConfig = z.infer<typeof frontDeskConfigSchema>;
 export type FrontDeskService = z.infer<typeof serviceSchema>;
 export type PromptOverrides = z.infer<typeof promptOverridesSchema>;
+export type PromptVariant = z.infer<typeof promptVariantSchema>;
+
+/**
+ * Resolve the override set in effect for this turn. Priority:
+ *   1. demo persona (activeRole === 'demo' with demoPromptOverrides configured)
+ *   2. the conversation's pinned campaign variant, merged over base
+ *   3. base promptOverrides
+ * A pinned variant whose key is missing from promptVariants falls back to base
+ * (the misconfiguration was already logged as variant_assigned{known:false}).
+ */
+export function resolveEffectiveOverrides(
+  config: FrontDeskConfig,
+  activeRole?: string,
+  promptVariant?: string,
+): { overrides: PromptOverrides; usingDemo: boolean } {
+  if (activeRole === 'demo' && config.demoPromptOverrides) {
+    return { overrides: config.demoPromptOverrides, usingDemo: true };
+  }
+  const base = config.promptOverrides;
+  const variant = promptVariant ? config.promptVariants?.[promptVariant] : undefined;
+  if (!variant) return { overrides: base, usingDemo: false };
+  return {
+    overrides: {
+      ...base,
+      ...variant,
+      // Per-key merge: campaign rules override individual tools, not the whole map.
+      toolInstructions: { ...base.toolInstructions, ...(variant.toolInstructions ?? {}) },
+    },
+    usingDemo: false,
+  };
+}
 
 /** Validate + narrow the raw tenant config into the front-desk shape. */
 export function parseFrontDeskConfig(raw: RawTenantConfig): FrontDeskConfig {
@@ -90,6 +140,7 @@ export function parseFrontDeskConfig(raw: RawTenantConfig): FrontDeskConfig {
     faq: raw.faq,
     promptOverrides: raw.promptOverrides ?? {},
     demoPromptOverrides: raw.demoPromptOverrides ?? null,
+    promptVariants: raw.promptVariants ?? null,
     bookingHorizonDays: raw.bookingHorizonDays ?? null,
   });
 }

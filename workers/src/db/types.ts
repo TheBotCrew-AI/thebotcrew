@@ -39,6 +39,10 @@ export interface TenantConfigRow {
   /** Keywords that switch a conversation into / out of the demo persona. */
   demo_on_keywords: string[] | null;
   demo_off_keywords: string[] | null;
+  /** Campaign keyword → prompt-variant key (n:1). NULL = no variants. */
+  keyword_variants: unknown;
+  /** Variant key → partial prompt overrides, merged over prompt_overrides. */
+  prompt_variants: unknown;
   /** Prompt overrides for the demo persona (same shape as prompt_overrides). */
   demo_prompt_overrides: unknown;
   /** Slug of the Worker secret with this tenant's AI key. NULL = platform key. */
@@ -163,6 +167,8 @@ export type BotEventType =
   | 'turn_scheduled'
   // Tenant has ai_key_ref but its Worker secret is missing → platform key used
   | 'ai_key_fallback'
+  // Campaign prompt variant pinned to a conversation (first touch; {variant, keyword, known})
+  | 'variant_assigned'
   // Bot left a request ready for a person to pick up (flagAwaitingHuman)
   | 'awaiting_human'
   // Conversation switched into / out of the demo persona ({to} in metadata)

@@ -47,17 +47,49 @@ export function matchesDemoOff(tenant: TenantContext, text: string): boolean {
   return messageMatchesTrigger(text, tenant.demoOffKeywords ?? []);
 }
 
+/** Shared keyword normalizer: lowercase, punctuation flattened to spaces, space-padded. */
+function normKeyword(s: string): string {
+  return ' ' + s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim() + ' ';
+}
+
 /**
  * Whole-word/phrase, case- and accent-insensitive keyword match. Punctuation is
  * flattened to spaces and the text is space-padded, so "Agente" matches
  * "Hola, Agente!" but not "urgente", and phrases like "quiero info" still match.
  */
 export function messageMatchesTrigger(text: string, keywords: string[]): boolean {
-  const norm = (s: string): string =>
-    ' ' + s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim() + ' ';
-  const hay = norm(text);
+  const hay = normKeyword(text);
   return keywords.some((kw) => {
-    const needle = norm(kw);
+    const needle = normKeyword(kw);
     return needle.trim().length > 0 && hay.includes(needle);
   });
+}
+
+export interface VariantMatch {
+  keyword: string;
+  variant: string;
+}
+
+/**
+ * Match the message against the tenant's campaign keywords (keyword_variants).
+ * Same normalizer as the trigger gate. When several keywords match, the LONGEST
+ * (most specific) normalized keyword wins — "me interesa promo de laser" beats
+ * "info" — so a generic keyword can coexist with campaign phrases. Ties break
+ * by config order. Returns null when the tenant has no variants or none match.
+ */
+export function matchVariantKeyword(tenant: TenantContext, text: string): VariantMatch | null {
+  const map = tenant.keywordVariants;
+  if (!map) return null;
+  const hay = normKeyword(text);
+  let best: (VariantMatch & { needleLen: number }) | null = null;
+  for (const [keyword, variant] of Object.entries(map)) {
+    if (!variant?.trim()) continue;
+    const needle = normKeyword(keyword);
+    const needleLen = needle.trim().length;
+    if (needleLen === 0 || !hay.includes(needle)) continue;
+    if (!best || needleLen > best.needleLen) {
+      best = { keyword, variant: variant.trim(), needleLen };
+    }
+  }
+  return best ? { keyword: best.keyword, variant: best.variant } : null;
 }

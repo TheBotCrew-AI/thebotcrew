@@ -43,7 +43,7 @@ export async function loadTenantConfig(ghlLocationId: string): Promise<TenantCon
   const { data, error } = await supabase
     .from('tenant_config')
     .select(
-      'business_name, timezone, tone, services, hours, calendars, faq, enabled_roles, prompt_overrides, ai_provider, ai_model, ai_key_ref, awaiting_human_tag, follow_up_tiers, follow_up_cadence, follow_up_angles, quiet_hours, booking_horizon_days, enabled_channels, test_contact_ids, trigger_keywords, demo_on_keywords, demo_off_keywords, demo_prompt_overrides,' +
+      'business_name, timezone, tone, services, hours, calendars, faq, enabled_roles, prompt_overrides, ai_provider, ai_model, ai_key_ref, awaiting_human_tag, follow_up_tiers, follow_up_cadence, follow_up_angles, quiet_hours, booking_horizon_days, enabled_channels, test_contact_ids, trigger_keywords, demo_on_keywords, demo_off_keywords, demo_prompt_overrides, keyword_variants, prompt_variants,' +
         'tenants!inner(id, client_id, ghl_location_id, is_active)',
     )
     .eq('tenants.ghl_location_id', ghlLocationId)
@@ -68,6 +68,7 @@ export async function loadTenantConfig(ghlLocationId: string): Promise<TenantCon
     triggerKeywords: row.trigger_keywords ?? null,
     demoOnKeywords: row.demo_on_keywords ?? null,
     demoOffKeywords: row.demo_off_keywords ?? null,
+    keywordVariants: parseKeywordVariants(row.keyword_variants),
     awaitingHumanTag: row.awaiting_human_tag?.trim() ? row.awaiting_human_tag.trim() : null,
     config: {
       businessName: row.business_name,
@@ -79,6 +80,7 @@ export async function loadTenantConfig(ghlLocationId: string): Promise<TenantCon
       faq: row.faq,
       promptOverrides: row.prompt_overrides,
       demoPromptOverrides: row.demo_prompt_overrides ?? null,
+      promptVariants: row.prompt_variants ?? null,
       provider: (row.ai_provider as AiProvider) ?? undefined,
       model: row.ai_model ?? undefined,
       followUpCadence: Array.isArray(row.follow_up_cadence)
@@ -109,6 +111,16 @@ export async function getTenantGhlLocationId(tenantId: string): Promise<string |
     .maybeSingle();
   fail('getTenantGhlLocationId', error);
   return (data as { ghl_location_id?: string } | null)?.ghl_location_id ?? undefined;
+}
+
+/** Sanitize keyword_variants jsonb: keep only non-empty string→string entries; anything else → null. */
+function parseKeywordVariants(raw: unknown): Record<string, string> | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (k.trim().length > 0 && typeof v === 'string' && v.trim().length > 0) out[k] = v;
+  }
+  return Object.keys(out).length > 0 ? out : null;
 }
 
 /** Validate the stored quiet_hours jsonb; anything malformed falls back to null (platform default). */
@@ -179,10 +191,12 @@ export async function markDelivered(messageId: string): Promise<void> {
   fail('markDelivered', error);
 }
 
-/** The conversation's persona: active role + when demo mode started (for clean-start history). */
+/** The conversation's persona: active role + when demo mode started (for clean-start history)
+ *  + the campaign prompt variant pinned at activation (first-touch sticky). */
 export interface ConversationPersona {
   activeRole: string | null;
   demoStartedAt: string | null;
+  promptVariant: string | null;
 }
 
 /** Read the conversation's persona (null activeRole = normal front-desk; 'demo' = demo persona). */
@@ -190,12 +204,35 @@ export async function getConversationPersona(conversationId: string): Promise<Co
   const supabase = getSupabase();
   const { data, error } = await supabase
     .from('conversations')
-    .select('active_role, demo_started_at')
+    .select('active_role, demo_started_at, prompt_variant')
     .eq('id', conversationId)
     .maybeSingle();
   fail('getConversationPersona', error);
-  const row = data as { active_role: string | null; demo_started_at: string | null } | null;
-  return { activeRole: row?.active_role ?? null, demoStartedAt: row?.demo_started_at ?? null };
+  const row = data as {
+    active_role: string | null;
+    demo_started_at: string | null;
+    prompt_variant: string | null;
+  } | null;
+  return {
+    activeRole: row?.active_role ?? null,
+    demoStartedAt: row?.demo_started_at ?? null,
+    promptVariant: row?.prompt_variant ?? null,
+  };
+}
+
+/**
+ * First-touch sticky variant assignment (app_set_prompt_variant). Returns true
+ * only when THIS call pinned the variant — callers log variant_assigned then.
+ * Re-matches on an already-pinned conversation are no-ops (false).
+ */
+export async function setPromptVariant(ghlConversationId: string, variant: string): Promise<boolean> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase.rpc('app_set_prompt_variant', {
+    p_ghl_conversation_id: ghlConversationId,
+    p_variant: variant,
+  });
+  fail('setPromptVariant', error);
+  return data === true;
 }
 
 /** Persist a corrected GHL contact id on a conversation (after a merge re-resolve on send). */
