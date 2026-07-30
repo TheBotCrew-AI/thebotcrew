@@ -51,7 +51,7 @@ import {
 } from '../db/queries.js';
 import { GhlClient } from '../ghl/client.js';
 import { parseInboundWebhook } from '../ghl/webhook.js';
-import { STATUS_TAGS } from '../ghl/tags.js';
+import { demoEndTag, STATUS_TAGS } from '../ghl/tags.js';
 import type { GhlInboundWebhook, ParsedInbound } from '../ghl/types.js';
 import { DEFAULT_MODEL, DEFAULT_PROVIDER, FRONT_DESK_ROLE } from '../roles/front-desk/index.js';
 
@@ -420,6 +420,11 @@ export async function runAgentTurn({
           const lead = session.leadData as { businessName?: string; businessType?: string };
           demoHandoff = { reason, businessName: lead.businessName, businessType: lead.businessType };
           console.log(`[demo-session] ended conv=${parsed.conversationId} reason=${reason} used=${used}`);
+          // Funnel outcome onto the GHL contact: completed = used the full budget (hot);
+          // incomplete = expired/abandoned (retargeting pool). Best-effort mirror.
+          new GhlClient(tenant.tenantId).addContactTags(parsed.contactId, [demoEndTag(reason)]).catch((e: unknown) =>
+            console.error('[demo-session] end tag failed (non-blocking):', e instanceof Error ? e.message : String(e)),
+          );
           // Re-read: the RPC flipped active_role and stamped role_started_at.
           ({ activeRole, roleStartedAt, demoStartedAt, promptVariant } = await getConversationPersona(conversationId));
         } else {
@@ -870,7 +875,22 @@ export async function handleInboundWebhook(
     }
   } else if (matchesDemoOff(tenant, parsed.text)) {
     try {
-      await setActiveRole(parsed.conversationId, null);
+      // A running SESSION must be ended here too — not just the persona flip —
+      // or it stays orphaned-active: no demo_session_ended event, no funnel tag,
+      // and the budget meter would resume if demo mode were ever re-entered.
+      const session = await getActiveDemoSession(parsed.conversationId).catch(() => null);
+      if (session) {
+        await endDemoSession(session.id, 'closed'); // also flips active_role → NULL
+        await logBotEvent(tenant.clientId, parsed.conversationId, 'demo_session_ended', {
+          sessionId: session.id,
+          reason: 'closed',
+        });
+        new GhlClient(tenant.tenantId).addContactTags(parsed.contactId, [demoEndTag('closed')]).catch((e: unknown) =>
+          console.error('[demo] close tag failed (non-blocking):', e instanceof Error ? e.message : String(e)),
+        );
+      } else {
+        await setActiveRole(parsed.conversationId, null);
+      }
       await logBotEvent(tenant.clientId, parsed.conversationId, 'demo_toggled', { to: 'front-desk' });
     } catch (e) {
       console.error('[demo] setActiveRole(null) failed:', e instanceof Error ? e.message : String(e));

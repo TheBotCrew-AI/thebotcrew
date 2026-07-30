@@ -24,3 +24,21 @@ export const STATUS_TAGS: Partial<Record<ConversationStatus, string>> = {
   opted_out: 'bot-opted-out',
   standby: 'bot-standby',
 };
+
+/**
+ * Demo-session funnel tags (0038). Written on the GHL contact at each stage so
+ * the funnel is visible in GHL: smart lists, and workflows can key on them
+ * (e.g. "demo-iniciada 24h ago AND NOT demo-completada" → template nudge).
+ * `completed` = the lead used the full message budget (a hot lead);
+ * `incomplete` = the session expired or was closed early (retargeting pool).
+ */
+export const DEMO_SESSION_TAGS = {
+  started: 'demo-iniciada',
+  completed: 'demo-completada',
+  incomplete: 'demo-incompleta',
+} as const;
+
+/** Map a session end reason to the funnel tag it earns. */
+export function demoEndTag(reason: 'exhausted' | 'expired' | 'closed'): string {
+  return reason === 'exhausted' ? DEMO_SESSION_TAGS.completed : DEMO_SESSION_TAGS.incomplete;
+}

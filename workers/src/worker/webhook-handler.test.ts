@@ -632,3 +632,62 @@ describe('handleInboundWebhook — demo sessions (budget, expiry, closer flip)',
     expect(turnFrom(agent).activeRole).toBe('demo');
   });
 });
+
+describe('handleInboundWebhook — demo funnel tags + off-keyword session close', () => {
+  const demoPersona = { activeRole: 'demo', roleStartedAt: '2026-07-29T10:00:00Z', demoStartedAt: '2026-07-29T10:00:00Z', promptVariant: null };
+  const demoTenant = () => tenant({ demoOffKeywords: ['demo off'] });
+  const activeSession = {
+    id: 'sess-1', activatedAt: '2026-07-29T10:00:00Z', expiresAt: '2099-01-01T00:00:00Z',
+    messageBudget: 15, personaVersion: 1, leadData: { businessName: 'Sonrisa' }, promptOverrides: {}, simulatedBooking: null,
+  };
+
+  it('budget exhausted → contact tagged demo-completada (a completed demo is a hot lead)', async () => {
+    vi.mocked(q.getConversationPersona)
+      .mockResolvedValueOnce(demoPersona)
+      .mockResolvedValue({ activeRole: null, roleStartedAt: '2026-07-29T12:00:00Z', demoStartedAt: null, promptVariant: null });
+    vi.mocked(q.getActiveDemoSession).mockResolvedValue(activeSession as never);
+    vi.mocked(q.countBotMessagesSince).mockResolvedValue(15);
+    await handleInboundWebhook(inbound, agentReplying());
+    expect(ghl.addContactTags).toHaveBeenCalledWith('c1', ['demo-completada']);
+  });
+
+  it('expired session → tagged demo-incompleta (retargeting pool)', async () => {
+    vi.mocked(q.getConversationPersona)
+      .mockResolvedValueOnce(demoPersona)
+      .mockResolvedValue({ activeRole: null, roleStartedAt: '2026-07-29T12:00:00Z', demoStartedAt: null, promptVariant: null });
+    vi.mocked(q.getActiveDemoSession).mockResolvedValue({ ...activeSession, expiresAt: '2020-01-01T00:00:00Z' } as never);
+    vi.mocked(q.countBotMessagesSince).mockResolvedValue(2);
+    await handleInboundWebhook(inbound, agentReplying());
+    expect(ghl.addContactTags).toHaveBeenCalledWith('c1', ['demo-incompleta']);
+  });
+
+  it('demo-off keyword with an active session → session ended (closed) + tagged, not orphaned', async () => {
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(demoTenant());
+    vi.mocked(q.getActiveDemoSession).mockResolvedValue(activeSession as never);
+    await handleInboundWebhook({ ...inbound, body: 'demo off' }, agentReplying());
+    expect(q.endDemoSession).toHaveBeenCalledWith('sess-1', 'closed');
+    expect(q.setActiveRole).not.toHaveBeenCalled(); // the RPC flips the role itself
+    expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'demo_session_ended',
+      expect.objectContaining({ reason: 'closed' }));
+    expect(ghl.addContactTags).toHaveBeenCalledWith('c1', ['demo-incompleta']);
+  });
+
+  it('demo-off keyword with NO session (manual demo) → plain persona flip, unchanged', async () => {
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(demoTenant());
+    vi.mocked(q.getActiveDemoSession).mockResolvedValue(null);
+    await handleInboundWebhook({ ...inbound, body: 'demo off' }, agentReplying());
+    expect(q.setActiveRole).toHaveBeenCalledWith('conv1', null);
+    expect(q.endDemoSession).not.toHaveBeenCalled();
+  });
+
+  it('a tag failure never blocks the closer turn', async () => {
+    vi.mocked(q.getConversationPersona)
+      .mockResolvedValueOnce(demoPersona)
+      .mockResolvedValue({ activeRole: null, roleStartedAt: '2026-07-29T12:00:00Z', demoStartedAt: null, promptVariant: null });
+    vi.mocked(q.getActiveDemoSession).mockResolvedValue(activeSession as never);
+    vi.mocked(q.countBotMessagesSince).mockResolvedValue(15);
+    ghl.addContactTags.mockRejectedValue(new Error('ghl 500'));
+    const res = await handleInboundWebhook(inbound, agentReplying());
+    expect(res.body).toMatchObject({ replied: true });
+  });
+});

@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { TenantContext, TurnContext } from '../../../core/types.js';
 
+const ghl = { addContactTags: vi.fn() };
+vi.mock('../../../ghl/client.js', () => ({ GhlClient: vi.fn(() => ghl) }));
 vi.mock('../../../db/queries.js');
 
 import * as q from '../../../db/queries.js';
@@ -36,6 +38,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(q.createDemoSession).mockResolvedValue('sess-1');
   vi.mocked(q.logBotEvent).mockResolvedValue(undefined);
+  ghl.addContactTags.mockResolvedValue(undefined);
 });
 
 describe('startDemo tool', () => {
@@ -77,5 +80,18 @@ describe('startDemo tool', () => {
       'client1', 'conv1', 'db_error',
       expect.objectContaining({ stage: 'create_demo_session' }),
     );
+  });
+});
+
+describe('startDemo tool — funnel tag', () => {
+  it('tags the contact demo-iniciada on session creation (best-effort)', async () => {
+    await run(ctx(tenant(true)));
+    expect(ghl.addContactTags).toHaveBeenCalledWith('c1', ['demo-iniciada']);
+  });
+
+  it('a tag failure never fails the demo activation', async () => {
+    ghl.addContactTags.mockRejectedValue(new Error('ghl 500'));
+    const res = await run(ctx(tenant(true)));
+    expect(res.ok).toBe(true);
   });
 });

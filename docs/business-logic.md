@@ -446,6 +446,20 @@ REAL slot by accident.
 - **Front-load `follow_up_cadence`** (e.g. 30m/3h/18h): outside WhatsApp's 24h window,
   free-form sends fail at Meta's layer — a multi-day cadence just logs delivery errors.
 
+**How a session ends (three paths, all atomic, all flip to the closer):**
+1. **Budget exhausted** (the designed ending — a completed demo, hot lead);
+2. **Expiry** (48h, enforced lazily when the lead next writes);
+3. **`demo_off_keywords`** typed by anyone — ends the session as `closed` (before this,
+   the off-keyword flipped the persona but left the session orphaned-active).
+
+**Funnel tags on the GHL contact** (`ghl/tags.ts` `DEMO_SESSION_TAGS`, best-effort like all
+tag mirrors): `demo-iniciada` when startDemo creates the session; `demo-completada` when the
+budget was fully used; `demo-incompleta` when it expired or was closed early. Smart lists /
+workflows can key on them — e.g. "`demo-iniciada` >24h AND NOT `demo-completada`" → a GHL
+template nudge, which also covers the one funnel leak the platform deliberately doesn't:
+follow-ups are OFF during demo, so a lead who ghosts mid-demo gets no in-platform nudge
+until the session ends.
+
 Observability: `demo_session_started` / `demo_session_ended` (`{reason, botMessagesUsed}`) in
 `bot_events`; sessions keep `lead_data` + `persona_version` for cohort comparison.
 

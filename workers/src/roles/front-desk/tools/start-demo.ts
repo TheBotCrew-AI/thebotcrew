@@ -14,6 +14,8 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { createDemoSession, logBotEvent } from '../../../db/queries.js';
+import { GhlClient } from '../../../ghl/client.js';
+import { DEMO_SESSION_TAGS } from '../../../ghl/tags.js';
 import { buildDemoPersona, PERSONA_VERSION } from '../demo-persona.js';
 import { resolveAgentContext } from './agent-context.js';
 
@@ -80,6 +82,12 @@ export const startDemoTool = createTool({
       businessName: persona.leadData.businessName,
       businessType: persona.leadData.businessType,
     });
+
+    // Funnel stage visible in GHL (smart lists / workflows). Best-effort, like
+    // every other tag mirror — never fail the demo over it.
+    new GhlClient(tenant.tenantId).addContactTags(turn.ghlContactId, [DEMO_SESSION_TAGS.started]).catch((e: unknown) =>
+      console.error('[startDemo] tag write failed (non-blocking):', e instanceof Error ? e.message : String(e)),
+    );
 
     return {
       ok: true,
