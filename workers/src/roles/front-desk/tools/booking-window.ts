@@ -9,6 +9,8 @@
  *   the tool can tell the agent to redirect the lead instead of querying.
  */
 
+import { requestedInstantMs } from './booking-time.js';
+
 export const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -28,10 +30,13 @@ export function resolveBookingWindow(
   fromDate: string | undefined,
   toDate: string | undefined,
   horizonDays: number | null | undefined,
+  /** Tenant timezone. An offset-less date from the model is read as LOCAL wall-clock in
+   *  this zone — reading it as UTC shifts the window and silently truncates real slots. */
+  timeZone = 'UTC',
 ): BookingWindow {
-  let fromMs = fromDate ? Date.parse(fromDate) : now;
+  let fromMs = requestedInstantMs(fromDate, timeZone, now);
   if (Number.isNaN(fromMs) || fromMs < now) fromMs = now;
-  let toMs = toDate ? Date.parse(toDate) : now + SEVEN_DAYS_MS;
+  let toMs = requestedInstantMs(toDate, timeZone, now + SEVEN_DAYS_MS);
   if (Number.isNaN(toMs)) toMs = now + SEVEN_DAYS_MS;
 
   if (horizonDays == null) {

@@ -6,6 +6,7 @@ import {
   requestAnchorMs,
   bookingQueryWindow,
   resolveBookableSlot,
+  requestedInstantMs,
 } from './booking-time.js';
 
 describe('hasTimezoneOffset', () => {
@@ -89,5 +90,36 @@ describe('resolveBookableSlot', () => {
   });
   it('returns null on empty availability', () => {
     expect(resolveBookableSlot([], '2026-07-08T17:15:00', tz)).toBeNull();
+  });
+});
+
+describe('requestedInstantMs — an offset-less date means TENANT-local, not UTC', () => {
+  const TJ = 'America/Tijuana'; // -07:00 in summer
+  const FALLBACK = Date.parse('2026-01-01T00:00:00Z');
+
+  it('honours an explicit offset', () => {
+    expect(requestedInstantMs('2026-08-01T16:00:00-07:00', TJ, FALLBACK))
+      .toBe(Date.parse('2026-08-01T23:00:00Z'));
+    expect(requestedInstantMs('2026-08-01T23:00:00Z', TJ, FALLBACK))
+      .toBe(Date.parse('2026-08-01T23:00:00Z'));
+  });
+
+  it('reads a bare wall-clock in the tenant timezone (the bug: it used to mean UTC)', () => {
+    // Saturday midnight in Tijuana is 07:00Z, NOT 00:00Z. Reading it as UTC starts
+    // the window on Friday 5pm local and truncates the real Saturday evening.
+    expect(requestedInstantMs('2026-08-01T00:00:00', TJ, FALLBACK))
+      .toBe(Date.parse('2026-08-01T07:00:00Z'));
+    expect(requestedInstantMs('2026-08-01T23:59:00', TJ, FALLBACK))
+      .toBe(Date.parse('2026-08-02T06:59:00Z'));
+  });
+
+  it('works for a positive-offset zone too', () => {
+    expect(requestedInstantMs('2026-08-01T09:00:00', 'Europe/Madrid', FALLBACK))
+      .toBe(Date.parse('2026-08-01T07:00:00Z')); // CEST = +02:00
+  });
+
+  it('falls back on missing or unparseable input', () => {
+    expect(requestedInstantMs(undefined, TJ, FALLBACK)).toBe(FALLBACK);
+    expect(requestedInstantMs('mañana por la tarde', TJ, FALLBACK)).toBe(FALLBACK);
   });
 });

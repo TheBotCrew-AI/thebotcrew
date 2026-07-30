@@ -56,6 +56,53 @@ export function slotWallKey(iso: string, timeZone: string): string | null {
 }
 
 /**
+ * The UTC instant for a wall-clock time in `timeZone`, found iteratively: measure the
+ * guess's wall-clock, correct by the difference. Converges in ≤2 steps for real-world
+ * offsets and needs no timezone database.
+ */
+export function zonedWallClockToMs(
+  year: number, month: number, day: number, hour: number, minute: number, timeZone: string,
+): number {
+  const target = Date.UTC(year, month - 1, day, hour, minute);
+  let t = target;
+  for (let i = 0; i < 2; i++) {
+    const key = slotWallKey(new Date(t).toISOString(), timeZone);
+    if (!key) return target;
+    const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(key);
+    if (!m) return target;
+    const measured = Date.UTC(+m[1]!, +m[2]! - 1, +m[3]!, +m[4]!, +m[5]!);
+    t += target - measured;
+  }
+  return t;
+}
+
+/**
+ * The instant a model-supplied date actually means.
+ *
+ * With an explicit offset → that instant. WITHOUT one → the wall-clock read in the
+ * TENANT's timezone, never UTC. Same failure this file exists for, one level up: the
+ * model writes "el sábado" as `2026-08-01T00:00:00`, and reading that as UTC shifts the
+ * whole availability window by the tenant's offset — silently truncating a day's real
+ * slots (or claiming a range is out of horizon when it isn't).
+ */
+export function requestedInstantMs(
+  iso: string | undefined,
+  timeZone: string,
+  fallbackMs: number,
+): number {
+  if (!iso) return fallbackMs;
+  if (hasTimezoneOffset(iso)) {
+    const t = Date.parse(iso);
+    return Number.isNaN(t) ? fallbackMs : t;
+  }
+  const key = wallClockKey(iso);
+  if (!key) return fallbackMs;
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(key);
+  if (!m) return fallbackMs;
+  return zonedWallClockToMs(+m[1]!, +m[2]!, +m[3]!, +m[4]!, +m[5]!, timeZone);
+}
+
+/**
  * Coarse UTC anchor for the requested time, used only to bound the availability re-query.
  * We interpret the wall-clock as if it were UTC (or honour an explicit offset) purely to pick
  * a query window — the true instant is within a few hours of it, so callers pad by ±1 day.

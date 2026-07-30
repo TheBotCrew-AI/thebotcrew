@@ -12,6 +12,8 @@
  * that matches the lead's pick (see resolveBookableSlot in the tool branches).
  */
 
+import { zonedWallClockToMs } from './booking-time.js';
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** Wall-clock times offered each day (minutes from midnight, tenant-local). */
@@ -60,19 +62,8 @@ function wallClock(ms: number, timeZone: string): { y: number; mo: number; d: nu
   };
 }
 
-/**
- * The UTC instant for a tz wall-clock time, found iteratively (measure the
- * guess's wall-clock, correct by the difference; converges in ≤2 steps for
- * real-world offsets — no tz database needed).
- */
-function zonedTimeToUtcMs(y: number, mo: number, d: number, h: number, mi: number, timeZone: string): number {
-  let t = Date.UTC(y, mo - 1, d, h, mi);
-  for (let i = 0; i < 2; i++) {
-    const w = wallClock(t, timeZone);
-    t += Date.UTC(y, mo - 1, d, h, mi) - Date.UTC(w.y, w.mo - 1, w.d, w.h, w.mi);
-  }
-  return t;
-}
+// The wall-clock → instant conversion lives in booking-time.ts (zonedWallClockToMs):
+// one implementation, shared with the availability window resolver and unit-tested there.
 
 export interface SimSlot {
   start: string;
@@ -122,7 +113,7 @@ export function simulatedSlots(
 
     for (const [i, t] of DAILY_TIMES.entries()) {
       if (i === takenA || i === takenB) continue;
-      const startMs = zonedTimeToUtcMs(day.y, day.mo, day.d, t.h, t.m, timeZone);
+      const startMs = zonedWallClockToMs(day.y, day.mo, day.d, t.h, t.m, timeZone);
       if (Number.isFinite(excludeMs) && startMs === excludeMs) continue;
       const start = new Date(startMs).toISOString();
       slots.push({

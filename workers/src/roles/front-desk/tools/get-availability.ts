@@ -89,7 +89,7 @@ export const getAvailabilityTool = createTool({
     // clamped here, or (if it starts entirely beyond the horizon) we return that fact so
     // the agent redirects the lead to the valid window.
     const horizon = config.bookingHorizonDays ?? null;
-    const window = resolveBookingWindow(Date.now(), fromDate, toDate, horizon);
+    const window = resolveBookingWindow(Date.now(), fromDate, toDate, horizon, config.timezone);
 
     if (window.outOfHorizon && window.maxMs != null) {
       const maxLabel = label(new Date(window.maxMs).toISOString());

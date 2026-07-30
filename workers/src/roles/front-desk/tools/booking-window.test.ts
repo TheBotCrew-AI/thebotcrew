@@ -53,3 +53,36 @@ describe('resolveBookingWindow', () => {
     expect(w.toMs).toBe(Date.parse('2026-07-02T00:00:00Z'));
   });
 });
+
+describe('resolveBookingWindow — tenant-local interpretation of model dates', () => {
+  const TJ = 'America/Tijuana';
+  const NOW = Date.parse('2026-07-30T18:00:00Z'); // 11:00 Tijuana
+
+  it("a bare 'end of Saturday' no longer truncates the day's real slots", () => {
+    // The model writes "hasta el sábado" as 2026-08-01T23:59. Read as UTC that is
+    // 16:59 Tijuana, cutting every Saturday evening slot out of the query.
+    const w = resolveBookingWindow(NOW, undefined, '2026-08-01T23:59:00', null, TJ);
+    expect(w.toMs).toBe(Date.parse('2026-08-02T06:59:00Z'));
+  });
+
+  it('a bare start-of-day is local midnight, not the previous evening', () => {
+    const w = resolveBookingWindow(NOW, '2026-08-01T00:00:00', undefined, null, TJ);
+    expect(w.fromMs).toBe(Date.parse('2026-08-01T07:00:00Z'));
+  });
+
+  it('an explicit offset is unchanged', () => {
+    const w = resolveBookingWindow(NOW, '2026-08-01T00:00:00-07:00', undefined, null, TJ);
+    expect(w.fromMs).toBe(Date.parse('2026-08-01T07:00:00Z'));
+  });
+
+  it('the horizon is measured against the correctly-resolved start', () => {
+    // 2 days out in local terms; with a 7-day horizon this must NOT be out of range.
+    const w = resolveBookingWindow(NOW, '2026-08-01T00:00:00', undefined, 7, TJ);
+    expect(w.outOfHorizon).toBe(false);
+  });
+
+  it('defaults to UTC when no timezone is passed (back-compat)', () => {
+    const w = resolveBookingWindow(NOW, '2026-08-01T00:00:00', undefined, null);
+    expect(w.fromMs).toBe(Date.parse('2026-08-01T00:00:00Z'));
+  });
+});
