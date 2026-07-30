@@ -342,7 +342,7 @@ export async function createDemoSession(params: {
 /** End a session + flip the conversation back to the normal persona, atomically. */
 export async function endDemoSession(
   sessionId: string,
-  reason: 'exhausted' | 'expired' | 'closed',
+  reason: 'exhausted' | 'expired' | 'closed' | 'booked',
 ): Promise<void> {
   const supabase = getSupabase();
   const { error } = await supabase.rpc('app_end_demo_session', {

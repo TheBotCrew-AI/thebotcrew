@@ -839,3 +839,70 @@ describe('handleInboundWebhook — the closer persists after the demo (active_ro
     expect(q.scheduleFollowUp).toHaveBeenCalledWith('cv-uuid', 1, 30, 'America/Mexico_City', undefined);
   });
 });
+
+describe('handleInboundWebhook — booking ends the demo (objective met)', () => {
+  const demoPersona = { activeRole: 'demo', roleStartedAt: '2026-07-30T16:00:00Z', demoStartedAt: '2026-07-30T16:00:00Z', promptVariant: null };
+  const base = {
+    id: 'sess-9', activatedAt: '2026-07-30T16:00:00Z', expiresAt: '2099-01-01T00:00:00Z',
+    messageBudget: 7, personaVersion: 3,
+    leadData: { businessName: 'BeautyFull', leadName: 'Leo' },
+    promptOverrides: { identity: 'P' }, simulatedBooking: null,
+  };
+  const booking = { startTime: '2026-08-01T17:00:00.000Z', serviceName: 'Botox', label: 'sábado 1 de agosto, 10:00 a.m.' };
+  const sentText = () => ghl.sendMessage.mock.calls.map((c) => (c[0] as { text: string }).text).join('\n');
+
+  beforeEach(() => {
+    vi.mocked(q.getConversationPersona).mockResolvedValue(demoPersona);
+    vi.mocked(q.firstInboundAfter).mockResolvedValue('2026-07-30T16:01:00Z');
+    vi.mocked(q.countBotMessagesSince).mockResolvedValue(2); // budget nowhere near spent
+  });
+
+  it('a booking made during the turn ends the session as "booked" and appends the pitch', async () => {
+    vi.mocked(q.getActiveDemoSession)
+      .mockResolvedValueOnce(base as never)                              // turn start: no booking yet
+      .mockResolvedValue({ ...base, simulatedBooking: booking } as never); // post-generate: booked
+    await handleInboundWebhook(inbound, agentReplying('¡Listo! Nos vemos el sábado a las 10:00 a.m.'));
+
+    expect(q.endDemoSession).toHaveBeenCalledWith('sess-9', 'booked');
+    expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'demo_session_ended',
+      expect.objectContaining({ reason: 'booked' }));
+    const sent = sentText();
+    expect(sent).toContain('¡Listo! Nos vemos el sábado');   // the confirmation still goes out
+    expect(sent).toContain('Acabas de agendar en menos de un minuto'); // pitch rides on it
+    expect(sent).toContain('24/7');
+    expect(ghl.addContactTags).toHaveBeenCalledWith('c1', ['demo-completada']);
+  });
+
+  it('no booking → the demo continues untouched', async () => {
+    vi.mocked(q.getActiveDemoSession).mockResolvedValue(base as never);
+    await handleInboundWebhook(inbound, agentReplying('¿Te muestro horarios?'));
+    expect(q.endDemoSession).not.toHaveBeenCalled();
+    expect(sentText()).not.toContain('Acabas de agendar');
+  });
+
+  it('a booking that already existed at turn start does NOT re-end the session', async () => {
+    vi.mocked(q.getActiveDemoSession).mockResolvedValue({ ...base, simulatedBooking: booking } as never);
+    await handleInboundWebhook(inbound, agentReplying('Nos vemos el sábado.'));
+    expect(q.endDemoSession).not.toHaveBeenCalled();
+  });
+
+  it('follow-ups re-arm on the booking turn (the demo is over)', async () => {
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(
+      tenant({ config: { ...tenant().config, followUpCadence: [30] } }),
+    );
+    vi.mocked(q.getActiveDemoSession)
+      .mockResolvedValueOnce(base as never)
+      .mockResolvedValue({ ...base, simulatedBooking: booking } as never);
+    await handleInboundWebhook(inbound, agentReplying('¡Listo!'));
+    expect(q.scheduleFollowUp).toHaveBeenCalledWith('cv-uuid', 1, 30, 'America/Mexico_City', undefined);
+  });
+
+  it('a failed session read never breaks the turn — the demo just runs on', async () => {
+    vi.mocked(q.getActiveDemoSession)
+      .mockResolvedValueOnce(base as never)
+      .mockRejectedValue(new Error('db down'));
+    const res = await handleInboundWebhook(inbound, agentReplying('¡Listo!'));
+    expect(res.body).toMatchObject({ replied: true });
+    expect(q.endDemoSession).not.toHaveBeenCalled();
+  });
+});

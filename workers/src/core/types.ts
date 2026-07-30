@@ -96,7 +96,7 @@ export interface TenantContext {
 /** Context injected into the turn right after a demo session ended: the normal
  *  persona (the closer) answers knowing what the lead just experienced. */
 export interface DemoHandoff {
-  reason: 'exhausted' | 'expired' | 'closed';
+  reason: 'exhausted' | 'expired' | 'closed' | 'booked';
   businessName?: string;
   businessType?: string;
   /** The person's name, captured during intake — so the closer never re-asks it. */

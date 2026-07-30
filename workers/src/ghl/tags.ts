@@ -38,7 +38,10 @@ export const DEMO_SESSION_TAGS = {
   incomplete: 'demo-incompleta',
 } as const;
 
-/** Map a session end reason to the funnel tag it earns. */
-export function demoEndTag(reason: 'exhausted' | 'expired' | 'closed'): string {
-  return reason === 'exhausted' ? DEMO_SESSION_TAGS.completed : DEMO_SESSION_TAGS.incomplete;
+/** Map a session end reason to the funnel tag it earns. `booked` and `exhausted` both
+ *  mean the lead saw the demo through; expiry/early close are the retargeting pool. */
+export function demoEndTag(reason: 'exhausted' | 'expired' | 'closed' | 'booked'): string {
+  return reason === 'exhausted' || reason === 'booked'
+    ? DEMO_SESSION_TAGS.completed
+    : DEMO_SESSION_TAGS.incomplete;
 }

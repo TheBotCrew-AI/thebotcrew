@@ -430,6 +430,8 @@ export async function runAgentTurn({
   let demoEndedAt: string | undefined;
   /** True only on the turn that ends the demo: that reply is deterministic, not generated. */
   let demoJustEnded = false;
+  /** The running session, kept so a booking made DURING this turn can end it. */
+  let activeDemoSession: Awaited<ReturnType<typeof getActiveDemoSession>> = null;
   if (activeRole === 'demo') {
     try {
       const session = await getActiveDemoSession(parsed.conversationId);
@@ -466,6 +468,7 @@ export async function runAgentTurn({
           // The demo's own booking, surfaced below as activeAppointment so the agent
           // gets the same self-block guard as a real one (see that section).
           demoBooking = session.simulatedBooking;
+          activeDemoSession = session;
         }
       }
     } catch (e) {
@@ -662,6 +665,40 @@ export async function runAgentTurn({
       : result.text;
   }
 
+  // A simulated booking IS the demo's objective, so the session ends the moment it
+  // happens — no post-booking small talk. The pitch rides on the confirmation the agent
+  // just wrote, which is the strongest moment in the funnel: the lead has literally just
+  // watched an assistant book them. Detected by re-reading the session (the tool writes
+  // the booking there) rather than parsing tool results out of the model's steps.
+  let endedByBooking = false;
+  if (activeRole === 'demo' && activeDemoSession && !demoBooking && !forcedReply) {
+    try {
+      const after = await getActiveDemoSession(parsed.conversationId);
+      if (after?.simulatedBooking) {
+        await endDemoSession(activeDemoSession.id, 'booked');
+        await logBotEvent(tenant.clientId, parsed.conversationId, 'demo_session_ended', {
+          sessionId: activeDemoSession.id,
+          reason: 'booked',
+        });
+        ghl.addContactTags(parsed.contactId, [demoEndTag('booked')]).catch((e: unknown) =>
+          console.error('[demo-session] booked tag failed (non-blocking):', e instanceof Error ? e.message : String(e)),
+        );
+        // Append the handover to this same reply: confirmation → pitch, no gap.
+        reply = `${reply}\n\n${buildDemoEndAnnouncement(
+          buildDemoHandoff(activeDemoSession.leadData, 'booked', true),
+        )}`;
+        endedByBooking = true;
+        // Local role follows the DB so the follow-up cycle below re-arms (it is
+        // suppressed only while the demo is running).
+        activeRole = 'closer';
+        console.log(`[demo-session] ended by booking conv=${parsed.conversationId}`);
+      }
+    } catch (e) {
+      // Non-blocking: worst case the demo runs on to its message budget as before.
+      console.error('[demo-session] booking check failed (non-blocking):', e instanceof Error ? e.message : String(e));
+    }
+  }
+
   // Anti-double guard: a HUMAN may have replied in GHL WHILE we were generating.
   // Re-check before sending so we don't talk over them. We bail BEFORE logging the
   // outbound, so the delivery cron never finds a pending row to re-send.
@@ -698,7 +735,7 @@ export async function runAgentTurn({
   console.log(`[classify] conv=${parsed.conversationId} hasQuestion=${hasQuestion}`);
   // Skipped for the forced handover too: it always ends in a question, and the lead's last
   // message was in-character roleplay — nothing there is a real terminal state.
-  const outcome = activeRole === 'demo' || forcedReply
+  const outcome = activeRole === 'demo' || forcedReply || endedByBooking
     ? null
     : await classifyConversationOutcome(parsed.text, reply, aux);
   console.log(`[classify] outcome=${outcome ?? 'null (active or error)'}`);

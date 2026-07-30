@@ -148,7 +148,10 @@ supabase/
                                # 0038 demo_sessions (lead-magnet funnel: budgeted per-lead self-demos, startDemo tool,
                                #      role_started_at expand, simulated booking in demo mode — see business-logic §5c),
                                # 0039 tenant_config_history (trigger-based audit: full-row snapshots on every config edit;
-                               #      diff/revert per tenant; no code reads it)
+                               #      diff/revert per tenant; no code reads it),
+                               # 0040 closer_role (a demo ends INTO active_role='closer' — the setter persona persists
+                               #      for the whole post-demo conversation, not just the flip turn),
+                               # 0041 demo_end_reason_booked (a simulated booking ends the demo: objective met → pitch)
   clients.sql, seed-tenants.sql# seeds (run by `supabase db reset` per config.toml)
 sites/                         # client marketing sites: static HTML, no build step, no deps
   _template/                   # starting point for a new client

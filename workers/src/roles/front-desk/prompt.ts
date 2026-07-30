@@ -312,6 +312,8 @@ No tenemos número de WhatsApp del lead en el sistema (típico de leads de Faceb
       ? 'La demo terminó porque pasó su tiempo límite.'
       : demoHandoff.reason === 'closed'
       ? 'El lead cerró la demo él mismo.'
+      : demoHandoff.reason === 'booked'
+      ? 'La demo terminó en cuanto el lead AGENDÓ dentro de ella: cumplió su objetivo. Es la señal de interés más fuerte que vas a tener — la acaba de vivir, no se la tienes que explicar.'
       : 'La demo llegó a su límite de mensajes — terminó en un buen momento, a propósito.';
     const bizName = biz ?? 'tu negocio';
     const bizRef = biz ? `"${biz}"${demoHandoff.businessType ? ` (${demoHandoff.businessType})` : ''}` : 'su negocio';
@@ -437,15 +439,26 @@ Responde siempre en español.`;
  */
 export function buildDemoEndAnnouncement(handoff: DemoHandoff): string {
   const biz = handoff.businessName?.trim() || 'tu negocio';
-  const hi = handoff.leadName?.trim() ? `${handoff.leadName.trim()}, hasta` : 'Hasta';
+  const name = handoff.leadName?.trim();
+  const soft = `\n\n¿Te serviría tenerlo en ${biz} contestando así a cada cliente, 24/7?`;
+
+  // Booked: the demo just hit its objective. Lead with what they literally
+  // watched happen — it's the most persuasive line we will ever have.
+  if (handoff.reason === 'booked') {
+    return (
+      `${name ? `${name}, eso` : 'Eso'} que acabas de ver es justo el punto 👋 Acabas de agendar en menos de un minuto, ` +
+      `y del otro lado no había nadie del equipo: solo el asistente que armé para ${biz} con los datos que me diste.` +
+      soft
+    );
+  }
+
+  const hi = name ? `${name}, hasta` : 'Hasta';
   const timeUp = handoff.reason === 'expired' ? ' (se cerró por tiempo)' : '';
-  const proof = handoff.booked
-    ? ` — y hasta te agendó la cita, sin que nadie del equipo estuviera`
-    : '';
+  const proof = handoff.booked ? ` — y hasta te agendó la cita, sin que nadie del equipo estuviera` : '';
   return (
     `${hi} aquí llega la demo 👋${timeUp} Todo eso lo respondió el asistente que armé para ${biz} ` +
     `con los datos que me diste${proof}.` +
-    `\n\n¿Te serviría tenerlo en ${biz} contestando así a cada cliente, 24/7?`
+    soft
   );
 }
 

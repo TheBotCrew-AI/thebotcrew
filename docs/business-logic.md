@@ -456,15 +456,28 @@ REAL slot by accident.
 - **Front-load `follow_up_cadence`** (e.g. 30m/3h/18h): outside WhatsApp's 24h window,
   free-form sends fail at Meta's layer — a multi-day cadence just logs delivery errors.
 
-**How a session ends (three paths, all atomic, all flip to the closer):**
-1. **Budget exhausted** (the designed ending — a completed demo, hot lead);
-2. **Expiry** (48h, enforced lazily when the lead next writes);
-3. **`demo_off_keywords`** typed by anyone — ends the session as `closed` (before this,
+**How a session ends (four paths, all atomic, all flip to the closer):**
+1. **The lead books** (`booked`, 0041) — a simulated booking IS the demo's objective, so the
+   session ends the moment `bookAppointment` succeeds: no post-booking small talk. Detected
+   by re-reading the session after the turn (the tool writes `simulated_booking` there), and
+   the handover pitch is **appended to that same reply**, so the confirmation and the pitch
+   arrive together — the strongest moment in the funnel.
+2. **Budget exhausted** (the fallback ending — the lead never booked but saw enough);
+3. **Expiry** (48h, enforced lazily when the lead next writes);
+4. **`demo_off_keywords`** typed by anyone — ends the session as `closed` (before this,
    the off-keyword flipped the persona but left the session orphaned-active).
+
+**The handover message is DETERMINISTIC** (`buildDemoEndAnnouncement`), not model-generated.
+Two rounds of prompt instructions failed in production: with the lead's last in-character
+question in the history, the model answered it and jumped to the pitch, so the lead never
+learned the demo had ended. On the turn a session ends, `agent.generate` is skipped entirely
+(the booking path appends the announcement to the agent's confirmation instead). Same
+principle as the booking slot resolver — where correctness is non-negotiable, the runtime
+decides. The copy adapts to `reason`, whether the lead booked, and their name.
 
 **Funnel tags on the GHL contact** (`ghl/tags.ts` `DEMO_SESSION_TAGS`, best-effort like all
 tag mirrors): `demo-iniciada` when startDemo creates the session; `demo-completada` when the
-budget was fully used; `demo-incompleta` when it expired or was closed early. Smart lists /
+lead **booked** or used the full budget; `demo-incompleta` when it expired or was closed early. Smart lists /
 workflows can key on them — e.g. "`demo-iniciada` >24h AND NOT `demo-completada`" → a GHL
 template nudge, which also covers the one funnel leak the platform deliberately doesn't:
 follow-ups are OFF during demo, so a lead who ghosts mid-demo gets no in-platform nudge
