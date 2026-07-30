@@ -237,6 +237,14 @@ for the retry cron.
 - `pnpm typecheck` + `pnpm test:unit` (the gate) then `pnpm build` (mastra build via
   CloudflareDeployer) → `pnpm --filter @thebotcrew/workers exec wrangler deploy`. Set Worker
   secrets with `wrangler secret put <NAME>` (see `.env.example`). Staging step TBD.
+- **Gradual rollout (preferred now that a client is live):** `wrangler versions upload` →
+  `wrangler versions deploy` at a percentage → ramp → `wrangler rollback` if needed. Caveat:
+  a deploy that includes new **Durable Object migrations** cannot roll out gradually.
+- **Migrations are expand/contract, as a hard rule:** the CF deploy and the Supabase migration
+  are not atomic, so every migration must be backward-compatible with the currently deployed
+  Worker (add nullable columns/tables → deploy code → drop/rename in a LATER release).
+  Example in flight: `role_started_at` (0038) supersedes `demo_started_at`; both are written —
+  drop the old column only after the deploy is proven.
 
 ## GHL integration notes
 
