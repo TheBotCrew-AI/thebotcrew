@@ -248,6 +248,40 @@ export interface ActiveDemoSession {
   simulatedBooking: SimulatedBooking | null;
 }
 
+/** The conversation's most recent demo session whatever its status — the closer
+ *  persona rebuilds its handoff context from this on every post-demo turn. */
+export async function getLatestDemoSession(
+  ghlConversationId: string,
+): Promise<{
+  leadData: Record<string, unknown>;
+  endReason: string | null;
+  endedAt: string | null;
+  booked: boolean;
+} | null> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from('demo_sessions')
+    .select('lead_data, end_reason, ended_at, simulated_booking')
+    .eq('ghl_conversation_id', ghlConversationId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  fail('getLatestDemoSession', error);
+  if (!data) return null;
+  const row = data as {
+    lead_data: Record<string, unknown> | null;
+    end_reason: string | null;
+    ended_at: string | null;
+    simulated_booking: unknown;
+  };
+  return {
+    leadData: row.lead_data ?? {},
+    endReason: row.end_reason,
+    endedAt: row.ended_at,
+    booked: row.simulated_booking != null,
+  };
+}
+
 /** The conversation's ACTIVE demo session, or null (manual keyword demos have none). */
 export async function getActiveDemoSession(ghlConversationId: string): Promise<ActiveDemoSession | null> {
   const supabase = getSupabase();

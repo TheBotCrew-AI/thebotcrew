@@ -316,7 +316,7 @@ describe('buildFrontDeskInstructions — closer announces the handover clearly',
 
   it('makes announcing the end of the demo mandatory and shows how', () => {
     const out = closer();
-    expect(out).toContain('AVISA que la demo terminó. Es obligatorio');
+    expect(out).toContain('AVISA que terminó. Es obligatorio');
     expect(out).toContain('NO sabe que la prueba acabó');
     expect(out).toContain('Hasta aquí llega la demo');
     expect(out).toContain('Todo eso lo contestó el asistente de SkinBeauty');
@@ -342,5 +342,43 @@ describe('buildFrontDeskInstructions — closer announces the handover clearly',
     expect(bare).toContain('Solo que probó la demo de su negocio');
     expect(bare).toContain('tu negocio');
     expect(bare).not.toContain('undefined');
+  });
+});
+
+describe('buildFrontDeskInstructions — closer replaces the tenant flow (the "¿con quién tengo el gusto?" bug)', () => {
+  const handoff: DemoHandoff = { reason: 'exhausted', businessName: 'BeautyFull', leadName: 'Leo', booked: true };
+  // A tenant whose own flow opens by greeting and asking for the name — exactly
+  // what won over the closer section on 2026-07-30.
+  const tenantFlow = () =>
+    cfg({ promptOverrides: { qualificationNotes: '# Mi flujo\n1. Saluda y pregunta ¿con quién tengo el gusto?' } });
+  const closer = () =>
+    buildFrontDeskInstructions(tenantFlow(), NOW, undefined, undefined, undefined, undefined, undefined, handoff);
+
+  it("suppresses the tenant's qualification flow entirely while closing", () => {
+    expect(buildFrontDeskInstructions(tenantFlow(), NOW)).toContain('¿con quién tengo el gusto?'); // normal turn keeps it
+    expect(closer()).not.toContain('# Mi flujo');
+  });
+
+  it('states outright that this is not a new conversation', () => {
+    const out = closer();
+    expect(out).toContain('ESTO NO ES UNA CONVERSACIÓN NUEVA');
+    expect(out).toContain('NUNCA saludes como si fuera la primera vez');
+    expect(out).toContain('NUNCA le vuelvas a pedir su nombre');
+    expect(out).toContain('Ignora cualquier flujo de bienvenida');
+  });
+
+  it('distinguishes the first post-demo message from later ones', () => {
+    const out = closer();
+    expect(out).toContain('Si es tu PRIMER mensaje después de la demo');
+    expect(out).toContain('Si YA avisaste');
+    expect(out).toContain('No lo repitas');
+  });
+
+  it('handles a lead-closed demo without claiming it ran out', () => {
+    const out = buildFrontDeskInstructions(
+      cfg(), NOW, undefined, undefined, undefined, undefined, undefined,
+      { reason: 'closed', businessName: 'X' },
+    );
+    expect(out).toContain('El lead cerró la demo él mismo');
   });
 });

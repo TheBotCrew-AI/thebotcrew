@@ -209,9 +209,15 @@ export function buildFrontDeskInstructions(
     ? offering.trim()
     : `# Servicios disponibles\n${renderServices(config)}`;
 
-  const hasCustomFlow = !!qualificationNotes?.trim();
+  // The closer replaces the tenant's own qualification flow entirely. Leaving both in
+  // is what produced "¿con quién tengo el gusto?" right after a demo: the tenant flow
+  // opens by greeting and asking the name, and it won over the closer section below.
+  const inCloser = !!demoHandoff && !usingDemo;
+  const hasCustomFlow = !inCloser && !!qualificationNotes?.trim();
 
-  const flowSection = hasCustomFlow
+  const flowSection = inCloser
+    ? ''
+    : hasCustomFlow
     ? `\n\n${qualificationNotes!.trim()}`
     : `\n\n# Tu objetivo
 1. Saludar y entender qué necesita el cliente.
@@ -300,10 +306,12 @@ No tenemos número de WhatsApp del lead en el sistema (típico de leads de Faceb
   // History was truncated at the flip, so this section carries what the closer needs
   // to know about what the lead just experienced.
   let demoHandoffSection = '';
-  if (demoHandoff && !usingDemo) {
+  if (inCloser && demoHandoff) {
     const biz = demoHandoff.businessName?.trim();
     const why = demoHandoff.reason === 'expired'
       ? 'La demo terminó porque pasó su tiempo límite.'
+      : demoHandoff.reason === 'closed'
+      ? 'El lead cerró la demo él mismo.'
       : 'La demo llegó a su límite de mensajes — terminó en un buen momento, a propósito.';
     const bizName = biz ?? 'tu negocio';
     const bizRef = biz ? `"${biz}"${demoHandoff.businessType ? ` (${demoHandoff.businessType})` : ''}` : 'su negocio';
@@ -324,12 +332,22 @@ Lo que YA sabes de él (no lo vuelvas a preguntar):
 
 Sal del juego de rol: a partir de aquí hablas tú, con tu identidad normal, y NUNCA vuelves a actuar como el asistente del negocio del lead. Tu objetivo aquí es UNO: que agende la llamada. Se gana con preguntas, no con discurso.
 
-## Turno 1 — AVISA que la demo terminó. Es obligatorio.
-El lead viene escribiendo como si fuera cliente de su propio negocio y NO sabe que la prueba acabó. Si le contestas como si nada, se pierde: parece que cambiaste de tema sin explicación. Tu primer mensaje SIEMPRE hace estas dos cosas, en este orden:
+## ESTO NO ES UNA CONVERSACIÓN NUEVA
+Ya llevas rato hablando con esta persona: primero le preparaste la demo y luego ella la probó escribiendo como cliente de su propio negocio. Los mensajes que ves arriba son el final de esa demo, NO el inicio de un chat nuevo.
+- NUNCA saludes como si fuera la primera vez ("Hola, ¿con quién tengo el gusto?", "¿en qué te puedo ayudar?"). Eso rompe todo: ya se presentó.
+- NUNCA le vuelvas a pedir su nombre, su negocio, su giro ni sus servicios: ya te los dio (están arriba).
+- Ignora cualquier flujo de bienvenida o calificación inicial de otras partes de estas instrucciones. Aquí manda esta sección.
+
+## Si es tu PRIMER mensaje después de la demo: AVISA que terminó. Es obligatorio.
+Reconoces que es tu primer mensaje si arriba todavía no hay ningún mensaje tuyo hablando como The Bot Crew (solo mensajes del lead, o los del asistente que hacía de recepcionista de su negocio).
+El lead venía escribiendo como si fuera cliente de su propio negocio y NO sabe que la prueba acabó. Si le contestas como si nada, se pierde: parece que cambiaste de tema sin explicación. Ese primer mensaje SIEMPRE hace estas dos cosas, en este orden:
 1. Cierra la demo de forma explícita y clara. Que se entienda que eso era la demo y que ya volviste a ser tú. Por ejemplo: "Hasta aquí llega la demo 👋 Todo eso lo contestó el asistente de ${bizName}, solo con los datos que me diste."
 2. UNA sola pregunta suave, tipo: "¿Te serviría tener esto en ${bizName}, contestando así a cada cliente 24/7?"
 Nada más. No expliques la oferta todavía, no menciones precios y no ofrezcas horarios aún. Manda tu mensaje y ESPERA su respuesta.
-PROHIBIDO en ese primer mensaje: seguir la conversación de la demo, contestar una duda del negocio del lead como si aún fueras su recepcionista, o saltar directo a proponer la llamada sin antes avisar que la demo terminó.
+PROHIBIDO en ese primer mensaje: saludar de cero o pedir su nombre, seguir la conversación de la demo, contestar una duda del negocio del lead como si aún fueras su recepcionista, o saltar directo a proponer la llamada sin antes avisar que la demo terminó.
+
+## Si YA avisaste (arriba hay mensajes tuyos como The Bot Crew)
+No lo repitas. Sigue el hilo desde donde va la conversación, con las ramas de abajo.
 
 ## Si dice que SÍ (o muestra interés claro)
 No te lances a vender: cierra.

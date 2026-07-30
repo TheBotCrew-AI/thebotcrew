@@ -29,6 +29,7 @@ import {
   endDemoSession,
   firstInboundAfter,
   getActiveDemoSession,
+  getLatestDemoSession,
   type SimulatedBooking,
   getConversationPersona,
   setActiveRole,
@@ -346,6 +347,24 @@ async function correctContactName(
   }
 }
 
+/** Build the closer's context from a demo session's stored lead data. */
+function buildDemoHandoff(
+  leadData: Record<string, unknown>,
+  reason: DemoHandoff['reason'],
+  booked: boolean,
+): DemoHandoff {
+  const lead = leadData as { businessName?: string; businessType?: string; leadName?: string; services?: string[] };
+  return {
+    reason,
+    businessName: lead.businessName,
+    businessType: lead.businessType,
+    leadName: lead.leadName,
+    services: Array.isArray(lead.services) ? lead.services : undefined,
+    // Booking inside the demo is the strongest intent signal we have.
+    booked,
+  };
+}
+
 /** Map our stored turns into the model's user/assistant view. */
 function toModelMessages(history: ConversationMessage[]): ChatMessage[] {
   return history.map((m): ChatMessage =>
@@ -406,6 +425,8 @@ export async function runAgentTurn({
   // inbound, so the closer sees the lead's last message and none of the roleplay).
   let demoHandoff: DemoHandoff | undefined;
   let demoBooking: SimulatedBooking | null = null;
+  /** When the demo ended — bot messages before it are roleplay, not the closer's own. */
+  let demoEndedAt: string | undefined;
   if (activeRole === 'demo') {
     try {
       const session = await getActiveDemoSession(parsed.conversationId);
@@ -424,18 +445,8 @@ export async function runAgentTurn({
             reason,
             botMessagesUsed: used,
           });
-          const lead = session.leadData as {
-            businessName?: string; businessType?: string; leadName?: string; services?: string[];
-          };
-          demoHandoff = {
-            reason,
-            businessName: lead.businessName,
-            businessType: lead.businessType,
-            leadName: lead.leadName,
-            services: Array.isArray(lead.services) ? lead.services : undefined,
-            // Booking inside the demo is the strongest intent signal we have.
-            booked: !!session.simulatedBooking,
-          };
+          demoHandoff = buildDemoHandoff(session.leadData, reason, !!session.simulatedBooking);
+          demoEndedAt = new Date().toISOString();
           console.log(`[demo-session] ended conv=${parsed.conversationId} reason=${reason} used=${used}`);
           // Funnel outcome onto the GHL contact: completed = used the full budget (hot);
           // incomplete = expired/abandoned (retargeting pool). Best-effort mirror.
@@ -458,17 +469,35 @@ export async function runAgentTurn({
       // keyword demo (tenant-level demo overrides), never as a dropped reply.
       console.error('[demo-session] check failed (non-blocking):', e instanceof Error ? e.message : String(e));
     }
+  } else if (activeRole === 'closer') {
+    // Post-demo persona (0040): rebuild the handoff context from the last session on
+    // EVERY turn, so the setter flow lasts the whole conversation — not just the turn
+    // where the demo ended (which is what made it evaporate after one message).
+    try {
+      const last = await getLatestDemoSession(parsed.conversationId);
+      if (last) {
+        const reason = last.endReason === 'expired' ? 'expired' : last.endReason === 'closed' ? 'closed' : 'exhausted';
+        demoHandoff = buildDemoHandoff(last.leadData, reason, last.booked);
+        demoEndedAt = last.endedAt ?? undefined;
+      }
+    } catch (e) {
+      console.error('[closer] latest session read failed (non-blocking):', e instanceof Error ? e.message : String(e));
+    }
   }
 
   // Clean-start history: from when the CURRENT persona took over (demo start OR the
   // closer flip). Legacy fallback for rows stamped before 0038: demo_started_at.
   const sinceTs = roleStartedAt ?? (activeRole === 'demo' && demoStartedAt ? demoStartedAt : undefined);
   const history = await loadRecentMessages(conversationId, 20, sinceTs);
-  // The closer turn: the anchor is the lead's last inbound, so any demo replies sent
-  // AFTER it (the tail of the roleplay) would otherwise land in the closer's context and
-  // pull it back into character. It doesn't need them — the handoff section already says
-  // what happened — so it sees only what the lead said.
-  const messages = toModelMessages(demoHandoff ? history.filter((m) => m.senderType === 'lead') : history);
+  // The turn the demo ENDS on: the anchor is the lead's last inbound, so any demo replies
+  // sent after it (the tail of the roleplay) would land in the closer's context and pull it
+  // back into character. Strip them — the handoff section already says what happened. Later
+  // closer turns keep their full history: by then every assistant message is the closer's own.
+  const messages = toModelMessages(
+    demoEndedAt
+      ? history.filter((m) => m.senderType === 'lead' || m.sentAt > demoEndedAt!)
+      : history,
+  );
 
   const ghl = new GhlClient(tenant.tenantId);
 

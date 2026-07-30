@@ -760,3 +760,68 @@ describe('handleInboundWebhook — demo self-block guard + closer context hygien
     expect(JSON.stringify(msgs)).not.toContain('ya se ocupó');
   });
 });
+
+describe('handleInboundWebhook — the closer persists after the demo (active_role=closer)', () => {
+  const closerPersona = { activeRole: 'closer', roleStartedAt: '2026-07-30T15:58:39Z', demoStartedAt: null, promptVariant: null };
+  const lastSession = {
+    leadData: { businessName: 'BeautyFull', businessType: 'Med spa', leadName: 'Leo', services: ['HydraFacial'] },
+    endReason: 'exhausted',
+    endedAt: '2026-07-30T15:58:55Z',
+    booked: true,
+  };
+  const turnFrom = (agent: Agent) => {
+    const call = vi.mocked(agent.generate).mock.calls[0] as unknown as [unknown, { requestContext: { get(k: string): unknown } }];
+    return call[1].requestContext.get('turn') as { activeRole?: string; demoHandoff?: Record<string, unknown> };
+  };
+  const modelMessages = (agent: Agent) =>
+    (vi.mocked(agent.generate).mock.calls[0] as unknown as [{ role: string; content: string }[], unknown])[0];
+
+  it('rebuilds the handoff context on EVERY later turn, not just the flip turn', async () => {
+    vi.mocked(q.getConversationPersona).mockResolvedValue(closerPersona);
+    vi.mocked(q.getLatestDemoSession).mockResolvedValue(lastSession as never);
+    const agent = agentReplying();
+    await handleInboundWebhook(inbound, agent);
+    expect(turnFrom(agent).demoHandoff).toMatchObject({
+      reason: 'exhausted', businessName: 'BeautyFull', leadName: 'Leo', booked: true,
+    });
+    // Not a demo: the demo guards must stay off (follow-ups, classifier, real tools).
+    expect(turnFrom(agent).activeRole).toBe('closer');
+    expect(q.getActiveDemoSession).not.toHaveBeenCalled();
+  });
+
+  it('keeps the closer own replies in history but strips the demo roleplay tail', async () => {
+    vi.mocked(q.getConversationPersona).mockResolvedValue(closerPersona);
+    vi.mocked(q.getLatestDemoSession).mockResolvedValue(lastSession as never);
+    vi.mocked(q.loadRecentMessages).mockResolvedValue([
+      { direction: 'inbound',  senderType: 'lead', content: 'Va!',                     sentAt: '2026-07-30T15:58:39Z' },
+      { direction: 'outbound', senderType: 'bot',  content: 'TAIL DE LA DEMO',         sentAt: '2026-07-30T15:58:50Z' },
+      { direction: 'outbound', senderType: 'bot',  content: 'Hasta aquí llega la demo', sentAt: '2026-07-30T15:59:10Z' },
+      { direction: 'inbound',  senderType: 'lead', content: 'ah ok, sí me serviría',   sentAt: '2026-07-30T16:00:00Z' },
+    ]);
+    const agent = agentReplying();
+    await handleInboundWebhook(inbound, agent);
+    const dump = JSON.stringify(modelMessages(agent));
+    expect(dump).not.toContain('TAIL DE LA DEMO');       // sent before ended_at → roleplay
+    expect(dump).toContain('Hasta aquí llega la demo');  // sent after → the closer's own
+    expect(dump).toContain('ah ok, sí me serviría');
+  });
+
+  it('a closer turn with no session on file still answers (degrades to the normal persona)', async () => {
+    vi.mocked(q.getConversationPersona).mockResolvedValue(closerPersona);
+    vi.mocked(q.getLatestDemoSession).mockResolvedValue(null);
+    const agent = agentReplying();
+    const res = await handleInboundWebhook(inbound, agent);
+    expect(res.body).toMatchObject({ replied: true });
+    expect(turnFrom(agent).demoHandoff).toBeUndefined();
+  });
+
+  it('follow-ups re-arm in closer mode (they are only off during the demo)', async () => {
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(
+      tenant({ config: { ...tenant().config, followUpCadence: [30] } }),
+    );
+    vi.mocked(q.getConversationPersona).mockResolvedValue(closerPersona);
+    vi.mocked(q.getLatestDemoSession).mockResolvedValue(lastSession as never);
+    await handleInboundWebhook(inbound, agentReplying());
+    expect(q.scheduleFollowUp).toHaveBeenCalledWith('cv-uuid', 1, 30, 'America/Mexico_City', undefined);
+  });
+});
