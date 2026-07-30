@@ -15,8 +15,9 @@ export function buildReactivationAgent(): Agent {
     instructions: ({ requestContext }) => {
       const tenant = requestContext.get('tenant') as TenantContext;
       const candidates = (requestContext.get('reactivationCandidates') as string[] | undefined) ?? [];
+      const demo = requestContext.get('demoContext') as { businessName?: string; booked?: boolean } | undefined;
       const config = parseReactivationConfig(tenant.config);
-      return buildReactivationInstructions(config.businessName, config.tone, candidates);
+      return buildReactivationInstructions(config.businessName, config.tone, candidates, demo);
     },
     model: ({ requestContext }) => {
       const provider = requestContext.get('provider') as AiProvider;

@@ -17,6 +17,7 @@ import { loadTenantConfig } from '../db/queries.js';
 import {
   cancelFollowUps,
   getConversationPersona,
+  getLatestDemoSession,
   loadDueFollowUps,
   loadSentAngleIndexes,
   logBotEvent,
@@ -82,8 +83,10 @@ async function processOne(
   // carries followUpAngles nudges from THAT pool — "¿sigues interesada en la promo?"
   // — falling back to the tenant pool on any missing/malformed config or read error.
   let promptVariant: string | null = null;
+  let activeRole: string | null = null;
+  let roleStartedAt: string | null = null;
   try {
-    ({ promptVariant } = await getConversationPersona(followUp.conversationId));
+    ({ promptVariant, activeRole, roleStartedAt } = await getConversationPersona(followUp.conversationId));
   } catch (e) {
     console.error('[followup] persona read failed (using tenant angle pool):', e instanceof Error ? e.message : String(e));
   }
@@ -120,6 +123,23 @@ async function processOne(
     });
   }
 
+  // A conversation that went through a demo needs two corrections here, because this
+  // runner is otherwise persona-blind (it loads full history with the tenant's normal
+  // config). Without them the nudge is written from the ROLEPLAY — chasing the lead
+  // about the fake appointment they booked while pretending to be their own customer.
+  let demoContext: { businessName?: string; booked?: boolean } | undefined;
+  if (activeRole === 'closer') {
+    try {
+      const last = await getLatestDemoSession(followUp.ghlConversationId);
+      if (last) {
+        const lead = last.leadData as { businessName?: string };
+        demoContext = { businessName: lead.businessName, booked: last.booked };
+      }
+    } catch (e) {
+      console.error('[followup] demo context read failed (non-blocking):', e instanceof Error ? e.message : String(e));
+    }
+  }
+
   const requestContext = buildAgentRequestContext({
     tenant,
     turn,
@@ -127,9 +147,12 @@ async function processOne(
     model,
     llmApiKey: aiKey.apiKey,
     reactivationCandidates: remaining.map((a) => a.text),
+    demoContext,
   });
 
-  const history = await loadRecentMessages(followUp.conversationId);
+  // Same clean-start rule as a live turn: read history from when the CURRENT persona
+  // took over, so a post-demo nudge sees the closer's conversation, not the roleplay.
+  const history = await loadRecentMessages(followUp.conversationId, 20, roleStartedAt ?? undefined);
   const messages = toModelMessages(history);
 
   let reply: string;

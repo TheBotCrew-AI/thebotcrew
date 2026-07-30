@@ -483,6 +483,15 @@ template nudge, which also covers the one funnel leak the platform deliberately 
 follow-ups are OFF during demo, so a lead who ghosts mid-demo gets no in-platform nudge
 until the session ends.
 
+**Post-demo follow-ups** (`followup-runner.ts`): the reactivation runner is persona-blind by
+design (its own cron, full history, tenant config). For a conversation in `closer` mode that
+would write the nudge **from the roleplay** — chasing the lead about the fake appointment
+they booked while pretending to be their own customer. Two corrections: history loads from
+`role_started_at` (same clean-start rule as a live turn), and a `demoContext`
+(`{businessName, booked}`) goes into the reactivation prompt telling it the lead is a
+**business owner evaluating us**, that the appointment was simulated, and that asking about
+the lead's own services is forbidden. Normal conversations are untouched.
+
 Observability: `demo_session_started` / `demo_session_ended` (`{reason, botMessagesUsed}`) in
 `bot_events`; sessions keep `lead_data` + `persona_version` for cohort comparison.
 

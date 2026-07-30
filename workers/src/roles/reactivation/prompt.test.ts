@@ -21,3 +21,27 @@ describe('buildReactivationInstructions', () => {
     expect(buildReactivationInstructions('X', null, [])).toContain('cálido, natural y cercano');
   });
 });
+
+describe('buildReactivationInstructions — demo context', () => {
+  it('omits the demo block for a normal conversation', () => {
+    const out = buildReactivationInstructions('The Bot Crew', null, ['angle A']);
+    expect(out).not.toContain('CONTEXTO CRÍTICO');
+  });
+
+  it('reframes the lead as a business owner and bans chasing the roleplay', () => {
+    const out = buildReactivationInstructions('The Bot Crew', null, ['angle A'], {
+      businessName: 'BeautyFull', booked: true,
+    });
+    expect(out).toContain('CONTEXTO CRÍTICO');
+    expect(out).toContain('"BeautyFull"');
+    expect(out).toContain('DUEÑO DE NEGOCIO evaluando contratarnos');
+    expect(out).toContain('fue SIMULADA');
+    expect(out).toContain('PROHIBIDO ABSOLUTAMENTE');
+  });
+
+  it('without a booking it still voids the roleplay details', () => {
+    const out = buildReactivationInstructions('The Bot Crew', null, [], { businessName: 'X' });
+    expect(out).toContain('Nada de lo que se habló ahí');
+    expect(out).not.toContain('fue SIMULADA');
+  });
+});

@@ -18,6 +18,9 @@ export interface AgentRequestValues {
   llmApiKey: string;
   /** Unused angle pool passed to reactivation runs (hybrid selection); undefined for front-desk. */
   reactivationCandidates?: string[];
+  /** Set when the conversation has been through a demo, so a reactivation nudge doesn't
+   *  chase the lead about the roleplay (its fake appointment, the lead's own services). */
+  demoContext?: { businessName?: string; booked?: boolean };
 }
 
 export type AgentRequestContext = RequestContext<AgentRequestValues>;
@@ -31,6 +34,9 @@ export function buildAgentRequestContext(values: AgentRequestValues): AgentReque
   ctx.set('llmApiKey', values.llmApiKey);
   if (values.reactivationCandidates !== undefined) {
     ctx.set('reactivationCandidates', values.reactivationCandidates);
+  }
+  if (values.demoContext !== undefined) {
+    ctx.set('demoContext', values.demoContext);
   }
   return ctx;
 }

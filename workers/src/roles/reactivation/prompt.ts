@@ -1,10 +1,29 @@
+export interface DemoContext {
+  businessName?: string;
+  booked?: boolean;
+}
+
 export function buildReactivationInstructions(
   businessName: string,
   tone: string | null | undefined,
   candidates: string[],
+  demo?: DemoContext,
 ): string {
   const toneDesc = tone?.trim() || 'cálido, natural y cercano';
   const hasCandidates = candidates.length > 0;
+
+  // Post-demo nudges are a different conversation than the roleplay that precedes them.
+  // Without this the runner (which is persona-blind) writes the nudge from the demo
+  // transcript and chases the lead about the FAKE appointment they made while pretending
+  // to be their own customer — e.g. "¿sigues interesada en tu cita de Botox?".
+  const demoSection = demo
+    ? `\n\n# CONTEXTO CRÍTICO: este lead acaba de probar una demo
+Antes en el historial vas a ver una conversación donde este lead escribía como si fuera CLIENTE de su propio negocio${demo.businessName ? ` ("${demo.businessName}")` : ''}. Eso era una DEMO del producto: un juego de rol, no una conversación real.
+- El lead es un DUEÑO DE NEGOCIO evaluando contratarnos, NO un cliente de ese negocio.
+- ${demo.booked ? 'La cita que aparece agendada en ese historial fue SIMULADA, parte de la demo. NO existe.' : 'Nada de lo que se habló ahí (servicios, precios, tratamientos) es real para esta conversación.'}
+- PROHIBIDO ABSOLUTAMENTE: preguntarle por esa cita, por esos tratamientos o por cualquier servicio del negocio DEL LEAD. Sería absurdo — nosotros no se los damos.
+- Tu mensaje retoma UNA sola cosa: si le interesa tener este asistente en su negocio y dar el siguiente paso con nuestro equipo. Puedes apoyarte en que ya vio la demo funcionando.`
+    : '';
 
   // The angle is chosen HYBRIDLY: the model picks the most fitting unused angle for
   // the current conversation state and reports its choice via a machine-readable tag
@@ -39,5 +58,5 @@ Revisa TODOS los mensajes anteriores del bot en el historial antes de escribir.
 - Si el historial ya contiene información del servicio (descripción, precio, condiciones, etc.), NO la repitas. El lead ya la vio; repetirla se siente como spam.
 - Tu mensaje DEBE explorar un ángulo distinto a los ya enviados — diferente pregunta, diferente tema, diferente enfoque.
 
-${angleSection}`;
+${angleSection}${demoSection}`;
 }

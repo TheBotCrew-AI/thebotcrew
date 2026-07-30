@@ -137,3 +137,53 @@ describe('runPendingFollowUps — campaign-aware angle pools', () => {
     expect(res.processed).toBe(1);
   });
 });
+
+describe('runPendingFollowUps — post-demo nudges (the roleplay must not leak)', () => {
+  const ctxArg = async () => {
+    const { buildAgentRequestContext } = await import('../core/runtime-context.js');
+    return vi.mocked(buildAgentRequestContext).mock.calls[0]?.[0] as {
+      demoContext?: { businessName?: string; booked?: boolean };
+    };
+  };
+
+  it('a closer conversation loads history from the persona flip, not the whole roleplay', async () => {
+    vi.mocked(q.getConversationPersona).mockResolvedValue({
+      activeRole: 'closer', roleStartedAt: '2026-07-30T17:55:00Z', demoStartedAt: null, promptVariant: null,
+    });
+    vi.mocked(q.getLatestDemoSession).mockResolvedValue({
+      leadData: { businessName: 'BeautyFull' }, endReason: 'booked', endedAt: '2026-07-30T17:55:00Z', booked: true,
+    } as never);
+    await runPendingFollowUps(agent);
+    expect(q.loadRecentMessages).toHaveBeenCalledWith('cv1', 20, '2026-07-30T17:55:00Z');
+  });
+
+  it('passes the demo context so the nudge never chases the simulated appointment', async () => {
+    vi.mocked(q.getConversationPersona).mockResolvedValue({
+      activeRole: 'closer', roleStartedAt: '2026-07-30T17:55:00Z', demoStartedAt: null, promptVariant: null,
+    });
+    vi.mocked(q.getLatestDemoSession).mockResolvedValue({
+      leadData: { businessName: 'BeautyFull' }, endReason: 'booked', endedAt: null, booked: true,
+    } as never);
+    await runPendingFollowUps(agent);
+    expect((await ctxArg()).demoContext).toEqual({ businessName: 'BeautyFull', booked: true });
+  });
+
+  it('a normal (non-demo) conversation is untouched: full history, no demo context', async () => {
+    vi.mocked(q.getConversationPersona).mockResolvedValue({
+      activeRole: null, roleStartedAt: null, demoStartedAt: null, promptVariant: null,
+    });
+    await runPendingFollowUps(agent);
+    expect(q.loadRecentMessages).toHaveBeenCalledWith('cv1', 20, undefined);
+    expect((await ctxArg()).demoContext).toBeUndefined();
+    expect(q.getLatestDemoSession).not.toHaveBeenCalled();
+  });
+
+  it('a failed demo-context read still sends the nudge', async () => {
+    vi.mocked(q.getConversationPersona).mockResolvedValue({
+      activeRole: 'closer', roleStartedAt: '2026-07-30T17:55:00Z', demoStartedAt: null, promptVariant: null,
+    });
+    vi.mocked(q.getLatestDemoSession).mockRejectedValue(new Error('db down'));
+    const res = await runPendingFollowUps(agent);
+    expect(res.processed).toBe(1);
+  });
+});
