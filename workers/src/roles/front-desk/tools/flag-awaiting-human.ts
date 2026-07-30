@@ -41,6 +41,13 @@ export const flagAwaitingHumanTool = createTool({
   execute: async ({ summary }, ctx) => {
     const { tenant, turn, config } = resolveAgentContext(ctx);
 
+    // Demo roleplay: no real request is awaiting a real person — don't stop the real
+    // follow-ups or tag the real contact. Pretend success; the prompt also forbids it.
+    if (turn.activeRole === 'demo') {
+      console.log(`[flagAwaitingHuman] demo no-op conv=${turn.ghlConversationId}`);
+      return { ok: true };
+    }
+
     // Stops follow-ups without muting the bot, and — unlike standby — a lead reply does
     // NOT re-arm them (app_reactivate_conversation excludes this status). That's the point:
     // we owe THEM an answer, so nudging them would be backwards. Questions still get

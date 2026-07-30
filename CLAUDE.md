@@ -143,7 +143,8 @@ supabase/
                                # 0032 rls_close_data_api (RLS on the last 6 tables + views + RPC grants),
                                # 0033 per_tenant_ai_key_and_llm_usage (ai_key_ref slug + llm_usage/model_pricing + cost view),
                                # 0034 awaiting_human_tag, 0035 reactivation_rules (awaiting_human status + selective reactivation),
-                               # 0036 prompt_variants (per-campaign prompts: n:1 keyword→variant, first-touch sticky)
+                               # 0036 prompt_variants (per-campaign prompts: n:1 keyword→variant, first-touch sticky),
+                               # 0037 demo_restamp_fix (idempotent demo activation + demo guards: no real side effects in roleplay)
   clients.sql, seed-tenants.sql# seeds (run by `supabase db reset` per config.toml)
 sites/                         # client marketing sites: static HTML, no build step, no deps
   _template/                   # starting point for a new client

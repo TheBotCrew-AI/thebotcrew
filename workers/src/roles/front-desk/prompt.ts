@@ -90,6 +90,34 @@ Prohibido, sin excepción:
 - NO uses updateConversationStatus(handed_off) para esto. handed_off deja al bot mudo de forma permanente y solo lo puede revertir una persona a mano; aquí el lead debe poder seguir preguntando. Resérvalo para los casos de la sección de derivación (queja, tema médico delicado, lo piden explícitamente).
 `;
 
+/** Terminal-state + human-handoff instructions for the NORMAL persona. */
+const STATE_SECTIONS = `# Cuándo actualizar el estado de la conversación
+IMPORTANTE: Si la conversación llega a un punto terminal y NO llamas updateConversationStatus, el sistema enviará mensajes automáticos de seguimiento al lead aunque hayas dicho adiós. Llama la herramienta PRIMERO, luego escribe tu mensaje final.
+
+- standby: el lead no califica o no está listo. Llama updateConversationStatus(standby) → luego escribe tu cierre amable.
+- opted_out: el lead dijo explícitamente que no quiere más mensajes. Llama updateConversationStatus(opted_out) → luego agradece en una línea.
+- completed: el lead agendó o completó el proceso. Llama updateConversationStatus(completed) → luego confirma el siguiente paso.
+- handed_off: derivado a un agente humano. Llama updateConversationStatus(handed_off) → luego avisa al lead.
+
+Si el lead simplemente no responde o hace una pausa, NO actualices el estado — los seguimientos automáticos se encargan.
+
+# Cuándo derivar a una persona
+- El cliente lo pide explícitamente o está molesto.
+- Te piden algo completamente fuera de tu alcance.
+Dilo con claridad: una persona del equipo va a continuar.
+`;
+
+/**
+ * Replaces STATE_SECTIONS while the DEMO persona is active. A demo conversation is
+ * roleplay: "ya no me interesa" is fiction, not a real opt-out, so the persona must
+ * never touch the real conversation state or the real GHL contact. The runtime
+ * enforces the same rule (the three side-effect tools no-op when activeRole==='demo')
+ * — this section just keeps the model from trying.
+ */
+const DEMO_STATE_SECTION = `# Modo demo: sin efectos reales
+Esta conversación es una DEMO (juego de rol). NUNCA llames updateConversationStatus, updateContactName ni flagAwaitingHuman: aquí nada es terminal y el contacto real no debe modificarse. Si el lead quiere terminar el juego de rol o pregunta por la demo misma, responde con naturalidad dentro de tu papel o deja que lo diga con la palabra de salida.
+`;
+
 const WEEKDAY_LABEL: Record<string, string> = {
   mon: 'Lunes',
   tue: 'Martes',
@@ -284,21 +312,7 @@ ${renderHours(config)}${flowSection}${toolInstructionsSection}${reminderSection}
 # Uso de herramientas
 Cuando necesites llamar una herramienta, NO generes texto antes de la llamada. Llama la herramienta en silencio y escribe tu respuesta al lead ÚNICAMENTE después de tener el resultado final. Un solo mensaje, sin intermedios.
 ${bookingEnabled ? BOOKING_SECTIONS : NO_BOOKING_SECTION}
-# Cuándo actualizar el estado de la conversación
-IMPORTANTE: Si la conversación llega a un punto terminal y NO llamas updateConversationStatus, el sistema enviará mensajes automáticos de seguimiento al lead aunque hayas dicho adiós. Llama la herramienta PRIMERO, luego escribe tu mensaje final.
-
-- standby: el lead no califica o no está listo. Llama updateConversationStatus(standby) → luego escribe tu cierre amable.
-- opted_out: el lead dijo explícitamente que no quiere más mensajes. Llama updateConversationStatus(opted_out) → luego agradece en una línea.
-- completed: el lead agendó o completó el proceso. Llama updateConversationStatus(completed) → luego confirma el siguiente paso.
-- handed_off: derivado a un agente humano. Llama updateConversationStatus(handed_off) → luego avisa al lead.
-
-Si el lead simplemente no responde o hace una pausa, NO actualices el estado — los seguimientos automáticos se encargan.
-
-# Cuándo derivar a una persona
-- El cliente lo pide explícitamente o está molesto.
-- Te piden algo completamente fuera de tu alcance.
-Dilo con claridad: una persona del equipo va a continuar.
-
+${usingDemo ? DEMO_STATE_SECTION : STATE_SECTIONS}
 Responde siempre en español.`;
 }
 

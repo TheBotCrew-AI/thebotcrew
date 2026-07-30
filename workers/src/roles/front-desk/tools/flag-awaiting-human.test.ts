@@ -80,3 +80,22 @@ describe('flagAwaitingHuman', () => {
     expect(q.logBotEvent).toHaveBeenCalled();
   });
 });
+
+describe('flagAwaitingHuman — demo guard', () => {
+  it('no-ops in demo mode: no status change, no tag on the real contact', async () => {
+    const demoCtx = {
+      requestContext: {
+        get: (k: string) =>
+          k === 'tenant'
+            ? { tenantId: 't1', clientId: 'client1', awaitingHumanTag: 'esperando-agenda', config: { businessName: 'X', timezone: 'America/Tijuana', tone: null, services: [], hours: {}, calendars: {}, faq: [], promptOverrides: {} } }
+            : k === 'turn'
+            ? { ghlConversationId: 'conv1', ghlContactId: 'c1', activeRole: 'demo' }
+            : undefined,
+      },
+    };
+    const res = await run(demoCtx, { summary: 'quiere cita' });
+    expect(res).toEqual({ ok: true });
+    expect(q.updateConversationStatus).not.toHaveBeenCalled();
+    expect(ghl.addContactTags).not.toHaveBeenCalled();
+  });
+});

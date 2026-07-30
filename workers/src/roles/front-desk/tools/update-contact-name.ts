@@ -27,6 +27,14 @@ export const updateContactNameTool = createTool({
   outputSchema: z.object({ ok: z.boolean() }),
   execute: async ({ name }, ctx) => {
     const { tenant, turn } = resolveAgentContext(ctx);
+
+    // Demo roleplay: the "customer" name the lead plays with must never overwrite
+    // the real GHL contact. Pretend success; the prompt also forbids the call.
+    if (turn.activeRole === 'demo') {
+      console.log(`[updateContactName] demo no-op conv=${turn.ghlConversationId}`);
+      return { ok: true };
+    }
+
     const trimmed = name.trim().replace(/\s+/g, ' ');
     if (!trimmed) return { ok: false };
     const [firstName, ...rest] = trimmed.split(' ');

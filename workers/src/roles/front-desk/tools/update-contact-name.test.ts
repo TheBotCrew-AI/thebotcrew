@@ -78,3 +78,15 @@ describe('updateContactName tool', () => {
     );
   });
 });
+
+describe('updateContactName tool — demo guard', () => {
+  it('no-ops in demo mode: the roleplay name never touches the real contact', async () => {
+    const demoTurn = { ...turn, activeRole: 'demo' };
+    const demoCtx = { requestContext: { get: (k: string) => (k === 'tenant' ? tenant : k === 'turn' ? demoTurn : undefined) } };
+    const res = await (updateContactNameTool.execute as (i: { name: string }, c: typeof demoCtx) => Promise<{ ok: boolean }>)(
+      { name: 'Cliente Ficticio' }, demoCtx,
+    );
+    expect(res).toEqual({ ok: true });
+    expect(ghl.updateContactName).not.toHaveBeenCalled();
+  });
+});

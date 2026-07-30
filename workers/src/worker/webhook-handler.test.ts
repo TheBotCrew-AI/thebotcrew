@@ -67,6 +67,9 @@ beforeEach(() => {
   vi.mocked(q.markDelivered).mockResolvedValue(undefined);
   vi.mocked(q.updateConversationStatus).mockResolvedValue(undefined);
   vi.mocked(q.botActivation).mockResolvedValue('already');
+  // Explicit default: clearAllMocks() does NOT drop implementations, so a test that
+  // sets a demo persona would otherwise leak it into every later test.
+  vi.mocked(q.getConversationPersona).mockResolvedValue({ activeRole: null, demoStartedAt: null, promptVariant: null });
   vi.mocked(q.setConversationContactKeys).mockResolvedValue(undefined);
   vi.mocked(q.getConversationContactKeys).mockResolvedValue({ phone: null, email: null });
   vi.mocked(q.updateConversationContact).mockResolvedValue(undefined);
@@ -475,5 +478,72 @@ describe('handleInboundWebhook — campaign prompt variants', () => {
     const call = vi.mocked(agent.generate).mock.calls[0] as unknown as [unknown, { requestContext: { get(k: string): unknown } }];
     const turn = call[1].requestContext.get('turn') as { promptVariant?: string };
     expect(turn.promptVariant).toBe('laser-promo');
+  });
+});
+
+describe('handleInboundWebhook — demo-mode guards (roleplay must not touch real state)', () => {
+  const demoPersona = { activeRole: 'demo', demoStartedAt: '2026-07-29T10:00:00Z', promptVariant: null };
+  const noQuestion = 'Entendido, muchas gracias por tu visita.'; // no "?" → classifier path opens
+
+  it('control: outside demo, a no-question reply triggers the outcome classifier', async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({ ok: false, status: 500 }); // classifier fails safe
+    vi.stubGlobal('fetch', fetchSpy);
+    await handleInboundWebhook(inbound, agentReplying(noQuestion));
+    expect(fetchSpy).toHaveBeenCalled();
+  });
+
+  it('demo: the outcome classifier is skipped entirely', async () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+    vi.mocked(q.getConversationPersona).mockResolvedValue(demoPersona);
+    await handleInboundWebhook(inbound, agentReplying(noQuestion));
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(q.updateConversationStatus).not.toHaveBeenCalled();
+  });
+
+  it('control: outside demo, a bot reply schedules follow-up position 1', async () => {
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(
+      tenant({ config: { ...tenant().config, followUpCadence: [30, 180] } }),
+    );
+    await handleInboundWebhook(inbound, agentReplying());
+    expect(q.scheduleFollowUp).toHaveBeenCalledWith('cv-uuid', 1, 30, 'America/Mexico_City', undefined);
+  });
+
+  it('demo: no follow-up is scheduled (the reactivation agent is persona-blind)', async () => {
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(
+      tenant({ config: { ...tenant().config, followUpCadence: [30, 180] } }),
+    );
+    vi.mocked(q.getConversationPersona).mockResolvedValue(demoPersona);
+    await handleInboundWebhook(inbound, agentReplying());
+    expect(q.scheduleFollowUp).not.toHaveBeenCalled();
+  });
+
+  it('demo: the contact-name backstop is skipped even inside its re-opened window', async () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(
+      tenant({ config: { ...tenant().config, promptOverrides: { confirmContactName: true } } }),
+    );
+    vi.mocked(q.getConversationPersona).mockResolvedValue(demoPersona);
+    // Demo-truncated history: exactly 1 prior bot message → the window would be open.
+    vi.mocked(q.loadRecentMessages).mockResolvedValue([
+      { direction: 'outbound', senderType: 'bot', content: '¿Me confirmas tu nombre?', sentAt: '2026-07-29T10:01:00Z' },
+    ]);
+    await handleInboundWebhook({ ...inbound, body: 'Soy Cliente Ficticio' }, agentReplying());
+    expect(fetchSpy).not.toHaveBeenCalled();          // no extract-name model call
+    expect(ghl.updateContactName).not.toHaveBeenCalled();
+  });
+
+  it('control: outside demo the backstop runs in the same window', async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({ ok: false, status: 500 }); // backstop fails safe
+    vi.stubGlobal('fetch', fetchSpy);
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(
+      tenant({ config: { ...tenant().config, promptOverrides: { confirmContactName: true } } }),
+    );
+    vi.mocked(q.loadRecentMessages).mockResolvedValue([
+      { direction: 'outbound', senderType: 'bot', content: '¿Me confirmas tu nombre?', sentAt: '2026-07-29T10:01:00Z' },
+    ]);
+    await handleInboundWebhook({ ...inbound, body: 'Soy Carlos' }, agentReplying());
+    expect(fetchSpy).toHaveBeenCalled();
   });
 });

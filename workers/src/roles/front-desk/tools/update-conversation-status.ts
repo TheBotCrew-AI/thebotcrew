@@ -29,6 +29,15 @@ export const updateConversationStatusTool = createTool({
   outputSchema: z.object({ ok: z.boolean() }),
   execute: async ({ status }, ctx) => {
     const { tenant, turn } = resolveAgentContext(ctx);
+
+    // Demo roleplay never mutates real state: a fake customer's "ya no me interesa"
+    // must not opt the REAL lead out (or tag their real GHL contact). Pretend success
+    // so the model closes the exchange naturally; the prompt also forbids the call.
+    if (turn.activeRole === 'demo') {
+      console.log(`[updateConversationStatus] demo no-op conv=${turn.ghlConversationId} status=${status}`);
+      return { ok: true };
+    }
+
     await updateConversationStatus(turn.ghlConversationId, status);
 
     // Mirror the state onto the GHL contact as a tag (transparency / sync).

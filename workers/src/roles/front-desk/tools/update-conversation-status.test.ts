@@ -40,3 +40,16 @@ describe('updateConversationStatus tool', () => {
     expect(res).toEqual({ ok: true });
   });
 });
+
+describe('updateConversationStatus tool — demo guard', () => {
+  it('no-ops in demo mode: real status and real tags stay untouched', async () => {
+    const demoTurn = { ...turn, activeRole: 'demo' };
+    const demoCtx = { requestContext: { get: (k: string) => (k === 'tenant' ? tenant : k === 'turn' ? demoTurn : undefined) } };
+    const res = await (updateConversationStatusTool.execute as (i: { status: string }, c: typeof demoCtx) => Promise<{ ok: boolean }>)(
+      { status: 'opted_out' }, demoCtx,
+    );
+    expect(res).toEqual({ ok: true }); // pretend success so the model closes gracefully
+    expect(q.updateConversationStatus).not.toHaveBeenCalled();
+    expect(ghl.addContactTags).not.toHaveBeenCalled();
+  });
+});

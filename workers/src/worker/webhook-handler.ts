@@ -553,7 +553,10 @@ export async function runAgentTurn({
   // exchanges — after the bot has asked for the name (>=1 prior bot message) but before the
   // conversation moves on (<=2) — so we don't pay an extra model call every turn. We don't
   // rely on the agent's updateContactName tool: OpenAI models skip it (no result needed).
+  // Demo guard: the truncated demo history re-opens the "opening exchanges" window, and
+  // the name a lead roleplays with must never overwrite their real GHL contact name.
   const confirmContactName =
+    activeRole !== 'demo' &&
     (tenant.config.promptOverrides as { confirmContactName?: boolean } | null | undefined)?.confirmContactName === true;
   if (confirmContactName) {
     const priorBotMessages = history.filter((m) => m.senderType === 'bot').length;
@@ -565,9 +568,11 @@ export async function runAgentTurn({
 
   // Classify conversation outcome — runs only when reply has no question (cheap path).
   // This is the reliable fallback for when the agent doesn't call updateConversationStatus itself.
+  // Demo guard: a demo conversation is roleplay — a fake customer's "ya no me interesa"
+  // must not opt the REAL lead out (status + GHL tag + reactivation rules all real).
   const hasQuestion = reply.includes('?');
   console.log(`[classify] conv=${parsed.conversationId} hasQuestion=${hasQuestion}`);
-  const outcome = await classifyConversationOutcome(parsed.text, reply, aux);
+  const outcome = activeRole === 'demo' ? null : await classifyConversationOutcome(parsed.text, reply, aux);
   console.log(`[classify] outcome=${outcome ?? 'null (active or error)'}`);
   if (outcome) {
     try {
@@ -658,7 +663,10 @@ export async function runAgentTurn({
   // pending nudge, so this resets the cadence clock while the angle cursor advances
   // independently (see followup-runner). Must be awaited — a detached promise gets
   // killed when waitUntil resolves.
-  const firstDelay = tenant.config.followUpCadence?.[0];
+  // Demo guard: the reactivation agent is persona-blind (full history, tenant's normal
+  // config + angles) — a nudge mid-demo would shatter the roleplay. Follow-ups resume
+  // when the conversation leaves demo mode.
+  const firstDelay = activeRole === 'demo' ? undefined : tenant.config.followUpCadence?.[0];
   if (firstDelay !== undefined) {
     try {
       await scheduleFollowUp(conversationId, 1, firstDelay, tenant.config.timezone, tenant.config.quietHours);

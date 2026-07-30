@@ -372,10 +372,24 @@ persona**, controlled by keywords — useful for showing the bot to a prospect o
 - **Clean start.** Flipping into demo stamps `conversations.demo_started_at`; the turn then loads
   **only** messages since activation (`loadRecentMessages(..., sinceTs)`), so the demo persona
   doesn't inherit pre-demo history (e.g. a completed booking). The demo prompt also greets on the
-  activation keyword instead of treating it as a question.
+  activation keyword instead of treating it as a question. **Idempotent (0037):** re-matching the
+  on-keyword mid-demo keeps the original stamp — before 0037 it re-stamped `now()` on every
+  match, truncating history to zero mid-conversation ("demo amnesia").
+- **Roleplay never touches real state (0037 hardening).** A demo conversation is fiction, so
+  while `active_role='demo'`:
+  - the outcome **classifier is skipped** — a roleplayed "ya no me interesa" must not set the
+    real conversation `opted_out` (which would survive the demo via the 0035 reactivation rules)
+    or tag the real GHL contact;
+  - **follow-ups are not scheduled** — the reactivation agent is persona-blind (full history,
+    normal tenant config + angles); a nudge mid-demo shatters the roleplay. They resume once the
+    conversation leaves demo;
+  - the **contact-name backstop is skipped** — demo-truncated history re-opens the "opening
+    exchanges" window, and a roleplay name must never overwrite the real contact's name;
+  - the three side-effect tools (`updateConversationStatus`, `updateContactName`,
+    `flagAwaitingHuman`) **no-op and pretend success**, and the demo prompt replaces the
+    terminal-state instructions with a "sin efectos reales" rule.
 - **Off by default & safe.** If a tenant sets no demo keywords, nothing changes. `off` returns to
-  the normal front-desk (to fully silence a thread, use the `bot-off` tag instead). Follow-ups and
-  classification still apply during demo (same engine).
+  the normal front-desk (to fully silence a thread, use the `bot-off` tag instead).
 
 ## 6. Models & factual grounding
 
