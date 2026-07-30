@@ -199,3 +199,27 @@ describe('buildFrontDeskInstructions — campaign prompt variants', () => {
     expect(without).not.toContain('# Agendar citas');
   });
 });
+
+describe('buildFrontDeskInstructions — golden rule is demo-aware', () => {
+  it('normal persona keeps the STRICT rule (every real tenant, unchanged)', () => {
+    const out = buildFrontDeskInstructions(cfg(), NOW);
+    expect(out).toContain('# Regla de oro');
+    expect(out).toContain('Solo afirma datos que estén en esta configuración');
+    expect(out).not.toContain('modo demo');
+  });
+
+  it('demo persona allows general domain knowledge but still bans business-specific invention', () => {
+    const c = cfg({ demoPromptOverrides: { identity: 'Demo persona' } });
+    const out = buildFrontDeskInstructions(c, NOW, undefined, 'demo');
+    expect(out).toContain('# Regla de oro (modo demo)');
+    expect(out).toContain('conocimiento general del rubro');
+    expect(out).toContain('NUNCA inventas son los datos ESPECÍFICOS');
+    expect(out).not.toContain('Solo afirma datos que estén en esta configuración');
+  });
+
+  it('a variant-pinned (non-demo) conversation still gets the strict rule', () => {
+    const c = cfg({ promptVariants: { promo: { offering: 'Promo' } } });
+    const out = buildFrontDeskInstructions(c, NOW, undefined, undefined, undefined, undefined, 'promo');
+    expect(out).toContain('Solo afirma datos que estén en esta configuración');
+  });
+});

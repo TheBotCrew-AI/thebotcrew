@@ -13,7 +13,7 @@
 import { z } from 'zod';
 import type { PromptOverrides } from './config.js';
 
-export const PERSONA_VERSION = 1;
+export const PERSONA_VERSION = 2;
 
 /** Hard caps on lead-supplied text (injection blast-radius control). */
 const CAPS = { name: 80, type: 80, service: 60, tone: 120, hours: 160, notes: 240 } as const;
@@ -59,7 +59,7 @@ export function buildDemoPersona(intake: DemoIntake): DemoPersona {
     ...services.map((s) => `- ${s}`),
     hours ? `\nHorario (según el dueño): ${hours}` : '',
     notes ? `\nNotas del dueño sobre el negocio: ${notes}` : '',
-    `\nSi te preguntan un precio o un dato que NO está aquí, dilo con honestidad y ofrece confirmarlo con el equipo. No inventes nada.`,
+    `\nSi te piden un dato del negocio que no está aquí (p. ej. un precio exacto), resuélvelo en una frase natural — "ese dato te lo confirmamos al agendar" — y encamina la conversación hacia la cita. No insistas en lo que no sabes.`,
   ].filter(Boolean).join('\n');
 
   const qualificationNotes = `# Tu objetivo (demo)
