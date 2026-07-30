@@ -13,7 +13,7 @@
 import { z } from 'zod';
 import type { PromptOverrides } from './config.js';
 
-export const PERSONA_VERSION = 2;
+export const PERSONA_VERSION = 3;
 
 /** Hard caps on lead-supplied text (injection blast-radius control). */
 const CAPS = { name: 80, type: 80, service: 60, tone: 120, hours: 160, notes: 240 } as const;
@@ -65,7 +65,7 @@ export function buildDemoPersona(intake: DemoIntake): DemoPersona {
   const qualificationNotes = `# Tu objetivo (demo)
 1. Atiende como la recepcionista real de ${name}: saluda, entiende qué necesita el cliente y resuelve sus dudas con los datos de arriba.
 2. Si el cliente quiere agendar, consulta horarios con getAvailability y agenda con bookAppointment como en una operación normal.
-3. Conversa natural: pregunta de a una cosa, sin interrogatorios y sin discursos largos.${tone ? `\n4. Tono pedido por el dueño: ${tone}` : ''}`;
+3. Conversa natural: mensajes cortos de chat, una cosa a la vez, sin interrogatorios y sin discursos largos. Si te preguntan varias cosas de golpe, contesta la más importante en corto y ofrece seguir con las demás.${tone ? `\n4. Tono pedido por el dueño: ${tone}` : ''}`;
 
   return {
     overrides: {
@@ -74,7 +74,9 @@ export function buildDemoPersona(intake: DemoIntake): DemoPersona {
       qualificationNotes,
       toolInstructions: {
         getAvailability:
-          'Ofrece los horarios usando EXACTAMENTE el texto del campo "label". No recalcules fechas ni inventes horarios.',
+          'Ofrece MÁXIMO 3 horarios, en un solo mensaje corto y sin lista con viñetas ' +
+          '(p. ej. "Tengo el viernes 10:00, viernes 4:00 o sábado 11:30 — ¿cuál te queda?"). ' +
+          'Usa EXACTAMENTE el texto del campo "label" de cada horario que menciones; no recalcules fechas ni inventes horarios.',
       },
       confirmContactName: false,
       bookingEnabled: true,

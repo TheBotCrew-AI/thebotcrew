@@ -46,7 +46,9 @@ export const getAvailabilityTool = createTool({
       });
       return {
         slots,
-        note: 'Ofrece estos horarios al lead usando EXACTAMENTE el texto del campo "label" (ya trae el día de la semana correcto). No recalcules ni traduzcas fechas.',
+        note:
+          'Ofrece MÁXIMO 3 de estos horarios, en un solo mensaje corto y sin lista con viñetas. ' +
+          'Usa EXACTAMENTE el texto del campo "label" de los que menciones (ya trae el día correcto). No recalcules ni traduzcas fechas.',
       };
     }
 

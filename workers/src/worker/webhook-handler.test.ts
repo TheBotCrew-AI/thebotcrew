@@ -691,3 +691,72 @@ describe('handleInboundWebhook — demo funnel tags + off-keyword session close'
     expect(res.body).toMatchObject({ replied: true });
   });
 });
+
+describe('handleInboundWebhook — demo self-block guard + closer context hygiene', () => {
+  const demoPersona = { activeRole: 'demo', roleStartedAt: '2026-07-30T14:00:00Z', demoStartedAt: '2026-07-30T14:00:00Z', promptVariant: null };
+  const session = (over: Record<string, unknown> = {}) => ({
+    id: 'sess-1', activatedAt: '2026-07-30T14:00:00Z', expiresAt: '2099-01-01T00:00:00Z',
+    messageBudget: 15, personaVersion: 3, leadData: { businessName: 'Beautiful Desire' },
+    promptOverrides: { identity: 'P' }, simulatedBooking: null, ...over,
+  });
+  const turnFrom = (agent: Agent) => {
+    const call = vi.mocked(agent.generate).mock.calls[0] as unknown as [unknown, { requestContext: { get(k: string): unknown } }];
+    return call[1].requestContext.get('turn') as { activeAppointment?: { startTime: string; service?: string } };
+  };
+  const modelMessages = (agent: Agent) =>
+    (vi.mocked(agent.generate).mock.calls[0] as unknown as [{ role: string; content: string }[], unknown])[0];
+
+  it("surfaces the demo's OWN simulated booking as activeAppointment (kills the 'ya se ocupó' loop)", async () => {
+    vi.mocked(q.getConversationPersona).mockResolvedValue(demoPersona);
+    vi.mocked(q.getActiveDemoSession).mockResolvedValue(session({
+      simulatedBooking: { startTime: '2026-08-01T17:00:00.000Z', serviceName: 'Botox', label: 'sábado 1 de agosto, 10:00 a.m.' },
+    }) as never);
+    vi.mocked(q.firstInboundAfter).mockResolvedValue('2026-07-30T14:01:00Z');
+    vi.mocked(q.countBotMessagesSince).mockResolvedValue(3);
+    const agent = agentReplying();
+    await handleInboundWebhook(inbound, agent);
+    expect(turnFrom(agent).activeAppointment).toEqual({ startTime: '2026-08-01T17:00:00.000Z', service: 'Botox' });
+    // A demo must never see the contact's REAL appointment.
+    expect(q.loadActiveAppointment).not.toHaveBeenCalled();
+  });
+
+  it('demo with no booking yet → no activeAppointment, real one still not consulted', async () => {
+    vi.mocked(q.getConversationPersona).mockResolvedValue(demoPersona);
+    vi.mocked(q.getActiveDemoSession).mockResolvedValue(session() as never);
+    vi.mocked(q.firstInboundAfter).mockResolvedValue(null);
+    vi.mocked(q.countBotMessagesSince).mockResolvedValue(3);
+    const agent = agentReplying();
+    await handleInboundWebhook(inbound, agent);
+    expect(turnFrom(agent).activeAppointment).toBeUndefined();
+    expect(q.loadActiveAppointment).not.toHaveBeenCalled();
+  });
+
+  it("budget starts at the lead's first in-character message, not at the announcement", async () => {
+    vi.mocked(q.getConversationPersona).mockResolvedValue(demoPersona);
+    vi.mocked(q.getActiveDemoSession).mockResolvedValue(session() as never);
+    vi.mocked(q.firstInboundAfter).mockResolvedValue('2026-07-30T14:01:00Z');
+    vi.mocked(q.countBotMessagesSince).mockResolvedValue(3);
+    await handleInboundWebhook(inbound, agentReplying());
+    expect(q.firstInboundAfter).toHaveBeenCalledWith('cv-uuid', '2026-07-30T14:00:00Z');
+    expect(q.countBotMessagesSince).toHaveBeenCalledWith('cv-uuid', '2026-07-30T14:01:00Z');
+  });
+
+  it("the closer sees only the lead's messages — the roleplay tail can't pull it back in character", async () => {
+    vi.mocked(q.getConversationPersona)
+      .mockResolvedValueOnce(demoPersona)
+      .mockResolvedValue({ activeRole: null, roleStartedAt: '2026-07-30T14:29:29Z', demoStartedAt: null, promptVariant: null });
+    vi.mocked(q.getActiveDemoSession).mockResolvedValue(session() as never);
+    vi.mocked(q.firstInboundAfter).mockResolvedValue('2026-07-30T14:01:00Z');
+    vi.mocked(q.countBotMessagesSince).mockResolvedValue(15);
+    vi.mocked(q.loadRecentMessages).mockResolvedValue([
+      { direction: 'inbound', senderType: 'lead', content: '¿cómo funciona la depilación?', sentAt: '2026-07-30T14:29:29Z' },
+      { direction: 'outbound', senderType: 'bot', content: 'Lo siento, el turno ya se ocupó…', sentAt: '2026-07-30T14:29:39Z' },
+      { direction: 'outbound', senderType: 'bot', content: '- viernes 10:00\n- sábado 11:30', sentAt: '2026-07-30T14:29:43Z' },
+    ]);
+    const agent = agentReplying();
+    await handleInboundWebhook(inbound, agent);
+    const msgs = modelMessages(agent);
+    expect(msgs.every((m) => m.role === 'user')).toBe(true);
+    expect(JSON.stringify(msgs)).not.toContain('ya se ocupó');
+  });
+});

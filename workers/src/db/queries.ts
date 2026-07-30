@@ -332,6 +332,23 @@ export async function countBotMessagesSince(conversationId: string, sinceTs: str
   return count ?? 0;
 }
 
+/** Timestamp of the first inbound after `afterTs` (the demo budget's real start: the
+ *  lead's first in-character message, so the startDemo announcement isn't charged). */
+export async function firstInboundAfter(conversationId: string, afterTs: string): Promise<string | null> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from('messages')
+    .select('sent_at')
+    .eq('conversation_id', conversationId)
+    .eq('direction', 'inbound')
+    .gt('sent_at', afterTs)
+    .order('sent_at', { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  fail('firstInboundAfter', error);
+  return (data as { sent_at?: string } | null)?.sent_at ?? null;
+}
+
 /** Store/clear the session's simulated booking (demo bookings never touch GHL). */
 export async function setSimulatedBooking(sessionId: string, booking: SimulatedBooking | null): Promise<void> {
   const supabase = getSupabase();

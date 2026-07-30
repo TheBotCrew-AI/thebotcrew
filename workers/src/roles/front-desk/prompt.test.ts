@@ -151,7 +151,16 @@ describe('buildFrontDeskInstructions', () => {
       'demo',
     );
     expect(out).toContain('SOY SOFÍA DE LA CLÍNICA');
-    expect(out).toContain('emojis'); // demo formatting note allows emojis
+    // Demo formatting: chat-length replies, no brochure dumps (1 emoji allowed).
+    expect(out).toContain('UN solo mensaje por turno');
+    expect(out).toContain('PROHIBIDO: listas');
+    expect(out).toContain('Máximo 1 emoji');
+  });
+
+  it('the strict no-emoji/no-list formatting stays for non-demo personas', () => {
+    const out = buildFrontDeskInstructions(cfg(), NOW);
+    expect(out).toContain('Sin listas. Sin negritas. Sin emojis');
+    expect(out).not.toContain('UN solo mensaje por turno');
   });
 });
 

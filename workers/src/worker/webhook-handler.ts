@@ -27,7 +27,9 @@ import {
   botActivation,
   countBotMessagesSince,
   endDemoSession,
+  firstInboundAfter,
   getActiveDemoSession,
+  type SimulatedBooking,
   getConversationPersona,
   setActiveRole,
   isBotSuppressed,
@@ -403,12 +405,17 @@ export async function runAgentTurn({
   // closer — atomically (app_end_demo_session stamps role_started_at at the latest
   // inbound, so the closer sees the lead's last message and none of the roleplay).
   let demoHandoff: DemoHandoff | undefined;
+  let demoBooking: SimulatedBooking | null = null;
   if (activeRole === 'demo') {
     try {
       const session = await getActiveDemoSession(parsed.conversationId);
       if (session) {
         const expired = Date.parse(session.expiresAt) <= Date.now();
-        const used = await countBotMessagesSince(conversationId, session.activatedAt);
+        // Budget counts the DEMO's own replies. The announcement ("tu demo está
+        // lista") is sent by the normal persona in the startDemo turn, so the meter
+        // starts at the lead's first in-character message, not at activation.
+        const demoStart = (await firstInboundAfter(conversationId, session.activatedAt)) ?? session.activatedAt;
+        const used = await countBotMessagesSince(conversationId, demoStart);
         if (expired || used >= session.messageBudget) {
           const reason = expired ? 'expired' : 'exhausted';
           await endDemoSession(session.id, reason);
@@ -431,6 +438,9 @@ export async function runAgentTurn({
           // Overlay the session's generated persona (request-scoped; the demo prompt
           // path already reads demoPromptOverrides when active_role='demo').
           tenant.config.demoPromptOverrides = session.promptOverrides;
+          // The demo's own booking, surfaced below as activeAppointment so the agent
+          // gets the same self-block guard as a real one (see that section).
+          demoBooking = session.simulatedBooking;
         }
       }
     } catch (e) {
@@ -444,7 +454,11 @@ export async function runAgentTurn({
   // closer flip). Legacy fallback for rows stamped before 0038: demo_started_at.
   const sinceTs = roleStartedAt ?? (activeRole === 'demo' && demoStartedAt ? demoStartedAt : undefined);
   const history = await loadRecentMessages(conversationId, 20, sinceTs);
-  const messages = toModelMessages(history);
+  // The closer turn: the anchor is the lead's last inbound, so any demo replies sent
+  // AFTER it (the tail of the roleplay) would otherwise land in the closer's context and
+  // pull it back into character. It doesn't need them — the handoff section already says
+  // what happened — so it sees only what the lead said.
+  const messages = toModelMessages(demoHandoff ? history.filter((m) => m.senderType === 'lead') : history);
 
   const ghl = new GhlClient(tenant.tenantId);
 
@@ -490,9 +504,14 @@ export async function runAgentTurn({
 
   // Surface the contact's active appointment so the agent knows it already booked and never
   // re-checks availability against its own just-created appointment (the self-block class).
-  // Skipped in demo mode: the demo starts clean and must not inherit a real prior booking.
+  // The demo needs the SAME guard against its OWN simulated booking: the sim excludes a
+  // booked slot from later availability calls (as a real calendar would), and without this
+  // the agent reads its disappearance as "ya se ocupó" and re-offers times — which is
+  // exactly what it did on 2026-07-30. Real appointments stay invisible to the demo.
   let activeAppointment: { startTime: string; service?: string } | undefined;
-  if (activeRole !== 'demo') {
+  if (activeRole === 'demo') {
+    if (demoBooking) activeAppointment = { startTime: demoBooking.startTime, service: demoBooking.serviceName };
+  } else {
     try {
       const appt = await loadActiveAppointment(tenant.clientId, parsed.contactId);
       if (appt) activeAppointment = { startTime: appt.startTime, service: appt.service ?? undefined };
