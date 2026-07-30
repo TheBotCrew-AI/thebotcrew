@@ -13,9 +13,22 @@ import { GhlClient } from '../../../ghl/client.js';
 import { getActiveDemoSession, logAppointment, logBotEvent, setSimulatedBooking } from '../../../db/queries.js';
 import { resolveAgentContext } from './agent-context.js';
 import { resolveActiveAppointment } from './resolve-appointment.js';
-import { resolveBookingWindow } from './booking-window.js';
-import { resolveBookableSlot } from './booking-time.js';
+import { bookingQueryWindow, resolveBookableSlot } from './booking-time.js';
 import { simSlotLabel, simulatedSlots } from './demo-sim.js';
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Tenant-tz label (same format getAvailability emits) so the agent never re-derives a date. */
+function formatSlotLabel(iso: string, timeZone: string): string {
+  try {
+    return new Intl.DateTimeFormat('es-MX', {
+      timeZone, weekday: 'long', day: 'numeric', month: 'long',
+      hour: 'numeric', minute: '2-digit', hour12: true,
+    }).format(new Date(iso));
+  } catch {
+    return iso;
+  }
+}
 
 export const rescheduleAppointmentTool = createTool({
   id: 'rescheduleAppointment',
@@ -75,46 +88,79 @@ export const rescheduleAppointmentTool = createTool({
     const serviceName =
       appt.serviceType ?? Object.keys(config.calendars).find((n) => config.calendars[n] === calendarId) ?? null;
 
-    // Validate the requested time is a REAL free slot (within the booking horizon).
-    const horizon = config.bookingHorizonDays ?? null;
-    const window = resolveBookingWindow(Date.now(), startTime, undefined, horizon);
-    if (window.outOfHorizon) {
-      return {
-        rescheduled: false,
-        message: `Ese horario queda fuera de la ventana de agendado (próximos ${horizon} días). Ofrece un horario dentro de ella.`,
-      };
-    }
-
-    const targetMs = new Date(startTime).getTime();
-    let isFree = false;
+    // Resolve the requested time the SAME way bookAppointment does. This tool used to
+    // match by instant (`new Date(startTime).getTime()`) and then hand GHL the model's raw
+    // string — which reopened the exact bug booking was hardened against on 2026-07-06.
+    // Live on 2026-07-30: the lead asked for "viernes 4:00 p.m.", the model emitted
+    // `2026-07-31T16:00:00` with the `-07:00` dropped, that parsed as 16:00 UTC, which is
+    // a REAL free slot (9:00 a.m. Tijuana) — so the naive instant match passed and the
+    // appointment moved to 9 a.m. Matching by tenant wall-clock makes a dropped offset
+    // unrepresentable, and we send back the canonical, offset-carrying slot string.
+    const now = Date.now();
+    const { fromMs, toMs } = bookingQueryWindow(startTime, now);
+    let canonicalStart: string;
     try {
       const slots = await ghl.getAvailability(
         calendarId,
-        new Date(window.fromMs).toISOString(),
-        new Date(window.toMs).toISOString(),
+        new Date(fromMs).toISOString(),
+        new Date(toMs).toISOString(),
       );
-      isFree = slots.some((s) => new Date(s.start).getTime() === targetMs);
+      const resolved = resolveBookableSlot(slots, startTime, config.timezone);
+      if (!resolved) {
+        await logBotEvent(tenant.clientId, turn.ghlConversationId, 'booking_failed', {
+          stage: 'reschedule',
+          serviceName,
+          calendarId,
+          startTime,
+          reason: 'slot_unavailable',
+        });
+        return {
+          rescheduled: false,
+          message: 'Ese horario no está disponible. Consulta getAvailability y ofrece SOLO los horarios que devuelva.',
+        };
+      }
+      canonicalStart = resolved;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error('[rescheduleAppointment] availability check failed:', msg);
+      await logBotEvent(tenant.clientId, turn.ghlConversationId, 'booking_failed', {
+        stage: 'reschedule_validate_availability',
+        serviceName,
+        calendarId,
+        startTime,
+        error: msg,
+      });
       return { rescheduled: false, message: 'No pude verificar la disponibilidad en este momento. Intenta de nuevo.' };
     }
-    if (!isFree) {
+
+    // Horizon is enforced on the RESOLVED instant, not the model's string (same as booking).
+    const horizon = config.bookingHorizonDays ?? null;
+    if (horizon != null && Date.parse(canonicalStart) > now + horizon * DAY_MS) {
+      await logBotEvent(tenant.clientId, turn.ghlConversationId, 'booking_failed', {
+        stage: 'reschedule',
+        serviceName,
+        calendarId,
+        startTime: canonicalStart,
+        reason: 'out_of_horizon',
+        horizonDays: horizon,
+      });
       return {
         rescheduled: false,
-        message: 'Ese horario no está disponible. Ofrece uno de los horarios que devolvió getAvailability.',
+        message: `Ese horario queda fuera de la ventana de agendado (${horizon} días). Ofrece un horario más cercano.`,
       };
     }
 
     // Optional endTime from the service's configured duration (GHL derives it if omitted).
     const durationMin = config.services.find((s) => s.name === serviceName)?.durationMin;
-    const endTime = durationMin ? new Date(targetMs + durationMin * 60_000).toISOString() : undefined;
+    const endTime = durationMin
+      ? new Date(Date.parse(canonicalStart) + durationMin * 60_000).toISOString()
+      : undefined;
 
     try {
       await ghl.rescheduleAppointment({
         appointmentId: appt.ghlAppointmentId,
         calendarId,
-        startTime,
+        startTime: canonicalStart,
         ...(endTime ? { endTime } : {}),
       });
     } catch (err) {
@@ -124,7 +170,7 @@ export const rescheduleAppointmentTool = createTool({
         stage: 'reschedule',
         ghlAppointmentId: appt.ghlAppointmentId,
         serviceName,
-        startTime,
+        startTime: canonicalStart,
         error: msg,
       });
       return { rescheduled: false, message: 'No se pudo reagendar la cita en este momento. Intenta de nuevo o contacta al equipo.' };
@@ -135,12 +181,19 @@ export const rescheduleAppointmentTool = createTool({
       p_client_id: tenant.clientId,
       p_ghl_contact_id: turn.ghlContactId,
       p_action: 'rescheduled',
-      p_appointment_datetime: startTime,
+      // The resolved instant, never the model's string — our store must agree with GHL.
+      p_appointment_datetime: canonicalStart,
       p_service_type: serviceName,
       p_source: 'front-desk',
       p_ghl_appointment_id: appt.ghlAppointmentId,
     }).catch((e: unknown) => console.error('[rescheduleAppointment] logAppointment failed:', e));
 
-    return { rescheduled: true, message: `Cita reagendada a ${startTime}.` };
+    // Hand back a tenant-tz label so the agent confirms the real time instead of
+    // re-rendering an ISO string it might mis-state.
+    const label = formatSlotLabel(canonicalStart, config.timezone);
+    return {
+      rescheduled: true,
+      message: `Cita reagendada: ${label}. Confírmasela al lead usando EXACTAMENTE ese texto.`,
+    };
   },
 });
