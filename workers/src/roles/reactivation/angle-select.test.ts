@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseAngleSelection } from './angle-select.js';
+import { parseAngleSelection, resolveAnglePool } from './angle-select.js';
 
 describe('parseAngleSelection', () => {
   it('extracts a valid tag and strips it from the message', () => {
@@ -35,5 +35,43 @@ describe('parseAngleSelection', () => {
     const out = parseAngleSelection('ANGULO: 4\r\n¿Te aparto un espacio?', 4);
     expect(out.angleChoice).toBe(4);
     expect(out.message).toBe('¿Te aparto un espacio?');
+  });
+});
+
+describe('resolveAnglePool', () => {
+  const tenantPool = ['angle A', 'angle B'];
+  const variants = {
+    'laser-promo': { offering: 'x', followUpAngles: ['¿sigues interesada en la promo de laser?', 'la promo termina pronto'] },
+    'sin-angles': { offering: 'y' },
+    'empty-angles': { followUpAngles: [] },
+    'junk-angles': { followUpAngles: [42, '  ', null] },
+  };
+
+  it('uses the variant pool when the conversation is pinned to a variant that has one', () => {
+    const r = resolveAnglePool(variants, 'laser-promo', tenantPool);
+    expect(r.source).toBe('variant');
+    expect(r.pool).toEqual(['¿sigues interesada en la promo de laser?', 'la promo termina pronto']);
+  });
+
+  it('falls back to the tenant pool: no variant pinned', () => {
+    expect(resolveAnglePool(variants, null, tenantPool)).toEqual({ pool: tenantPool, source: 'tenant' });
+  });
+
+  it('falls back: variant without angles, empty angles, junk-only angles, unknown key', () => {
+    expect(resolveAnglePool(variants, 'sin-angles', tenantPool).source).toBe('tenant');
+    expect(resolveAnglePool(variants, 'empty-angles', tenantPool).source).toBe('tenant');
+    expect(resolveAnglePool(variants, 'junk-angles', tenantPool).source).toBe('tenant');
+    expect(resolveAnglePool(variants, 'deleted-campaign', tenantPool).source).toBe('tenant');
+  });
+
+  it('falls back on malformed promptVariants config (null, array, scalar)', () => {
+    expect(resolveAnglePool(null, 'laser-promo', tenantPool).source).toBe('tenant');
+    expect(resolveAnglePool(['not', 'an', 'object'], 'laser-promo', tenantPool).source).toBe('tenant');
+    expect(resolveAnglePool('junk', 'laser-promo', tenantPool).source).toBe('tenant');
+  });
+
+  it('filters non-string/blank entries out of a valid variant pool', () => {
+    const r = resolveAnglePool({ v: { followUpAngles: ['real', '', 3, 'otra'] } }, 'v', tenantPool);
+    expect(r).toEqual({ pool: ['real', 'otra'], source: 'variant' });
   });
 });

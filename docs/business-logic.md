@@ -55,6 +55,13 @@ monolithic prompt (migration 0036; `core/tenant.ts` `matchVariantKeyword`,
   misconfiguration fingerprint** — a keyword mapped to a variant key with no
   `prompt_variants` entry; the prompt falls back to base, loudly, never silently. A variant
   DB failure never blocks the turn (lead gets the base prompt).
+- **Campaign-aware follow-ups (0040, code-only):** a variant may carry its own
+  `followUpAngles` — conversations pinned to it nudge from THAT pool ("¿sigues interesada en
+  la promo de laser?") instead of the tenant's `follow_up_angles`. **Replace, not merge**:
+  sent-angle indexes are positions within one pool, and the variant is first-touch sticky,
+  so each conversation's pool identity is stable. Missing/malformed variant angles (or a
+  persona read failure) fall back to the tenant pool — never to silence. Resolver:
+  `resolveAnglePool` (`roles/reactivation/angle-select.ts`); wired in `followup-runner.ts`.
 
 ## 2. Conversation lifecycle
 

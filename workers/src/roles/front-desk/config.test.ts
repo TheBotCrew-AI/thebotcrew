@@ -107,3 +107,14 @@ describe('resolveEffectiveOverrides', () => {
     expect(overrides.confirmContactName).toBe(true);
   });
 });
+
+describe('promptVariants — followUpAngles', () => {
+  it('accepts campaign-specific reactivation angles on a variant', () => {
+    const c = parseFrontDeskConfig({
+      businessName: 'X',
+      timezone: 'America/Mexico_City',
+      promptVariants: { 'laser-promo': { followUpAngles: ['¿sigues interesada en la promo?'] } },
+    } as never);
+    expect(c.promptVariants?.['laser-promo']?.followUpAngles).toEqual(['¿sigues interesada en la promo?']);
+  });
+});

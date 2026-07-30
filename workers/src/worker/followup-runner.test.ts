@@ -6,7 +6,11 @@ import type { DueFollowUp } from '../db/types.js';
 vi.mock('../core/env.js');
 vi.mock('../db/queries.js');
 vi.mock('../core/runtime-context.js', () => ({ buildAgentRequestContext: vi.fn(() => ({})) }));
-vi.mock('../roles/reactivation/angle-select.js', () => ({ parseAngleSelection: vi.fn(() => ({ message: 'te esperamos 👋', angleChoice: null })) }));
+vi.mock('../roles/reactivation/angle-select.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../roles/reactivation/angle-select.js')>();
+  // Keep the PURE pool resolver real; stub only the model-output parser.
+  return { ...actual, parseAngleSelection: vi.fn(() => ({ message: 'te esperamos 👋', angleChoice: null })) };
+});
 const ghl = { sendMessage: vi.fn() };
 vi.mock('../ghl/client.js', () => ({ GhlClient: vi.fn(() => ghl) }));
 
@@ -95,5 +99,41 @@ describe('runPendingFollowUps', () => {
     const res = await runPendingFollowUps(agent);
     expect(q.markFollowUpFailed).toHaveBeenCalledWith('fu1');
     expect(res).toEqual({ processed: 0, failed: 1, skipped: 0 });
+  });
+});
+
+describe('runPendingFollowUps — campaign-aware angle pools', () => {
+  // buildAgentRequestContext is mocked at module level; assert the candidates it receives.
+  const candidatesArg = async () => {
+    const { buildAgentRequestContext } = await import('../core/runtime-context.js');
+    return (vi.mocked(buildAgentRequestContext).mock.calls[0]?.[0] as { reactivationCandidates?: string[] }).reactivationCandidates;
+  };
+
+  const variantTenant = () =>
+    tenant({
+      followUpAngles: ['angle A', 'angle B'],
+      promptVariants: { 'laser-promo': { followUpAngles: ['promo laser angle'] } },
+    });
+
+  it('a variant-pinned conversation nudges from the variant pool', async () => {
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(variantTenant());
+    vi.mocked(q.getConversationPersona).mockResolvedValue({ activeRole: null, roleStartedAt: null, demoStartedAt: null, promptVariant: 'laser-promo' });
+    await runPendingFollowUps(agent);
+    expect(await candidatesArg()).toEqual(['promo laser angle']);
+  });
+
+  it('no pinned variant → tenant pool', async () => {
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(variantTenant());
+    vi.mocked(q.getConversationPersona).mockResolvedValue({ activeRole: null, roleStartedAt: null, demoStartedAt: null, promptVariant: null });
+    await runPendingFollowUps(agent);
+    expect(await candidatesArg()).toEqual(['angle A', 'angle B']);
+  });
+
+  it('a persona read failure falls back to the tenant pool, follow-up still sends', async () => {
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(variantTenant());
+    vi.mocked(q.getConversationPersona).mockRejectedValue(new Error('db down'));
+    const res = await runPendingFollowUps(agent);
+    expect(await candidatesArg()).toEqual(['angle A', 'angle B']);
+    expect(res.processed).toBe(1);
   });
 });

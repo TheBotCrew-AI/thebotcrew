@@ -73,6 +73,13 @@ export const promptVariantSchema = z.object({
   /** Merged PER-KEY over the base toolInstructions (base rules survive unless overridden). */
   toolInstructions: z.record(z.string(), z.string()).optional(),
   bookingEnabled: z.boolean().optional(),
+  /**
+   * Campaign-specific reactivation angles. When present and non-empty, follow-ups
+   * for conversations pinned to this variant draw from THIS pool instead of the
+   * tenant's follow_up_angles (replace, not merge — sent-angle indexes are
+   * positions within one pool). See roles/reactivation/angle-select.ts.
+   */
+  followUpAngles: z.array(z.string()).optional(),
 });
 
 export const frontDeskConfigSchema = z.object({

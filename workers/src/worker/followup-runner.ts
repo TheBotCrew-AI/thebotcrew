@@ -16,6 +16,7 @@ import { usageFromAgentResult } from '../core/llm-usage.js';
 import { loadTenantConfig } from '../db/queries.js';
 import {
   cancelFollowUps,
+  getConversationPersona,
   loadDueFollowUps,
   loadSentAngleIndexes,
   logBotEvent,
@@ -30,7 +31,7 @@ import {
   updateConversationContact,
   loadRecentMessages,
 } from '../db/queries.js';
-import { parseAngleSelection } from '../roles/reactivation/angle-select.js';
+import { parseAngleSelection, resolveAnglePool } from '../roles/reactivation/angle-select.js';
 import { buildAgentRequestContext } from '../core/runtime-context.js';
 import type { AiProvider, Channel } from '../core/types.js';
 import type { DueFollowUp } from '../db/types.js';
@@ -77,7 +78,20 @@ async function processOne(
   // Hybrid angle selection: offer only the pool angles not yet SENT on this
   // conversation, so angles never repeat even as the cadence cycle resets. An empty
   // pool (all used) → the agent free-forms a fresh nudge (chosenAngleIndex stays null).
-  const anglePool = tenant.config.followUpAngles ?? [];
+  // Campaign-aware (0040): a conversation pinned to a prompt variant whose config
+  // carries followUpAngles nudges from THAT pool — "¿sigues interesada en la promo?"
+  // — falling back to the tenant pool on any missing/malformed config or read error.
+  let promptVariant: string | null = null;
+  try {
+    ({ promptVariant } = await getConversationPersona(followUp.conversationId));
+  } catch (e) {
+    console.error('[followup] persona read failed (using tenant angle pool):', e instanceof Error ? e.message : String(e));
+  }
+  const { pool: anglePool } = resolveAnglePool(
+    tenant.config.promptVariants,
+    promptVariant,
+    tenant.config.followUpAngles ?? [],
+  );
   const usedIndexes = await loadSentAngleIndexes(followUp.conversationId);
   const remaining = anglePool
     .map((text, index) => ({ text, index }))
