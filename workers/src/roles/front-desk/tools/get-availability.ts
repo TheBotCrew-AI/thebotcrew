@@ -6,9 +6,10 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { GhlClient } from '../../../ghl/client.js';
-import { logBotEvent } from '../../../db/queries.js';
+import { getActiveDemoSession, logBotEvent } from '../../../db/queries.js';
 import { resolveAgentContext } from './agent-context.js';
 import { resolveBookingWindow } from './booking-window.js';
+import { simulatedSlots } from './demo-sim.js';
 
 export const getAvailabilityTool = createTool({
   id: 'getAvailability',
@@ -26,6 +27,29 @@ export const getAvailabilityTool = createTool({
   }),
   execute: async ({ serviceName, fromDate, toDate }, ctx) => {
     const { tenant, turn, config } = resolveAgentContext(ctx);
+
+    // Demo mode: SIMULATED slots — no GHL call (nothing can fail in front of a
+    // prospect), no real calendar involved. Deterministic per conversation+day so
+    // re-queries agree; the already-simulated booking is excluded like a real hold.
+    if (turn.activeRole === 'demo') {
+      const session = await getActiveDemoSession(turn.ghlConversationId).catch(() => null);
+      const slots = simulatedSlots(
+        turn.ghlConversationId,
+        config.timezone,
+        Date.now(),
+        session?.simulatedBooking?.startTime,
+      );
+      await logBotEvent(tenant.clientId, turn.ghlConversationId, 'availability_checked', {
+        serviceName,
+        demo: true,
+        slotCount: slots.length,
+      });
+      return {
+        slots,
+        note: 'Ofrece estos horarios al lead usando EXACTAMENTE el texto del campo "label" (ya trae el día de la semana correcto). No recalcules ni traduzcas fechas.',
+      };
+    }
+
     const calendarId = config.calendars[serviceName];
     if (!calendarId) {
       await logBotEvent(tenant.clientId, turn.ghlConversationId, 'availability_checked', {

@@ -85,3 +85,29 @@ describe('lookupAppointment', () => {
     expect(res.message).toContain('no pude leer la fecha');
   });
 });
+
+describe('lookupAppointment — demo mode', () => {
+  it('answers from the session simulated booking, never from the store/GHL', async () => {
+    const demoTurn = { ghlContactId: 'c1', ghlConversationId: 'conv1', channel: 'whatsapp', activeRole: 'demo' } as TurnContext;
+    const demoCtx = { requestContext: { get: (k: string) => (k === 'tenant' ? tenant : k === 'turn' ? demoTurn : undefined) } };
+    vi.mocked(q.getActiveDemoSession).mockResolvedValue({
+      id: 's1', activatedAt: '', expiresAt: '', messageBudget: 15, personaVersion: 1,
+      leadData: {}, promptOverrides: {},
+      simulatedBooking: { startTime: '2026-08-01T17:00:00.000Z', serviceName: 'Limpieza', label: 'sábado 1 de agosto, 11:00 a.m.' },
+    });
+    const exec = lookupAppointmentTool.execute as (i: Record<string, unknown>, c: unknown) => Promise<{ found: boolean; label?: string }>;
+    const res = await exec({}, demoCtx);
+    expect(res.found).toBe(true);
+    expect(res.label).toBe('sábado 1 de agosto, 11:00 a.m.');
+    expect(q.loadLatestAppointment).not.toHaveBeenCalled();
+  });
+
+  it('demo with no simulated booking → not found (never leaks a real appointment)', async () => {
+    const demoTurn = { ghlContactId: 'c1', ghlConversationId: 'conv1', channel: 'whatsapp', activeRole: 'demo' } as TurnContext;
+    const demoCtx = { requestContext: { get: (k: string) => (k === 'tenant' ? tenant : k === 'turn' ? demoTurn : undefined) } };
+    vi.mocked(q.getActiveDemoSession).mockResolvedValue(null);
+    const exec = lookupAppointmentTool.execute as (i: Record<string, unknown>, c: unknown) => Promise<{ found: boolean }>;
+    const res = await exec({}, demoCtx);
+    expect(res.found).toBe(false);
+  });
+});

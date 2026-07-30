@@ -10,10 +10,12 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { GhlClient } from '../../../ghl/client.js';
-import { logAppointment, logBotEvent } from '../../../db/queries.js';
+import { getActiveDemoSession, logAppointment, logBotEvent, setSimulatedBooking } from '../../../db/queries.js';
 import { resolveAgentContext } from './agent-context.js';
 import { resolveActiveAppointment } from './resolve-appointment.js';
 import { resolveBookingWindow } from './booking-window.js';
+import { resolveBookableSlot } from './booking-time.js';
+import { simSlotLabel, simulatedSlots } from './demo-sim.js';
 
 export const rescheduleAppointmentTool = createTool({
   id: 'rescheduleAppointment',
@@ -32,6 +34,30 @@ export const rescheduleAppointmentTool = createTool({
   }),
   execute: async ({ startTime }, ctx) => {
     const { tenant, turn, config } = resolveAgentContext(ctx);
+
+    // Demo mode: move the SIMULATED booking, with the same only-real-slots guard.
+    if (turn.activeRole === 'demo') {
+      const session = await getActiveDemoSession(turn.ghlConversationId).catch(() => null);
+      const current = session?.simulatedBooking;
+      if (!session || !current) {
+        return { rescheduled: false, message: 'No encuentro una cita activa para reagendar.' };
+      }
+      const slots = simulatedSlots(turn.ghlConversationId, config.timezone, Date.now(), current.startTime);
+      const resolved = resolveBookableSlot(slots, startTime, config.timezone);
+      if (!resolved) {
+        return {
+          rescheduled: false,
+          message: 'Ese horario no está disponible. Consulta getAvailability y ofrece solo los slots que devuelva.',
+        };
+      }
+      const label = simSlotLabel(resolved, config.timezone);
+      try {
+        await setSimulatedBooking(session.id, { startTime: resolved, serviceName: current.serviceName, label });
+      } catch (e) {
+        console.error('[rescheduleAppointment] demo update failed (non-blocking):', e instanceof Error ? e.message : String(e));
+      }
+      return { rescheduled: true, message: `Cita reagendada: ${label}. Confírmala al lead con ese texto exacto.` };
+    }
 
     const ghl = new GhlClient(tenant.tenantId);
     const appt = await resolveActiveAppointment(ghl, tenant.clientId, turn.ghlContactId, Date.now());

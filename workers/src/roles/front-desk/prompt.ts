@@ -6,6 +6,7 @@
  * sections are suppressed — the tenant's custom flow takes over entirely.
  */
 
+import type { DemoHandoff } from '../../core/types.js';
 import { resolveEffectiveOverrides, type FrontDeskConfig } from './config.js';
 
 /**
@@ -171,6 +172,7 @@ export function buildFrontDeskInstructions(
   contactName?: string,
   activeAppointment?: { startTime: string; service?: string },
   promptVariant?: string,
+  demoHandoff?: DemoHandoff,
 ): string {
   // Override precedence: demo persona > pinned campaign variant (merged over base) > base.
   const { overrides, usingDemo } = resolveEffectiveOverrides(config, activeRole, promptVariant);
@@ -272,6 +274,23 @@ No tenemos número de WhatsApp del lead en el sistema (típico de leads de Faceb
     ? `\n\n# Nombre del contacto\nEl contacto está registrado en el sistema como: "${contactName.trim()}". Puede ser su nombre real o el de su negocio (así llegan a veces los registros).`
     : '';
 
+  // The closer turn: a demo session just ended and the NORMAL persona answers next.
+  // History was truncated at the flip, so this section carries what the closer needs
+  // to know about what the lead just experienced.
+  let demoHandoffSection = '';
+  if (demoHandoff && !usingDemo) {
+    const biz = demoHandoff.businessName?.trim();
+    const why = demoHandoff.reason === 'expired'
+      ? 'La demo terminó porque pasó su tiempo límite.'
+      : 'La demo llegó a su límite de mensajes — terminó en un buen momento, a propósito.';
+    demoHandoffSection = `\n\n# El lead acaba de terminar la demo de SU negocio
+Este lead es dueño/a de un negocio${biz ? ` ("${biz}"${demoHandoff.businessType ? `, ${demoHandoff.businessType}` : ''})` : ''} y acaba de probar en vivo una demo de un asistente hecho para ese negocio. ${why}
+- Sal del juego de rol: a partir de aquí hablas tú, con tu identidad normal.
+- Abre avisando con naturalidad que hasta ahí llega la prueba, y pregúntale qué le pareció la experiencia.
+- Si le gustó, ofrécele agendar una llamada con el equipo para configurarlo de verdad para su negocio (usa getAvailability y bookAppointment con normalidad — esa cita SÍ es real).
+- No vuelvas a actuar como el asistente del negocio del lead; la demo ya cerró.`;
+  }
+
   // Hard guard against the self-block class: when the contact ALREADY has an active
   // appointment, the agent must not re-check availability — its own booking makes that
   // slot disappear from getAvailability, which the model would misread as "ya no está libre".
@@ -307,7 +326,7 @@ Solo afirma datos que estén en esta configuración o que devuelvan tus herramie
 ${offeringSection}
 
 # Horario (zona horaria: ${config.timezone})
-${renderHours(config)}${flowSection}${toolInstructionsSection}${reminderSection}${contactNameSection}${existingAppointmentSection}
+${renderHours(config)}${flowSection}${toolInstructionsSection}${reminderSection}${contactNameSection}${demoHandoffSection}${existingAppointmentSection}
 
 # Uso de herramientas
 Cuando necesites llamar una herramienta, NO generes texto antes de la llamada. Llama la herramienta en silencio y escribe tu respuesta al lead ÚNICAMENTE después de tener el resultado final. Un solo mensaje, sin intermedios.

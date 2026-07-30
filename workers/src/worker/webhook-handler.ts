@@ -21,10 +21,13 @@ import {
 } from '../core/llm-usage.js';
 import { channelEnabled, hasTriggerKeywords, inTestMode, matchesDemoOff, matchesDemoOn, matchVariantKeyword, messageMatchesTrigger, resolveTenant, roleEnabled } from '../core/tenant.js';
 import { buildAgentRequestContext } from '../core/runtime-context.js';
-import type { AiProvider, ConversationMessage, ConversationStatus, TenantContext, TurnContext } from '../core/types.js';
+import type { AiProvider, ConversationMessage, ConversationStatus, DemoHandoff, TenantContext, TurnContext } from '../core/types.js';
 import {
   cancelFollowUps,
   botActivation,
+  countBotMessagesSince,
+  endDemoSession,
+  getActiveDemoSession,
   getConversationPersona,
   setActiveRole,
   isBotSuppressed,
@@ -385,17 +388,56 @@ export async function runAgentTurn({
   // Read the persona fresh at turn time (a demo keyword may have flipped it since
   // scheduling, and the campaign variant is pinned on the conversation row).
   let activeRole: string | null = null;
+  let roleStartedAt: string | null = null;
   let demoStartedAt: string | null = null;
   let promptVariant: string | null = null;
   try {
-    ({ activeRole, demoStartedAt, promptVariant } = await getConversationPersona(conversationId));
+    ({ activeRole, roleStartedAt, demoStartedAt, promptVariant } = await getConversationPersona(conversationId));
   } catch (e) {
     console.error('[demo] getConversationPersona failed:', e instanceof Error ? e.message : String(e));
   }
 
-  // In demo mode, start clean: only load history since demo was activated so the persona
-  // doesn't inherit pre-demo context (e.g. a completed booking).
-  const sinceTs = activeRole === 'demo' && demoStartedAt ? demoStartedAt : undefined;
+  // Demo SESSION (0038, the lead-magnet funnel — a manual keyword demo has no session):
+  // read it fresh, enforce budget + expiry, and overlay its generated persona. When the
+  // budget is exhausted (or the session expired), flip back to the NORMAL persona — the
+  // closer — atomically (app_end_demo_session stamps role_started_at at the latest
+  // inbound, so the closer sees the lead's last message and none of the roleplay).
+  let demoHandoff: DemoHandoff | undefined;
+  if (activeRole === 'demo') {
+    try {
+      const session = await getActiveDemoSession(parsed.conversationId);
+      if (session) {
+        const expired = Date.parse(session.expiresAt) <= Date.now();
+        const used = await countBotMessagesSince(conversationId, session.activatedAt);
+        if (expired || used >= session.messageBudget) {
+          const reason = expired ? 'expired' : 'exhausted';
+          await endDemoSession(session.id, reason);
+          await logBotEvent(tenant.clientId, parsed.conversationId, 'demo_session_ended', {
+            sessionId: session.id,
+            reason,
+            botMessagesUsed: used,
+          });
+          const lead = session.leadData as { businessName?: string; businessType?: string };
+          demoHandoff = { reason, businessName: lead.businessName, businessType: lead.businessType };
+          console.log(`[demo-session] ended conv=${parsed.conversationId} reason=${reason} used=${used}`);
+          // Re-read: the RPC flipped active_role and stamped role_started_at.
+          ({ activeRole, roleStartedAt, demoStartedAt, promptVariant } = await getConversationPersona(conversationId));
+        } else {
+          // Overlay the session's generated persona (request-scoped; the demo prompt
+          // path already reads demoPromptOverrides when active_role='demo').
+          tenant.config.demoPromptOverrides = session.promptOverrides;
+        }
+      }
+    } catch (e) {
+      // Non-blocking: on a session read/flip failure the turn proceeds as a manual
+      // keyword demo (tenant-level demo overrides), never as a dropped reply.
+      console.error('[demo-session] check failed (non-blocking):', e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  // Clean-start history: from when the CURRENT persona took over (demo start OR the
+  // closer flip). Legacy fallback for rows stamped before 0038: demo_started_at.
+  const sinceTs = roleStartedAt ?? (activeRole === 'demo' && demoStartedAt ? demoStartedAt : undefined);
   const history = await loadRecentMessages(conversationId, 20, sinceTs);
   const messages = toModelMessages(history);
 
@@ -463,6 +505,7 @@ export async function runAgentTurn({
     activeRole: activeRole ?? undefined,
     promptVariant: promptVariant ?? undefined,
     activeAppointment,
+    demoHandoff,
   };
   const provider = (tenant.config.provider ?? DEFAULT_PROVIDER) as AiProvider;
   const model = tenant.config.model ?? DEFAULT_MODEL;

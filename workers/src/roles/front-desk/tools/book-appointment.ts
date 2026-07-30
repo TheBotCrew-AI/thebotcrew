@@ -6,9 +6,10 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { GhlClient } from '../../../ghl/client.js';
-import { logAppointment, logBotEvent, logEvent } from '../../../db/queries.js';
+import { getActiveDemoSession, logAppointment, logBotEvent, logEvent, setSimulatedBooking } from '../../../db/queries.js';
 import { resolveAgentContext } from './agent-context.js';
 import { bookingQueryWindow, resolveBookableSlot } from './booking-time.js';
+import { simSlotLabel, simulatedSlots } from './demo-sim.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -37,6 +38,34 @@ export const bookAppointmentTool = createTool({
   }),
   execute: async ({ serviceName, startTime, whatsappPhone }, ctx) => {
     const { config, tenant, turn } = resolveAgentContext(ctx);
+
+    // Demo mode: SIMULATED booking — same anti-hallucination guard as the real path
+    // (only the exact slot string the sim returned can be "booked"), but no GHL call,
+    // no appointments row, no reminder-number write. Stored on the session so
+    // lookup/reschedule/cancel see it within the demo.
+    if (turn.activeRole === 'demo') {
+      const session = await getActiveDemoSession(turn.ghlConversationId).catch(() => null);
+      const slots = simulatedSlots(turn.ghlConversationId, config.timezone, Date.now(), session?.simulatedBooking?.startTime);
+      const resolved = resolveBookableSlot(slots, startTime, config.timezone);
+      if (!resolved) {
+        return {
+          booked: false,
+          message:
+            'Ese horario no está disponible. Consulta de nuevo los horarios con getAvailability y ' +
+            'ofrécele al lead ÚNICAMENTE uno de los slots que devuelva.',
+        };
+      }
+      const label = simSlotLabel(resolved, config.timezone);
+      if (session) {
+        try {
+          await setSimulatedBooking(session.id, { startTime: resolved, serviceName, label });
+        } catch (e) {
+          console.error('[bookAppointment] demo setSimulatedBooking failed (non-blocking):', e instanceof Error ? e.message : String(e));
+        }
+      }
+      return { booked: true, message: `Cita confirmada: ${label}. Confírmala al lead con ese texto exacto.` };
+    }
+
     const calendarId = config.calendars[serviceName];
     if (!calendarId) {
       return { booked: false, message: `No tengo un calendario para "${serviceName}".` };

@@ -391,6 +391,64 @@ persona**, controlled by keywords — useful for showing the bot to a prospect o
 - **Off by default & safe.** If a tenant sets no demo keywords, nothing changes. `off` returns to
   the normal front-desk (to fully silence a thread, use the `bot-off` tag instead).
 
+## 5c. Demo sessions — the lead-magnet funnel (0038)
+
+Budgeted, per-lead self-demos: an ad lead gets a live demo of a bot **for their own
+business**, then the normal persona (the closer) takes over to book a real call. Runs on the
+Bot Crew's own tenant; gated per tenant by `tenant_config.demo_sessions_enabled`
+(default **false** — no other tenant is affected). Manual keyword demos (§5b) are unchanged
+and never create sessions.
+
+**Flow.**
+1. Ad → `wa.me` link with a static keyword (e.g. "DEMO"). The keyword doubles as the
+   `trigger_keywords` entry gate — no special-casing in the gate order.
+2. The NORMAL persona does the intake conversationally (business name, giro, services —
+   enriched from the form contact when the phone matches) and calls the **`startDemo`
+   tool**, which builds the persona from a TEMPLATE (`roles/front-desk/demo-persona.ts` —
+   deliberately not an LLM call: deterministic, instant, testable, and lead text is embedded
+   as length-capped DATA, shrinking the prompt-injection surface; `persona_version` tracks the
+   template) and calls `app_create_demo_session`: session row + `active_role='demo'` flip,
+   atomic. The announcing turn still speaks as the normal persona ("escríbeme como si fueras
+   un cliente…"); the lead's next message is answered in character.
+3. Each turn while in demo reads the session fresh: the generated persona is overlaid onto
+   `demoPromptOverrides`, and **budget + expiry** are enforced BEFORE generating. Budget =
+   bot message PARTS since activation (derived by counting `messages`, self-healing — no
+   counter to drift under the debounce), default 15; expiry default 48h, enforced lazily at
+   turn time (an abandoned demo just sits until the lead writes again).
+4. Exhausted/expired → `app_end_demo_session`: session ended + flip to `active_role=NULL`,
+   atomic. The turn re-reads the persona and answers as **the closer** — the tenant's normal
+   front-desk — with a `demoHandoff` prompt section (what business, why it ended: ask how it
+   went, offer a REAL call via the normal booking tools). Follow-ups re-arm from the closer
+   turn (they are OFF during demo, §5b).
+
+**Clean-start via `role_started_at`.** 0038 generalizes `demo_started_at`: every persona
+TRANSITION stamps `conversations.role_started_at` **at the latest inbound message** (not
+`now()` — the message that caused the flip is already logged, so a `now()` stamp would hand
+the new persona an empty history). History always loads from `role_started_at` when set, so
+the demo doesn't see pre-demo context and the closer doesn't see the roleplay — only the
+lead's last message plus the handoff section. `demo_started_at` is still written (legacy
+fallback for turns racing the deploy); drop it in a later release (expand/contract).
+
+**Simulated booking.** While `active_role='demo'` (sessions AND manual demos), the five
+booking tools never touch GHL or the real store (`tools/demo-sim.ts`): `getAvailability`
+returns plausible slots, deterministic per conversation+day (re-queries agree; 1-2 slots/day
+"taken" so the calendar reads real; Sundays closed); `bookAppointment` enforces the same
+only-exact-slot rule as the real path (`resolveBookableSlot`) and stores the booking on the
+session (`simulated_booking`); lookup/reschedule/cancel operate on that stored booking. No
+GHL error can fire mid-pitch, nothing to clean up, and a manual demo can no longer book a
+REAL slot by accident.
+
+**Launch checklist (Bot Crew tenant — all config, no deploy):**
+- `demo_sessions_enabled = true`; qualificationNotes teach the intake→startDemo flow.
+- **Clear `test_contact_ids`** — test mode outranks every other gate; leaving it set silently
+  drops every real lead (`test_mode_skip`).
+- `whatsapp ∈ enabled_channels`; the ad keyword in `trigger_keywords`.
+- **Front-load `follow_up_cadence`** (e.g. 30m/3h/18h): outside WhatsApp's 24h window,
+  free-form sends fail at Meta's layer — a multi-day cadence just logs delivery errors.
+
+Observability: `demo_session_started` / `demo_session_ended` (`{reason, botMessagesUsed}`) in
+`bot_events`; sessions keep `lead_data` + `persona_version` for cohort comparison.
+
 ## 6. Models & factual grounding
 
 - **Platform default: `openai` / `gpt-5-mini`** (`DEFAULT_PROVIDER` / `DEFAULT_MODEL` in

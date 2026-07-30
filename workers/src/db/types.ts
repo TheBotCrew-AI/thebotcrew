@@ -49,6 +49,8 @@ export interface TenantConfigRow {
   ai_key_ref: string | null;
   /** Tag applied when the bot leaves a request awaiting a human. NULL = unused. */
   awaiting_human_tag: string | null;
+  /** Whether startDemo may create budgeted per-lead demo sessions (lead-magnet funnel). */
+  demo_sessions_enabled: boolean | null;
 }
 
 /** One row returned by app_load_due_follow_ups. */
@@ -169,6 +171,9 @@ export type BotEventType =
   | 'ai_key_fallback'
   // Campaign prompt variant pinned to a conversation (first touch; {variant, keyword, known})
   | 'variant_assigned'
+  // Demo session lifecycle (lead-magnet funnel): created via startDemo / ended (budget|expiry)
+  | 'demo_session_started'
+  | 'demo_session_ended'
   // Bot left a request ready for a person to pick up (flagAwaitingHuman)
   | 'awaiting_human'
   // Conversation switched into / out of the demo persona ({to} in metadata)

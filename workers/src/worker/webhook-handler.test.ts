@@ -69,7 +69,7 @@ beforeEach(() => {
   vi.mocked(q.botActivation).mockResolvedValue('already');
   // Explicit default: clearAllMocks() does NOT drop implementations, so a test that
   // sets a demo persona would otherwise leak it into every later test.
-  vi.mocked(q.getConversationPersona).mockResolvedValue({ activeRole: null, demoStartedAt: null, promptVariant: null });
+  vi.mocked(q.getConversationPersona).mockResolvedValue({ activeRole: null, roleStartedAt: null, demoStartedAt: null, promptVariant: null });
   vi.mocked(q.setConversationContactKeys).mockResolvedValue(undefined);
   vi.mocked(q.getConversationContactKeys).mockResolvedValue({ phone: null, email: null });
   vi.mocked(q.updateConversationContact).mockResolvedValue(undefined);
@@ -251,7 +251,7 @@ describe('handleInboundWebhook — active appointment guard', () => {
   });
 
   it('skips the appointment lookup in demo mode (clean-start)', async () => {
-    vi.mocked(q.getConversationPersona).mockResolvedValue({ activeRole: 'demo', demoStartedAt: null, promptVariant: null });
+    vi.mocked(q.getConversationPersona).mockResolvedValue({ activeRole: 'demo', roleStartedAt: null, demoStartedAt: null, promptVariant: null });
     vi.mocked(q.loadActiveAppointment).mockResolvedValue({ startTime: '2026-07-04T14:30:00-07:00', service: 'Corte' });
     const agent = agentReplying();
     await handleInboundWebhook(inbound, agent);
@@ -472,7 +472,7 @@ describe('handleInboundWebhook — campaign prompt variants', () => {
   });
 
   it("threads the conversation's pinned variant into the turn context", async () => {
-    vi.mocked(q.getConversationPersona).mockResolvedValue({ activeRole: null, demoStartedAt: null, promptVariant: 'laser-promo' });
+    vi.mocked(q.getConversationPersona).mockResolvedValue({ activeRole: null, roleStartedAt: null, demoStartedAt: null, promptVariant: 'laser-promo' });
     const agent = agentReplying();
     await handleInboundWebhook(inbound, agent);
     const call = vi.mocked(agent.generate).mock.calls[0] as unknown as [unknown, { requestContext: { get(k: string): unknown } }];
@@ -482,7 +482,7 @@ describe('handleInboundWebhook — campaign prompt variants', () => {
 });
 
 describe('handleInboundWebhook — demo-mode guards (roleplay must not touch real state)', () => {
-  const demoPersona = { activeRole: 'demo', demoStartedAt: '2026-07-29T10:00:00Z', promptVariant: null };
+  const demoPersona = { activeRole: 'demo', roleStartedAt: null, demoStartedAt: '2026-07-29T10:00:00Z', promptVariant: null };
   const noQuestion = 'Entendido, muchas gracias por tu visita.'; // no "?" → classifier path opens
 
   it('control: outside demo, a no-question reply triggers the outcome classifier', async () => {
@@ -545,5 +545,90 @@ describe('handleInboundWebhook — demo-mode guards (roleplay must not touch rea
     ]);
     await handleInboundWebhook({ ...inbound, body: 'Soy Carlos' }, agentReplying());
     expect(fetchSpy).toHaveBeenCalled();
+  });
+});
+
+describe('handleInboundWebhook — demo sessions (budget, expiry, closer flip)', () => {
+  const demoPersona = { activeRole: 'demo', roleStartedAt: '2026-07-29T10:00:00Z', demoStartedAt: '2026-07-29T10:00:00Z', promptVariant: null };
+  const session = (over: Record<string, unknown> = {}) => ({
+    id: 'sess-1',
+    activatedAt: '2026-07-29T10:00:00Z',
+    expiresAt: '2099-01-01T00:00:00Z',
+    messageBudget: 15,
+    personaVersion: 1,
+    leadData: { businessName: 'Clínica Sonrisa', businessType: 'clínica dental' },
+    promptOverrides: { identity: 'PERSONA GENERADA' },
+    simulatedBooking: null,
+    ...over,
+  });
+  const turnFrom = (agent: Agent) => {
+    const call = vi.mocked(agent.generate).mock.calls[0] as unknown as [unknown, { requestContext: { get(k: string): unknown } }];
+    return call[1].requestContext.get('turn') as { activeRole?: string; demoHandoff?: { reason: string; businessName?: string } };
+  };
+  const tenantFrom = (agent: Agent) => {
+    const call = vi.mocked(agent.generate).mock.calls[0] as unknown as [unknown, { requestContext: { get(k: string): unknown } }];
+    return call[1].requestContext.get('tenant') as TenantContext;
+  };
+
+  it('active session under budget → session persona overlaid, demo continues', async () => {
+    vi.mocked(q.getConversationPersona).mockResolvedValue(demoPersona);
+    vi.mocked(q.getActiveDemoSession).mockResolvedValue(session() as never);
+    vi.mocked(q.countBotMessagesSince).mockResolvedValue(3);
+    const agent = agentReplying();
+    await handleInboundWebhook(inbound, agent);
+    expect(q.endDemoSession).not.toHaveBeenCalled();
+    expect(turnFrom(agent).activeRole).toBe('demo');
+    expect(tenantFrom(agent).config.demoPromptOverrides).toEqual({ identity: 'PERSONA GENERADA' });
+  });
+
+  it('budget exhausted → session ended, closer answers with the handoff context', async () => {
+    vi.mocked(q.getConversationPersona)
+      .mockResolvedValueOnce(demoPersona) // turn-time read: still demo
+      .mockResolvedValue({ activeRole: null, roleStartedAt: '2026-07-29T12:00:00Z', demoStartedAt: null, promptVariant: null }); // re-read after flip
+    vi.mocked(q.getActiveDemoSession).mockResolvedValue(session() as never);
+    vi.mocked(q.countBotMessagesSince).mockResolvedValue(15);
+    const agent = agentReplying();
+    await handleInboundWebhook(inbound, agent);
+
+    expect(q.endDemoSession).toHaveBeenCalledWith('sess-1', 'exhausted');
+    expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'demo_session_ended',
+      expect.objectContaining({ reason: 'exhausted' }));
+    const turn = turnFrom(agent);
+    expect(turn.activeRole).toBeUndefined(); // the closer = the NORMAL persona
+    expect(turn.demoHandoff).toMatchObject({ reason: 'exhausted', businessName: 'Clínica Sonrisa' });
+    // Closer history truncates at the flip (role_started_at from the re-read).
+    expect(q.loadRecentMessages).toHaveBeenCalledWith('cv-uuid', 20, '2026-07-29T12:00:00Z');
+    // The closer turn re-arms follow-ups if the tenant has a cadence (activeRole is null now).
+  });
+
+  it('expired session → same flip with reason expired', async () => {
+    vi.mocked(q.getConversationPersona)
+      .mockResolvedValueOnce(demoPersona)
+      .mockResolvedValue({ activeRole: null, roleStartedAt: '2026-07-29T12:00:00Z', demoStartedAt: null, promptVariant: null });
+    vi.mocked(q.getActiveDemoSession).mockResolvedValue(session({ expiresAt: '2020-01-01T00:00:00Z' }) as never);
+    vi.mocked(q.countBotMessagesSince).mockResolvedValue(2);
+    const agent = agentReplying();
+    await handleInboundWebhook(inbound, agent);
+    expect(q.endDemoSession).toHaveBeenCalledWith('sess-1', 'expired');
+    expect(turnFrom(agent).demoHandoff).toMatchObject({ reason: 'expired' });
+  });
+
+  it('no session (manual keyword demo) → unchanged: tenant demo overrides, no budget', async () => {
+    vi.mocked(q.getConversationPersona).mockResolvedValue(demoPersona);
+    vi.mocked(q.getActiveDemoSession).mockResolvedValue(null);
+    const agent = agentReplying();
+    await handleInboundWebhook(inbound, agent);
+    expect(q.countBotMessagesSince).not.toHaveBeenCalled();
+    expect(q.endDemoSession).not.toHaveBeenCalled();
+    expect(turnFrom(agent).activeRole).toBe('demo');
+  });
+
+  it('a session read failure degrades to a manual demo, never a dropped reply', async () => {
+    vi.mocked(q.getConversationPersona).mockResolvedValue(demoPersona);
+    vi.mocked(q.getActiveDemoSession).mockRejectedValue(new Error('db down'));
+    const agent = agentReplying();
+    const res = await handleInboundWebhook(inbound, agent);
+    expect(res.body).toMatchObject({ replied: true });
+    expect(turnFrom(agent).activeRole).toBe('demo');
   });
 });

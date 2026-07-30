@@ -9,7 +9,7 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { GhlClient } from '../../../ghl/client.js';
-import { logAppointment, logBotEvent, reactivateConversation } from '../../../db/queries.js';
+import { getActiveDemoSession, logAppointment, logBotEvent, reactivateConversation, setSimulatedBooking } from '../../../db/queries.js';
 import { resolveAgentContext } from './agent-context.js';
 import { resolveActiveAppointment } from './resolve-appointment.js';
 
@@ -25,6 +25,20 @@ export const cancelAppointmentTool = createTool({
   }),
   execute: async (_input, ctx) => {
     const { tenant, turn } = resolveAgentContext(ctx);
+
+    // Demo mode: clear the session's simulated booking; never touch GHL or the store.
+    if (turn.activeRole === 'demo') {
+      const session = await getActiveDemoSession(turn.ghlConversationId).catch(() => null);
+      if (!session?.simulatedBooking) {
+        return { cancelled: false, message: 'No encuentro una cita activa para cancelar.' };
+      }
+      try {
+        await setSimulatedBooking(session.id, null);
+      } catch (e) {
+        console.error('[cancelAppointment] demo clear failed (non-blocking):', e instanceof Error ? e.message : String(e));
+      }
+      return { cancelled: true, message: 'Cita cancelada. Ofrece agendar otro horario si el lead quiere.' };
+    }
 
     const ghl = new GhlClient(tenant.tenantId);
     const appt = await resolveActiveAppointment(ghl, tenant.clientId, turn.ghlContactId, Date.now());

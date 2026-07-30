@@ -43,7 +43,7 @@ export async function loadTenantConfig(ghlLocationId: string): Promise<TenantCon
   const { data, error } = await supabase
     .from('tenant_config')
     .select(
-      'business_name, timezone, tone, services, hours, calendars, faq, enabled_roles, prompt_overrides, ai_provider, ai_model, ai_key_ref, awaiting_human_tag, follow_up_tiers, follow_up_cadence, follow_up_angles, quiet_hours, booking_horizon_days, enabled_channels, test_contact_ids, trigger_keywords, demo_on_keywords, demo_off_keywords, demo_prompt_overrides, keyword_variants, prompt_variants,' +
+      'business_name, timezone, tone, services, hours, calendars, faq, enabled_roles, prompt_overrides, ai_provider, ai_model, ai_key_ref, awaiting_human_tag, follow_up_tiers, follow_up_cadence, follow_up_angles, quiet_hours, booking_horizon_days, enabled_channels, test_contact_ids, trigger_keywords, demo_on_keywords, demo_off_keywords, demo_prompt_overrides, keyword_variants, prompt_variants, demo_sessions_enabled,' +
         'tenants!inner(id, client_id, ghl_location_id, is_active)',
     )
     .eq('tenants.ghl_location_id', ghlLocationId)
@@ -70,6 +70,7 @@ export async function loadTenantConfig(ghlLocationId: string): Promise<TenantCon
     demoOffKeywords: row.demo_off_keywords ?? null,
     keywordVariants: parseKeywordVariants(row.keyword_variants),
     awaitingHumanTag: row.awaiting_human_tag?.trim() ? row.awaiting_human_tag.trim() : null,
+    demoSessionsEnabled: row.demo_sessions_enabled === true,
     config: {
       businessName: row.business_name,
       timezone: row.timezone,
@@ -191,10 +192,14 @@ export async function markDelivered(messageId: string): Promise<void> {
   fail('markDelivered', error);
 }
 
-/** The conversation's persona: active role + when demo mode started (for clean-start history)
- *  + the campaign prompt variant pinned at activation (first-touch sticky). */
+/** The conversation's persona: active role + when the CURRENT persona took over
+ *  (clean-start history for demo AND for the closer after a demo ends) + the
+ *  campaign prompt variant pinned at activation (first-touch sticky). */
 export interface ConversationPersona {
   activeRole: string | null;
+  /** When the current persona took over (0038). null = no persona change ever. */
+  roleStartedAt: string | null;
+  /** Legacy demo-only stamp (0029); read as a fallback for rows written pre-0038. */
   demoStartedAt: string | null;
   promptVariant: string | null;
 }
@@ -204,20 +209,137 @@ export async function getConversationPersona(conversationId: string): Promise<Co
   const supabase = getSupabase();
   const { data, error } = await supabase
     .from('conversations')
-    .select('active_role, demo_started_at, prompt_variant')
+    .select('active_role, role_started_at, demo_started_at, prompt_variant')
     .eq('id', conversationId)
     .maybeSingle();
   fail('getConversationPersona', error);
   const row = data as {
     active_role: string | null;
+    role_started_at: string | null;
     demo_started_at: string | null;
     prompt_variant: string | null;
   } | null;
   return {
     activeRole: row?.active_role ?? null,
+    roleStartedAt: row?.role_started_at ?? null,
     demoStartedAt: row?.demo_started_at ?? null,
     promptVariant: row?.prompt_variant ?? null,
   };
+}
+
+// ── Demo sessions (0038): budgeted per-lead self-demos (the lead-magnet funnel) ──
+
+/** A demo session's simulated (never-real) booking. */
+export interface SimulatedBooking {
+  startTime: string;
+  serviceName: string;
+  label: string;
+}
+
+export interface ActiveDemoSession {
+  id: string;
+  activatedAt: string;
+  expiresAt: string;
+  messageBudget: number;
+  personaVersion: number;
+  leadData: Record<string, unknown>;
+  /** The generated persona, overlaid onto demoPromptOverrides at turn time. */
+  promptOverrides: unknown;
+  simulatedBooking: SimulatedBooking | null;
+}
+
+/** The conversation's ACTIVE demo session, or null (manual keyword demos have none). */
+export async function getActiveDemoSession(ghlConversationId: string): Promise<ActiveDemoSession | null> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from('demo_sessions')
+    .select('id, activated_at, expires_at, message_budget, persona_version, lead_data, prompt_overrides, simulated_booking')
+    .eq('ghl_conversation_id', ghlConversationId)
+    .eq('status', 'active')
+    .maybeSingle();
+  fail('getActiveDemoSession', error);
+  if (!data) return null;
+  const row = data as {
+    id: string;
+    activated_at: string;
+    expires_at: string;
+    message_budget: number;
+    persona_version: number;
+    lead_data: Record<string, unknown> | null;
+    prompt_overrides: unknown;
+    simulated_booking: SimulatedBooking | null;
+  };
+  return {
+    id: row.id,
+    activatedAt: row.activated_at,
+    expiresAt: row.expires_at,
+    messageBudget: row.message_budget,
+    personaVersion: row.persona_version,
+    leadData: row.lead_data ?? {},
+    promptOverrides: row.prompt_overrides,
+    simulatedBooking: row.simulated_booking ?? null,
+  };
+}
+
+/** Create a session + flip the conversation into demo, atomically (app_create_demo_session).
+ *  A running session is replaced, not errored. Returns the new session id. */
+export async function createDemoSession(params: {
+  ghlConversationId: string;
+  leadData: Record<string, unknown>;
+  promptOverrides: unknown;
+  messageBudget: number;
+  expiresMinutes: number;
+  personaVersion?: number;
+}): Promise<string> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase.rpc('app_create_demo_session', {
+    p_ghl_conversation_id: params.ghlConversationId,
+    p_lead_data: params.leadData,
+    p_prompt_overrides: params.promptOverrides,
+    p_message_budget: params.messageBudget,
+    p_expires_minutes: params.expiresMinutes,
+    p_persona_version: params.personaVersion ?? 1,
+  });
+  fail('createDemoSession', error);
+  if (typeof data !== 'string') throw new Error('[db:createDemoSession] RPC returned no session id');
+  return data;
+}
+
+/** End a session + flip the conversation back to the normal persona, atomically. */
+export async function endDemoSession(
+  sessionId: string,
+  reason: 'exhausted' | 'expired' | 'closed',
+): Promise<void> {
+  const supabase = getSupabase();
+  const { error } = await supabase.rpc('app_end_demo_session', {
+    p_session_id: sessionId,
+    p_reason: reason,
+  });
+  fail('endDemoSession', error);
+}
+
+/** Bot messages logged since a timestamp — the demo budget meter (counts the
+ *  message PARTS the lead actually received; self-healing, no counter drift). */
+export async function countBotMessagesSince(conversationId: string, sinceTs: string): Promise<number> {
+  const supabase = getSupabase();
+  const { count, error } = await supabase
+    .from('messages')
+    .select('id', { count: 'exact', head: true })
+    .eq('conversation_id', conversationId)
+    .eq('sender_type', 'bot')
+    .gte('sent_at', sinceTs);
+  fail('countBotMessagesSince', error);
+  return count ?? 0;
+}
+
+/** Store/clear the session's simulated booking (demo bookings never touch GHL). */
+export async function setSimulatedBooking(sessionId: string, booking: SimulatedBooking | null): Promise<void> {
+  const supabase = getSupabase();
+  const { error } = await supabase
+    .from('demo_sessions')
+    .update({ simulated_booking: booking })
+    .eq('id', sessionId);
+  fail('setSimulatedBooking', error);
 }
 
 /**

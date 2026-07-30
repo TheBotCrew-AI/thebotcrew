@@ -177,3 +177,34 @@ describe('bookAppointment', () => {
     });
   });
 });
+
+describe('bookAppointment — demo mode (simulated booking)', () => {
+  it('books only an exact simulated slot, stores it on the session, never calls GHL', async () => {
+    const { simulatedSlots } = await import('./demo-sim.js');
+    const tenant = {
+      tenantId: 't1', clientId: 'client1',
+      config: { businessName: 'X', timezone: 'America/Mexico_City', tone: null, services: [], hours: {}, calendars: {}, faq: [], promptOverrides: {} },
+    } as unknown as TenantContext;
+    const turn = { ghlContactId: 'c1', ghlConversationId: 'conv1', channel: 'whatsapp', activeRole: 'demo' } as TurnContext;
+    const ctx = { requestContext: { get: (k: string) => (k === 'tenant' ? tenant : k === 'turn' ? turn : undefined) } };
+    vi.mocked(q.getActiveDemoSession).mockResolvedValue({
+      id: 's1', activatedAt: '', expiresAt: '', messageBudget: 15, personaVersion: 1,
+      leadData: {}, promptOverrides: {}, simulatedBooking: null,
+    });
+    vi.mocked(q.setSimulatedBooking).mockResolvedValue(undefined);
+
+    const slot = simulatedSlots('conv1', 'America/Mexico_City', Date.now())[0]!;
+    const exec = bookAppointmentTool.execute as (i: Record<string, unknown>, c: unknown) => Promise<{ booked: boolean; message: string }>;
+
+    // A made-up time is refused (same anti-hallucination rule as the real path).
+    const bad = await exec({ serviceName: 'Limpieza', startTime: '2030-01-01T09:13:00-07:00' }, ctx);
+    expect(bad.booked).toBe(false);
+
+    const good = await exec({ serviceName: 'Limpieza', startTime: slot.start }, ctx);
+    expect(good.booked).toBe(true);
+    expect(q.setSimulatedBooking).toHaveBeenCalledWith('s1', expect.objectContaining({ startTime: slot.start, serviceName: 'Limpieza' }));
+    expect(ghl.bookAppointment).not.toHaveBeenCalled(); // no real GHL traffic
+    expect(ghl.getAvailability).not.toHaveBeenCalled();
+    expect(q.logAppointment).not.toHaveBeenCalled(); // nothing in the real stats layer
+  });
+});

@@ -91,3 +91,33 @@ describe('getAvailability', () => {
     expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'availability_checked', expect.objectContaining({ outcome: 'error' }));
   });
 });
+
+describe('getAvailability — demo mode (simulated slots)', () => {
+  const demoCtx = () => {
+    const base = makeCtx();
+    const tenant = base.requestContext.get('tenant');
+    const turn = { ghlContactId: 'c1', ghlConversationId: 'conv1', channel: 'whatsapp', activeRole: 'demo' } as TurnContext;
+    return { requestContext: { get: (k: string) => (k === 'tenant' ? tenant : k === 'turn' ? turn : undefined) } };
+  };
+
+  it('returns simulated slots without ever calling GHL — even for an unconfigured service', async () => {
+    vi.mocked(q.getActiveDemoSession).mockResolvedValue(null);
+    const res = await run({ serviceName: 'Limpieza dental del negocio del lead' }, demoCtx() as ReturnType<typeof makeCtx>);
+    expect(res.slots.length).toBeGreaterThan(0);
+    expect(res.slots[0]?.label).toBeTruthy();
+    expect(ghl.getAvailability).not.toHaveBeenCalled();
+    expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'availability_checked', expect.objectContaining({ demo: true }));
+  });
+
+  it('excludes the session simulated booking from the offered slots', async () => {
+    vi.mocked(q.getActiveDemoSession).mockResolvedValue(null);
+    const first = await run({ serviceName: 'X' }, demoCtx() as ReturnType<typeof makeCtx>);
+    const booked = first.slots[0]!.start;
+    vi.mocked(q.getActiveDemoSession).mockResolvedValue({
+      id: 's1', activatedAt: '', expiresAt: '', messageBudget: 15, personaVersion: 1,
+      leadData: {}, promptOverrides: {}, simulatedBooking: { startTime: booked, serviceName: 'X', label: 'x' },
+    });
+    const res = await run({ serviceName: 'X' }, demoCtx() as ReturnType<typeof makeCtx>);
+    expect(res.slots.map((s) => s.start)).not.toContain(booked);
+  });
+});

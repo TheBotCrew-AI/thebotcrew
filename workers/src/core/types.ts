@@ -87,7 +87,18 @@ export interface TenantContext {
   /** Tag written on the GHL contact when the bot leaves a request for a person to pick
    *  up (flagAwaitingHuman). null = this tenant doesn't use that signal. */
   awaitingHumanTag: string | null;
+  /** Whether the startDemo tool may create budgeted per-lead demo sessions on this
+   *  tenant (the lead-magnet funnel). false = the tool refuses; nothing else changes. */
+  demoSessionsEnabled: boolean;
   config: RawTenantConfig;
+}
+
+/** Context injected into the turn right after a demo session ended: the normal
+ *  persona (the closer) answers knowing what the lead just experienced. */
+export interface DemoHandoff {
+  reason: 'exhausted' | 'expired';
+  businessName?: string;
+  businessType?: string;
 }
 
 /** Identifiers for the single inbound turn currently being handled. */
@@ -108,6 +119,8 @@ export interface TurnContext {
    *  Present so the agent knows it already booked and never re-offers availability against
    *  its own appointment (the self-block class). Skipped in demo mode (clean-start). */
   activeAppointment?: { startTime: string; service?: string };
+  /** Set only on the turn where a demo session just ended — the closer's context. */
+  demoHandoff?: DemoHandoff;
 }
 
 /** A turn in our own conversation store, used to rebuild agent history. */

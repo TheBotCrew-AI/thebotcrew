@@ -10,6 +10,7 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { GhlClient } from '../../../ghl/client.js';
+import { getActiveDemoSession } from '../../../db/queries.js';
 import { resolveAgentContext } from './agent-context.js';
 import { resolveActiveAppointment } from './resolve-appointment.js';
 
@@ -28,6 +29,23 @@ export const lookupAppointmentTool = createTool({
   }),
   execute: async (_input, ctx) => {
     const { tenant, turn, config } = resolveAgentContext(ctx);
+
+    // Demo mode: answer from the session's simulated booking — never from the
+    // real store/GHL (the demo must not see the lead's real appointments).
+    if (turn.activeRole === 'demo') {
+      const session = await getActiveDemoSession(turn.ghlConversationId).catch(() => null);
+      const b = session?.simulatedBooking;
+      if (!b) {
+        return { found: false, message: 'No encuentro una cita activa a tu nombre.' };
+      }
+      return {
+        found: true,
+        startTime: b.startTime,
+        label: b.label,
+        service: b.serviceName,
+        message: `La cita activa es: ${b.label} (${b.serviceName}). Preséntala usando ese texto exacto.`,
+      };
+    }
 
     const ghl = new GhlClient(tenant.tenantId);
     const appt = await resolveActiveAppointment(ghl, tenant.clientId, turn.ghlContactId, Date.now());

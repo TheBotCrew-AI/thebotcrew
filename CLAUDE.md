@@ -144,7 +144,9 @@ supabase/
                                # 0033 per_tenant_ai_key_and_llm_usage (ai_key_ref slug + llm_usage/model_pricing + cost view),
                                # 0034 awaiting_human_tag, 0035 reactivation_rules (awaiting_human status + selective reactivation),
                                # 0036 prompt_variants (per-campaign prompts: n:1 keyword→variant, first-touch sticky),
-                               # 0037 demo_restamp_fix (idempotent demo activation + demo guards: no real side effects in roleplay)
+                               # 0037 demo_restamp_fix (idempotent demo activation + demo guards: no real side effects in roleplay),
+                               # 0038 demo_sessions (lead-magnet funnel: budgeted per-lead self-demos, startDemo tool,
+                               #      role_started_at expand, simulated booking in demo mode — see business-logic §5c)
   clients.sql, seed-tenants.sql# seeds (run by `supabase db reset` per config.toml)
 sites/                         # client marketing sites: static HTML, no build step, no deps
   _template/                   # starting point for a new client
