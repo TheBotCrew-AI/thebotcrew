@@ -420,7 +420,10 @@ and never create sessions.
 3. Each turn while in demo reads the session fresh: the generated persona is overlaid onto
    `demoPromptOverrides`, and **budget + expiry** are enforced BEFORE generating. Budget =
    bot message PARTS since activation (derived by counting `messages`, self-healing — no
-   counter to drift under the debounce), default 15; expiry default 48h, enforced lazily at
+   counter to drift under the debounce) **counted from the lead's first in-character
+   message**, so the startDemo announcement isn't charged — default **7**, deliberately
+   short: the demo only has to prove it works, and ending while the lead still wants more
+   is what makes the closer land. Expiry default 48h, enforced lazily at
    turn time (an abandoned demo just sits until the lead writes again).
 4. Exhausted/expired → `app_end_demo_session`: session ended + flip to `active_role=NULL`,
    atomic. The turn re-reads the persona and answers as **the closer** — the tenant's normal

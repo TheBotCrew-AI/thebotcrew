@@ -19,8 +19,13 @@ import { DEMO_SESSION_TAGS } from '../../../ghl/tags.js';
 import { buildDemoPersona, PERSONA_VERSION } from '../demo-persona.js';
 import { resolveAgentContext } from './agent-context.js';
 
-/** Bot message PARTS (what the lead sees as messages) before the closer takes over. */
-export const DEMO_MESSAGE_BUDGET = 15;
+/**
+ * Bot message PARTS (what the lead sees as messages) before the closer takes over.
+ * Counted from the lead's first in-character message, so the startDemo announcement
+ * isn't charged. Kept deliberately short: the demo only has to prove the thing works
+ * — ending while the lead still wants more is what makes the closer land.
+ */
+export const DEMO_MESSAGE_BUDGET = 7;
 /** Wall-clock cap: an abandoned demo ends (as 'expired') when the lead next writes. */
 export const DEMO_EXPIRES_MINUTES = 48 * 60;
 
