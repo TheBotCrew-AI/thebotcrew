@@ -278,3 +278,26 @@ describe('buildFrontDeskInstructions — demo closer (setter flow)', () => {
     expect(out).not.toContain('undefined');
   });
 });
+
+describe('buildFrontDeskInstructions — demo conversational variety', () => {
+  const demo = () =>
+    buildFrontDeskInstructions(cfg({ demoPromptOverrides: { identity: 'Recepción' } }), NOW, undefined, 'demo');
+
+  it('bans repeating the same closing question and offers alternative angles', () => {
+    const out = demo();
+    expect(out).toContain('NUNCA repitas la misma pregunta de cierre');
+    expect(out).toContain('¿te acomoda mejor entre semana o el sábado?');
+    expect(out).toContain('¿mañana o tarde te funciona mejor?');
+    expect(out).toContain('A veces contesta y ya, sin cierre');
+  });
+
+  it('tells it to stop asking once intent is clear', () => {
+    expect(demo()).toContain('deja de preguntarle si quiere');
+  });
+
+  it('never renders for a non-demo persona (real tenants unaffected)', () => {
+    const out = buildFrontDeskInstructions(cfg(), NOW);
+    expect(out).not.toContain('Cómo llevas la conversación (demo)');
+    expect(out).toContain('# Cuándo actualizar el estado de la conversación');
+  });
+});

@@ -115,6 +115,28 @@ Dilo con claridad: una persona del equipo va a continuar.
  * enforces the same rule (the three side-effect tools no-op when activeRole==='demo')
  * — this section just keeps the model from trying.
  */
+/**
+ * How the demo persona MOVES the conversation. Lives here (not in the generated
+ * persona) because it's generic demo craft, not lead-specific data — so it applies
+ * to every demo immediately, including sessions already running.
+ *
+ * The failure it fixes: closing every single message with the same
+ * "¿quieres que te muestre los horarios?" — the tell that gives away a bot.
+ */
+const DEMO_FLOW_SECTION = `# Cómo llevas la conversación (demo)
+Tu meta es que el cliente agende, pero no la persigas en cada mensaje: eso suena a robot y cansa.
+- NUNCA repitas la misma pregunta de cierre. Si ya preguntaste "¿quieres que te muestre los horarios?" (o cualquier variante), no la vuelvas a usar en toda la conversación.
+- Varía el ángulo según el momento. Algunos que sí funcionan:
+  · Asumir la cita: "¿te acomoda mejor entre semana o el sábado?"
+  · Preferencia de horario: "¿mañana o tarde te funciona mejor?"
+  · Diagnóstico: "¿es tu primera vez con este tratamiento?"
+  · Escasez suave y real: "esta semana todavía me quedan un par de espacios"
+  · Directo: consulta los horarios y ofrécelos sin preguntar antes.
+- A veces contesta y ya, sin cierre. Un mensaje sin pregunta también avanza la conversación y suena mucho más humano.
+- Si el cliente YA mostró intención de agendar, deja de preguntarle si quiere: consulta horarios y ofrécele opciones concretas.
+
+`;
+
 const DEMO_STATE_SECTION = `# Modo demo: sin efectos reales
 Esta conversación es una DEMO (juego de rol). NUNCA llames updateConversationStatus, updateContactName ni flagAwaitingHuman: aquí nada es terminal y el contacto real no debe modificarse. Si el lead quiere terminar el juego de rol o pregunta por la demo misma, responde con naturalidad dentro de tu papel o deja que lo diga con la palabra de salida.
 `;
@@ -364,7 +386,7 @@ ${renderHours(config)}${flowSection}${toolInstructionsSection}${reminderSection}
 # Uso de herramientas
 Cuando necesites llamar una herramienta, NO generes texto antes de la llamada. Llama la herramienta en silencio y escribe tu respuesta al lead ÚNICAMENTE después de tener el resultado final. Un solo mensaje, sin intermedios.
 ${bookingEnabled ? BOOKING_SECTIONS : NO_BOOKING_SECTION}
-${usingDemo ? DEMO_STATE_SECTION : STATE_SECTIONS}
+${usingDemo ? DEMO_FLOW_SECTION + DEMO_STATE_SECTION : STATE_SECTIONS}
 Responde siempre en español.`;
 }
 
