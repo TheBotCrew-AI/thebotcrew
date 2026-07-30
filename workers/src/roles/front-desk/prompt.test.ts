@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { DemoHandoff } from '../../core/types.js';
 import { parseFrontDeskConfig } from './config.js';
-import { buildFrontDeskInstructions } from './prompt.js';
+import { buildDemoEndAnnouncement, buildFrontDeskInstructions } from './prompt.js';
 
 const cfg = (raw: Record<string, unknown> = {}) =>
   parseFrontDeskConfig({
@@ -380,5 +380,34 @@ describe('buildFrontDeskInstructions — closer replaces the tenant flow (the "�
       { reason: 'closed', businessName: 'X' },
     );
     expect(out).toContain('El lead cerró la demo él mismo');
+  });
+});
+
+describe('buildDemoEndAnnouncement (deterministic handover)', () => {
+  it('announces the end, names the business, and asks the soft question', () => {
+    const out = buildDemoEndAnnouncement({ reason: 'exhausted', businessName: 'BeautyFull', leadName: 'Leo' });
+    expect(out).toContain('Leo, hasta aquí llega la demo');
+    expect(out).toContain('el asistente que armé para BeautyFull');
+    expect(out).toContain('¿Te serviría tenerlo en BeautyFull contestando así a cada cliente, 24/7?');
+    expect(out).toContain('\n\n'); // splits into two short WhatsApp messages
+  });
+
+  it('uses the booking as proof when the lead booked inside the demo', () => {
+    const booked = buildDemoEndAnnouncement({ reason: 'exhausted', businessName: 'X', booked: true });
+    expect(booked).toContain('hasta te agendó la cita');
+    const notBooked = buildDemoEndAnnouncement({ reason: 'exhausted', businessName: 'X' });
+    expect(notBooked).not.toContain('te agendó la cita');
+  });
+
+  it('says so when the demo expired, and degrades without a business name', () => {
+    const expired = buildDemoEndAnnouncement({ reason: 'expired' });
+    expect(expired).toContain('se cerró por tiempo');
+    expect(expired).toContain('tu negocio');
+    expect(expired).not.toContain('undefined');
+  });
+
+  it('stays chat-length (no brochure)', () => {
+    const out = buildDemoEndAnnouncement({ reason: 'exhausted', businessName: 'BeautyFull', leadName: 'Leo', booked: true });
+    expect(out.length).toBeLessThan(320);
   });
 });

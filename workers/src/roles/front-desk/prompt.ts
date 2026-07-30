@@ -424,6 +424,31 @@ ${usingDemo ? DEMO_FLOW_SECTION + DEMO_STATE_SECTION : STATE_SECTIONS}
 Responde siempre en español.`;
 }
 
+/**
+ * The one message that must be exactly right: the announcement that the demo ended.
+ *
+ * DETERMINISTIC, not model-generated. Two attempts at instructing the model failed in
+ * production (2026-07-30): with the lead's last in-character question sitting in the
+ * history, the model answered it and jumped to the pitch, skipping the announcement
+ * entirely — the lead never learns the demo is over. Same reasoning as the booking
+ * slot resolver: where correctness is non-negotiable, the runtime decides, not the LLM.
+ *
+ * The blank line makes it two short WhatsApp messages (see splitIntoMessages).
+ */
+export function buildDemoEndAnnouncement(handoff: DemoHandoff): string {
+  const biz = handoff.businessName?.trim() || 'tu negocio';
+  const hi = handoff.leadName?.trim() ? `${handoff.leadName.trim()}, hasta` : 'Hasta';
+  const timeUp = handoff.reason === 'expired' ? ' (se cerró por tiempo)' : '';
+  const proof = handoff.booked
+    ? ` — y hasta te agendó la cita, sin que nadie del equipo estuviera`
+    : '';
+  return (
+    `${hi} aquí llega la demo 👋${timeUp} Todo eso lo respondió el asistente que armé para ${biz} ` +
+    `con los datos que me diste${proof}.` +
+    `\n\n¿Te serviría tenerlo en ${biz} contestando así a cada cliente, 24/7?`
+  );
+}
+
 /** Human, tenant-tz label for an appointment's ISO start (weekday + date + time, es-MX). */
 function formatApptLabel(iso: string, timeZone: string): string {
   try {

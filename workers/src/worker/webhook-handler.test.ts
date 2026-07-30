@@ -593,12 +593,14 @@ describe('handleInboundWebhook — demo sessions (budget, expiry, closer flip)',
     expect(q.endDemoSession).toHaveBeenCalledWith('sess-1', 'exhausted');
     expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'demo_session_ended',
       expect.objectContaining({ reason: 'exhausted' }));
-    const turn = turnFrom(agent);
-    expect(turn.activeRole).toBeUndefined(); // the closer = the NORMAL persona
-    expect(turn.demoHandoff).toMatchObject({ reason: 'exhausted', businessName: 'Clínica Sonrisa' });
-    // Closer history truncates at the flip (role_started_at from the re-read).
-    expect(q.loadRecentMessages).toHaveBeenCalledWith('cv-uuid', 20, '2026-07-29T12:00:00Z');
-    // The closer turn re-arms follow-ups if the tenant has a cadence (activeRole is null now).
+    // The handover message is DETERMINISTIC — the model is not consulted on this turn,
+    // because twice in production it answered the lead's last in-character question and
+    // pitched instead of announcing that the demo was over.
+    expect(agent.generate).not.toHaveBeenCalled();
+    const sent = ghl.sendMessage.mock.calls.map((c) => (c[0] as { text: string }).text).join('\n');
+    expect(sent).toContain('Hasta aquí llega la demo');
+    expect(sent).toContain('Clínica Sonrisa');
+    expect(sent).toContain('24/7');
   });
 
   it('expired session → same flip with reason expired', async () => {
@@ -610,7 +612,9 @@ describe('handleInboundWebhook — demo sessions (budget, expiry, closer flip)',
     const agent = agentReplying();
     await handleInboundWebhook(inbound, agent);
     expect(q.endDemoSession).toHaveBeenCalledWith('sess-1', 'expired');
-    expect(turnFrom(agent).demoHandoff).toMatchObject({ reason: 'expired' });
+    expect(agent.generate).not.toHaveBeenCalled();
+    const sent = ghl.sendMessage.mock.calls.map((c) => (c[0] as { text: string }).text).join('\n');
+    expect(sent).toContain('se cerró por tiempo'); // expiry is stated, not glossed over
   });
 
   it('no session (manual keyword demo) → unchanged: tenant demo overrides, no budget', async () => {
@@ -741,23 +745,33 @@ describe('handleInboundWebhook — demo self-block guard + closer context hygien
     expect(q.countBotMessagesSince).toHaveBeenCalledWith('cv-uuid', '2026-07-30T14:01:00Z');
   });
 
-  it("the closer sees only the lead's messages — the roleplay tail can't pull it back in character", async () => {
+  it("the handover ignores the lead's last in-character message instead of answering it", async () => {
+    // The live failure: the lead's last demo message was a question ("¿debo ir
+    // preparada?") and the model answered it, so the demo just... stopped being a demo.
     vi.mocked(q.getConversationPersona)
       .mockResolvedValueOnce(demoPersona)
-      .mockResolvedValue({ activeRole: null, roleStartedAt: '2026-07-30T14:29:29Z', demoStartedAt: null, promptVariant: null });
+      .mockResolvedValue({ activeRole: 'closer', roleStartedAt: '2026-07-30T14:29:29Z', demoStartedAt: null, promptVariant: null });
     vi.mocked(q.getActiveDemoSession).mockResolvedValue(session() as never);
     vi.mocked(q.firstInboundAfter).mockResolvedValue('2026-07-30T14:01:00Z');
     vi.mocked(q.countBotMessagesSince).mockResolvedValue(15);
-    vi.mocked(q.loadRecentMessages).mockResolvedValue([
-      { direction: 'inbound', senderType: 'lead', content: '¿cómo funciona la depilación?', sentAt: '2026-07-30T14:29:29Z' },
-      { direction: 'outbound', senderType: 'bot', content: 'Lo siento, el turno ya se ocupó…', sentAt: '2026-07-30T14:29:39Z' },
-      { direction: 'outbound', senderType: 'bot', content: '- viernes 10:00\n- sábado 11:30', sentAt: '2026-07-30T14:29:43Z' },
-    ]);
-    const agent = agentReplying();
-    await handleInboundWebhook(inbound, agent);
-    const msgs = modelMessages(agent);
-    expect(msgs.every((m) => m.role === 'user')).toBe(true);
-    expect(JSON.stringify(msgs)).not.toContain('ya se ocupó');
+    const agent = agentReplying('respuesta del modelo que NO debe salir');
+    await handleInboundWebhook({ ...inbound, body: '¿debo ir preparada?' }, agent);
+
+    expect(agent.generate).not.toHaveBeenCalled();
+    const sent = ghl.sendMessage.mock.calls.map((c) => (c[0] as { text: string }).text).join('\n');
+    expect(sent).not.toContain('respuesta del modelo');
+    expect(sent).toContain('Hasta aquí llega la demo');
+  });
+
+  it('the handover still respects a human takeover mid-turn', async () => {
+    vi.mocked(q.getConversationPersona)
+      .mockResolvedValueOnce(demoPersona)
+      .mockResolvedValue({ activeRole: 'closer', roleStartedAt: '2026-07-29T12:00:00Z', demoStartedAt: null, promptVariant: null });
+    vi.mocked(q.getActiveDemoSession).mockResolvedValue(session() as never);
+    vi.mocked(q.countBotMessagesSince).mockResolvedValue(15);
+    vi.mocked(q.isHumanActive).mockResolvedValue(true);
+    await handleInboundWebhook(inbound, agentReplying());
+    expect(ghl.sendMessage).not.toHaveBeenCalled();
   });
 });
 

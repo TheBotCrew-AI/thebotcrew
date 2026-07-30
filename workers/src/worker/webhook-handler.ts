@@ -57,6 +57,7 @@ import { parseInboundWebhook } from '../ghl/webhook.js';
 import { demoEndTag, STATUS_TAGS } from '../ghl/tags.js';
 import type { GhlInboundWebhook, ParsedInbound } from '../ghl/types.js';
 import { DEFAULT_MODEL, DEFAULT_PROVIDER, FRONT_DESK_ROLE } from '../roles/front-desk/index.js';
+import { buildDemoEndAnnouncement } from '../roles/front-desk/prompt.js';
 
 /**
  * Milliseconds to wait after the last inbound message before running the agent.
@@ -427,6 +428,8 @@ export async function runAgentTurn({
   let demoBooking: SimulatedBooking | null = null;
   /** When the demo ended — bot messages before it are roleplay, not the closer's own. */
   let demoEndedAt: string | undefined;
+  /** True only on the turn that ends the demo: that reply is deterministic, not generated. */
+  let demoJustEnded = false;
   if (activeRole === 'demo') {
     try {
       const session = await getActiveDemoSession(parsed.conversationId);
@@ -447,6 +450,7 @@ export async function runAgentTurn({
           });
           demoHandoff = buildDemoHandoff(session.leadData, reason, !!session.simulatedBooking);
           demoEndedAt = new Date().toISOString();
+          demoJustEnded = true;
           console.log(`[demo-session] ended conv=${parsed.conversationId} reason=${reason} used=${used}`);
           // Funnel outcome onto the GHL contact: completed = used the full budget (hot);
           // incomplete = expired/abandoned (retargeting pool). Best-effort mirror.
@@ -602,47 +606,61 @@ export async function runAgentTurn({
     llmApiKey: aiKey.apiKey,
   });
 
-  console.log(`[agent] generating conv=${parsed.conversationId} model=${model} historyLen=${messages.length}`);
-  let result;
-  try {
-    // 8 steps: a booking turn can chain getAvailability + bookAppointment (which also saves
-    // the reminder number) + updateConversationStatus and still leave room for the final
-    // written reply. Too low
-    // and the turn exhausts steps mid-flow and emits only a pre-tool intro (truncated reply).
-    result = await agent.generate(messages, { requestContext, maxSteps: 8 });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.error('[agent] generate failed:', msg);
-    logError(tenant.clientId, parsed.conversationId, 'agent_error', {
-      error: msg,
-      model,
-      historyLen: messages.length,
-      inbound: parsed.text.slice(0, 120),
-    });
-    return { status: 500, body: { error: 'agent_generate_failed', conversationId } };
+  // The demo just ended: this one reply is DETERMINISTIC, not generated. Two rounds of
+  // prompt instructions failed in production — with the lead's last in-character question
+  // sitting in the history, the model answered it and jumped to the pitch, never telling
+  // the lead the demo was over. The announcement is the hinge of the whole funnel, so the
+  // runtime writes it (same principle as the booking slot resolver). Every turn after this
+  // one is model-driven again, with the closer persona persisting.
+  const forcedReply = demoJustEnded && demoHandoff ? buildDemoEndAnnouncement(demoHandoff) : undefined;
+
+  let reply: string;
+  if (forcedReply) {
+    reply = forcedReply;
+    console.log(`[demo-session] deterministic handover reply conv=${parsed.conversationId}`);
+  } else {
+    console.log(`[agent] generating conv=${parsed.conversationId} model=${model} historyLen=${messages.length}`);
+    let result;
+    try {
+      // 8 steps: a booking turn can chain getAvailability + bookAppointment (which also saves
+      // the reminder number) + updateConversationStatus and still leave room for the final
+      // written reply. Too low
+      // and the turn exhausts steps mid-flow and emits only a pre-tool intro (truncated reply).
+      result = await agent.generate(messages, { requestContext, maxSteps: 8 });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('[agent] generate failed:', msg);
+      logError(tenant.clientId, parsed.conversationId, 'agent_error', {
+        error: msg,
+        model,
+        historyLen: messages.length,
+        inbound: parsed.text.slice(0, 120),
+      });
+      return { status: 500, body: { error: 'agent_generate_failed', conversationId } };
+    }
+    console.log(`[agent] reply conv=${parsed.conversationId} replyLen=${result.text?.length ?? 0}`);
+    // The agent turn is the bulk of the spend — record it before any of the
+    // early-return paths below (human takeover, etc.) can skip it. The tokens were
+    // burned whether or not we end up sending the reply.
+    const turnUsage = usageFromAgentResult(result);
+    if (turnUsage) {
+      void logLlmUsage({
+        clientId: tenant.clientId,
+        ghlConversationId: parsed.conversationId,
+        callKind: FRONT_DESK_ROLE,
+        provider,
+        model,
+        usage: turnUsage,
+        keySource: aiKey.source,
+      });
+    }
+    // result.text concatenates text from every step when the agent makes multiple tool calls
+    // (the model generates narration before each call). Use only the last step's text.
+    const steps = (result as { steps?: Array<{ text?: string }> }).steps;
+    reply = steps?.length
+      ? (steps.slice().reverse().find((s) => s.text?.trim())?.text?.trim() ?? result.text)
+      : result.text;
   }
-  console.log(`[agent] reply conv=${parsed.conversationId} replyLen=${result.text?.length ?? 0}`);
-  // The agent turn is the bulk of the spend — record it before any of the
-  // early-return paths below (human takeover, etc.) can skip it. The tokens were
-  // burned whether or not we end up sending the reply.
-  const turnUsage = usageFromAgentResult(result);
-  if (turnUsage) {
-    void logLlmUsage({
-      clientId: tenant.clientId,
-      ghlConversationId: parsed.conversationId,
-      callKind: FRONT_DESK_ROLE,
-      provider,
-      model,
-      usage: turnUsage,
-      keySource: aiKey.source,
-    });
-  }
-  // result.text concatenates text from every step when the agent makes multiple tool calls
-  // (the model generates narration before each call). Use only the last step's text.
-  const steps = (result as { steps?: Array<{ text?: string }> }).steps;
-  const reply = steps?.length
-    ? (steps.slice().reverse().find((s) => s.text?.trim())?.text?.trim() ?? result.text)
-    : result.text;
 
   // Anti-double guard: a HUMAN may have replied in GHL WHILE we were generating.
   // Re-check before sending so we don't talk over them. We bail BEFORE logging the
@@ -662,7 +680,7 @@ export async function runAgentTurn({
   // Demo guard: the truncated demo history re-opens the "opening exchanges" window, and
   // the name a lead roleplays with must never overwrite their real GHL contact name.
   const confirmContactName =
-    activeRole !== 'demo' &&
+    activeRole !== 'demo' && !forcedReply &&
     (tenant.config.promptOverrides as { confirmContactName?: boolean } | null | undefined)?.confirmContactName === true;
   if (confirmContactName) {
     const priorBotMessages = history.filter((m) => m.senderType === 'bot').length;
@@ -678,7 +696,11 @@ export async function runAgentTurn({
   // must not opt the REAL lead out (status + GHL tag + reactivation rules all real).
   const hasQuestion = reply.includes('?');
   console.log(`[classify] conv=${parsed.conversationId} hasQuestion=${hasQuestion}`);
-  const outcome = activeRole === 'demo' ? null : await classifyConversationOutcome(parsed.text, reply, aux);
+  // Skipped for the forced handover too: it always ends in a question, and the lead's last
+  // message was in-character roleplay — nothing there is a real terminal state.
+  const outcome = activeRole === 'demo' || forcedReply
+    ? null
+    : await classifyConversationOutcome(parsed.text, reply, aux);
   console.log(`[classify] outcome=${outcome ?? 'null (active or error)'}`);
   if (outcome) {
     try {
