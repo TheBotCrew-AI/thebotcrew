@@ -151,7 +151,10 @@ supabase/
                                #      diff/revert per tenant; no code reads it),
                                # 0040 closer_role (a demo ends INTO active_role='closer' — the setter persona persists
                                #      for the whole post-demo conversation, not just the flip turn),
-                               # 0041 demo_end_reason_booked (a simulated booking ends the demo: objective met → pitch)
+                               # 0041 demo_end_reason_booked (a simulated booking ends the demo: objective met → pitch),
+                               # 0042 lead_disqualified_event (optional `reason` on updateConversationStatus →
+                               #      a distinct event, so a lead ruled out on purpose stops looking like an
+                               #      ordinary standby — see business-logic §2b)
   clients.sql, seed-tenants.sql# seeds (run by `supabase db reset` per config.toml)
 sites/                         # client marketing sites: static HTML, no build step, no deps
   _template/                   # starting point for a new client

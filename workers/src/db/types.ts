@@ -177,7 +177,11 @@ export type BotEventType =
   // Bot left a request ready for a person to pick up (flagAwaitingHuman)
   | 'awaiting_human'
   // Conversation switched into / out of the demo persona ({to} in metadata)
-  | 'demo_toggled';
+  | 'demo_toggled'
+  // The bot ruled a lead out and parked it ({status, reason} in metadata, 0042).
+  // Reason is the model's own words — read it, don't just count rows: an
+  // unexpected reason is the fingerprint of a model disqualifying on its own terms.
+  | 'lead_disqualified';
 
 export interface LogAppointmentParams {
   p_client_id: string;

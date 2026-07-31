@@ -4,9 +4,9 @@
  * Offline cases (always run): prompt template + config validation — the
  * deterministic backbone of the anti-hallucination guarantee.
  *
- * Live cases (run only when ANTHROPIC_API_KEY is set): exercise the real agent
- * for qualification, booking intent, and anti-hallucination behavior. They build
- * the request context by hand so no DB is needed.
+ * Live cases (run only when an OpenAI or Anthropic key is set; see eval-model.ts):
+ * exercise the real agent for qualification, booking intent, and anti-hallucination
+ * behavior. They build the request context by hand so no DB is needed.
  *
  * Run: `pnpm --filter @thebotcrew/workers eval`
  */
@@ -14,10 +14,11 @@
 import { describe, it, expect } from 'vitest';
 import { buildFrontDeskInstructions } from '../prompt.js';
 import { parseFrontDeskConfig } from '../config.js';
-import { buildFrontDeskAgent, DEFAULT_MODEL } from '../agent.js';
+import { buildFrontDeskAgent } from '../agent.js';
 import { buildAgentRequestContext } from '../../../core/runtime-context.js';
-import type { AiProvider, TurnContext } from '../../../core/types.js';
+import type { TurnContext } from '../../../core/types.js';
 import { demoTenant } from './fixtures.js';
+import { evalApiKey, evalModel, evalProvider } from './eval-model.js';
 
 describe('front-desk prompt (offline)', () => {
   const config = parseFrontDeskConfig(demoTenant.config);
@@ -48,15 +49,12 @@ const turn: TurnContext = {
   channel: 'whatsapp',
 };
 
-const evalProvider: AiProvider = process.env.ANTHROPIC_API_KEY ? 'anthropic' : 'openai';
-const evalApiKey = process.env.ANTHROPIC_API_KEY ?? process.env.OPENAI_API_KEY ?? '';
-
 function evalRequestContext() {
   return buildAgentRequestContext({
     tenant: demoTenant,
     turn,
     provider: evalProvider,
-    model: DEFAULT_MODEL,
+    model: evalModel,
     llmApiKey: evalApiKey,
   });
 }
@@ -91,7 +89,7 @@ describe.skipIf(!evalApiKey)('front-desk agent (live)', () => {
       tenant: demoTenant,
       turn: { ...turn, activeAppointment: { startTime, service: 'Consulta general' } },
       provider: evalProvider,
-      model: DEFAULT_MODEL,
+      model: evalModel,
       llmApiKey: evalApiKey,
     });
     const agent = buildFrontDeskAgent();

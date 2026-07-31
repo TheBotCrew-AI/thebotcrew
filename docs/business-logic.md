@@ -304,6 +304,36 @@ may speak, the commercial outcome (duplicating the `outcome` column: 196 rows ar
 deferred. Until then, resist adding values: only add one if its **reactivation semantics**
 differ from every existing value, which is the bar `awaiting_human` met.
 
+### 2b. WHY a conversation was parked (`reason` → `lead_disqualified`, 0042)
+
+`updateConversationStatus` takes an optional **`reason`** (free text, ≤200 chars, the model's
+own words). When present it writes a **`lead_disqualified`** event `{status, reason}` next to
+the RPC's usual `status_changed {from,to}`.
+
+- **The problem it solves:** a lead ruled out *on purpose* and a conversation that merely ran
+  its course both land in `standby` and are indistinguishable there. You could neither count
+  disqualifications nor audit whether the agent was over-trimming.
+- **Free text, not an enum, on purpose.** An enum only ever records the reasons we predicted;
+  the signal worth catching is the model disqualifying on grounds nobody wrote down. **Read
+  the payload, don't just count rows:**
+  `select payload->>'reason', count(*) from bot_events where event_type='lead_disqualified' group by 1;`
+- Any status may carry a reason (a `handed_off` reason is just as useful). No reason → no
+  event, so ordinary standbys look exactly as they did before.
+- **Skipped in demo mode**, like every other side effect (§5b): a roleplayed brush-off must
+  not pollute the real funnel's stats.
+
+**Its first user — The Bot Crew's own fit filter (tenant config, not code).** The platform
+sells to businesses that **book appointments** — to deliver a service, or a sales call. A
+business whose sale closes inside the chat (online store, catalog resale, food delivery) has
+nothing to schedule, so the agent explains that warmly, does **not** call `startDemo`, and
+parks the conversation in `standby` with reason `"no agenda citas"`. Two rules make it safe:
+suspicion is never grounds — an ambiguous business gets **one** qualifying question first
+(a wrongly disqualified lead costs far more than a wasted demo) — and size, giro and message
+volume still never disqualify. The rule text lives in that tenant's
+`prompt_overrides.qualificationNotes`; the golden cases that protect it are
+`roles/front-desk/evals/fit-filter.eval.ts`, which carry a **copy** of the section in
+`evals/fixtures.ts` (`FIT_FILTER_SECTION`) — edit both in the same change.
+
 ## 5a. Tenants that don't book through the bot (`bookingEnabled: false`)
 
 Some tenants have **no calendar the bot can trust**. MADI Skin Care is the reference case:

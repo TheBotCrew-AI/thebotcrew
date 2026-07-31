@@ -4,14 +4,23 @@
  *
  * Front-desk only. Call this as the LAST action in a turn when the conversation
  * has reached a terminal or paused state — never in the middle of a flow.
+ *
+ * An optional `reason` records WHY. The RPC already logs `status_changed
+ * {from,to}`, but a lead ruled out on purpose and a conversation that merely
+ * ran its course both land in `standby` and look identical there — so a stated
+ * reason is additionally logged as `lead_disqualified` (0042). It stays free
+ * text: the reason worth catching is the one we didn't predict.
  */
 
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
-import { updateConversationStatus } from '../../../db/queries.js';
+import { logBotEvent, updateConversationStatus } from '../../../db/queries.js';
 import { GhlClient } from '../../../ghl/client.js';
 import { STATUS_TAGS } from '../../../ghl/tags.js';
 import { resolveAgentContext } from './agent-context.js';
+
+/** Cap on the model-written reason: an event payload, not a place to narrate. */
+const REASON_MAX_LENGTH = 200;
 
 export const updateConversationStatusTool = createTool({
   id: 'updateConversationStatus',
@@ -25,9 +34,20 @@ export const updateConversationStatusTool = createTool({
     status: z
       .enum(['completed', 'opted_out', 'standby', 'handed_off'])
       .describe('Estado destino de la conversación'),
+    reason: z
+      .string()
+      .trim()
+      .min(1)
+      .max(REASON_MAX_LENGTH)
+      .optional()
+      .describe(
+        'Motivo breve, en tus palabras, de por qué descartas o pausas a este lead. ' +
+          'Obligatorio cuando lo descalificas porque su negocio no encaja (ej. "no agenda citas"). ' +
+          'Déjalo vacío cuando la conversación simplemente terminó su curso normal.',
+      ),
   }),
   outputSchema: z.object({ ok: z.boolean() }),
-  execute: async ({ status }, ctx) => {
+  execute: async ({ status, reason }, ctx) => {
     const { tenant, turn } = resolveAgentContext(ctx);
 
     // Demo roleplay never mutates real state: a fake customer's "ya no me interesa"
@@ -39,6 +59,13 @@ export const updateConversationStatusTool = createTool({
     }
 
     await updateConversationStatus(turn.ghlConversationId, status);
+
+    // Why, not just what. Awaited (not fire-and-forget) for the same reason as every
+    // other event write: the Worker can be killed the moment the response is sent.
+    // logBotEvent swallows its own errors, so this can never fail the status change.
+    if (reason) {
+      await logBotEvent(tenant.clientId, turn.ghlConversationId, 'lead_disqualified', { status, reason });
+    }
 
     // Mirror the state onto the GHL contact as a tag (transparency / sync).
     // For handed_off this writes `bot-off`, which keeps the bot suppressed AND
