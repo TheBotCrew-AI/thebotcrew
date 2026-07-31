@@ -283,7 +283,11 @@ export function buildFrontDeskInstructions(
   // Both branches exist only to serve a booking. With booking off there is no
   // bookAppointment call to carry the number, so asking for it would collect something
   // we cannot store — and imply a booking the bot isn't going to make.
-  const reminderSection = !bookingEnabled
+  // Suppressed in demo mode. A demo booking is simulated and discards whatsappPhone, so on
+  // FB/IG — where the contact has no phone — this section had the demo spend 1-2 of its 7
+  // messages collecting a number that goes nowhere, making an FB/IG demo strictly worse than
+  // a WhatsApp one. The CLOSER still gets it: that booking is real and needs the number.
+  const reminderSection = !bookingEnabled || usingDemo
     ? ''
     : contactPhone
     ? `\n\n# Número para confirmación y recordatorios

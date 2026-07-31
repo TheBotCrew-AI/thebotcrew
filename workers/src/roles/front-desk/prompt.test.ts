@@ -411,3 +411,26 @@ describe('buildDemoEndAnnouncement (deterministic handover)', () => {
     expect(out.length).toBeLessThan(320);
   });
 });
+
+describe('buildFrontDeskInstructions — demo on FB/IG (no phone on the contact)', () => {
+  const demoCfg = () => cfg({ demoPromptOverrides: { identity: 'Recepción demo', bookingEnabled: true } });
+
+  it('the demo never asks for a WhatsApp number (the simulated booking discards it)', () => {
+    const out = buildFrontDeskInstructions(demoCfg(), NOW, undefined, 'demo');
+    expect(out).not.toContain('# Número para confirmación y recordatorios');
+    expect(out).not.toContain('pídele su WhatsApp');
+  });
+
+  it('a normal FB/IG turn still asks for it — that booking is real', () => {
+    const out = buildFrontDeskInstructions(cfg(), NOW, undefined);
+    expect(out).toContain('No tenemos número de WhatsApp');
+  });
+
+  it('the closer after a demo still asks for it', () => {
+    const out = buildFrontDeskInstructions(
+      cfg(), NOW, undefined, undefined, undefined, undefined, undefined,
+      { reason: 'booked', businessName: 'X', booked: true },
+    );
+    expect(out).toContain('No tenemos número de WhatsApp');
+  });
+});
