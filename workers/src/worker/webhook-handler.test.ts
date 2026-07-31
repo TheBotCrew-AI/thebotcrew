@@ -841,6 +841,69 @@ describe('handleInboundWebhook — the closer persists after the demo (active_ro
   });
 });
 
+describe('handleInboundWebhook — the demo START announcement is deterministic', () => {
+  // The normal persona is speaking and startDemo creates a session mid-turn. The rules of
+  // the game must ride on THAT reply: ad leads arrive not knowing what a demo is, and the
+  // ones who found out too late spent it interrogating a roleplayed receptionist.
+  const normalPersona = { activeRole: null, roleStartedAt: null, demoStartedAt: null, promptVariant: null };
+  const created = {
+    id: 'sess-new', activatedAt: '2026-07-31T16:00:00Z', expiresAt: '2099-01-01T00:00:00Z',
+    messageBudget: 7, personaVersion: 3,
+    leadData: { businessName: 'Clínica Sonrisa', businessType: 'clínica dental' },
+    promptOverrides: { identity: 'P' }, simulatedBooking: null,
+  };
+  const sentText = () => ghl.sendMessage.mock.calls.map((c) => (c[0] as { text: string }).text).join('\n');
+
+  beforeEach(() => {
+    vi.mocked(q.getConversationPersona).mockResolvedValue(normalPersona);
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(
+      tenant({ demoSessionsEnabled: true, demoOffKeywords: ['demo off'] }),
+    );
+  });
+
+  // With a normal persona the turn-start read never happens (it is gated on
+  // activeRole === 'demo'), so the ONLY call is the post-generate one.
+  it('appends who answers next and the way out, onto the agent\'s own reply', async () => {
+    vi.mocked(q.getActiveDemoSession).mockResolvedValue(created as never);
+    await handleInboundWebhook(inbound, agentReplying('Va, ya lo estoy armando.'));
+
+    const sent = sentText();
+    expect(sent).toContain('Va, ya lo estoy armando.');          // the agent's reply survives
+    expect(sent).toContain('ya no te respondo yo');              // who answers next
+    expect(sent).toContain('para Clínica Sonrisa');              // whose assistant it is
+    expect(sent).toContain('Escribe "demo off"');                // the way out, from config
+  });
+
+  it('no session created → nothing is appended (an ordinary turn stays ordinary)', async () => {
+    vi.mocked(q.getActiveDemoSession).mockResolvedValue(null);
+    await handleInboundWebhook(inbound, agentReplying('¿A qué se dedica tu negocio?'));
+    expect(sentText()).not.toContain('ya no te respondo yo');
+  });
+
+  it('a tenant with no off-keyword gets the announcement without a dead exit word', async () => {
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(
+      tenant({ demoSessionsEnabled: true, demoOffKeywords: null }),
+    );
+    vi.mocked(q.getActiveDemoSession).mockResolvedValue(created as never);
+    await handleInboundWebhook(inbound, agentReplying('Listo.'));
+    const sent = sentText();
+    expect(sent).toContain('ya no te respondo yo');
+    expect(sent).not.toContain('salir de la demo');
+  });
+
+  it('a tenant without demo sessions never pays for the check', async () => {
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(tenant({ demoSessionsEnabled: false }));
+    await handleInboundWebhook(inbound, agentReplying('¿Te agendo el sábado?'));
+    expect(q.getActiveDemoSession).not.toHaveBeenCalled();
+  });
+
+  it('a session read failure never blocks the reply', async () => {
+    vi.mocked(q.getActiveDemoSession).mockRejectedValue(new Error('db down'));
+    await handleInboundWebhook(inbound, agentReplying('Va, ya lo estoy armando.'));
+    expect(sentText()).toContain('Va, ya lo estoy armando.');
+  });
+});
+
 describe('handleInboundWebhook — booking ends the demo (objective met)', () => {
   const demoPersona = { activeRole: 'demo', roleStartedAt: '2026-07-30T16:00:00Z', demoStartedAt: '2026-07-30T16:00:00Z', promptVariant: null };
   const base = {

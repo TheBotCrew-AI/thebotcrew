@@ -33,8 +33,11 @@ export const startDemoTool = createTool({
   id: 'startDemo',
   description:
     'Activa una demo en vivo del asistente PARA EL NEGOCIO DEL LEAD, con los datos que el lead te dio en esta ' +
-    'conversación. Llámala SOLO cuando ya tengas al menos: nombre del negocio, giro, y sus servicios principales. ' +
-    'Tras llamarla, avísale al lead que la demo está lista y que escriba como si fuera un cliente de su negocio.',
+    'conversación. A partir de la llamada, el lead deja de hablar contigo: le responde el asistente demo. ' +
+    'Requisitos, TODOS obligatorios: (1) ya le explicaste que va a entrar a una demo y quién le va a responder; ' +
+    '(2) el lead lo confirmó explícitamente — una pregunta suya NO es una confirmación; (3) no tiene ninguna ' +
+    'pregunta sin responder; (4) ya tienes nombre del negocio, giro y servicios principales. ' +
+    'NO escribas tú el aviso de que la demo arrancó: el sistema lo manda solo, con la palabra para salir.',
   inputSchema: z.object({
     businessName: z.string().min(1).describe('Nombre del negocio del lead, tal como te lo dio'),
     businessType: z.string().min(1).describe('Giro del negocio (ej. "clínica dental", "estética")'),
@@ -101,8 +104,9 @@ export const startDemoTool = createTool({
     return {
       ok: true,
       message:
-        'Demo activada. Dile al lead que su demo está lista y que escriba su siguiente mensaje como si fuera ' +
-        'un cliente de su negocio — a partir de ese mensaje responderá el asistente demo.',
+        'Demo activada. El aviso al lead (que a partir de su siguiente mensaje responde el asistente demo, ' +
+        'cómo escribirle y la palabra para salir) lo manda el sistema automáticamente al final de tu respuesta: ' +
+        'NO lo escribas tú ni lo repitas. Cierra tu mensaje de forma natural y breve.',
     };
   },
 });

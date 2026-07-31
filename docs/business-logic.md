@@ -461,15 +461,31 @@ and never create sessions.
 **Flow.**
 1. Ad → `wa.me` link with a static keyword (e.g. "DEMO"). The keyword doubles as the
    `trigger_keywords` entry gate — no special-casing in the gate order.
-2. The NORMAL persona does the intake conversationally (business name, giro, services —
+2. **The lead must understand the dynamic before the persona flips** (added 2026-07-31 after
+   live leads got confused). The normal persona **explains** what a demo is → **answers every
+   open question** about The Bot Crew → **asks for an explicit yes** ("una pregunta NO cuenta
+   como sí") → only then collects data and calls `startDemo`. Before this, the flow optimized
+   for speed ("no alargues: 2-3 mensajes máximo") and flipped as soon as it had three facts,
+   so a lead's next question about the product was answered by a receptionist roleplaying
+   **their own** business — burning the demo budget on questions it was never meant to answer,
+   at the moment of peak attention. Enforced in the tenant's `qualificationNotes` **and** in
+   the `startDemo` tool description; golden cases in `evals/fit-filter.eval.ts`
+   ("demo gate"). The cost is 1–2 extra turns before the demo, accepted deliberately: a lead
+   lost at the door is cheaper than a demo spent on the wrong conversation.
+3. The NORMAL persona does the intake conversationally (business name, giro, services —
    enriched from the form contact when the phone matches) and calls the **`startDemo`
    tool**, which builds the persona from a TEMPLATE (`roles/front-desk/demo-persona.ts` —
    deliberately not an LLM call: deterministic, instant, testable, and lead text is embedded
    as length-capped DATA, shrinking the prompt-injection surface; `persona_version` tracks the
    template) and calls `app_create_demo_session`: session row + `active_role='demo'` flip,
-   atomic. The announcing turn still speaks as the normal persona ("escríbeme como si fueras
-   un cliente…"); the lead's next message is answered in character.
-3. Each turn while in demo reads the session fresh: the generated persona is overlaid onto
+   atomic. **The announcement is DETERMINISTIC** (`buildDemoStartAnnouncement`), appended by
+   the runtime to that same reply — same reason as the closing one below: it states who
+   answers from the next message on, how to write to them, and **the way out**. The exit word
+   comes from `demo_off_keywords`; with none configured that line is omitted rather than
+   promising a word that does nothing. The prompt forbids the agent writing its own version.
+   Detected by re-reading the session after the turn (never by parsing the model's steps),
+   gated on `demo_sessions_enabled` so only that tenant pays the extra read.
+4. Each turn while in demo reads the session fresh: the generated persona is overlaid onto
    `demoPromptOverrides`, and **budget + expiry** are enforced BEFORE generating. Budget =
    bot message PARTS since activation (derived by counting `messages`, self-healing — no
    counter to drift under the debounce) **counted from the lead's first in-character
@@ -477,7 +493,7 @@ and never create sessions.
    short: the demo only has to prove it works, and ending while the lead still wants more
    is what makes the closer land. Expiry default 48h, enforced lazily at
    turn time (an abandoned demo just sits until the lead writes again).
-4. Exhausted/expired → `app_end_demo_session`: session ended + flip to `active_role=NULL`,
+5. Exhausted/expired → `app_end_demo_session`: session ended + flip to `active_role=NULL`,
    atomic. The turn re-reads the persona and answers as **the closer** — the tenant's normal
    front-desk — with a `demoHandoff` prompt section (what business, why it ended: ask how it
    went, offer a REAL call via the normal booking tools). Follow-ups re-arm from the closer

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { DemoHandoff } from '../../core/types.js';
 import { parseFrontDeskConfig } from './config.js';
-import { buildDemoEndAnnouncement, buildFrontDeskInstructions } from './prompt.js';
+import { buildDemoEndAnnouncement, buildDemoStartAnnouncement, buildFrontDeskInstructions } from './prompt.js';
 
 const cfg = (raw: Record<string, unknown> = {}) =>
   parseFrontDeskConfig({
@@ -433,6 +433,32 @@ describe('buildFrontDeskInstructions — closer replaces the tenant flow (the "�
       { reason: 'closed', businessName: 'X' },
     );
     expect(out).toContain('El lead cerró la demo él mismo');
+  });
+});
+
+describe('buildDemoStartAnnouncement (deterministic rules of the game)', () => {
+  it('says who answers next, how to write, and how to get out', () => {
+    const out = buildDemoStartAnnouncement('Clínica Sonrisa', 'demo off');
+    expect(out).toContain('ya no te respondo yo');
+    expect(out).toContain('para Clínica Sonrisa');
+    expect(out).toContain('como si fueras un cliente tuyo');
+    expect(out).toContain('Escribe "demo off"');
+    expect(out).toContain('\n\n'); // splits into short WhatsApp messages
+  });
+
+  it('omits the exit line when the tenant configured no off-keyword — never promise a dead word', () => {
+    const out = buildDemoStartAnnouncement('Clínica Sonrisa', undefined);
+    expect(out).not.toContain('salir de la demo');
+    expect(out).toContain('ya no te respondo yo'); // the rest still lands
+  });
+
+  it('falls back to a generic business name rather than printing nothing', () => {
+    expect(buildDemoStartAnnouncement(undefined, 'demo off')).toContain('para tu negocio');
+    expect(buildDemoStartAnnouncement('   ', 'demo off')).toContain('para tu negocio');
+  });
+
+  it('ignores a blank off-keyword the same as a missing one', () => {
+    expect(buildDemoStartAnnouncement('X', '   ')).not.toContain('Escribe');
   });
 });
 

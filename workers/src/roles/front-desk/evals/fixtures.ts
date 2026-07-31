@@ -46,10 +46,15 @@ Todo lo demás sigue igual: tamaño, giro, volumen de mensajes o presupuesto NUN
  * fit filter must survive that replacement.
  */
 const DEMO_INTAKE_FLOW = `# Demo en vivo (lead magnet)
-Si el lead llega pidiendo su demo:
-1. Reúne conversando (no como formulario): nombre del negocio, giro, y sus 2-5 servicios principales.
-2. En cuanto tengas nombre + giro + servicios Y confirmes que el negocio agenda citas, llama startDemo con esos datos.
-3. No llames startDemo si el lead no vino por la demo, no quiere probarla, o su negocio no agenda citas.
+La mayoría llega del anuncio SIN saber qué es esto. Si arrancas antes de que entiendan la dinámica, le hacen preguntas sobre The Bot Crew al asistente demo —que responde como recepcionista del negocio DEL LEAD— y la demo pierde todo su valor. El orden importa más que la velocidad.
+
+Paso 1 — Explica la dinámica ANTES de pedir datos: va a probar un asistente configurado para SU negocio, aquí mismo; le escribe como si fuera un cliente suyo y ve cómo responde y agenda.
+Paso 2 — Resuelve TODAS sus dudas primero (qué es, cuánto cuesta, si es real). Mientras haya una pregunta sin responder, NO arranques.
+Paso 3 — Pide confirmación explícita y espera un sí claro. Un "va", "sale", "dale" cuenta. Una pregunta NO cuenta como sí.
+Paso 4 — Ya con el sí, reúne conversando: nombre del negocio, giro, y sus 2-5 servicios principales.
+Paso 5 — Con esos datos, llama startDemo. NO escribas tú el aviso de arranque: el sistema lo manda solo.
+
+NUNCA llames startDemo si el lead no ha confirmado, tiene una pregunta sin responder, no vino por la demo, o su negocio no agenda citas.
 
 # Si sí encaja
 Ofrécele agendar una sesión de 20 min con Leo para mostrarle cómo funciona.`;
@@ -113,7 +118,12 @@ export const botCrewTenant: TenantContext = {
         'Tu misión: entender el negocio del prospecto, calificar si encaja con la oferta y — si califica — agendar una sesión de 20 min.',
       offering:
         '# Qué hace The Bot Crew\nInstala un agente de IA que responde a los leads que el negocio YA recibe, los califica y los AGENDA en su calendario. ' +
-        'No es publicidad y no genera demanda: da atención inmediata para que ningún interesado se quede sin respuesta.',
+        'No es publicidad y no genera demanda: da atención inmediata para que ningún interesado se quede sin respuesta.\n\n' +
+        // Trimmed from the live `offering` + "# Manejo de objeciones comunes". Without it the
+        // agent has no answer to "¿me va a costar algo?" and deflects to a human — which is
+        // correct behavior for a fact it doesn't have, but makes the demo-gate case untestable.
+        '# Precio\nLa instalación es completamente GRATIS: el lead no paga nada, sin mensualidades ni contratos. ' +
+        'Un stack equivalente por separado costaría entre $450 y $1,260 USD al mes — ese monto es lo que se AHORRA, nunca un cobro futuro.',
       qualificationNotes: DEMO_INTAKE_FLOW,
       houseRules: FIT_FILTER_SECTION,
     },

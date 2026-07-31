@@ -148,6 +148,58 @@ describe.skipIf(!evalApiKey)('fit filter — survives a campaign that replaces t
   });
 });
 
+describe.skipIf(!evalApiKey)('demo gate — explain and confirm before flipping the persona', () => {
+  // Observed in production 2026-07-31: ad leads arrive not knowing what "demo" means here.
+  // The agent collected three facts, flipped the persona, and the lead's next question about
+  // The Bot Crew was answered by a receptionist roleplaying THEIR OWN business. The demo
+  // burned its budget on questions it was never meant to answer.
+  const demoTenantWithSessions: TenantContext = { ...botCrewTenant, demoSessionsEnabled: true };
+  const demoRc = () =>
+    buildAgentRequestContext({
+      tenant: demoTenantWithSessions,
+      turn,
+      provider: evalProvider,
+      model: evalModel,
+      llmApiKey: evalApiKey,
+    });
+
+  it('a question is not a yes — answer it, do not start the demo', async () => {
+    const agent = buildFrontDeskAgent();
+    const res = await agent.generate(
+      [
+        { role: 'user', content: 'quiero mi demo' },
+        {
+          role: 'assistant',
+          content:
+            'Va 🙌 Lo que sigue es una demo en vivo: configuro un asistente para TU negocio y lo pruebas aquí mismo. ¿Le entramos?',
+        },
+        { role: 'user', content: 'oye pero espérate, ¿esto qué es exactamente? ¿me va a costar algo?' },
+      ],
+      { requestContext: demoRc() },
+    );
+
+    // The crux: an open question must be answered, not flipped past.
+    expect(toolIds(res)).not.toContain('startDemo');
+    expect(res.text.toLowerCase()).toMatch(/gratis|sin costo|no pagas|instalaci/);
+  });
+
+  it('does not start the demo just because it has the business data', async () => {
+    const agent = buildFrontDeskAgent();
+    const res = await agent.generate(
+      [
+        { role: 'user', content: 'quiero mi demo' },
+        { role: 'assistant', content: '¿A qué se dedica tu negocio?' },
+        { role: 'user', content: 'Tengo una clínica dental, Sonrisa Feliz. Hacemos limpiezas, ortodoncia y blanqueamiento.' },
+      ],
+      { requestContext: demoRc() },
+    );
+
+    // All three facts are on the table, but nobody explained the dynamic or got a yes.
+    expect(toolIds(res)).not.toContain('startDemo');
+    expect(res.text).toContain('?'); // it asks — to explain and confirm
+  });
+});
+
 describe.skipIf(!evalApiKey)('fit filter — the expensive mistake is over-filtering', () => {
   it('asks the qualifying question instead of ruling out an ambiguous business', async () => {
     const agent = buildFrontDeskAgent();

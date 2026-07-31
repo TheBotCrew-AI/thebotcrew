@@ -450,6 +450,37 @@ Responde siempre en español.`;
  *
  * The blank line makes it two short WhatsApp messages (see splitIntoMessages).
  */
+/**
+ * The message that opens a demo session — DETERMINISTIC, like the one that closes it
+ * (buildDemoEndAnnouncement below) and for the same reason: this sentence is the hinge
+ * of the funnel and the model kept getting it wrong.
+ *
+ * Observed in production 2026-07-31: ad leads arrive without knowing what a "demo" here
+ * even is. The agent collected three facts and flipped the persona, so the lead's next
+ * question about The Bot Crew — what is this, what does it cost — was answered by a
+ * receptionist roleplaying THEIR OWN business. The demo burned its budget on questions it
+ * was never meant to answer, and the lead never saw the product work.
+ *
+ * Two jobs, neither of which can be left to the model:
+ *  1. state plainly that from the NEXT message on, someone else is answering;
+ *  2. hand over a real way out.
+ *
+ * `offKeyword` comes from `tenant_config.demo_off_keywords` — never invented here. With
+ * none configured the exit line is omitted rather than promising a word that does nothing.
+ */
+export function buildDemoStartAnnouncement(businessName?: string, offKeyword?: string): string {
+  const biz = businessName?.trim() || 'tu negocio';
+  const exit = offKeyword?.trim()
+    ? `\n\n¿Quieres salir de la demo y volver conmigo? Escribe "${offKeyword.trim()}".`
+    : '';
+  return (
+    `Listo 👌 A partir de tu siguiente mensaje ya no te respondo yo: te contesta el asistente demo ` +
+    `que acabo de configurar para ${biz}.\n\n` +
+    `Escríbele como si fueras un cliente tuyo — pregúntale precios, horarios o pídele una cita, y ve cómo atiende.` +
+    exit
+  );
+}
+
 export function buildDemoEndAnnouncement(handoff: DemoHandoff): string {
   const biz = handoff.businessName?.trim() || 'tu negocio';
   const name = handoff.leadName?.trim();

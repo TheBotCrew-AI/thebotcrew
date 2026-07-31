@@ -58,7 +58,7 @@ import { parseInboundWebhook } from '../ghl/webhook.js';
 import { demoEndTag, STATUS_TAGS } from '../ghl/tags.js';
 import type { GhlInboundWebhook, ParsedInbound } from '../ghl/types.js';
 import { DEFAULT_MODEL, DEFAULT_PROVIDER, FRONT_DESK_ROLE } from '../roles/front-desk/index.js';
-import { buildDemoEndAnnouncement } from '../roles/front-desk/prompt.js';
+import { buildDemoEndAnnouncement, buildDemoStartAnnouncement } from '../roles/front-desk/prompt.js';
 
 /**
  * Milliseconds to wait after the last inbound message before running the agent.
@@ -664,6 +664,29 @@ export async function runAgentTurn({
     reply = steps?.length
       ? (steps.slice().reverse().find((s) => s.text?.trim())?.text?.trim() ?? result.text)
       : result.text;
+  }
+
+  // The demo just STARTED on this turn: the normal persona was speaking and startDemo
+  // created a session mid-turn. Detected by re-reading (never by parsing the model's
+  // steps), the same way the booking below is. The rules of the game ride on that same
+  // reply, so the lead learns who answers next BEFORE they write again — leaving it to
+  // the prompt is what had ad leads interrogating a roleplayed receptionist about The Bot
+  // Crew, burning the demo budget on questions it was never meant to answer.
+  //
+  // Gated on demoSessionsEnabled so this costs a DB read only for the tenant that can
+  // actually have a session; startDemo refuses to create one without the flag anyway.
+  if (tenant.demoSessionsEnabled && activeRole !== 'demo' && !activeDemoSession && !forcedReply) {
+    try {
+      const started = await getActiveDemoSession(parsed.conversationId);
+      if (started) {
+        const lead = started.leadData as { businessName?: string };
+        reply = `${reply}\n\n${buildDemoStartAnnouncement(lead.businessName, tenant.demoOffKeywords?.[0])}`;
+        console.log(`[demo-session] deterministic start announcement conv=${parsed.conversationId}`);
+      }
+    } catch (e) {
+      // Non-blocking: worst case the lead gets the agent's own announcement, as before.
+      console.error('[demo-session] start check failed (non-blocking):', e instanceof Error ? e.message : String(e));
+    }
   }
 
   // A simulated booking IS the demo's objective, so the session ends the moment it
