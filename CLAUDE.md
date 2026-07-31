@@ -8,6 +8,10 @@
 > hours, availability rules, handoff) live in [`docs/business-logic.md`](docs/business-logic.md).
 > Read it before changing agent behavior, and update it in the same change — same rule as here.
 >
+> **How config becomes a prompt** — the code/DB split, which override layer wins, prompt
+> assembly order, and the gates — is diagrammed in [`docs/config-model.md`](docs/config-model.md).
+> Read that before adding a config field, a campaign variant, or a persona.
+>
 > ✅ **Durable Objects migration — turn durability: DONE.** Turns run through the
 > per-conversation `ConversationDO` (serialized + durable 15s Alarm) for all tenants
 > (`DO_TURNS=*`). **Phase 3 cleanup shipped (2026-07-03):** the redundant reconciliation cron,
