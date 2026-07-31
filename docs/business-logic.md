@@ -47,6 +47,22 @@ monolithic prompt (migration 0036; `core/tenant.ts` `matchVariantKeyword`,
 - **Orthogonal to the gate**: `trigger_keywords` decides IF the bot enters;
   `keyword_variants` decides WHICH prompt flavors the thread. Use either or both (list a
   keyword in both when gated).
+- **⚠️ Field-level replacement drops whatever else lives in that field.** The merge is a
+  spread (`{...base, ...variant}`), so a variant that sets `qualificationNotes` replaces the
+  base's **entire** text — including any tenant-wide rule that happens to be written inside
+  it. The live example: The Bot Crew's fit filter (§2b) lives in `qualificationNotes`, so the
+  day a second campaign ships with its own flow, **its leads silently lose the fit filter**.
+  Nothing fails, no event fires, the disqualification just stops happening.
+  **No field is safe** — a campaign for a specific offer would plausibly override `offering`
+  too. The platform has no always-on, non-overridable prompt slot; if that becomes a real
+  need, add a `houseRules` field read from **base** regardless of the variant (~20 lines:
+  schema field, one line in `resolveEffectiveOverrides`, a render slot in `prompt.ts`) rather
+  than repeating the rule in every variant. Until then: **when you add a variant that
+  overrides a field, re-read what else was in it.**
+- **A variant changes the script, not the toolbox.** Every tool stays available to every
+  conversation (`bookingEnabled` is the only flag that removes one), so a lead pinned to an
+  offer campaign can still trigger `startDemo` by asking for a demo, even though their flow
+  never mentions it. Usually desirable — just not accidental.
 - **First-touch sticky**, enforced in SQL (`app_set_prompt_variant`, COALESCE): the first
   matching message pins `conversations.prompt_variant`; later campaign keywords never switch
   it (ad attribution; no mid-thread personality swap). Read fresh each turn alongside
