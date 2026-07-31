@@ -6,18 +6,20 @@
 import type { TenantContext } from '../../../core/types.js';
 
 /**
- * The fit filter from The Bot Crew's live `prompt_overrides.qualificationNotes`
- * (tenant 04385692-…), reproduced here so `fit-filter.eval.ts` can exercise it.
+ * The fit filter, byte-for-byte as it lives in The Bot Crew's
+ * `prompt_overrides.houseRules` (tenant 04385692-…), so `fit-filter.eval.ts` can
+ * exercise the real rule.
  *
- * ⚠️ THIS IS A COPY. The prompt itself lives in the DB — that's the platform's
- * config/code split, and the price of it is that this text can drift from
- * production without anything failing. **Edit the tenant and this constant in
- * the same change**, the same rule the docs carry. What the evals protect is
- * the RULE (chat-only → no demo; ambiguity → a question), so a small wording
- * drift is survivable; a rule that quietly disappears from one side is not.
+ * ⚠️ THIS IS A COPY — the prompt itself lives in the DB, which is the platform's
+ * config/code split working as designed. The copy can rot, so `prompt-drift.eval.ts`
+ * compares it against prod on every `pnpm eval` and fails on any difference. That
+ * check is only as good as this constant being an EXACT copy: no reflowing, no
+ * "small" wording fixes here. Edit the tenant, then paste the result back in.
+ *
+ * It lives in `houseRules` (not `qualificationNotes`) so a campaign variant that
+ * replaces the flow cannot take the filter down with it — see business-logic §1.1.
  */
-export const FIT_FILTER_SECTION = `# A quién le sirve esto (filtro único)
-El sistema vive del CALENDARIO: su trabajo es convertir un lead en una CITA. Sirve a negocios que necesitan agendar, ya sea para:
+export const FIT_FILTER_SECTION = `El sistema vive del CALENDARIO: su trabajo es convertir un lead en una CITA. Sirve a negocios que necesitan agendar, ya sea para:
 - dar su servicio (clínica, dentista, estética, gym, spa, taller, bienes raíces), o
 - una llamada de ventas o consulta donde se cierra el trato (agencias, consultoría, seguros, servicios B2B).
 
@@ -34,9 +36,16 @@ Cómo descalificar (cálido y directo, sin dejarlo mal):
 4. NO llames startDemo. NO ofrezcas la sesión de 20 min.
 5. Cierra el turno llamando updateConversationStatus con status "standby" y reason "no agenda citas".
 
-Todo lo demás sigue igual: tamaño, giro, volumen de mensajes o presupuesto NUNCA descalifican. Este es el único filtro.
+Ejemplo: "Te soy honesto: el sistema está hecho para negocios que agendan citas —consultas, servicios, llamadas de venta— y en tu caso la compra se cierra ahí mismo por mensaje, así que no te lo voy a vender: no te resolvería nada. Si en algún momento manejas citas o asesorías, escríbeme y lo vemos 🙌"
 
-# Demo en vivo (lead magnet)
+Todo lo demás sigue igual: tamaño, giro, volumen de mensajes o presupuesto NUNCA descalifican. Este es el único filtro.`;
+
+/**
+ * The campaign FLOW, kept separate from the rules above on purpose: this is the
+ * part a second campaign would replace wholesale (`prompt_variants`), and the
+ * fit filter must survive that replacement.
+ */
+const DEMO_INTAKE_FLOW = `# Demo en vivo (lead magnet)
 Si el lead llega pidiendo su demo:
 1. Reúne conversando (no como formulario): nombre del negocio, giro, y sus 2-5 servicios principales.
 2. En cuanto tengas nombre + giro + servicios Y confirmes que el negocio agenda citas, llama startDemo con esos datos.
@@ -105,7 +114,8 @@ export const botCrewTenant: TenantContext = {
       offering:
         '# Qué hace The Bot Crew\nInstala un agente de IA que responde a los leads que el negocio YA recibe, los califica y los AGENDA en su calendario. ' +
         'No es publicidad y no genera demanda: da atención inmediata para que ningún interesado se quede sin respuesta.',
-      qualificationNotes: FIT_FILTER_SECTION,
+      qualificationNotes: DEMO_INTAKE_FLOW,
+      houseRules: FIT_FILTER_SECTION,
     },
   },
 };

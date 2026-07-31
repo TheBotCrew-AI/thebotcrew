@@ -32,6 +32,18 @@ export const promptOverridesSchema = z.object({
   /** Appended after the built-in qualification flow. Use for tenant-specific instructions. */
   qualificationNotes: z.string().optional(),
   /**
+   * Tenant-wide rules that outrank the conversational flow — who we will and won't
+   * serve, what we never promise. Rendered from BASE config even when a campaign
+   * variant is pinned, which is the whole point: a variant replaces a whole field,
+   * so a rule written inside `qualificationNotes` silently vanishes the day a
+   * campaign overrides that field (no event, no failure — it just stops happening).
+   * Deliberately absent from `promptVariantSchema` so a variant cannot set it.
+   *
+   * Suppressed in demo mode: house rules describe the REAL business, and inside a
+   * roleplay for someone else's business they are incoherent.
+   */
+  houseRules: z.string().optional(),
+  /**
    * Per-tool business rules, keyed by tool id (e.g. "getAvailability").
    * Injected as a dedicated prompt section so the agent knows how to interpret
    * and present each tool's results for this specific tenant.
@@ -130,6 +142,10 @@ export function resolveEffectiveOverrides(
       ...variant,
       // Per-key merge: campaign rules override individual tools, not the whole map.
       toolInstructions: { ...base.toolInstructions, ...(variant.toolInstructions ?? {}) },
+      // House rules are the tenant's, not the campaign's. promptVariantSchema has no
+      // such field, so the spread above can't touch it today — this line is what keeps
+      // that true if someone ever adds one, and makes the guarantee visible here.
+      houseRules: base.houseRules,
     },
     usingDemo: false,
   };

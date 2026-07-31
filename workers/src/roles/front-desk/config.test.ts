@@ -98,6 +98,20 @@ describe('resolveEffectiveOverrides', () => {
     expect(overrides.identity).toBe('Demo identity');
   });
 
+  it('houseRules always come from base — a campaign cannot drop the tenant rules', () => {
+    const withRules = parseFrontDeskConfig({
+      ...base,
+      promptOverrides: { ...base.promptOverrides, houseRules: 'Solo servimos a quien agenda citas.' },
+      // A variant that replaces the flow AND tries to smuggle in its own house rules.
+      promptVariants: {
+        'laser-promo': { ...base.promptVariants['laser-promo'], qualificationNotes: 'Flujo de campaña', houseRules: 'Vale todo' },
+      },
+    } as never);
+    const { overrides } = resolveEffectiveOverrides(withRules, undefined, 'laser-promo');
+    expect(overrides.qualificationNotes).toBe('Flujo de campaña'); // the flow IS the campaign's
+    expect(overrides.houseRules).toBe('Solo servimos a quien agenda citas.'); // the rules are not
+  });
+
   it('confirmContactName always comes from base (variants cannot toggle backstops)', () => {
     const withBackstop = parseFrontDeskConfig({
       ...base,

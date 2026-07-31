@@ -49,16 +49,17 @@ monolithic prompt (migration 0036; `core/tenant.ts` `matchVariantKeyword`,
   keyword in both when gated).
 - **⚠️ Field-level replacement drops whatever else lives in that field.** The merge is a
   spread (`{...base, ...variant}`), so a variant that sets `qualificationNotes` replaces the
-  base's **entire** text — including any tenant-wide rule that happens to be written inside
-  it. The live example: The Bot Crew's fit filter (§2b) lives in `qualificationNotes`, so the
-  day a second campaign ships with its own flow, **its leads silently lose the fit filter**.
-  Nothing fails, no event fires, the disqualification just stops happening.
-  **No field is safe** — a campaign for a specific offer would plausibly override `offering`
-  too. The platform has no always-on, non-overridable prompt slot; if that becomes a real
-  need, add a `houseRules` field read from **base** regardless of the variant (~20 lines:
-  schema field, one line in `resolveEffectiveOverrides`, a render slot in `prompt.ts`) rather
-  than repeating the rule in every variant. Until then: **when you add a variant that
-  overrides a field, re-read what else was in it.**
+  base's **entire** text — including any tenant-wide rule written inside it. Nothing fails and
+  no event fires; the rule just stops happening. **When you add a variant that overrides a
+  field, re-read what else was in it.**
+- **`houseRules` is the exception, and the place tenant-wide rules belong.** A base-only
+  field (absent from `promptVariantSchema`, and re-sourced from base in
+  `resolveEffectiveOverrides` even if someone adds it there later) rendered as its own
+  section **after** the flow and labelled as outranking it — because a campaign's script is
+  exactly what it exists to override. **Suppressed in demo mode**: inside a roleplay for the
+  LEAD's business, rules about who WE serve are incoherent. The Bot Crew's fit filter (§2b)
+  lives here for precisely this reason — it survived the move out of `qualificationNotes`,
+  which is what would otherwise have taken it down on the first campaign variant.
 - **A variant changes the script, not the toolbox.** Every tool stays available to every
   conversation (`bookingEnabled` is the only flag that removes one), so a lead pinned to an
   offer campaign can still trigger `startDemo` by asking for a demo, even though their flow
@@ -346,9 +347,14 @@ parks the conversation in `standby` with reason `"no agenda citas"`. Two rules m
 suspicion is never grounds — an ambiguous business gets **one** qualifying question first
 (a wrongly disqualified lead costs far more than a wasted demo) — and size, giro and message
 volume still never disqualify. The rule text lives in that tenant's
-`prompt_overrides.qualificationNotes`; the golden cases that protect it are
-`roles/front-desk/evals/fit-filter.eval.ts`, which carry a **copy** of the section in
-`evals/fixtures.ts` (`FIT_FILTER_SECTION`) — edit both in the same change.
+**`prompt_overrides.houseRules`** (§1.1 — not `qualificationNotes`, so a campaign variant
+can't replace it away). The golden cases that protect it are
+`roles/front-desk/evals/fit-filter.eval.ts`, including one that pins an offer-campaign
+variant and checks the filter still bites. They run against a **copy** of the text in
+`evals/fixtures.ts` (`FIT_FILTER_SECTION`), and `evals/prompt-drift.eval.ts` compares that
+copy byte-for-byte against prod on every `pnpm eval` — the only case in the suite that
+touches the DB, self-skipping without Supabase env vars so the CI gate never needs them.
+Edit the tenant, then paste the result back into the constant.
 
 ## 5a. Tenants that don't book through the bot (`bookingEnabled: false`)
 

@@ -106,6 +106,48 @@ describe.skipIf(!evalApiKey)('fit filter — a chat-only business is ruled out, 
   });
 });
 
+describe.skipIf(!evalApiKey)('fit filter — survives a campaign that replaces the flow', () => {
+  // The regression this exists to prevent: campaign #2 ships with its own
+  // qualificationNotes, the variant replaces that field wholesale, and the fit filter
+  // rides along into the void. `houseRules` is read from base precisely so it can't.
+  const offerCampaignTenant: TenantContext = {
+    ...botCrewTenant,
+    config: {
+      ...botCrewTenant.config,
+      promptVariants: {
+        'oferta-x': {
+          qualificationNotes:
+            '# Campaña Oferta X\nEl lead viene de un anuncio de la Oferta X. Preséntala, resuelve dudas y ' +
+            'lleva la conversación a agendar la llamada. No hagas intake de demo.',
+        },
+      },
+    },
+  };
+
+  it('a lead pinned to an offer campaign is still ruled out when they never book', async () => {
+    const agent = buildFrontDeskAgent();
+    const res = await agent.generate(
+      [
+        { role: 'assistant', content: 'Hola, ¿a qué se dedica tu negocio?' },
+        { role: 'user', content: 'Vendo zapatos por Facebook, me escriben, les cobro por transferencia y se los envío. Nunca agendo nada.' },
+      ],
+      {
+        requestContext: buildAgentRequestContext({
+          tenant: offerCampaignTenant,
+          turn: { ...turn, promptVariant: 'oferta-x' },
+          provider: evalProvider,
+          model: evalModel,
+          llmApiKey: evalApiKey,
+        }),
+      },
+    );
+
+    expect(toolIds(res)).not.toContain('startDemo');
+    expect(toolIds(res)).toContain('updateConversationStatus');
+    expect(String(toolArgs(res, 'updateConversationStatus')?.reason ?? '')).toMatch(/cita|agenda/i);
+  });
+});
+
 describe.skipIf(!evalApiKey)('fit filter — the expensive mistake is over-filtering', () => {
   it('asks the qualifying question instead of ruling out an ambiguous business', async () => {
     const agent = buildFrontDeskAgent();

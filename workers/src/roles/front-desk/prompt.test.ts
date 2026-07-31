@@ -69,6 +69,59 @@ describe('buildFrontDeskInstructions', () => {
     expect(out).not.toContain('# Tu objetivo');
   });
 
+  describe('houseRules — tenant rules that outrank the campaign flow', () => {
+    const RULES = 'Solo servimos a negocios que agendan citas.';
+    const withRules = (raw: Record<string, unknown> = {}) =>
+      cfg({ ...raw, promptOverrides: { houseRules: RULES, ...(raw.promptOverrides as object) } });
+
+    it('renders as its own section, labelled as outranking the flow', () => {
+      const out = buildFrontDeskInstructions(withRules(), NOW);
+      expect(out).toContain('# Reglas de casa — mandan sobre el flujo de arriba');
+      expect(out).toContain(RULES);
+    });
+
+    it('renders AFTER the flow, so a campaign script cannot bury it', () => {
+      const out = buildFrontDeskInstructions(
+        withRules({ promptOverrides: { qualificationNotes: 'MI FLUJO' } }),
+        NOW,
+      );
+      expect(out.indexOf(RULES)).toBeGreaterThan(out.indexOf('MI FLUJO'));
+    });
+
+    it('survives a pinned campaign variant that replaces the whole flow', () => {
+      const out = buildFrontDeskInstructions(
+        withRules({
+          promptOverrides: { qualificationNotes: 'FLUJO BASE' },
+          promptVariants: { promo: { qualificationNotes: 'FLUJO DE CAMPAÑA' } },
+        }),
+        NOW,
+        undefined, // contactPhone
+        undefined, // activeRole
+        undefined, // contactName
+        undefined, // activeAppointment
+        'promo',   // promptVariant
+      );
+      expect(out).toContain('FLUJO DE CAMPAÑA');
+      expect(out).not.toContain('FLUJO BASE');
+      expect(out).toContain(RULES); // the campaign replaced the flow, NOT the house rules
+    });
+
+    it('is suppressed in demo mode — rules about OUR business make no sense in the roleplay', () => {
+      const out = buildFrontDeskInstructions(
+        withRules({ demoPromptOverrides: { identity: 'Recepcionista de otra clínica' } }),
+        NOW,
+        undefined, // contactPhone
+        'demo',    // activeRole
+      );
+      expect(out).not.toContain(RULES);
+      expect(out).not.toContain('# Reglas de casa');
+    });
+
+    it('no houseRules configured → no section at all', () => {
+      expect(buildFrontDeskInstructions(cfg(), NOW)).not.toContain('# Reglas de casa');
+    });
+  });
+
   describe('bookingEnabled = false (tenant books by hand)', () => {
     const noBooking = () => cfg({ promptOverrides: { bookingEnabled: false } });
 

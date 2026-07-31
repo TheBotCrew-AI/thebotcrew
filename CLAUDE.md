@@ -320,11 +320,12 @@ for the retry cron.
     over `prompt_overrides`. First-touch sticky per conversation (`conversations.prompt_variant`,
     `app_set_prompt_variant`); orthogonal to the gate; demo persona wins over the variant.
     **The merge is a spread, so a variant replaces a whole FIELD** — a tenant-wide rule
-    written inside `qualificationNotes` (today: the fit filter, business-logic §2b) silently
-    disappears for that campaign's leads: no event, no failure, it just stops happening. No
-    field is override-proof; a `houseRules` slot read from base is the fix if it ever matters.
-    A variant changes the script, not the toolbox — every tool stays callable.
-    See docs/business-logic.md §1.1.
+    written inside `qualificationNotes` silently disappears for that campaign's leads: no
+    event, no failure, it just stops happening. Hence **`houseRules`**: a base-only override
+    field (not in `promptVariantSchema`) rendered after the flow and labelled as outranking
+    it, suppressed in demo mode. Tenant-wide rules go there, never in `qualificationNotes` —
+    that's where the fit filter (§2b) lives. A variant changes the script, not the toolbox —
+    every tool stays callable. See docs/business-logic.md §1.1.
 - Resolved: inbound payload shape (`type=InboundMessage`, `direction=inbound`,
   `locationId/contactId/conversationId/body/messageType`), send/calendar/tag endpoints
   (live in `ghl/client.ts`), and the **auth model** — per-location **OAuth** via the GHL App

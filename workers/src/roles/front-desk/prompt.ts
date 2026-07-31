@@ -198,7 +198,7 @@ export function buildFrontDeskInstructions(
 ): string {
   // Override precedence: demo persona > pinned campaign variant (merged over base) > base.
   const { overrides, usingDemo } = resolveEffectiveOverrides(config, activeRole, promptVariant);
-  const { identity, offering, qualificationNotes, toolInstructions } = overrides;
+  const { identity, offering, qualificationNotes, houseRules, toolInstructions } = overrides;
   const bookingEnabled = overrides.bookingEnabled !== false;
 
   const identityLine = identity?.trim()
@@ -230,6 +230,15 @@ export function buildFrontDeskInstructions(
 - Pregunta de forma conversacional, no como interrogatorio.
 - Si el cliente pide algo que no ofrecemos, acláralo amablemente y sugiere lo que sí tenemos.
 - Si está claramente listo para registrarse, no alargues: pasa a disponibilidad.`;
+
+  // Tenant-wide rules that survive a campaign variant (resolveEffectiveOverrides always
+  // sources them from base). Rendered AFTER the flow and labelled as outranking it, because
+  // a campaign's own script is exactly what they exist to override. Suppressed in demo mode:
+  // inside a roleplay for the LEAD's business, rules about who WE serve are incoherent.
+  const houseRulesSection =
+    !usingDemo && houseRules?.trim()
+      ? `\n\n# Reglas de casa — mandan sobre el flujo de arriba\n${houseRules.trim()}`
+      : '';
 
   const toneBody = config.tone?.trim()
     ? config.tone.trim()
@@ -421,7 +430,7 @@ Solo afirma datos que estén en esta configuración o que devuelvan tus herramie
 ${offeringSection}
 
 # Horario (zona horaria: ${config.timezone})
-${renderHours(config)}${flowSection}${toolInstructionsSection}${reminderSection}${contactNameSection}${demoHandoffSection}${existingAppointmentSection}
+${renderHours(config)}${flowSection}${houseRulesSection}${toolInstructionsSection}${reminderSection}${contactNameSection}${demoHandoffSection}${existingAppointmentSection}
 
 # Uso de herramientas
 Cuando necesites llamar una herramienta, NO generes texto antes de la llamada. Llama la herramienta en silencio y escribe tu respuesta al lead ÚNICAMENTE después de tener el resultado final. Un solo mensaje, sin intermedios.
