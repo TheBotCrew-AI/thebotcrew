@@ -27,6 +27,7 @@ import {
   botActivation,
   countBotMessagesSince,
   endDemoSession,
+  findUnansweredInbound,
   firstInboundAfter,
   getActiveDemoSession,
   getLatestDemoSession,
@@ -880,7 +881,7 @@ export async function handleInboundWebhook(
 
   console.log(`[webhook] inbound conv=${parsed.conversationId} contact=${parsed.contactId} channel=${parsed.channel} hasPhone=${!!phone}`);
 
-  const { conversationId, messageId } = await logMessage({
+  let { conversationId, messageId } = await logMessage({
     p_ghl_conversation_id: parsed.conversationId,
     p_client_id: tenant.clientId,
     p_channel: parsed.channel,
@@ -896,7 +897,27 @@ export async function handleInboundWebhook(
     p_ghl_message_id: parsed.messageId ?? null,
   });
   if (!conversationId) {
-    return { status: 200, body: { ignored: 'duplicate message', messageId: parsed.messageId } };
+    // GHL retried a webhook we already stored. Normally that's a harmless duplicate —
+    // but it is ALSO what happens when our first attempt persisted the inbound and then
+    // died before scheduling the turn. Dedup would turn that transient failure into
+    // permanent silence for a real lead (observed 2026-07-30 on a Facebook thread: the
+    // message was stored, zero events followed, the bot never answered). So: if the
+    // conversation's last message is still an unanswered lead message, recover by
+    // running the turn instead of dropping it.
+    const pending = await findUnansweredInbound(parsed.conversationId).catch((e: unknown) => {
+      console.error('[dedup] recovery check failed:', e instanceof Error ? e.message : String(e));
+      return null;
+    });
+    if (!pending) {
+      return { status: 200, body: { ignored: 'duplicate message', messageId: parsed.messageId } };
+    }
+    console.log(`[dedup] recovering unanswered inbound conv=${parsed.conversationId}`);
+    conversationId = pending.conversationId;
+    messageId = pending.messageId;
+    await logBotEvent(tenant.clientId, parsed.conversationId, 'turn_scheduled', {
+      via: 'duplicate-recovery',
+    });
+    // Fall through: the normal gates + scheduling below now run for this turn.
   }
 
   // Persist the contact's email as a merge key (phone already went in via logMessage above)
@@ -936,7 +957,23 @@ export async function handleInboundWebhook(
   // conversation is activated it flows normally — the keyword isn't required again.
   if (hasTriggerKeywords(tenant)) {
     const matched = messageMatchesTrigger(parsed.text, tenant.triggerKeywords ?? []);
-    const state = await botActivation(conversationId, matched);
+    // This RPC is the last awaited DB call before the turn is scheduled, and it used to be
+    // unprotected: a transient failure here threw, the route 500'd, and GHL's retry hit the
+    // dedup branch — a lead silently lost. Fail OPEN on error (answering one message we
+    // might have gated beats dropping a real lead) and make the degradation visible.
+    let state: Awaited<ReturnType<typeof botActivation>>;
+    try {
+      state = await botActivation(conversationId, matched);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error('[gate] botActivation failed — failing open:', msg);
+      await logBotEvent(tenant.clientId, parsed.conversationId, 'db_error', {
+        stage: 'bot_activation',
+        error: msg,
+        failedOpen: true,
+      });
+      state = 'already';
+    }
     if (state === 'gated') {
       console.log(`[gate] trigger keyword required conv=${parsed.conversationId}`);
       await logBotEvent(tenant.clientId, parsed.conversationId, 'keyword_required', { text: parsed.text.slice(0, 80) });

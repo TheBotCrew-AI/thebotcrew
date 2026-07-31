@@ -366,6 +366,43 @@ export async function countBotMessagesSince(conversationId: string, sinceTs: str
   return count ?? 0;
 }
 
+/**
+ * The conversation's last message when it is an UNANSWERED lead message older than
+ * `minAgeSeconds` — i.e. we stored the inbound and never replied.
+ *
+ * Used to recover from GHL's webhook retry: if our first attempt died after persisting
+ * the inbound, the retry would otherwise be swallowed by dedup and the lead would go
+ * permanently silent. The age floor keeps a genuinely concurrent duplicate (retry while
+ * the first turn is still generating) from producing a second reply.
+ */
+export async function findUnansweredInbound(
+  ghlConversationId: string,
+  minAgeSeconds = 60,
+): Promise<{ conversationId: string; messageId: string } | null> {
+  const supabase = getSupabase();
+  const { data: conv, error: convErr } = await supabase
+    .from('conversations')
+    .select('id')
+    .eq('ghl_conversation_id', ghlConversationId)
+    .maybeSingle();
+  fail('findUnansweredInbound:conversation', convErr);
+  const conversationId = (conv as { id?: string } | null)?.id;
+  if (!conversationId) return null;
+
+  const { data, error } = await supabase
+    .from('messages')
+    .select('id, sender_type, sent_at')
+    .eq('conversation_id', conversationId)
+    .order('sent_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  fail('findUnansweredInbound:message', error);
+  const row = data as { id: string; sender_type: string; sent_at: string } | null;
+  if (!row || row.sender_type !== 'lead') return null;
+  if (Date.now() - Date.parse(row.sent_at) < minAgeSeconds * 1000) return null;
+  return { conversationId, messageId: row.id };
+}
+
 /** Timestamp of the first inbound after `afterTs` (the demo budget's real start: the
  *  lead's first in-character message, so the startDemo announcement isn't charged). */
 export async function firstInboundAfter(conversationId: string, afterTs: string): Promise<string | null> {

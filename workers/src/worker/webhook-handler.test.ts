@@ -67,6 +67,7 @@ beforeEach(() => {
   vi.mocked(q.markDelivered).mockResolvedValue(undefined);
   vi.mocked(q.updateConversationStatus).mockResolvedValue(undefined);
   vi.mocked(q.botActivation).mockResolvedValue('already');
+  vi.mocked(q.findUnansweredInbound).mockResolvedValue(null);
   // Explicit default: clearAllMocks() does NOT drop implementations, so a test that
   // sets a demo persona would otherwise leak it into every later test.
   vi.mocked(q.getConversationPersona).mockResolvedValue({ activeRole: null, roleStartedAt: null, demoStartedAt: null, promptVariant: null });
@@ -904,5 +905,59 @@ describe('handleInboundWebhook — booking ends the demo (objective met)', () =>
     const res = await handleInboundWebhook(inbound, agentReplying('¡Listo!'));
     expect(res.body).toMatchObject({ replied: true });
     expect(q.endDemoSession).not.toHaveBeenCalled();
+  });
+});
+
+describe('handleInboundWebhook — a transient failure must not silence a lead', () => {
+  it('duplicate webhook + unanswered lead → recovers and runs the turn', async () => {
+    // GHL retried because our first attempt died AFTER storing the inbound. Dedup used to
+    // swallow the retry; the lead was never answered (2026-07-30, Facebook).
+    vi.mocked(q.logMessage).mockResolvedValueOnce({ conversationId: null, messageId: null });
+    vi.mocked(q.findUnansweredInbound).mockResolvedValue({ conversationId: 'cv-uuid', messageId: 'msg-uuid' });
+    const agent = agentReplying();
+    const res = await handleInboundWebhook(inbound, agent);
+
+    expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'turn_scheduled',
+      expect.objectContaining({ via: 'duplicate-recovery' }));
+    expect(agent.generate).toHaveBeenCalled();
+    expect(ghl.sendMessage).toHaveBeenCalled();
+    expect(res.body).toMatchObject({ replied: true });
+  });
+
+  it('duplicate webhook on an already-answered thread → still ignored (no double reply)', async () => {
+    vi.mocked(q.logMessage).mockResolvedValueOnce({ conversationId: null, messageId: null });
+    vi.mocked(q.findUnansweredInbound).mockResolvedValue(null);
+    const agent = agentReplying();
+    const res = await handleInboundWebhook(inbound, agent);
+    expect(agent.generate).not.toHaveBeenCalled();
+    expect(res.body).toMatchObject({ ignored: 'duplicate message' });
+  });
+
+  it('a failing recovery check degrades to the old behaviour, never throws', async () => {
+    vi.mocked(q.logMessage).mockResolvedValueOnce({ conversationId: null, messageId: null });
+    vi.mocked(q.findUnansweredInbound).mockRejectedValue(new Error('db down'));
+    const res = await handleInboundWebhook(inbound, agentReplying());
+    expect(res.body).toMatchObject({ ignored: 'duplicate message' });
+  });
+
+  it('the keyword gate fails OPEN when its RPC errors, and says so', async () => {
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(tenant({ triggerKeywords: ['agente'] }));
+    vi.mocked(q.botActivation).mockRejectedValue(new Error('rpc timeout'));
+    const agent = agentReplying();
+    const res = await handleInboundWebhook(inbound, agent); // body "hola" — no keyword
+
+    expect(agent.generate).toHaveBeenCalled(); // answered rather than silently dropped
+    expect(res.body).toMatchObject({ replied: true });
+    expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'db_error',
+      expect.objectContaining({ stage: 'bot_activation', failedOpen: true }));
+  });
+
+  it('a healthy gate still blocks a keywordless first message', async () => {
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(tenant({ triggerKeywords: ['agente'] }));
+    vi.mocked(q.botActivation).mockResolvedValue('gated');
+    const agent = agentReplying();
+    const res = await handleInboundWebhook(inbound, agent);
+    expect(agent.generate).not.toHaveBeenCalled();
+    expect(res.body).toMatchObject({ ignored: 'trigger keyword required' });
   });
 });
