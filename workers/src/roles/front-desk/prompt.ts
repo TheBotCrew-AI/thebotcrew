@@ -231,6 +231,22 @@ export function buildFrontDeskInstructions(
 - Si el cliente pide algo que no ofrecemos, acláralo amablemente y sugiere lo que sí tenemos.
 - Si está claramente listo para registrarse, no alargues: pasa a disponibilidad.`;
 
+  // The FAQ tool has to be announced OUTSIDE the flow. It used to be mentioned only in the
+  // built-in `# Tu objetivo` list above — which a tenant's own `qualificationNotes` replaces
+  // wholesale, so every tenant with a custom flow (i.e. every real one) silently lost it. The
+  // tool stayed registered, so the model called it only when it happened to notice it,
+  // and otherwise answered "no tengo ese dato" to questions the FAQ answers verbatim.
+  // Suppressed in demo mode: there the agent is roleplaying the LEAD's business, and the FAQ
+  // holds OUR answers — a lookup mid-roleplay leaks the wrong company's facts into the demo.
+  const faqSection =
+    !usingDemo && config.faq.length > 0
+      ? `\n\n# Preguntas frecuentes
+Hay ${config.faq.length} respuestas oficiales cargadas y NO están en este prompt: se consultan con la herramienta lookupFaq.
+- Antes de responder cualquier duda general (precios, tiempos, cobertura, cómo funciona, qué incluye), llama lookupFaq.
+- SIEMPRE llámala antes de decir que no sabes algo o que no tienes ese dato: es muy probable que la respuesta esté ahí.
+- Usa la respuesta que devuelva como fuente de verdad; adáptala al tono de la conversación, no la pegues literal.`
+      : '';
+
   // Tenant-wide rules that survive a campaign variant (resolveEffectiveOverrides always
   // sources them from base). Rendered AFTER the flow and labelled as outranking it, because
   // a campaign's own script is exactly what they exist to override. Suppressed in demo mode:
@@ -430,7 +446,7 @@ Solo afirma datos que estén en esta configuración o que devuelvan tus herramie
 ${offeringSection}
 
 # Horario (zona horaria: ${config.timezone})
-${renderHours(config)}${flowSection}${houseRulesSection}${toolInstructionsSection}${reminderSection}${contactNameSection}${demoHandoffSection}${existingAppointmentSection}
+${renderHours(config)}${flowSection}${faqSection}${houseRulesSection}${toolInstructionsSection}${reminderSection}${contactNameSection}${demoHandoffSection}${existingAppointmentSection}
 
 # Uso de herramientas
 Cuando necesites llamar una herramienta, NO generes texto antes de la llamada. Llama la herramienta en silencio y escribe tu respuesta al lead ÚNICAMENTE después de tener el resultado final. Un solo mensaje, sin intermedios.

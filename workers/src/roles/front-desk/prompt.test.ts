@@ -69,6 +69,40 @@ describe('buildFrontDeskInstructions', () => {
     expect(out).not.toContain('# Tu objetivo');
   });
 
+  describe('lookupFaq is announced outside the flow', () => {
+    // Regression: the tool was named only inside the built-in `# Tu objetivo` list, which a
+    // tenant's own qualificationNotes replaces — so every custom-flow tenant lost it and the
+    // agent answered "no tengo ese dato" to questions the FAQ answers verbatim.
+    it('renders for a tenant with a CUSTOM flow (where it used to disappear)', () => {
+      const out = buildFrontDeskInstructions(
+        cfg({ faq: [{ q: 'a', a: 'b' }], promptOverrides: { qualificationNotes: 'MI FLUJO' } }),
+        NOW,
+      );
+      expect(out).toContain('MI FLUJO');
+      expect(out).toContain('# Preguntas frecuentes');
+      expect(out).toContain('lookupFaq');
+    });
+
+    it('states how many answers exist, so the model knows there is something to look up', () => {
+      const twoFaqs = cfg({ faq: [{ q: 'a', a: 'b' }, { q: 'c', a: 'd' }] });
+      expect(buildFrontDeskInstructions(twoFaqs, NOW)).toContain('Hay 2 respuestas oficiales');
+    });
+
+    it('is absent when the tenant has no FAQ at all', () => {
+      expect(buildFrontDeskInstructions(cfg({ faq: [] }), NOW)).not.toContain('# Preguntas frecuentes');
+    });
+
+    it('is suppressed in demo mode — the FAQ holds OUR answers, not the roleplayed business\'s', () => {
+      const out = buildFrontDeskInstructions(
+        cfg({ faq: [{ q: 'a', a: 'b' }], demoPromptOverrides: { identity: 'Otra clínica' } }),
+        NOW,
+        undefined,
+        'demo',
+      );
+      expect(out).not.toContain('# Preguntas frecuentes');
+    });
+  });
+
   describe('houseRules — tenant rules that outrank the campaign flow', () => {
     const RULES = 'Solo servimos a negocios que agendan citas.';
     const withRules = (raw: Record<string, unknown> = {}) =>
