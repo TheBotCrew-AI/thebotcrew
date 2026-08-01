@@ -352,6 +352,29 @@ describe('handleInboundWebhook — contact-name backstop', () => {
       }),
     );
 
+  // Regression: the OpenAI aux calls sent `max_tokens`, which the gpt-5 family rejects with
+  // a 400 — so this backstop (and the status classifier) had NEVER run on the platform
+  // default. Fire-and-forget hid it: nothing but a log line. And the naive fix is a trap of
+  // its own — `max_completion_tokens` counts reasoning tokens, so the old 32 returns 200
+  // with an empty body. Assert the parameter AND that the budget is not a token-sized one.
+  it('sends max_completion_tokens (never max_tokens) with room for a reasoning pass', async () => {
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(nameConfirmTenant());
+    vi.mocked(q.loadRecentMessages).mockResolvedValue(openingHistory);
+    ghl.getContact.mockResolvedValue({ name: 'Gimnasio X' });
+    mockExtractor('Carlos');
+
+    await handleInboundWebhook(inbound, agentReplying('¿Te agendo el sábado?'));
+
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+    const call = fetchMock.mock.calls.find(([url]) => String(url).includes('openai.com'));
+    expect(call, 'the extractor never called OpenAI').toBeTruthy();
+    const body = JSON.parse((call![1] as { body: string }).body) as Record<string, unknown>;
+    expect(body).not.toHaveProperty('max_tokens');
+    expect(body.max_completion_tokens).toBeGreaterThanOrEqual(200);
+    // gpt-4o-mini 400s on reasoning_effort, and ai_model may name any model.
+    expect(body).not.toHaveProperty('reasoning_effort');
+  });
+
   it('flag on + opening window + new name → updates the GHL contact name', async () => {
     vi.mocked(q.loadTenantConfig).mockResolvedValue(nameConfirmTenant());
     vi.mocked(q.loadRecentMessages).mockResolvedValue(openingHistory);

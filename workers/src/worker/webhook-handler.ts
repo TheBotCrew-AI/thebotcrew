@@ -67,6 +67,28 @@ import { buildDemoEndAnnouncement, buildDemoStartAnnouncement } from '../roles/f
  */
 const DEBOUNCE_MS = 15_000;
 
+/**
+ * Output budget for the two auxiliary OpenAI calls (status classifier, name extractor).
+ * Both return a one-line JSON object, so the value looks absurdly generous — it isn't:
+ *
+ *  · `max_tokens` is REJECTED outright by the gpt-5 family ("Unsupported parameter …
+ *    use max_completion_tokens"). That 400 silently killed BOTH calls from the day the
+ *    platform default moved to gpt-5-mini: they are fire-and-forget, so nothing surfaced
+ *    beyond a log line. `llm_usage` proves it — not one `classify` or `extract-name` row
+ *    had ever been written. The classifier never ran (conversations stayed `active`, so
+ *    follow-ups kept chasing leads who were done) and the contact-name backstop never ran
+ *    (page-form leads kept their business name).
+ *  · `max_completion_tokens` counts REASONING tokens too, so the old value of 32 returns
+ *    HTTP 200 with an empty string (`finish_reason: "length"`) — a silent failure that
+ *    looks healthier than the 400 it replaced. 300 leaves room for the reasoning pass.
+ *
+ * `reasoning_effort: 'minimal'` would trim it further but is rejected by gpt-4o-mini
+ * ("Unrecognized request argument"), and `tenant_config.ai_model` may name any model —
+ * so this stays portable across both families. Anthropic keeps `max_tokens: 32`: it is
+ * that API's required parameter and it does not spend the budget on hidden reasoning.
+ */
+const AUX_MAX_COMPLETION_TOKENS = 300;
+
 export interface WebhookResult {
   status: 200 | 400 | 401 | 500;
   body: Record<string, unknown>;
@@ -251,7 +273,7 @@ async function classifyConversationOutcome(
         headers: { authorization: `Bearer ${llm.apiKey}`, 'content-type': 'application/json' },
         body: JSON.stringify({
           model: llm.model,
-          max_tokens: 32,
+          max_completion_tokens: AUX_MAX_COMPLETION_TOKENS,
           response_format: { type: 'json_object' },
           messages: [{ role: 'user', content: CLASSIFY_PROMPT(leadMessage, botReply) }],
         }),
@@ -326,7 +348,7 @@ async function correctContactName(
         headers: { authorization: `Bearer ${llm.apiKey}`, 'content-type': 'application/json' },
         body: JSON.stringify({
           model: llm.model,
-          max_tokens: 32,
+          max_completion_tokens: AUX_MAX_COMPLETION_TOKENS,
           response_format: { type: 'json_object' },
           messages: [{ role: 'user', content: EXTRACT_NAME_PROMPT(assistantQuestion, leadMessage, storedName) }],
         }),
