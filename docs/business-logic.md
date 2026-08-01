@@ -61,7 +61,9 @@ monolithic prompt (migration 0036; `core/tenant.ts` `matchVariantKeyword`,
   lives here for precisely this reason — it survived the move out of `qualificationNotes`,
   which is what would otherwise have taken it down on the first campaign variant.
 - **Live example — The Bot Crew's `demo-funnel` (2026-08-01).** `keyword_variants` maps the
-  three ad CTAs to it; its `qualificationNotes` is the demo route with **no call script in it
+  demo ad CTAs to it (`quiero mi demo`, `mi propia IA` — deliberately NOT
+  `completé el formulario`, which stays a gate keyword only, so form leads take the base
+  route to the call); its `qualificationNotes` is the demo route with **no call script in it
   at all**, while base keeps the route to the 20-min call. Measured before/after on the same
   scenario: one blob → the call was offered 1 turn in 5; split → variant 5/5 to the demo,
   base 3/3 to the call. The placement convention that makes this work (rules → `houseRules`,
