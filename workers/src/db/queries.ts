@@ -740,6 +740,24 @@ export async function setAwaitingHumanByContact(
 }
 
 /**
+ * Undo an opt-out for a contact (0045). Clear-only: there is no `set` direction,
+ * because adding the tag must never opt anyone out — the lead and the classifier
+ * own that call, an operator only owns reversing a wrong one.
+ *
+ * Returns how many conversations changed; 0 when there was nothing opted out,
+ * which is what keeps the bot's own tag write from looping (this only ever runs
+ * on the tag's ABSENCE). Rows in `handed_off` are untouched — stronger signal.
+ */
+export async function clearOptedOutByContact(ghlContactId: string): Promise<number> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase.rpc('app_clear_opted_out_by_contact', {
+    p_ghl_contact_id: ghlContactId,
+  });
+  fail('clearOptedOutByContact', error);
+  return (data as number | null) ?? 0;
+}
+
+/**
  * Observability event (run outcome, suppression, …). Never throws — swallows its
  * own errors. AWAIT it in request handlers: on Cloudflare a detached promise is
  * killed once the response is sent (no waitUntil in the route), so fire-and-forget

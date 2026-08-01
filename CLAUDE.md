@@ -168,7 +168,10 @@ supabase/
                                #      REFUSES awaiting_human → standby/completed, the two reactivable states, so the
                                #      lead's next message can't re-arm the cadence; logs status_change_blocked.
                                #      false ⇒ the caller must not mirror the status tag onto the GHL contact.
-                               #      **Apply BEFORE deploying**: the old RPC returned void → null → reads as refused)
+                               #      **Apply BEFORE deploying**: the old RPC returned void → null → reads as refused),
+                               # 0045 opted_out_mutes_the_bot (app_is_bot_suppressed now mutes on opted_out too — the
+                               #      farewell still sends, the mute starts at the NEXT inbound — plus the undo:
+                               #      removing the `bot-opted-out` tag clears it, one-directionally. See business-logic §2a)
   clients.sql, seed-tenants.sql# seeds (run by `supabase db reset` per config.toml)
 sites/                         # client marketing sites: static HTML, no build step, no deps
   _template/                   # starting point for a new client
@@ -323,6 +326,9 @@ for the retry cron.
   `ghl_contact_id`). The bot also writes tags when IT sets a status (`ghl/tags.ts`
   `STATUS_TAGS`), so state stays visible/synced in GHL. **Requires the `contacts.write`
   scope** (`ghl/oauth.ts`) — adding it means tenants must re-authorize the Marketplace app.
+- Opt-out undo (0045): `opted_out` now mutes the bot like `handed_off`, and since a classifier
+  (an LLM) sets it, **removing the `bot-opted-out` tag clears it** — same route/handler. Adding
+  the tag opts nobody out; the switch only undoes. See docs/business-logic.md §2a.
 - Webhook routes (configure in the Marketplace app): InboundMessage → `/webhooks/ghl`,
   OutboundMessage → `/webhooks/ghl/outbound`, ContactTagUpdate → `/webhooks/ghl/tags`.
 - Per-tenant reply gating (`tenant_config`, enforced in `webhook-handler.ts`; inbound is

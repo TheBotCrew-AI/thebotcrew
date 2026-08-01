@@ -803,7 +803,22 @@ export async function runAgentTurn({
       console.log(`[conv] status→${outcome} conv=${parsed.conversationId} applied=${applied}`);
       // Mirror the state onto the GHL contact as a tag (transparency / sync).
       const tag = applied ? STATUS_TAGS[outcome] : undefined;
-      if (tag) {
+      if (tag && outcome === 'opted_out') {
+        // AWAITED for this one status (0045). The tag stopped being decoration the
+        // moment `opted_out` began muting the bot: removing it is now the operator's
+        // only undo, so its ABSENCE is read as "this was a mistake". Written
+        // fire-and-forget, a failed write would leave a muted lead with no tag — and
+        // the next unrelated tag edit on that contact would silently un-mute someone
+        // who had asked us to stop. Loud on failure for the same reason.
+        try {
+          await ghl.addContactTags(parsed.contactId, [tag]);
+        } catch (e) {
+          console.error(
+            `[tags] OPT-OUT TAG WRITE FAILED contact=${parsed.contactId} — muted with no tag, a tag edit could lift it:`,
+            e instanceof Error ? e.message : String(e),
+          );
+        }
+      } else if (tag) {
         ghl.addContactTags(parsed.contactId, [tag]).catch((e: unknown) =>
           console.error('[tags] add on classify failed:', e instanceof Error ? e.message : String(e)),
         );

@@ -15,13 +15,22 @@ import type { ConversationStatus } from '../core/types.js';
 export const BOT_OFF_TAG = 'bot-off';
 
 /**
+ * Opt-out tag. Written by the bot when the classifier reads a "stop", and since
+ * 0045 also READ: removing it clears `opted_out` and lets the bot speak again.
+ *
+ * One-directional on purpose — adding it opts nobody out. The lead and the
+ * classifier own that decision; the operator only owns undoing a wrong one.
+ */
+export const OPTED_OUT_TAG = 'bot-opted-out';
+
+/**
  * Tags the bot applies to the GHL contact when it sets a conversation status.
  * Additive — kept for transparency so a human can see, in GHL, what the bot did.
  */
 export const STATUS_TAGS: Partial<Record<ConversationStatus, string>> = {
   handed_off: BOT_OFF_TAG,
   completed: 'bot-completed',
-  opted_out: 'bot-opted-out',
+  opted_out: OPTED_OUT_TAG,
   standby: 'bot-standby',
 };
 

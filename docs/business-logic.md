@@ -91,9 +91,10 @@ Statuses (`conversations.status`): `active`, `standby`, `completed`, `opted_out`
   pending follow-ups** and logs a **`status_changed`** event (`{from,to}`) — both in
   `app_update_conversation_status`, so every state change (agent tool or follow-up runner) is
   traceable. (A "silent standby" — agent ending a fresh lead with no reply — is visible here.)
-- A silent conversation in `standby`/`completed`/`opted_out` is **reactivated to `active`**
-  when the lead messages again (`app_reactivate_conversation`). `active` and `handed_off` are
-  untouched by reactivation.
+- A silent conversation in `standby`/`completed` is **reactivated to `active`** when the lead
+  messages again (`app_reactivate_conversation`). `active`, `awaiting_human`, `handed_off` and
+  `opted_out` are untouched by it — the last three on purpose, and only a human clears them
+  (see §2a; `opted_out` lost its reactivation in 0035 and its voice in 0045).
 
 ## 3. Human takeover & kill switch
 
@@ -348,11 +349,12 @@ behavior, and no TypeScript reads it — the logic lives in three RPCs:
 | `active` | yes | **yes** | — |
 | `standby` | yes | no | **yes** |
 | `completed` | yes | no | **yes** |
-| `opted_out` | yes | no | **no** (consent) |
+| `opted_out` | **no** (0045) | no | **no** (consent) |
 | `awaiting_human` | yes | no | **no** (we owe them) |
 | `handed_off` | **no** | no | **no** (only a human releases it) |
 
-- `app_is_bot_suppressed` mutes on **`handed_off` only** (plus the human 5-min timer).
+- `app_is_bot_suppressed` mutes on **`handed_off` and `opted_out`** (plus the human 5-min
+  timer).
 - `app_schedule_follow_up`, `app_load_due_follow_ups` and `app_commit_follow_up_send` (the gate
   right before the send, 0043) all require **`status = 'active'`**.
 
@@ -373,7 +375,31 @@ shows `bot-standby` on a lead still tagged `esperando-agenda`. Both call sites h
 so `pnpm test:unit` can't reach it: it's covered by `pnpm test:db`
 (`supabase/tests/0044_awaiting_human_is_sticky.test.sql`) against the local stack.
 
-So "reactivating" is **not** resuming the conversation — the bot was never stopped. It is
+**`opted_out` silences the bot (0045).** It used to only turn nudges off, so a lead who had
+said "no me escribas" still got a full reply every time they wrote — consent stopped the
+automation but not the conversation. Two things make that safe to enforce:
+
+- **The farewell survives.** The classifier stamps `opted_out` *before* the reply is sent, so a
+  mute checked at send time would kill the bot's own "listo, no te molesto más". It doesn't: the
+  pre-send re-check calls `isHumanActive`, not `isBotSuppressed` (same reason the agent's own
+  self-handoff can still say goodbye). The mute starts at the **next inbound**, the turn-start
+  gate. Don't "fix" that asymmetry without reading this.
+- **There is a way back, because an LLM sets this.** `opted_out` comes from the outcome
+  classifier. Before 0045 a false positive only cost the lead their nudges — the bot kept
+  answering, so they could talk their way back. Muting turns the same misfire into a lead
+  ignored forever, in silence, with `app_reactivate_conversation` skipping `opted_out` by design.
+  So **removing the `bot-opted-out` tag in GHL clears it** (`app_clear_opted_out_by_contact`,
+  wired in `tag-handler.ts`), mirroring `bot-off`. **One-directional:** adding the tag opts nobody
+  out — the lead and the classifier own that call, an operator only owns reversing a wrong one.
+  Every clear writes `status_changed {via:'opted_out_tag'}`; undoing a "stop" is the one state
+  change in this system that can put us in front of someone who asked us not to be.
+- Consequence: the `bot-opted-out` tag stopped being decoration, so the classifier now **awaits**
+  that one tag write (`webhook-handler.ts`). Fire-and-forget, a failed write would leave a muted
+  lead with no tag — and the next unrelated tag edit on that contact would silently un-mute them.
+  A failure logs loudly; the mute still stands (consent wins over tidiness).
+
+So "reactivating" is **not** resuming the conversation — for every value except `opted_out` and
+`handed_off` the bot was never stopped. It is
 **re-arming automated nudges**, and that is the only question worth asking when adding a
 value: *may we message this lead unprompted again?* (Migration 0035 fixed the answer for two
 cases; `opted_out` used to reactivate, which meant a lead who said "stop" could re-enter the

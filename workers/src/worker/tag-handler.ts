@@ -14,13 +14,23 @@
  * the tag *is* the "I've handled this" action, so it drives the state instead of
  * the model guessing when the request stops being pending.
  *
- * Neither loops on the bot's own writes: both RPCs no-op when the conversation is
- * already in the target state, and GHL fires this webhook for bot-written tags too.
+ * `bot-opted-out` (global, 0045) — the undo for a wrong opt-out:
+ *   absent → clear `opted_out` back to active
+ *   present → nothing. Adding it opts NOBODY out.
+ * Since 0045 `opted_out` mutes the bot exactly like `handed_off`, and it is set by
+ * the outcome classifier — an LLM. This tag is the only way back from a false
+ * positive that doesn't involve hand-written SQL, which is why the switch is
+ * one-directional: the lead's "stop" is never something an operator can assert on
+ * their behalf, only something they can decide was misread.
+ *
+ * None of the three loops on the bot's own writes: every RPC no-ops when the
+ * conversation is already in the target state, and GHL fires this webhook for
+ * bot-written tags too.
  */
 
 import { resolveTenant } from '../core/tenant.js';
-import { logBotEvent, setAwaitingHumanByContact, setBotOffByContact } from '../db/queries.js';
-import { BOT_OFF_TAG } from '../ghl/tags.js';
+import { clearOptedOutByContact, logBotEvent, setAwaitingHumanByContact, setBotOffByContact } from '../db/queries.js';
+import { BOT_OFF_TAG, OPTED_OUT_TAG } from '../ghl/tags.js';
 import type { GhlContactTagWebhook } from '../ghl/types.js';
 import { parseContactTagWebhook } from '../ghl/webhook.js';
 import type { WebhookResult } from './webhook-handler.js';
@@ -76,5 +86,20 @@ export async function handleTagWebhook(
     }
   }
 
-  return { status: 200, body: { ok: true, botOff, affected, awaitingAffected } };
+  // Opt-out undo. Same non-fatal treatment as the awaiting-human tag: this is a
+  // correction path, and failing it must not 500 a webhook whose kill-switch half
+  // already applied (GHL would retry the whole thing).
+  let optOutCleared = 0;
+  if (!parsed.tags.includes(OPTED_OUT_TAG)) {
+    try {
+      optOutCleared = await clearOptedOutByContact(parsed.contactId);
+      if (optOutCleared > 0) {
+        console.log(`[tags] contact=${parsed.contactId} ${OPTED_OUT_TAG} removed → cleared=${optOutCleared}`);
+      }
+    } catch (e) {
+      console.error('[tags] clearOptedOutByContact failed:', e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  return { status: 200, body: { ok: true, botOff, affected, awaitingAffected, optOutCleared } };
 }

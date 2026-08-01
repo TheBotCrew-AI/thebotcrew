@@ -8,7 +8,7 @@ vi.mock('../ghl/webhook.js');
 import { resolveTenant } from '../core/tenant.js';
 import * as q from '../db/queries.js';
 import { parseContactTagWebhook } from '../ghl/webhook.js';
-import { BOT_OFF_TAG } from '../ghl/tags.js';
+import { BOT_OFF_TAG, OPTED_OUT_TAG } from '../ghl/tags.js';
 import { handleTagWebhook } from './tag-handler.js';
 
 const tenant = { tenantId: 't1', clientId: 'client1', ghlLocationId: 'loc1' } as unknown as TenantContext;
@@ -19,6 +19,7 @@ beforeEach(() => {
   vi.mocked(parseContactTagWebhook).mockReturnValue({ locationId: 'loc1', contactId: 'c1', tags: [] });
   vi.mocked(q.setBotOffByContact).mockResolvedValue(0);
   vi.mocked(q.setAwaitingHumanByContact).mockResolvedValue(0);
+  vi.mocked(q.clearOptedOutByContact).mockResolvedValue(0);
   vi.mocked(q.logBotEvent).mockResolvedValue(undefined);
 });
 
@@ -118,6 +119,44 @@ describe('handleTagWebhook', () => {
 
       expect(res.status).toBe(200);
       expect(res.body).toMatchObject({ ok: true });
+    });
+  });
+
+  describe('the opt-out undo tag (0045)', () => {
+    // Since 0045 `opted_out` mutes the bot like `handed_off`, and it is set by an LLM
+    // classifier. Removing this tag is the only way back from a false positive that
+    // isn't hand-written SQL.
+    it('tag absent → clears the opt-out so the bot can speak again', async () => {
+      vi.mocked(q.clearOptedOutByContact).mockResolvedValue(1);
+      const res = await handleTagWebhook({} as never);
+      expect(q.clearOptedOutByContact).toHaveBeenCalledWith('c1');
+      expect(res.body).toMatchObject({ optOutCleared: 1 });
+    });
+
+    it('tag present → nothing happens: adding it opts NOBODY out', async () => {
+      // One-directional on purpose. The lead's "stop" is not something an operator
+      // can assert on their behalf — only something they can decide was misread.
+      vi.mocked(parseContactTagWebhook).mockReturnValue({
+        locationId: 'loc1', contactId: 'c1', tags: [OPTED_OUT_TAG],
+      });
+      await handleTagWebhook({} as never);
+      expect(q.clearOptedOutByContact).not.toHaveBeenCalled();
+    });
+
+    it('the bot writing the tag itself cannot loop back into a clear', async () => {
+      // GHL fires this webhook for bot-written tags too; the bot only ever ADDS it.
+      vi.mocked(parseContactTagWebhook).mockReturnValue({
+        locationId: 'loc1', contactId: 'c1', tags: [OPTED_OUT_TAG, 'bot-standby'],
+      });
+      await handleTagWebhook({} as never);
+      expect(q.clearOptedOutByContact).not.toHaveBeenCalled();
+    });
+
+    it('a failure here does not 500 the webhook', async () => {
+      vi.mocked(q.clearOptedOutByContact).mockRejectedValue(new Error('db down'));
+      const res = await handleTagWebhook({} as never);
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({ ok: true, optOutCleared: 0 });
     });
   });
 });
