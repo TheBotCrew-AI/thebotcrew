@@ -14,6 +14,17 @@
  *
  * When it fails: read prod, decide which side is right, and update the other.
  * Usually prod is right (Leo edits the tenant) and the fixture must be re-copied.
+ *
+ * CONTAINMENT, not equality (changed 2026-08-01). `houseRules` used to hold one
+ * section and equality was the strictest possible check. It now holds everything
+ * that must survive a campaign variant — the fit filter, the conversation
+ * principles, the opening protocol, the absolute rules — because a variant
+ * replaces `qualificationNotes` wholesale and anything left there would vanish
+ * with it. Mirroring all of that byte-for-byte would mean every wording tweak
+ * anywhere in it breaks an unrelated eval, and a check that cries wolf gets
+ * ignored. So each fixture mirrors the SECTION its golden cases exercise, and we
+ * assert prod still contains it verbatim: still catches the rule being edited,
+ * reworded or deleted, which is the whole point.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -65,6 +76,17 @@ describe.skipIf(!supabaseUrl || !serviceKey)('prompt drift — live tenant vs ev
     expect(live, 'prod has NO houseRules — the rule under test is not live').not.toBe('');
 
     const expected = fixture.trim();
-    expect(live, `prod and fixture diverge at ${firstDifference(live, expected)}\n\n`).toBe(expected);
+    // The section's first line doubles as its anchor: still there → the text was
+    // edited, so point at the first differing line; gone → the whole section was
+    // dropped, which is a different (worse) failure and deserves a different message.
+    const anchor = expected.split('\n')[0] ?? '';
+    const anchorAt = live.indexOf(anchor);
+    expect(
+      live.includes(expected),
+      anchorAt >= 0
+        ? `prod still has the section but its text changed — diverges at ${firstDifference(live.slice(anchorAt), expected)}\n\n`
+        : 'the mirrored section is GONE from prod houseRules — the golden cases now test text nobody runs\n\n',
+    ).toBe(true);
   });
 });
+
