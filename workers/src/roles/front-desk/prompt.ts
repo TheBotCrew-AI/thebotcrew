@@ -497,6 +497,40 @@ export function buildDemoStartAnnouncement(businessName?: string, offKeyword?: s
   );
 }
 
+/**
+ * The three out-of-character nudges a lead gets while a demo session is open and
+ * they have gone quiet. DETERMINISTIC and LLM-free, for the same reason the start
+ * and end announcements are — but here the stakes are higher: the reactivation
+ * agent is persona-blind, so letting it write these is exactly how a nudge ends up
+ * asking a lead who is roleplaying their own customer how many leads they get a day.
+ *
+ * Everything is wrapped in parentheses on purpose. The lead is mid-roleplay with an
+ * assistant pretending to be THEIR business; the parentheses are the only signal
+ * that this line comes from outside the play and is not the demo talking.
+ *
+ * `offKeyword` comes from `tenant_config.demo_off_keywords[0]` — never invented
+ * here. With none configured, the two tiers that promise an exit word fall back to
+ * wording that promises nothing, rather than naming a word that does nothing.
+ *
+ * Tier 3 is the last touch: the runner ends the session right after it, so this one
+ * has to work as a goodbye even if the lead never answers.
+ */
+export function buildDemoReminder(tier: number, offKeyword?: string): string {
+  const off = offKeyword?.trim();
+  switch (tier) {
+    case 1:
+      return '(Tu demo sigue activo. Si quieres seguir probándolo, ignora este mensaje y continúa la conversación.)';
+    case 2:
+      return off
+        ? `(¿Psst, quieres terminar el demo? Escribe "${off}" para cerrarlo y regresar conmigo.)`
+        : '(¿Psst, quieres terminar el demo? Dime y lo cerramos para seguir platicando.)';
+    default:
+      return off
+        ? `(Sigo por aquí cuando termines. Escribe "${off}" y platicamos de cómo quedaría esto en tu negocio.)`
+        : '(Sigo por aquí cuando termines. Dime y platicamos de cómo quedaría esto en tu negocio.)';
+  }
+}
+
 export function buildDemoEndAnnouncement(handoff: DemoHandoff): string {
   const biz = handoff.businessName?.trim() || 'tu negocio';
   const name = handoff.leadName?.trim();

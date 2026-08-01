@@ -21,7 +21,8 @@ import {
 } from '../core/llm-usage.js';
 import { channelEnabled, hasTriggerKeywords, inTestMode, matchesDemoOff, matchesDemoOn, matchVariantKeyword, messageMatchesTrigger, resolveTenant, roleEnabled } from '../core/tenant.js';
 import { buildAgentRequestContext } from '../core/runtime-context.js';
-import type { AiProvider, ConversationMessage, ConversationStatus, DemoHandoff, TenantContext, TurnContext } from '../core/types.js';
+import type { AiProvider, ConversationMessage, ConversationStatus, DemoHandoff, FollowUpKind, TenantContext, TurnContext } from '../core/types.js';
+import { DEMO_REMINDER_CADENCE } from '../core/types.js';
 import {
   cancelFollowUps,
   botActivation,
@@ -45,6 +46,7 @@ import {
   logMessage,
   markDelivered,
   reactivateConversation,
+  countSentDemoReminders,
   scheduleFollowUp,
   setGhlMessageId,
   setPromptVariant,
@@ -874,13 +876,36 @@ export async function runAgentTurn({
   // pending nudge, so this resets the cadence clock while the angle cursor advances
   // independently (see followup-runner). Must be awaited — a detached promise gets
   // killed when waitUntil resolves.
-  // Demo guard: the reactivation agent is persona-blind (full history, tenant's normal
-  // config + angles) — a nudge mid-demo would shatter the roleplay. Follow-ups resume
-  // when the conversation leaves demo mode.
-  const firstDelay = activeRole === 'demo' ? undefined : tenant.config.followUpCadence?.[0];
+  // Two ladders, never both. In demo the reactivation agent is persona-blind (full
+  // history, tenant's normal config + angles) and its nudge would shatter the
+  // roleplay — so the demo gets its own fixed, LLM-free reminders instead (0043).
+  // Suppressing follow-ups outright, as this did before, left a lead who walked away
+  // mid-demo unreachable forever: expiry is only evaluated on the next inbound.
+  //
+  // The demo rung is the number already DELIVERED, not this row's position: every
+  // inbound cancels the pending nudge, so a lead who keeps playing never climbs, and
+  // resetting to rung 1 would mean reminder #2 (how to close the demo) never lands.
+  const inDemo = activeRole === 'demo';
+  let firstDelay: number | undefined;
+  let followUpKind: FollowUpKind = 'cadence';
+  let followUpTier = 1;
+  if (inDemo) {
+    followUpKind = 'demo';
+    try {
+      followUpTier = (await countSentDemoReminders(conversationId)) + 1;
+      firstDelay = DEMO_REMINDER_CADENCE[followUpTier - 1];
+    } catch (e) {
+      console.error('[followup] demo rung read failed:', e instanceof Error ? e.message : String(e));
+    }
+  } else {
+    firstDelay = tenant.config.followUpCadence?.[0];
+  }
   if (firstDelay !== undefined) {
     try {
-      await scheduleFollowUp(conversationId, 1, firstDelay, tenant.config.timezone, tenant.config.quietHours);
+      await scheduleFollowUp(
+        conversationId, followUpTier, firstDelay,
+        tenant.config.timezone, tenant.config.quietHours, followUpKind,
+      );
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       console.error('[followup] scheduleFollowUp failed:', msg);
@@ -973,8 +998,11 @@ export async function handleInboundWebhook(
     );
   }
 
-  // Cancel any pending follow-ups — the lead is back. Fire-and-forget; non-blocking.
-  cancelFollowUps(conversationId).catch((e: unknown) => {
+  // Cancel any pending follow-ups — the lead is back. AWAITED (0043): this is one
+  // half of the send race. The runner's commit gate refuses to send a row that is no
+  // longer 'processing', so the sooner this lands the more often the cheap check
+  // catches it; fire-and-forget could let a nudge slip out after the lead replied.
+  await cancelFollowUps(conversationId).catch((e: unknown) => {
     console.error('[followup] cancelFollowUps failed:', e instanceof Error ? e.message : String(e));
   });
   // Reactivate if the conversation was in a terminal state (standby/completed/opted_out).

@@ -7,7 +7,8 @@
  */
 
 import { getSupabase } from './client.js';
-import type { AiProvider, Channel, ConversationMessage, ConversationStatus, QuietHours, TenantContext } from '../core/types.js';
+import type { AiProvider, Channel, ConversationMessage, ConversationStatus, FollowUpKind, QuietHours, TenantContext } from '../core/types.js';
+import { DEMO_REMINDER_ROLE } from '../core/types.js';
 import { clampToActiveHours, DEFAULT_QUIET_HOURS } from '../core/active-hours.js';
 import type { TokenUsage } from '../core/llm-usage.js';
 import { isAppointmentActive } from './appointment-active.js';
@@ -361,7 +362,12 @@ export async function countBotMessagesSince(conversationId: string, sinceTs: str
     .select('id', { count: 'exact', head: true })
     .eq('conversation_id', conversationId)
     .eq('sender_type', 'bot')
-    .gte('sent_at', sinceTs);
+    .gte('sent_at', sinceTs)
+    // Demo reminders are OUR bookkeeping, not the demo talking, and the budget is
+    // only 7 messages — counting three reminders against it would silently cost the
+    // lead almost half of what they came to see. `.or` rather than `.neq` because a
+    // PostgREST neq also drops NULL agent_role rows, which are real demo replies.
+    .or(`agent_role.is.null,agent_role.neq.${DEMO_REMINDER_ROLE}`);
   fail('countBotMessagesSince', error);
   return count ?? 0;
 }
@@ -831,6 +837,7 @@ export async function scheduleFollowUp(
   delayMinutes: number,
   timezone: string,
   quietHours?: QuietHours | null,
+  kind: FollowUpKind = 'cadence',
 ): Promise<string | null> {
   const base = new Date(Date.now() + delayMinutes * 60_000);
   const scheduledFor = clampToActiveHours(base, timezone, quietHours ?? DEFAULT_QUIET_HOURS);
@@ -839,9 +846,55 @@ export async function scheduleFollowUp(
     p_conversation_id: conversationId,
     p_tier: tier,
     p_scheduled_for: scheduledFor.toISOString(),
+    p_kind: kind,
   });
   fail('scheduleFollowUp', error);
   return (data as string | null) ?? null;
+}
+
+/**
+ * Last check before a nudge goes out: claim the row for sending, or refuse.
+ *
+ * Returns false when the lead came back while we were generating — either the
+ * inbound already cancelled the row, or it landed so recently that only the
+ * last-inbound comparison catches it. Either way the nudge must be dropped: it
+ * would answer a message the lead has already moved past, which is exactly the
+ * collision seen on 2026-07-31 (inbound 15:29:06 → nudge 15:29:14).
+ *
+ * The atomicity is the point. Reading the status and then sending would just
+ * move the race a few milliseconds later; this claims and checks in one
+ * statement, so only one of {cancel, send} can win.
+ */
+export async function commitFollowUpSend(
+  followUpId: string,
+  lastInboundMessageId: string | null,
+): Promise<boolean> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase.rpc('app_commit_follow_up_send', {
+    p_follow_up_id: followUpId,
+    p_last_inbound_id: lastInboundMessageId,
+  });
+  fail('commitFollowUpSend', error);
+  return (data as string | null) != null;
+}
+
+/**
+ * How many demo reminders this conversation has already been SENT — the demo
+ * ladder's cursor, mirroring loadSentAngleIndexes for the angle pool.
+ *
+ * Counting sent rows (not scheduled ones) is what makes the ladder survive an
+ * active lead: every inbound cancels the pending nudge and the next turn re-arms
+ * rung N+1, so someone who keeps playing with the demo simply never climbs it.
+ * Resetting to rung 1 instead would mean reminder #2 — the one that explains how
+ * to close the demo — is never reached.
+ */
+export async function countSentDemoReminders(conversationId: string): Promise<number> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase.rpc('app_count_sent_demo_reminders', {
+    p_conversation_id: conversationId,
+  });
+  fail('countSentDemoReminders', error);
+  return (data as number | null) ?? 0;
 }
 
 /** Load follow-ups that are due and ready to be sent. */
@@ -858,6 +911,8 @@ export async function loadDueFollowUps(limit = 20): Promise<DueFollowUp[]> {
     channel: string;
     tier: number;
     ghl_location_id: string;
+    kind: string | null;
+    last_inbound_message_id: string | null;
   };
   return ((data ?? []) as Row[]).map((r) => ({
     followUpId: r.follow_up_id,
@@ -868,7 +923,30 @@ export async function loadDueFollowUps(limit = 20): Promise<DueFollowUp[]> {
     channel: r.channel,
     tier: r.tier,
     ghlLocationId: r.ghl_location_id,
+    // Defensive default: a row written before 0042 (or by an older Worker) has no
+    // kind, and 'cadence' is the behaviour it was scheduled under.
+    kind: r.kind === 'demo' ? 'demo' : 'cadence',
+    lastInboundMessageId: r.last_inbound_message_id ?? null,
   }));
+}
+
+/**
+ * Cheap, non-atomic pre-flight: is this claimed row still ours to send?
+ *
+ * Not a substitute for `commitFollowUpSend` — it exists purely to bail out
+ * BEFORE the LLM call in the common case (the lead's inbound already ran
+ * `app_cancel_follow_ups`), so an abort costs a read instead of a generation.
+ * The atomic gate right before the send is what actually decides.
+ */
+export async function getFollowUpStatus(followUpId: string): Promise<string | null> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from('follow_ups')
+    .select('status')
+    .eq('id', followUpId)
+    .maybeSingle();
+  fail('getFollowUpStatus', error);
+  return (data as { status: string } | null)?.status ?? null;
 }
 
 /** Mark a follow-up as successfully sent. */

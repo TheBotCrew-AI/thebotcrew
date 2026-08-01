@@ -103,7 +103,10 @@ uses the service-role key, which bypasses RLS. Three rules to keep it shut:
   clamps getAvailability), the reply gates (`enabled_channels`, `test_contact_ids`,
   `trigger_keywords` — see GHL notes), and the **demo persona** (`demo_on_keywords` /
   `demo_off_keywords` control words + `demo_prompt_overrides` jsonb — see docs/business-logic.md)
-  live in Supabase. Onboarding a client is a DB row + config — no redeploy for the common case.
+  live in Supabase. **`demo_off_keywords[0]` is lead-facing** — the demo start announcement and
+  the demo reminders both print it verbatim, so keep an operator shorthand out of that first slot
+  and prefer a two-word phrase (`salir demo`): the exit matcher is whole-word and a lead
+  roleplaying their own customer will type a bare "salir" by accident. Onboarding a client is a DB row + config — no redeploy for the common case.
 
 Prompt templates carry placeholders; tenant config fills them at runtime. Agents only
 state facts present in tenant config or returned by tools (anti-hallucination rule).
@@ -156,6 +159,9 @@ supabase/
                                # 0040 closer_role (a demo ends INTO active_role='closer' — the setter persona persists
                                #      for the whole post-demo conversation, not just the flip turn),
                                # 0041 demo_end_reason_booked (a simulated booking ends the demo: objective met → pitch),
+                               # 0042 lead_disqualified_event (WHY a lead was parked, in the model's own words),
+                               # 0043 followup_send_gate_and_demo_reminders (atomic commit gate before a nudge is sent
+                               #      + follow_ups.kind: the demo gets its own 3-rung, LLM-free ladder — see business-logic §4/§4.2),
                                # 0042 lead_disqualified_event (optional `reason` on updateConversationStatus →
                                #      a distinct event, so a lead ruled out on purpose stops looking like an
                                #      ordinary standby — see business-logic §2b)
@@ -171,7 +177,9 @@ outright** (duplicate key on `schema_migrations_pkey`). That was the state of th
 2026-07-28, which is why local dry-runs had been impossible and every migration since 0006 was
 validated straight against prod. Use a letter suffix (`0013a`, `0014a–d`) when inserting
 between numbers. Renaming is safe for prod: prod's ledger uses timestamp versions
-(`20260613171711`), not these filenames.
+(`20260613171711`), not these filenames. **`ls supabase/migrations/ | tail` before naming a new
+file** — the highest number in the docs is not always the highest on disk (0043 was almost
+written as a second 0042).
 
 Two DB layers: **config read-layer** (`tenants`, `tenant_config`) + **conversation/stats
 write-layer** (`conversations`, `messages`, `appointments`, `bot_events`, views). Writes

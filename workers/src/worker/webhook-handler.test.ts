@@ -63,6 +63,7 @@ beforeEach(() => {
   vi.mocked(q.cancelFollowUps).mockResolvedValue(undefined);
   vi.mocked(q.reactivateConversation).mockResolvedValue(undefined);
   vi.mocked(q.scheduleFollowUp).mockResolvedValue(null);
+  vi.mocked(q.countSentDemoReminders).mockResolvedValue(0);
   vi.mocked(q.setGhlMessageId).mockResolvedValue(undefined);
   vi.mocked(q.markDelivered).mockResolvedValue(undefined);
   vi.mocked(q.updateConversationStatus).mockResolvedValue(undefined);
@@ -530,14 +531,42 @@ describe('handleInboundWebhook — demo-mode guards (roleplay must not touch rea
       tenant({ config: { ...tenant().config, followUpCadence: [30, 180] } }),
     );
     await handleInboundWebhook(inbound, agentReplying());
-    expect(q.scheduleFollowUp).toHaveBeenCalledWith('cv-uuid', 1, 30, 'America/Mexico_City', undefined);
+    expect(q.scheduleFollowUp).toHaveBeenCalledWith('cv-uuid', 1, 30, 'America/Mexico_City', undefined, 'cadence');
   });
 
-  it('demo: no follow-up is scheduled (the reactivation agent is persona-blind)', async () => {
+  it('demo: the cadence ladder never fires — its nudges would shatter the roleplay', async () => {
     vi.mocked(q.loadTenantConfig).mockResolvedValue(
       tenant({ config: { ...tenant().config, followUpCadence: [30, 180] } }),
     );
     vi.mocked(q.getConversationPersona).mockResolvedValue(demoPersona);
+    await handleInboundWebhook(inbound, agentReplying());
+    expect(q.scheduleFollowUp).not.toHaveBeenCalledWith(
+      expect.anything(), expect.anything(), expect.anything(), expect.anything(), expect.anything(), 'cadence',
+    );
+  });
+
+  it('demo: arms the demo reminder ladder instead of going silent', async () => {
+    // Before 0043 this scheduled nothing at all, which left a lead who walked away
+    // mid-demo unreachable forever — expiry is only evaluated on the next inbound.
+    vi.mocked(q.getConversationPersona).mockResolvedValue(demoPersona);
+    await handleInboundWebhook(inbound, agentReplying());
+    expect(q.scheduleFollowUp).toHaveBeenCalledWith(
+      'cv-uuid', 1, 30, 'America/Mexico_City', undefined, 'demo',
+    );
+  });
+
+  it('demo: the rung follows what already landed, so reminder #2 is reachable', async () => {
+    vi.mocked(q.getConversationPersona).mockResolvedValue(demoPersona);
+    vi.mocked(q.countSentDemoReminders).mockResolvedValue(1);
+    await handleInboundWebhook(inbound, agentReplying());
+    expect(q.scheduleFollowUp).toHaveBeenCalledWith(
+      'cv-uuid', 2, 240, 'America/Mexico_City', undefined, 'demo',
+    );
+  });
+
+  it('demo: past the last rung nothing is re-armed (the runner closes the demo there)', async () => {
+    vi.mocked(q.getConversationPersona).mockResolvedValue(demoPersona);
+    vi.mocked(q.countSentDemoReminders).mockResolvedValue(3);
     await handleInboundWebhook(inbound, agentReplying());
     expect(q.scheduleFollowUp).not.toHaveBeenCalled();
   });
@@ -860,7 +889,7 @@ describe('handleInboundWebhook — the closer persists after the demo (active_ro
     vi.mocked(q.getConversationPersona).mockResolvedValue(closerPersona);
     vi.mocked(q.getLatestDemoSession).mockResolvedValue(lastSession as never);
     await handleInboundWebhook(inbound, agentReplying());
-    expect(q.scheduleFollowUp).toHaveBeenCalledWith('cv-uuid', 1, 30, 'America/Mexico_City', undefined);
+    expect(q.scheduleFollowUp).toHaveBeenCalledWith('cv-uuid', 1, 30, 'America/Mexico_City', undefined, 'cadence');
   });
 });
 
@@ -981,7 +1010,7 @@ describe('handleInboundWebhook — booking ends the demo (objective met)', () =>
       .mockResolvedValueOnce(base as never)
       .mockResolvedValue({ ...base, simulatedBooking: booking } as never);
     await handleInboundWebhook(inbound, agentReplying('¡Listo!'));
-    expect(q.scheduleFollowUp).toHaveBeenCalledWith('cv-uuid', 1, 30, 'America/Mexico_City', undefined);
+    expect(q.scheduleFollowUp).toHaveBeenCalledWith('cv-uuid', 1, 30, 'America/Mexico_City', undefined, 'cadence');
   });
 
   it('a failed session read never breaks the turn — the demo just runs on', async () => {

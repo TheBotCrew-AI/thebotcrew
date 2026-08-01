@@ -5,7 +5,7 @@
  * `supabase gen types`, these can be replaced by the generated types.
  */
 
-import type { Channel, Direction, SenderType } from '../core/types.js';
+import type { Channel, Direction, FollowUpKind, SenderType } from '../core/types.js';
 
 /** Row shape from `tenant_config` (jsonb columns arrive parsed). */
 export interface TenantConfigRow {
@@ -63,6 +63,14 @@ export interface DueFollowUp {
   channel: string;
   tier: number;
   ghlLocationId: string;
+  /** Which ladder this row belongs to (0042). Rows written before 0042 read 'cadence'. */
+  kind: FollowUpKind;
+  /**
+   * The conversation's last inbound as of the CLAIM. The runner hands it back to
+   * `app_commit_follow_up_send` right before sending: if it no longer matches, the
+   * lead replied while the LLM was generating and the nudge must not go out.
+   */
+  lastInboundMessageId: string | null;
 }
 
 /** Embedded `tenants` row when querying from `tenant_config`. */
@@ -181,7 +189,13 @@ export type BotEventType =
   // The bot ruled a lead out and parked it ({status, reason} in metadata, 0042).
   // Reason is the model's own words — read it, don't just count rows: an
   // unexpected reason is the fingerprint of a model disqualifying on its own terms.
-  | 'lead_disqualified';
+  | 'lead_disqualified'
+  // A claimed follow-up was dropped instead of sent ({reason, kind, tier}, 0043).
+  // The only record that a nudge was correctly withheld — its absence is what
+  // made the send race invisible for so long.
+  | 'followup_aborted'
+  // An out-of-character "your demo is still open" nudge went out ({rung}, 0043)
+  | 'demo_reminder_sent';
 
 export interface LogAppointmentParams {
   p_client_id: string;

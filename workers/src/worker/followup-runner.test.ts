@@ -11,18 +11,20 @@ vi.mock('../roles/reactivation/angle-select.js', async (importOriginal) => {
   // Keep the PURE pool resolver real; stub only the model-output parser.
   return { ...actual, parseAngleSelection: vi.fn(() => ({ message: 'te esperamos 👋', angleChoice: null })) };
 });
-const ghl = { sendMessage: vi.fn() };
+const ghl = { sendMessage: vi.fn(), addContactTags: vi.fn() };
 vi.mock('../ghl/client.js', () => ({ GhlClient: vi.fn(() => ghl) }));
 
 import { getAiApiKey, resolveAiApiKey } from '../core/env.js';
 import * as q from '../db/queries.js';
 import { runPendingFollowUps } from './followup-runner.js';
 
-function tenant(overrides: Record<string, unknown> = {}): TenantContext {
+function tenant(overrides: Record<string, unknown> = {}, top: Record<string, unknown> = {}): TenantContext {
   return {
     tenantId: 't1',
     clientId: 'client1',
     ghlLocationId: 'loc1',
+    demoOffKeywords: ['salir demo'],
+    ...top,
     config: { followUpCadence: [60, 1440], followUpAngles: ['angle A', 'angle B'], timezone: 'America/Mexico_City', quietHours: null, ...overrides },
   } as unknown as TenantContext;
 }
@@ -36,6 +38,8 @@ const due = (o: Partial<DueFollowUp> = {}): DueFollowUp => ({
   channel: 'whatsapp',
   tier: 1,
   ghlLocationId: 'loc1',
+  kind: 'cadence',
+  lastInboundMessageId: 'in1',
   ...o,
 });
 
@@ -56,8 +60,21 @@ beforeEach(() => {
   vi.mocked(q.markFollowUpFailed).mockResolvedValue(undefined);
   vi.mocked(q.scheduleFollowUp).mockResolvedValue(null);
   vi.mocked(q.updateConversationStatus).mockResolvedValue(undefined);
+  // The send gate: open by default so existing cases exercise the happy path.
+  vi.mocked(q.getFollowUpStatus).mockResolvedValue('processing');
+  vi.mocked(q.commitFollowUpSend).mockResolvedValue(true);
+  vi.mocked(q.countSentDemoReminders).mockResolvedValue(0);
+  vi.mocked(q.cancelFollowUps).mockResolvedValue(undefined);
+  vi.mocked(q.logBotEvent).mockResolvedValue(undefined);
+  vi.mocked(q.getActiveDemoSession).mockResolvedValue(null);
+  vi.mocked(q.endDemoSession).mockResolvedValue(undefined);
+  vi.mocked(q.setActiveRole).mockResolvedValue(undefined);
+  vi.mocked(q.getConversationPersona).mockResolvedValue({
+    activeRole: null, roleStartedAt: null, demoStartedAt: null, promptVariant: null,
+  });
   vi.mocked(agent.generate).mockResolvedValue({ text: 'te esperamos 👋' } as never);
   ghl.sendMessage.mockResolvedValue({ ghlMessageId: 'g1' });
+  ghl.addContactTags.mockResolvedValue(undefined);
 });
 
 describe('runPendingFollowUps', () => {
@@ -81,7 +98,7 @@ describe('runPendingFollowUps', () => {
     const res = await runPendingFollowUps(agent);
     expect(ghl.sendMessage).toHaveBeenCalledWith(expect.objectContaining({ contactId: 'c1', text: 'te esperamos 👋' }));
     expect(q.markFollowUpSent).toHaveBeenCalledWith('fu1', expect.anything());
-    expect(q.scheduleFollowUp).toHaveBeenCalledWith('cv1', 2, 1440, 'America/Mexico_City', null);
+    expect(q.scheduleFollowUp).toHaveBeenCalledWith('cv1', 2, 1440, 'America/Mexico_City', null, 'cadence');
     expect(q.updateConversationStatus).not.toHaveBeenCalled();
     expect(res).toEqual({ processed: 1, failed: 0, skipped: 0 });
   });
@@ -99,6 +116,153 @@ describe('runPendingFollowUps', () => {
     const res = await runPendingFollowUps(agent);
     expect(q.markFollowUpFailed).toHaveBeenCalledWith('fu1');
     expect(res).toEqual({ processed: 0, failed: 1, skipped: 0 });
+  });
+});
+
+describe('runPendingFollowUps — the send gate (a lead who replies must not be chased)', () => {
+  // Regression for 2026-07-31 conv b5bf41b4: the lead answered at 15:29:06 and the
+  // nudge still went out at 15:29:14, because nothing re-read the row between the
+  // claim and the send — and markFollowUpSent then overwrote 'cancelled' with 'sent'.
+
+  it('the inbound already cancelled the row → aborts BEFORE paying for a generation', async () => {
+    vi.mocked(q.getFollowUpStatus).mockResolvedValue('cancelled');
+    const res = await runPendingFollowUps(agent);
+    expect(agent.generate).not.toHaveBeenCalled();
+    expect(ghl.sendMessage).not.toHaveBeenCalled();
+    expect(q.markFollowUpSent).not.toHaveBeenCalled();
+    expect(res).toEqual({ processed: 0, failed: 0, skipped: 1 });
+  });
+
+  it('the lead replies DURING generation → the gate refuses and nothing is sent', async () => {
+    vi.mocked(q.commitFollowUpSend).mockResolvedValue(false);
+    const res = await runPendingFollowUps(agent);
+    expect(agent.generate).toHaveBeenCalled();       // tokens were already spent
+    expect(ghl.sendMessage).not.toHaveBeenCalled();  // but the lead is spared
+    expect(q.markFollowUpSent).not.toHaveBeenCalled();
+    expect(res).toEqual({ processed: 0, failed: 0, skipped: 1 });
+  });
+
+  it('an aborted nudge is never logged as an outbound message', async () => {
+    vi.mocked(q.commitFollowUpSend).mockResolvedValue(false);
+    await runPendingFollowUps(agent);
+    expect(q.logMessage).not.toHaveBeenCalled();
+  });
+
+  it('an abort is recorded — the silent overwrite is what hid this bug', async () => {
+    vi.mocked(q.commitFollowUpSend).mockResolvedValue(false);
+    await runPendingFollowUps(agent);
+    expect(q.logBotEvent).toHaveBeenCalledWith(
+      'client1', 'conv1', 'followup_aborted', expect.objectContaining({ reason: 'lead_replied' }),
+    );
+    expect(q.cancelFollowUps).toHaveBeenCalledWith('cv1');
+  });
+
+  it('the gate is handed the last inbound seen at claim time', async () => {
+    await runPendingFollowUps(agent);
+    expect(q.commitFollowUpSend).toHaveBeenCalledWith('fu1', 'in1');
+  });
+
+  it('a cadence nudge that finds the conversation back in a demo aborts', async () => {
+    vi.mocked(q.getConversationPersona).mockResolvedValue({
+      activeRole: 'demo', roleStartedAt: null, demoStartedAt: null, promptVariant: null,
+    });
+    const res = await runPendingFollowUps(agent);
+    expect(agent.generate).not.toHaveBeenCalled();
+    expect(res.skipped).toBe(1);
+  });
+});
+
+describe('runPendingFollowUps — demo reminders', () => {
+  const demoDue = (o: Partial<DueFollowUp> = {}) => due({ kind: 'demo', ...o });
+  const sentText = () =>
+    ghl.sendMessage.mock.calls.map((c) => (c[0] as { text: string }).text).join('\n');
+  const inDemo = () =>
+    vi.mocked(q.getConversationPersona).mockResolvedValue({
+      activeRole: 'demo', roleStartedAt: null, demoStartedAt: null, promptVariant: null,
+    });
+
+  beforeEach(() => {
+    vi.mocked(q.loadDueFollowUps).mockResolvedValue([demoDue()]);
+    inDemo();
+  });
+
+  it('never calls the model — the reactivation agent is what breaks the roleplay', async () => {
+    await runPendingFollowUps(agent);
+    expect(agent.generate).not.toHaveBeenCalled();
+    expect(q.loadSentAngleIndexes).not.toHaveBeenCalled();
+  });
+
+  it('rung 1 is the "ignore this" nudge, wrapped in parentheses', async () => {
+    await runPendingFollowUps(agent);
+    const text = sentText();
+    expect(text.startsWith('(')).toBe(true);
+    expect(text.endsWith(')')).toBe(true);
+    expect(text).toContain('sigue activo');
+  });
+
+  it('rung 2 names the tenant\'s configured exit keyword, never an invented one', async () => {
+    vi.mocked(q.countSentDemoReminders).mockResolvedValue(1);
+    await runPendingFollowUps(agent);
+    expect(sentText()).toContain('"salir demo"');
+  });
+
+  it('with no exit keyword configured it promises nothing instead of naming a dead word', async () => {
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(tenant({}, { demoOffKeywords: null }));
+    vi.mocked(q.countSentDemoReminders).mockResolvedValue(1);
+    await runPendingFollowUps(agent);
+    expect(sentText()).not.toContain('Escribe');
+  });
+
+  it('the rung follows what was DELIVERED, so an active lead never skips #2', async () => {
+    // Row scheduled as tier 1, but one reminder already landed → send #2, not #1.
+    vi.mocked(q.countSentDemoReminders).mockResolvedValue(1);
+    vi.mocked(q.loadDueFollowUps).mockResolvedValue([demoDue({ tier: 1 })]);
+    await runPendingFollowUps(agent);
+    expect(sentText()).toContain('terminar el demo');
+  });
+
+  it('reminders are attributed so they cannot eat the 7-message demo budget', async () => {
+    await runPendingFollowUps(agent);
+    expect(q.logMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ p_agent_role: 'demo-reminder' }),
+    );
+  });
+
+  it('they burn no angle — the pool is intact for the closer', async () => {
+    await runPendingFollowUps(agent);
+    expect(q.markFollowUpSent).toHaveBeenCalledWith('fu1', null);
+  });
+
+  it('rungs 1 and 2 arm the next rung on the demo ladder', async () => {
+    await runPendingFollowUps(agent);
+    expect(q.scheduleFollowUp).toHaveBeenCalledWith('cv1', 2, 240, 'America/Mexico_City', null, 'demo');
+  });
+
+  it('rung 3 closes the session and hands the lead to the closer', async () => {
+    vi.mocked(q.countSentDemoReminders).mockResolvedValue(2);
+    vi.mocked(q.getActiveDemoSession).mockResolvedValue({ id: 'sess1' } as never);
+    await runPendingFollowUps(agent);
+    expect(q.endDemoSession).toHaveBeenCalledWith('sess1', 'expired');
+    expect(q.setActiveRole).toHaveBeenCalledWith('conv1', 'closer');
+    // …and the 44-angle ladder restarts, which is the whole point: before this a
+    // lead who walked away mid-demo was unreachable forever.
+    expect(q.scheduleFollowUp).toHaveBeenCalledWith('cv1', 1, 60, 'America/Mexico_City', null, 'cadence');
+  });
+
+  it('the demo ended before the reminder fired → nothing is sent', async () => {
+    vi.mocked(q.getConversationPersona).mockResolvedValue({
+      activeRole: 'closer', roleStartedAt: null, demoStartedAt: null, promptVariant: null,
+    });
+    const res = await runPendingFollowUps(agent);
+    expect(ghl.sendMessage).not.toHaveBeenCalled();
+    expect(res.skipped).toBe(1);
+  });
+
+  it('the same send gate applies: a lead who replied is not nudged', async () => {
+    vi.mocked(q.commitFollowUpSend).mockResolvedValue(false);
+    const res = await runPendingFollowUps(agent);
+    expect(ghl.sendMessage).not.toHaveBeenCalled();
+    expect(res.skipped).toBe(1);
   });
 });
 

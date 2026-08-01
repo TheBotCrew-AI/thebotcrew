@@ -16,6 +16,28 @@ export type AiProvider = 'openai' | 'anthropic';
 export type ConversationStatus =
   | 'active' | 'handed_off' | 'completed' | 'opted_out' | 'standby' | 'awaiting_human';
 
+/**
+ * Which ladder a follow-up belongs to (`follow_ups.kind`, migration 0042).
+ * `cadence` is the reactivation ladder driven by follow_up_cadence + the angle
+ * pool; `demo` is the fixed 3-rung, LLM-free reminder that a demo session is
+ * still open. They never mix: a conversation runs one or the other depending on
+ * whether it is currently in the demo persona.
+ */
+export type FollowUpKind = 'cadence' | 'demo';
+
+/**
+ * `messages.agent_role` for a demo reminder. It exists to be EXCLUDED: the demo
+ * budget meter counts bot messages since the session started
+ * (`countBotMessagesSince`), and with only 7 messages to spend, letting three
+ * reminders eat into that would cost the lead almost half the demo they came for.
+ */
+export const DEMO_REMINDER_ROLE = 'demo-reminder';
+
+/** Minutes after the last bot reply for demo reminders 1, 2 and 3. Spread across
+ *  the session's 48h life (DEMO_EXPIRES_MINUTES): 30 min, 4 h, 24 h. Platform-wide
+ *  — this is the demo feature's own behaviour, not a per-tenant variable. */
+export const DEMO_REMINDER_CADENCE = [30, 240, 1440] as const;
+
 /** Quiet (DND) window in tenant-local hours; follow-ups never fire inside it. */
 export interface QuietHours {
   /** Local hour [0-23] when the quiet window starts (inclusive). */

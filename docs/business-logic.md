@@ -171,6 +171,25 @@ angle-select.ts`, with a deterministic "next unused" fallback). When the pool is
 free-forms a fresh nudge (`angle_index` NULL). Because this cursor persists across cycles, a reset
 cycle keeps advancing to new angles — the "4 more attempts" never feel repetitive.
 
+**The send gate (0043) — a lead who replies is never chased.** Between claiming a due row and
+actually sending, the runner spends 10–40s generating. A lead answering inside that window used
+to get nudged anyway: the inbound flipped the row to `cancelled`, but nothing re-read it, and
+`app_mark_follow_up_sent` then overwrote `cancelled` → `sent`, so the audit trail looked clean.
+Two checks now guard it, and the abort is recorded as `bot_events.followup_aborted`:
+
+- **Pre-flight** (`getFollowUpStatus`, cheap, before the LLM call) — if the inbound's
+  `app_cancel_follow_ups` already ran, bail out without paying for a generation.
+- **The commit gate** (`app_commit_follow_up_send`, atomic, immediately before the GHL send) —
+  claims `processing → sending` only if the row is still `processing`, the conversation is still
+  `active`, **and** its `last_inbound_message_id` still matches what it was at claim time (that
+  last one catches a lead whose reply landed but whose cancel hadn't been written yet).
+  `app_mark_follow_up_sent` now requires `sending`, so a cancelled row can't be resurrected.
+
+Order matters: the outbound is logged **after** the gate is won, never before — logging first
+left a phantom message row on every abort. `cancelFollowUps` on the inbound path is `await`ed for
+the same reason. Incident: 2026-07-31 conv `b5bf41b4` — inbound 15:29:06, nudge 15:29:14, demo
+start 15:29:38.
+
 ### 4.1 Quiet hours (DND) — never message overnight
 
 A follow-up whose computed send time (`now + delayMinutes`) lands inside the tenant's quiet
@@ -184,6 +203,34 @@ single scheduling choke point `scheduleFollowUp` via the pure helper
 - Because each tier is scheduled relative to when the previous one *actually* sent, clamping
   one tier shifts the whole chain forward — **no cascading to handle**. Windows that cross
   midnight are handled (`hour >= start || hour < end`).
+
+### 4.2 Demo reminders — the other ladder (0043)
+
+While `active_role='demo'` the cadence ladder is **off**: the reactivation agent is persona-blind
+(full history, tenant's normal config + angles) and its nudge would shatter the roleplay. But
+suppressing follow-ups outright stranded people — session expiry is only evaluated on the **next
+inbound**, so a lead who walked away mid-demo sat in `active_role='demo'` forever with nothing to
+rescue them. A conversation now runs **exactly one** of the two ladders (`follow_ups.kind`).
+
+- **Three rungs, no model.** `buildDemoReminder` (`roles/front-desk/prompt.ts`) — static
+  templates, zero tokens, and impossible to free-form into the roleplay. Every one is wrapped in
+  **parentheses**: the lead is mid-conversation with an assistant playing their own business, and
+  that is the only signal the line comes from outside the play.
+- **Timing:** `DEMO_REMINDER_CADENCE = [30, 240, 1440]` minutes (30 min, 4 h, 24 h), spread
+  across the session's 48 h life. Platform-wide, not per-tenant — this is the demo feature's own
+  behaviour. Quiet hours still apply (same `scheduleFollowUp` choke point).
+- **The exit word comes from `demo_off_keywords[0]`,** never invented. With none configured, the
+  two rungs that offer a way out promise nothing rather than naming a dead word. Keep that first
+  entry lead-facing: it is also what `buildDemoStartAnnouncement` reads.
+- **The rung is what has LANDED,** not the row's tier (`app_count_sent_demo_reminders`). Every
+  inbound cancels the pending nudge, so a lead who keeps playing simply never climbs; resetting
+  to rung 1 would mean reminder #2 — the one explaining how to close the demo — never arrives.
+- **Rung 3 closes the demo:** session ended (`expired`), contact tagged `demo-incompleta`,
+  `active_role` flipped to `closer`, and the 44-angle cadence restarts. That is the rescue.
+- **They cost the lead nothing.** Logged as `agent_role='demo-reminder'` and excluded from
+  `countBotMessagesSince` — the demo budget is only 7 messages, so counting three reminders
+  against it would eat almost half of what the lead came to see. They carry no `angle_index`
+  either, so the closer inherits the whole angle pool.
 
 ## 5. Availability & booking
 
