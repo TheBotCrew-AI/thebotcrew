@@ -357,7 +357,7 @@ has been stale before; re-run the query under it rather than trusting the row.
 | --- | --- | --- | --- |
 | The Bot Crew | `wRMDr6h3anwYpM64XAUe` | `04385692-5c0d-436e-af77-4b1aa3fcc223` | whatsapp, instagram, facebook — **live**, gated by 5 `trigger_keywords`. The only tenant with `demo_sessions_enabled`, a demo persona, and `houseRules` (the fit filter, business-logic §2b). |
 | happy Naty Nat | `X8zdJcQaVckHuF3W4grr` | `ceb2b145-e644-432e-b48d-3f92ba4a49bf` | facebook, but **test mode** — `test_contact_ids` non-empty outranks the channel gate, so only that one contact gets replies. |
-| MADI Skin Care | `lIpNJhsKoGK8fPuDHeIn` | `19cf934b-2e36-4f4b-aa77-d3287e8d38fb` | whatsapp — **live** (`test_contact_ids` is NULL; this doc said "test mode, Leo only" until 2026-07-31, which had been wrong). **No bot booking** (`bookingEnabled: false`, `calendars` cleared; see business-logic §5a). Own AI key (`ai_key_ref='MADI'`), `booking_horizon_days=7`. Original calendar id, if booking is ever restored: `fW2lw3VcAoa9Ns6jwaII` |
+| MADI Skin Care | `lIpNJhsKoGK8fPuDHeIn` | `19cf934b-2e36-4f4b-aa77-d3287e8d38fb` | whatsapp — **live, on purpose** (confirmed by Leo 2026-07-31; this doc had said "test mode, Leo only", which was stale — `test_contact_ids` is NULL, so every WhatsApp lead is answered). **No bot booking** (`bookingEnabled: false`, `calendars` cleared; see business-logic §5a). Own AI key (`ai_key_ref='MADI'`), `booking_horizon_days=7`. Original calendar id, if booking is ever restored: `fW2lw3VcAoa9Ns6jwaII` |
 | Cliente Demo | `loc_demo_0001` | `73e8d3c3-0fdb-44e4-9e1a-3995c5d73bf4` | local dev seed |
 
 `clients` also holds **Médica Center Fem** (6.5k conversations, last bot reply 2026-06-05):
