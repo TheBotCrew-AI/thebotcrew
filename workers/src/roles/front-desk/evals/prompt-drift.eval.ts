@@ -18,10 +18,13 @@
 
 import { describe, it, expect } from 'vitest';
 import { createClient } from '@supabase/supabase-js';
-import { FIT_FILTER_SECTION } from './fixtures.js';
+import { FIT_FILTER_SECTION, MADI_HOUSE_RULES } from './fixtures.js';
 
-/** The Bot Crew's own tenant — the only one whose prompt these evals mirror. */
-const BOT_CREW_TENANT_ID = '04385692-5c0d-436e-af77-4b1aa3fcc223';
+/** Tenants whose `houseRules` an eval fixture mirrors, and must keep mirroring. */
+const MIRRORED_HOUSE_RULES: { label: string; tenantId: string; fixture: string }[] = [
+  { label: 'The Bot Crew', tenantId: '04385692-5c0d-436e-af77-4b1aa3fcc223', fixture: FIT_FILTER_SECTION },
+  { label: 'MADI Skin Care', tenantId: '19cf934b-2e36-4f4b-aa77-d3287e8d38fb', fixture: MADI_HOUSE_RULES },
+];
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -42,14 +45,14 @@ function firstDifference(live: string, fixture: string): string {
 }
 
 describe.skipIf(!supabaseUrl || !serviceKey)('prompt drift — live tenant vs eval fixture', () => {
-  it('The Bot Crew houseRules still match FIT_FILTER_SECTION', async () => {
+  it.each(MIRRORED_HOUSE_RULES)('$label houseRules still match the fixture', async ({ tenantId, fixture }) => {
     const supabase = createClient(supabaseUrl!, serviceKey!, {
       auth: { persistSession: false, autoRefreshToken: false },
     });
     const { data, error } = await supabase
       .from('tenant_config')
       .select('prompt_overrides')
-      .eq('tenant_id', BOT_CREW_TENANT_ID)
+      .eq('tenant_id', tenantId)
       .single();
 
     expect(error, `tenant_config read failed: ${error?.message}`).toBeNull();
@@ -57,11 +60,11 @@ describe.skipIf(!supabaseUrl || !serviceKey)('prompt drift — live tenant vs ev
     const overrides = data?.prompt_overrides as { houseRules?: string } | null;
     const live = overrides?.houseRules?.trim() ?? '';
 
-    // An empty houseRules is the loudest possible drift: the fit filter is simply
-    // not in the prompt any more, and every golden case below would still pass.
-    expect(live, 'prod has NO houseRules — the fit filter is not live').not.toBe('');
+    // Empty houseRules is the loudest possible drift: the rule is simply not in the
+    // prompt any more, and every golden case below would still pass without it.
+    expect(live, 'prod has NO houseRules — the rule under test is not live').not.toBe('');
 
-    const fixture = FIT_FILTER_SECTION.trim();
-    expect(live, `prod and fixture diverge at ${firstDifference(live, fixture)}\n\n`).toBe(fixture);
+    const expected = fixture.trim();
+    expect(live, `prod and fixture diverge at ${firstDifference(live, expected)}\n\n`).toBe(expected);
   });
 });

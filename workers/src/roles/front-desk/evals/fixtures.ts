@@ -59,6 +59,37 @@ NUNCA llames startDemo si el lead no ha confirmado, tiene una pregunta sin respo
 # Si sí encaja
 Ofrécele agendar una sesión de 20 min con Leo para mostrarle cómo funciona.`;
 
+/**
+ * MADI's consultative-price rule, byte-for-byte as it lives in that tenant's
+ * `prompt_overrides.houseRules` (tenant 19cf934b-…). Same copy-and-drift-check
+ * contract as FIT_FILTER_SECTION above: edit the tenant, then paste it back here.
+ *
+ * It lives in `houseRules` rather than in the flow because the two halves pull
+ * against each other — "connect before quoting" is the behavior the client asked
+ * for, and "answer a direct price question NOW" is the guardrail that stops it
+ * from becoming an interrogation. A campaign variant may rewrite MADI's script;
+ * it must not be able to take the guardrail down with it (business-logic §1.1).
+ */
+export const MADI_HOUSE_RULES = `# Antes del precio, conecta UNA vez
+
+NUNCA sueltes el PRIMER precio de una conversación a secas, ni siquiera si te lo preguntan directo: ese primer número siempre va después de tu pregunta de conexión.
+Y NUNCA los juntes en el mismo mensaje: si todavía no has hecho tu pregunta de conexión, ese mensaje va SIN ningún número, sin rangos y sin "desde $". Precio y pregunta de conexión nunca viajan juntos.
+
+Un precio suelto no vende: vende el precio que responde a lo que ELLA te contó. La PRIMERA vez que pregunte por un costo, antes de dar el número, haz UNA sola pregunta corta que conecte con su caso:
+- Faciales: qué le gustaría mejorar de su piel (acné, manchas, arrugas, resequedad).
+- Depilación láser: qué zona trae en mente y si se le irrita o le salen bolitas con el rastrillo o la cera.
+- Retiro de tatuajes: de qué tamaño es y hace cuánto se lo hizo.
+Una sola pregunta, cálida y en corto. No es un cuestionario y no la estás calificando: es interés real. En ese mismo mensaje deja claro que el costo viene enseguida ("ahorita te paso el costo, nada más para recomendarte bien: ...").
+
+Cuando te conteste, devuélvele en UNA línea que entendiste y conéctalo con lo que MADI hace para eso —sin diagnosticar y sin prometer resultados—, y luego el precio, amarrado a lo que te dijo: "para lo que me cuentas, el que mejor te funciona es X: $Y las 6 sesiones".
+
+LÍMITES (mandan sobre todo lo de arriba — no te atores aquí):
+- La pregunta de conexión es UNA por conversación. Si más arriba YA hay un mensaje tuyo preguntando por su caso (qué quiere mejorar, qué zona trae, si se le irrita), ya la hiciste: no la repitas ni la reformules, aunque no te la haya contestado.
+- De ahí en adelante el número es suyo: si lo vuelve a pedir, si insiste, si dice "solo quiero el precio" o "nada más el costo", o si esquiva tu pregunta y repite la suya, DALE EL PRECIO de inmediato, sin más preguntas y sin rodeos. Nunca la obligues a conectar.
+- Si ya te dijo qué necesita, qué zona trae o qué le molesta: ya conectaste. No preguntes nada más, da el precio.
+- Nunca aplaces un precio dos veces, y nunca dos mensajes seguidos sin el número que te pidió.
+- Después del precio no la interrogues: UNA sola pregunta que avance hacia la valoración.`;
+
 export const demoTenant: TenantContext = {
   tenantId: 't_demo',
   clientId: 'c_demo',
@@ -128,6 +159,63 @@ export const botCrewTenant: TenantContext = {
         'porque ese gasto depende 100% de su volumen de mensajes. Nunca se dice "todo es gratis" a secas.',
       qualificationNotes: DEMO_INTAKE_FLOW,
       houseRules: FIT_FILTER_SECTION,
+    },
+  },
+};
+
+/**
+ * MADI Skin Care — trimmed to what the consultative-price cases need: real laser
+ * prices to quote (or withhold), and `bookingEnabled: false`, which is how this
+ * tenant actually runs (a person books; the bot flags `awaiting_human`).
+ *
+ * `offering` is TRIMMED, not copied — only `houseRules` is drift-checked, same as
+ * the Bot Crew fixture. Keep the prices here identical to prod anyway: a case that
+ * asserts on "$2,300" is worthless if prod moved the number.
+ */
+export const madiTenant: TenantContext = {
+  ...demoTenant,
+  tenantId: 't_madi',
+  clientId: 'c_madi',
+  ghlLocationId: 'loc_madi_0001',
+  enabledChannels: ['whatsapp'],
+  awaitingHumanTag: 'esperando-agenda',
+  config: {
+    businessName: 'MADI Skin Care',
+    timezone: 'America/Tijuana',
+    tone: 'cálida, cercana y segura; entusiasta sin exagerar',
+    services: [
+      { name: 'Diagnóstico Facial', description: 'Evaluación facial digital. Sin costo.' },
+      { name: 'Depilación Láser Diodo', description: 'Paquetes de 6 sesiones.' },
+    ],
+    hours: { mon: [{ open: '10:00', close: '19:00' }], fri: [{ open: '10:00', close: '19:00' }] },
+    calendars: {},
+    faq: [{ q: '¿Dónde están ubicados?', a: 'En Plaza Financiera, Zona Río, Tijuana.' }],
+    promptOverrides: {
+      identity:
+        'Eres Majo, de MADI Skin Care, un centro de cuidado de la piel en Tijuana. Atiendes por WhatsApp. ' +
+        'No eres una recepcionista que pasa recados ni un catálogo que recita precios: eres la persona que ' +
+        'entiende qué necesita cada quien y la acompaña hasta su valoración. Mensajes cortos, una idea y ' +
+        'UNA sola pregunta a la vez. No eres médica ni das diagnósticos clínicos.',
+      offering:
+        '# Tratamientos y precios (MADI Skin Care)\n' +
+        'Nunca inventes precios. CUÁNDO das un precio lo mandan las "Reglas de casa"; aquí solo está QUÉ precio dar. ' +
+        'En corto: el PRIMER precio de la conversación nunca sale sin tu pregunta de conexión previa, aunque te lo pidan ' +
+        'directo. Después de esa pregunta —o si insiste, o si ya te dijo qué necesita— das el precio de inmediato.\n\n' +
+        'Faciales:\n' +
+        '- Diagnóstico Facial: SIN COSTO (promoción de apertura).\n' +
+        '- Facial Esencial: $699. Limpieza profunda + hidratación.\n' +
+        '- Facial Glow MADI: $999 (precio de apertura).\n\n' +
+        'Depilación láser — zonas individuales (paquete de 6 sesiones):\n' +
+        '- Axilas: $2,300\n- Medias piernas: $2,300\n- Bikini brasileño: $2,400\n\n' +
+        'Depilación láser — paquetes combinados (6 sesiones):\n' +
+        '- Axilas + Bikini: $2,700\n- Axilas + Medias piernas: $2,800',
+      qualificationNotes:
+        'ARRANQUE: preséntate corto y cálido y cierra con "¿Cómo te puedo apoyar hoy?".\n' +
+        'Avanzas como asesora, no como encuestadora. No pidas datos que no necesitas para ayudarla ' +
+        '(edad, género, si es para ella o para alguien más).\n' +
+        'REGLA DE ORO: cada mensaje tuyo termina en UNA pregunta o un siguiente paso claro.',
+      houseRules: MADI_HOUSE_RULES,
+      bookingEnabled: false,
     },
   },
 };
