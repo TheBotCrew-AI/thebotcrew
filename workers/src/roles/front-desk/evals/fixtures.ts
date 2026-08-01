@@ -122,8 +122,10 @@ export const botCrewTenant: TenantContext = {
         // Trimmed from the live `offering` + "# Manejo de objeciones comunes". Without it the
         // agent has no answer to "¿me va a costar algo?" and deflects to a human — which is
         // correct behavior for a fact it doesn't have, but makes the demo-gate case untestable.
-        '# Precio\nLa instalación es completamente GRATIS: el lead no paga nada, sin mensualidades ni contratos. ' +
-        'Un stack equivalente por separado costaría entre $450 y $1,260 USD al mes — ese monto es lo que se AHORRA, nunca un cobro futuro.',
+        '# Precio\nEl servicio, la instalación y TODAS las herramientas (CRM, agenda, recordatorios, automatización) van por cuenta de Leo, ' +
+        'sin mensualidad ni contratos — un stack equivalente costaría entre $450 y $1,260 USD al mes, y eso es lo que el negocio se AHORRA. ' +
+        'Lo ÚNICO que cubre el negocio es el consumo de IA, en su propia cuenta y al costo (centavos de dólar por conversación), ' +
+        'porque ese gasto depende 100% de su volumen de mensajes. Nunca se dice "todo es gratis" a secas.',
       qualificationNotes: DEMO_INTAKE_FLOW,
       houseRules: FIT_FILTER_SECTION,
     },

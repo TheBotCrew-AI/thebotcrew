@@ -238,11 +238,19 @@ the keyword.
 
 ---
 
-## 6. Optional: give the tenant its own AI key
+## 6. Give the tenant its own AI key
 
-Only when you want provider-side spend attribution (and a spend cap) for this client.
-Skip it and the tenant runs on the platform key — token accounting in `llm_usage`
-still works either way, tagged `key_source='platform'`.
+**No longer optional for The Bot Crew's current offer** (2026-07-31): the commercial model
+is that Leo covers his service, his time and every tool, while the client covers **only the
+AI consumption, in their own account, at cost** — because that spend scales with their
+message volume and can't be promised blind. That promise is only true if the client's
+account is the one being billed, so a new client gets their own key as part of onboarding,
+not as an upgrade. Skipping it means Leo silently eats their AI spend and the bot's pricing
+answer becomes a lie.
+
+(For a tenant on some other arrangement it remains optional — skip it and the tenant runs
+on the platform key; token accounting in `llm_usage` still works either way, tagged
+`key_source='platform'`.)
 
 **This is the one onboarding step that is NOT just a DB row**, because key material
 never goes in the database.
