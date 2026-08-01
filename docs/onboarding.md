@@ -108,8 +108,8 @@ that section renders instead. Full precedence model and a diagram:
 | Key | Effect |
 | --- | --- |
 | `identity` | Replaces the opening identity line. Where you disclose the AI nature, the role and the channels. |
-| `offering` | Replaces the whole `# Servicios` section — so `services` stops being rendered (it still drives `calendars` lookups). |
-| `qualificationNotes` | Replaces the built-in `# Tu objetivo` / `# Flujo de calificación` block. **The conversational FLOW** — the part a campaign variant replaces wholesale. |
+| `offering` | Replaces the whole `# Servicios` section — so `services` stops being rendered (it still drives `calendars` lookups). Also the right home for commercial framing and objection answers: base-level, and a variant only loses them if it overrides this field. |
+| `qualificationNotes` | Replaces the built-in `# Tu objetivo` / `# Flujo de calificación` block. **The conversational FLOW, and only the flow** — this is the field a campaign variant replaces wholesale, and it is also emptied on `closer` turns. Anything parked here is absent from both. |
 | `houseRules` | Tenant-wide rules that outrank the flow (who we will/won't serve, what we never promise). Rendered after the flow, labelled as governing it. **A campaign variant cannot override this** — that is the entire point. Suppressed in demo mode. Put anything that must survive a campaign HERE, not in `qualificationNotes`. |
 | `toolInstructions` | `{ "<toolId>": "<rule>" }` — a per-tool section. Merged **per key** by a variant, so base rules survive unless that exact tool is overridden. |
 | `bookingEnabled` | `false` strips every booking instruction from the prompt (see business-logic §5a). Variant-overridable. |
@@ -363,7 +363,7 @@ has been stale before; re-run the query under it rather than trusting the row.
 
 | Client | `ghl_location_id` | tenant_id | Channels |
 | --- | --- | --- | --- |
-| The Bot Crew | `wRMDr6h3anwYpM64XAUe` | `04385692-5c0d-436e-af77-4b1aa3fcc223` | whatsapp, instagram, facebook — **live**, gated by 5 `trigger_keywords`. The only tenant with `demo_sessions_enabled`, a demo persona, and `houseRules` (the fit filter, business-logic §2b). |
+| The Bot Crew | `wRMDr6h3anwYpM64XAUe` | `04385692-5c0d-436e-af77-4b1aa3fcc223` | whatsapp, instagram, facebook — **live**, gated by `trigger_keywords`. The only tenant with `demo_sessions_enabled` and with campaign variants: `keyword_variants` maps the three ad CTAs to the `demo-funnel` variant, whose `qualificationNotes` is the demo route (base = the route to the call). `houseRules` carries the fit filter, the conversation principles, the opening protocol and the absolute rules; `offering` carries the commercial framing and the objection answers. See [`config-model.md`](config-model.md) § Where to put a given piece of text. |
 | happy Naty Nat | `X8zdJcQaVckHuF3W4grr` | `ceb2b145-e644-432e-b48d-3f92ba4a49bf` | facebook, but **test mode** — `test_contact_ids` non-empty outranks the channel gate, so only that one contact gets replies. |
 | MADI Skin Care | `lIpNJhsKoGK8fPuDHeIn` | `19cf934b-2e36-4f4b-aa77-d3287e8d38fb` | whatsapp — **live, on purpose** (confirmed by Leo 2026-07-31; this doc had said "test mode, Leo only", which was stale — `test_contact_ids` is NULL, so every WhatsApp lead is answered). **No bot booking** (`bookingEnabled: false`, `calendars` cleared; see business-logic §5a). Own AI key (`ai_key_ref='MADI'`), `booking_horizon_days=7`. Original calendar id, if booking is ever restored: `fW2lw3VcAoa9Ns6jwaII` |
 | Cliente Demo | `loc_demo_0001` | `73e8d3c3-0fdb-44e4-9e1a-3995c5d73bf4` | local dev seed |

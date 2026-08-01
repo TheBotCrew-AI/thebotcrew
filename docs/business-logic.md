@@ -60,6 +60,19 @@ monolithic prompt (migration 0036; `core/tenant.ts` `matchVariantKeyword`,
   LEAD's business, rules about who WE serve are incoherent. The Bot Crew's fit filter (§2b)
   lives here for precisely this reason — it survived the move out of `qualificationNotes`,
   which is what would otherwise have taken it down on the first campaign variant.
+- **Live example — The Bot Crew's `demo-funnel` (2026-08-01).** `keyword_variants` maps the
+  three ad CTAs to it; its `qualificationNotes` is the demo route with **no call script in it
+  at all**, while base keeps the route to the 20-min call. Measured before/after on the same
+  scenario: one blob → the call was offered 1 turn in 5; split → variant 5/5 to the demo,
+  base 3/3 to the call. The placement convention that makes this work (rules → `houseRules`,
+  commercial answers → `offering`, flow → `qualificationNotes`) is in
+  [`config-model.md`](config-model.md) § Where to put a given piece of text.
+- **Turning on a variant does NOT reach conversations already in flight.** First-touch sticky
+  means a thread whose opening message predates the `keyword_variants` entry keeps
+  `prompt_variant = NULL` forever — it will never match again. When a campaign is introduced
+  on a live funnel, backfill: pin the variant on open conversations whose FIRST inbound
+  matched one of its keywords. 35 of The Bot Crew's 39 open threads needed this on
+  2026-08-01; without it they would have silently fallen back to the base route.
 - **A variant changes the script, not the toolbox.** Every tool stays available to every
   conversation (`bookingEnabled` is the only flag that removes one), so a lead pinned to an
   offer campaign can still trigger `startDemo` by asking for a demo, even though their flow
@@ -561,8 +574,9 @@ and never create sessions.
    for speed ("no alargues: 2-3 mensajes máximo") and flipped as soon as it had three facts,
    so a lead's next question about the product was answered by a receptionist roleplaying
    **their own** business — burning the demo budget on questions it was never meant to answer,
-   at the moment of peak attention. Enforced in the tenant's `qualificationNotes` **and** in
-   the `startDemo` tool description; golden cases in `evals/fit-filter.eval.ts`
+   at the moment of peak attention. Enforced in the **`demo-funnel` variant's**
+   `qualificationNotes` (§1.1 — not base; base has only a compact on-demand version for a
+   lead who asks unprompted) **and** in the `startDemo` tool description; golden cases in `evals/fit-filter.eval.ts`
    ("demo gate"). The cost is 1–2 extra turns before the demo, accepted deliberately: a lead
    lost at the door is cheaper than a demo spent on the wrong conversation.
 3. The NORMAL persona does the intake conversationally (business name, giro, services —
@@ -621,7 +635,10 @@ GHL error can fire mid-pitch, nothing to clean up, and a manual demo can no long
 REAL slot by accident.
 
 **Launch checklist (Bot Crew tenant — all config, no deploy):**
-- `demo_sessions_enabled = true`; qualificationNotes teach the intake→startDemo flow.
+- `demo_sessions_enabled = true`; the **`demo-funnel` variant's** `qualificationNotes` teaches
+  the explain→confirm→intake→startDemo flow, and `keyword_variants` maps the ad CTAs to it.
+  Putting that flow in BASE instead is what made the agent offer the sales call ~1 turn in 5
+  (§1.1): base already carries a route to the call, and the two compete inside one field.
 - **Clear `test_contact_ids`** — test mode outranks every other gate; leaving it set silently
   drops every real lead (`test_mode_skip`).
 - `whatsapp ∈ enabled_channels`; the ad keyword in `trigger_keywords`.

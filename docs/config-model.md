@@ -55,8 +55,15 @@ flowchart TD
     DP --> OUT
 ```
 
-Three things people get wrong here:
+Four things people get wrong here:
 
+- **`trigger_keywords` does NOT select a prompt.** It is the entry gate and nothing else:
+  it decides whether the bot answers at all. A lead arriving on the demo CTA gets exactly
+  the same prompt as everyone else unless a `keyword_variants` entry maps that phrase to a
+  variant. This is the single most common misreading of the model — it looks like the
+  keyword "activates the demo flow", and it does not. (It cost The Bot Crew a ~20% rate of
+  offering the sales call instead of the demo until 2026-08-01: both routes were sitting in
+  one `qualificationNotes` blob, competing, with no variant configured to separate them.)
 - **The demo persona does not merge.** It replaces the whole set. A rule you keep in base
   simply does not exist inside a demo — deliberately, because the demo is a roleplay of
   someone else's business.
@@ -82,6 +89,26 @@ Three things people get wrong here:
 
 **Rule of thumb:** the *flow* belongs to the campaign; the *rules* belong to the tenant.
 Anything that must survive a campaign goes in `houseRules`.
+
+### Where to put a given piece of text
+
+The Bot Crew's split, applied 2026-08-01 and worth copying — it is what makes adding a
+second campaign a two-field change instead of a rewrite:
+
+| Goes in | What lives there | Why there |
+| --- | --- | --- |
+| `houseRules` | who we serve / never serve, what we never claim, conversation principles, the opening protocol | base-only: no campaign can drop it |
+| `offering` | what the product is, pricing/commercial framing, objection answers | base; a variant *may* override it, so a campaign that does must re-include the money answers |
+| `qualificationNotes` | **the flow, and only the flow** | this is the field a campaign replaces |
+| `prompt_variants.<key>.qualificationNotes` | that campaign's flow | replaces the base flow wholesale |
+
+A useful test before writing a line into `qualificationNotes`: *would this still be true for
+a campaign that isn't this one?* If yes, it belongs in `houseRules` or `offering`.
+
+**One consequence worth knowing:** `qualificationNotes` is also emptied for `closer` turns
+(the closer section replaces the flow entirely). So anything parked in that field is absent
+from the closer too — which is how The Bot Crew's closer went without the pricing answers
+and the absolute rules until this split moved them out.
 
 ---
 
