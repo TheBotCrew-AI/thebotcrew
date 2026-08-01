@@ -14,6 +14,15 @@
  *     question, or already told us what she needs. That one loses the lead, so every
  *     case below except the first asserts the NUMBER shows up.
  *
+ * ⚠️ The first case is NOT deterministic. Measured over 13 runs on `gpt-5-mini`
+ * (what MADI runs), it holds about **85%** of the time; the other ~15% quotes
+ * cold. Treat a single failure as the known rate, not a regression — re-run 5-6
+ * times before touching the prompt. The failure is benign by design: quoting cold
+ * is exactly what the bot did before this rule existed, so the downside is a lost
+ * bit of value-framing, never a wrong price or a stuck lead. Raising it further
+ * means a stronger model for this tenant (`tenant_config.ai_model`), which the
+ * client pays for at cost — Leo's call, not a prompt problem.
+ *
  * Live-only (needs an API key); `pnpm eval`, excluded from the CI gate.
  */
 
