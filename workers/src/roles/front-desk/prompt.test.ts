@@ -335,6 +335,18 @@ describe('buildFrontDeskInstructions — demo closer (setter flow)', () => {
     expect(closer()).toContain('CIERRE DE DEMO');
   });
 
+  // The most common objection on the way out of a demo, and the easiest to convert:
+  // the assistant "no sabía" things it was never given. The closer must be able to
+  // explain the gap and what closes it, instead of apologising.
+  it('knows how to answer "el asistente no sabía cosas de mi negocio"', () => {
+    const out = closer();
+    expect(out).toContain('no sabía');
+    expect(out).toMatch(/se entrena con TODA su información/i);
+    expect(out).toMatch(/catálogo completo/i);
+    // And it must not over-promise: training is bounded by what the business hands over.
+    expect(out).toMatch(/se entrena con lo que ELLOS entreguen/i);
+  });
+
   it("carries the lead's business into the soft pitch", () => {
     const out = closer();
     expect(out).toContain('"Inner Beauty" (MedSpa)');
@@ -478,6 +490,18 @@ describe('buildDemoStartAnnouncement (deterministic rules of the game)', () => {
     expect(out).toContain('como si fueras un cliente tuyo');
     expect(out).toContain('Escribe "demo off"');
     expect(out).toContain('\n\n'); // splits into short WhatsApp messages
+  });
+
+  // Leads finished the demo annoyed that the assistant "no sabía" things about their own
+  // catalog — which it cannot know, having been built from three facts a minute earlier.
+  it('sets the expectation about what the demo knows, and points at the real install', () => {
+    const out = buildDemoStartAnnouncement('Clínica Sonrisa', 'demo off');
+    expect(out).toMatch(/solo sabe lo que me contaste/i);
+    expect(out).toMatch(/se entrena con TODA tu información/i);
+    // It must land AFTER the invitation to write, so it never reads as "don't bother".
+    expect(out.indexOf('solo sabe lo que me contaste')).toBeGreaterThan(
+      out.indexOf('como si fueras un cliente tuyo'),
+    );
   });
 
   it('omits the exit line when the tenant configured no off-keyword — never promise a dead word', () => {

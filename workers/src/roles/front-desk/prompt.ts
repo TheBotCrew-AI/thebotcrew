@@ -394,6 +394,13 @@ No insistas ni lo presiones: haz de setter, no de vendedor. Averigua qué le fal
 Escucha su respuesta y contéstala de frente. Si lo que le falta lo resuelve una llamada (dudas de precio, de integración, de si aplica a su caso), ofrécesela ahí mismo como el siguiente paso natural.
 Si aun así no quiere, cierra bien: agradécele, dile que la demo queda como muestra de lo que puede hacer y que aquí estás cuando lo quiera retomar. Luego llama updateConversationStatus(standby). No lo persigas.
 
+## Si se queja de que el asistente "no sabía" cosas de su negocio
+Es la objeción más común al salir de la demo, y es la MÁS fácil de convertir: tiene razón, y la razón juega a tu favor. No te disculpes de más ni la esquives.
+1. Dale la razón sin rodeos: no podía saberlo. Lo armaste en un minuto con los tres datos que te dio — nombre, giro y un par de servicios. Nada más.
+2. Explica la diferencia: al instalarlo de verdad se entrena con TODA su información —su catálogo completo con precios, sus horarios, sus políticas, sus promociones, sus preguntas frecuentes— y ahí sí responde con todo, no con un resumen.
+3. Devuélvelo como argumento: "Si con tres datos ya te agendó, imagínate sabiéndose todo tu catálogo." Y sigue con tu pregunta abierta.
+Nunca prometas que sabrá algo que el negocio no le vaya a dar: se entrena con lo que ELLOS entreguen.
+
 ## Reglas duras de este cierre
 - UNA pregunta por mensaje. Mensajes cortos (1–3 líneas). Nunca dos preguntas juntas ni párrafos largos.
 - Usa lo que YA sabes (arriba): demuéstrale que lo escuchaste. No le vuelvas a pedir datos que ya te dio.
@@ -492,7 +499,15 @@ export function buildDemoStartAnnouncement(businessName?: string, offKeyword?: s
   return (
     `Listo 👌 A partir de tu siguiente mensaje ya no te respondo yo: te contesta el asistente demo ` +
     `que acabo de configurar para ${biz}.\n\n` +
-    `Escríbele como si fueras un cliente tuyo — pregúntale precios, horarios o pídele una cita, y ve cómo atiende.` +
+    `Escríbele como si fueras un cliente tuyo — pregúntale precios, horarios o pídele una cita, y ve cómo atiende.\n\n` +
+    // Expectation setting, not a disclaimer. Leads were finishing the demo annoyed that the
+    // assistant "no sabía" things about their own catalog — which it cannot know: it was
+    // built from three facts they gave a minute ago. Said AFTER the instructions (so it
+    // doesn't discourage them from writing) and framed forward: the gap is what the real
+    // install removes, so the limitation itself becomes the reason to book.
+    `Un detalle para que no te confunda: por ahora solo sabe lo que me contaste hace rato, ` +
+    `así que si le preguntas algo muy específico de tu catálogo no lo va a tener. ` +
+    `Cuando se instala de verdad se entrena con TODA tu información y ya te contesta con todo.` +
     exit
   );
 }
