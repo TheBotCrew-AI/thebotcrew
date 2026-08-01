@@ -699,12 +699,19 @@ export async function runAgentTurn({
   //
   // Gated on demoSessionsEnabled so this costs a DB read only for the tenant that can
   // actually have a session; startDemo refuses to create one without the flag anyway.
+  //
+  // It REPLACES the model's text, it does not append to it. The prompt already forbids
+  // writing this announcement ("NO escribas tú el aviso… el sistema lo manda solo") and
+  // the model ignored it on 2 of the 2 demos that have ever started: both leads were told
+  // twice, in four messages inside eleven seconds. A rule the model breaks every time is
+  // not a rule, and the announcement is self-sufficient — who answers next, how to play,
+  // what it can't know, and the way out — so nothing of value is dropped with the text.
   if (tenant.demoSessionsEnabled && activeRole !== 'demo' && !activeDemoSession && !forcedReply) {
     try {
       const started = await getActiveDemoSession(parsed.conversationId);
       if (started) {
         const lead = started.leadData as { businessName?: string };
-        reply = `${reply}\n\n${buildDemoStartAnnouncement(lead.businessName, tenant.demoOffKeywords?.[0])}`;
+        reply = buildDemoStartAnnouncement(lead.businessName, tenant.demoOffKeywords?.[0]);
         console.log(`[demo-session] deterministic start announcement conv=${parsed.conversationId}`);
       }
     } catch (e) {

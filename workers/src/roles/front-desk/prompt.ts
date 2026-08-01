@@ -490,15 +490,22 @@ Responde siempre en español.`;
  *
  * `offKeyword` comes from `tenant_config.demo_off_keywords` — never invented here. With
  * none configured the exit line is omitted rather than promising a word that does nothing.
+ *
+ * EXACTLY TWO paragraphs, and that is a constraint, not a style choice: splitIntoMessages
+ * caps a reply at MAX_MESSAGE_PARTS (4), so the four-paragraph version consumed the entire
+ * budget on its own. Carlos Moreno (2026-08-01) got this as four messages in eleven
+ * seconds, the last two silently glued together by the overflow merge. Single newlines
+ * inside a paragraph are deliberate — they read as line breaks in WhatsApp without
+ * splitting into another message. Adding a blank line here costs the lead a message.
  */
 export function buildDemoStartAnnouncement(businessName?: string, offKeyword?: string): string {
   const biz = businessName?.trim() || 'tu negocio';
   const exit = offKeyword?.trim()
-    ? `\n\n¿Quieres salir de la demo y volver conmigo? Escribe "${offKeyword.trim()}".`
+    ? `\n¿Quieres salir de la demo y volver conmigo? Escribe "${offKeyword.trim()}".`
     : '';
   return (
     `Listo 👌 A partir de tu siguiente mensaje ya no te respondo yo: te contesta el asistente demo ` +
-    `que acabo de configurar para ${biz}.\n\n` +
+    `que acabo de configurar para ${biz}.\n` +
     `Escríbele como si fueras un cliente tuyo — pregúntale precios, horarios o pídele una cita, y ve cómo atiende.\n\n` +
     // Expectation setting, not a disclaimer. Leads were finishing the demo annoyed that the
     // assistant "no sabía" things about their own catalog — which it cannot know: it was

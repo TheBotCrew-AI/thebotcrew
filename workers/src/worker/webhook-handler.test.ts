@@ -938,15 +938,36 @@ describe('handleInboundWebhook — the demo START announcement is deterministic'
 
   // With a normal persona the turn-start read never happens (it is gated on
   // activeRole === 'demo'), so the ONLY call is the post-generate one.
-  it('appends who answers next and the way out, onto the agent\'s own reply', async () => {
+  it('states who answers next and the way out', async () => {
     vi.mocked(q.getActiveDemoSession).mockResolvedValue(created as never);
     await handleInboundWebhook(inbound, agentReplying('Va, ya lo estoy armando.'));
 
     const sent = sentText();
-    expect(sent).toContain('Va, ya lo estoy armando.');          // the agent's reply survives
     expect(sent).toContain('ya no te respondo yo');              // who answers next
     expect(sent).toContain('para Clínica Sonrisa');              // whose assistant it is
     expect(sent).toContain('Escribe "demo off"');                // the way out, from config
+  });
+
+  it('REPLACES the model\'s text — the announcement is never said twice', async () => {
+    // Carlos Moreno, 2026-08-01: the prompt forbids the model writing this ("NO escribas
+    // tú el aviso… el sistema lo manda solo") and it wrote one anyway on 2 of 2 demos, so
+    // the lead was told twice. The model's version is dropped, not appended to.
+    vi.mocked(q.getActiveDemoSession).mockResolvedValue(created as never);
+    await handleInboundWebhook(
+      inbound,
+      agentReplying('Listo, Carlos — ahora tu asistente demo te va a responder. Escríbele como si fueras un cliente.'),
+    );
+    const sent = sentText();
+    expect(sent).not.toContain('Listo, Carlos');
+    expect(sent).toContain('ya no te respondo yo');
+  });
+
+  it('goes out as TWO messages, not a four-message burst', async () => {
+    vi.mocked(q.getActiveDemoSession).mockResolvedValue(created as never);
+    await handleInboundWebhook(inbound, agentReplying('Va, ya lo estoy armando.'));
+    // 4 paragraphs hit MAX_MESSAGE_PARTS exactly and the overflow merge glued the last
+    // two together mid-thought. Two paragraphs leaves headroom and reads as one beat.
+    expect(ghl.sendMessage).toHaveBeenCalledTimes(2);
   });
 
   it('no session created → nothing is appended (an ordinary turn stays ordinary)', async () => {

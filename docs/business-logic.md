@@ -545,13 +545,24 @@ and never create sessions.
    deliberately not an LLM call: deterministic, instant, testable, and lead text is embedded
    as length-capped DATA, shrinking the prompt-injection surface; `persona_version` tracks the
    template) and calls `app_create_demo_session`: session row + `active_role='demo'` flip,
-   atomic. **The announcement is DETERMINISTIC** (`buildDemoStartAnnouncement`), appended by
-   the runtime to that same reply — same reason as the closing one below: it states who
-   answers from the next message on, how to write to them, and **the way out**. The exit word
-   comes from `demo_off_keywords`; with none configured that line is omitted rather than
-   promising a word that does nothing. The prompt forbids the agent writing its own version.
-   Detected by re-reading the session after the turn (never by parsing the model's steps),
-   gated on `demo_sessions_enabled` so only that tenant pays the extra read.
+   atomic. **The announcement is DETERMINISTIC** (`buildDemoStartAnnouncement`) and on that
+   turn it **REPLACES the model's text** — same reason as the closing one below: it states who
+   answers from the next message on, how to write to them, what it cannot know yet, and **the
+   way out**. The exit word comes from `demo_off_keywords`; with none configured that line is
+   omitted rather than promising a word that does nothing. Detected by re-reading the session
+   after the turn (never by parsing the model's steps), gated on `demo_sessions_enabled` so
+   only that tenant pays the extra read.
+
+   **Why replace and not append** (2026-08-01): the prompt already forbids the agent writing
+   its own announcement (`qualificationNotes` Paso 5, "NO escribas tú el aviso… el sistema lo
+   manda solo") and the model ignored it on **2 of the 2** demos that had ever started — Carlos
+   Moreno got the demo opening twice, in four messages inside eleven seconds. A rule the model
+   breaks every time is not a rule. The announcement is self-sufficient, so dropping the
+   model's text loses nothing. It is also **exactly two paragraphs by constraint**, not style:
+   `splitIntoMessages` caps at `MAX_MESSAGE_PARTS` (4), so the earlier four-paragraph version
+   spent the whole budget alone and any model text triggered the overflow merge, gluing the
+   last two paragraphs together mid-thought. Adding a blank line there costs the lead a
+   message — use single newlines inside a paragraph.
 4. Each turn while in demo reads the session fresh: the generated persona is overlaid onto
    `demoPromptOverrides`, and **budget + expiry** are enforced BEFORE generating. Budget =
    bot message PARTS since activation (derived by counting `messages`, self-healing — no
