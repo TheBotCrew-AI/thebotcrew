@@ -19,7 +19,7 @@ const run = (status: string, reason?: string) =>
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.mocked(q.updateConversationStatus).mockResolvedValue(undefined);
+  vi.mocked(q.updateConversationStatus).mockResolvedValue(true);
   ghl.addContactTags.mockResolvedValue(undefined);
 });
 
@@ -63,6 +63,25 @@ describe('updateConversationStatus tool', () => {
     const res = await run('standby');
     expect(q.updateConversationStatus).toHaveBeenCalledWith('conv1', 'standby');
     expect(res).toEqual({ ok: true });
+  });
+});
+
+describe('updateConversationStatus tool — refused write (awaiting_human, 0044)', () => {
+  // The RPC is the guard; these cover the half the DB can't: what the Worker does
+  // with a `false`. Writing the tag anyway is the visible failure — GHL would show
+  // `bot-standby` on a contact still tagged `esperando-agenda`.
+  beforeEach(() => vi.mocked(q.updateConversationStatus).mockResolvedValue(false));
+
+  it('does not mirror a status tag when the RPC refused the change', async () => {
+    const res = await run('standby');
+    expect(q.updateConversationStatus).toHaveBeenCalledWith('conv1', 'standby');
+    expect(ghl.addContactTags).not.toHaveBeenCalled();
+    expect(res).toEqual({ ok: true }); // the model closes its turn; retrying can't win
+  });
+
+  it('does not log lead_disqualified for a lead who was never actually parked', async () => {
+    await run('standby', 'no agenda citas');
+    expect(q.logBotEvent).not.toHaveBeenCalled();
   });
 });
 

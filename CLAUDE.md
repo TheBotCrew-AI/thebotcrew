@@ -159,12 +159,16 @@ supabase/
                                # 0040 closer_role (a demo ends INTO active_role='closer' — the setter persona persists
                                #      for the whole post-demo conversation, not just the flip turn),
                                # 0041 demo_end_reason_booked (a simulated booking ends the demo: objective met → pitch),
-                               # 0042 lead_disqualified_event (WHY a lead was parked, in the model's own words),
-                               # 0043 followup_send_gate_and_demo_reminders (atomic commit gate before a nudge is sent
-                               #      + follow_ups.kind: the demo gets its own 3-rung, LLM-free ladder — see business-logic §4/§4.2),
                                # 0042 lead_disqualified_event (optional `reason` on updateConversationStatus →
                                #      a distinct event, so a lead ruled out on purpose stops looking like an
-                               #      ordinary standby — see business-logic §2b)
+                               #      ordinary standby — see business-logic §2b),
+                               # 0043 followup_send_gate_and_demo_reminders (atomic commit gate before a nudge is sent
+                               #      + follow_ups.kind: the demo gets its own 3-rung, LLM-free ladder — see business-logic §4/§4.2),
+                               # 0044 awaiting_human_is_sticky (app_update_conversation_status now returns boolean and
+                               #      REFUSES awaiting_human → standby/completed, the two reactivable states, so the
+                               #      lead's next message can't re-arm the cadence; logs status_change_blocked.
+                               #      false ⇒ the caller must not mirror the status tag onto the GHL contact.
+                               #      **Apply BEFORE deploying**: the old RPC returned void → null → reads as refused)
   clients.sql, seed-tenants.sql# seeds (run by `supabase db reset` per config.toml)
 sites/                         # client marketing sites: static HTML, no build step, no deps
   _template/                   # starting point for a new client
@@ -250,8 +254,15 @@ for the retry cron.
   runs typecheck + `test:unit` on every push/PR, no keys).
 - **`pnpm eval`** — adds the role eval cases (`*.eval.ts`): offline (prompt) cases always run;
   live (model-calling) golden cases run only when `OPENAI_API_KEY`/`ANTHROPIC_API_KEY` is set.
-- Run `pnpm test:unit` before any change to orchestration/parsing, and `pnpm eval` before a
-  change to a role's prompt or tools. (Layer 3 golden-conversation gate on staging: TBD.)
+- **`pnpm test:db`** — the layer the mocks can't reach. Several invariants live **inside the
+  RPCs** (follow-up gating on `status='active'`, the 0043 send gate, the 0044 `awaiting_human`
+  guard), and `test:unit` mocks `db/queries` wholesale, so it proves only what the Worker does
+  with the RPC's answer — never the answer itself. Each file in `supabase/tests/*.test.sql` runs
+  in a transaction and rolls back, so it's repeatable against the local stack without a reset.
+  Needs `supabase start`; **not** in CI (no DB there).
+- Run `pnpm test:unit` before any change to orchestration/parsing, `pnpm test:db` after touching
+  a migration or an `app_*` RPC, and `pnpm eval` before a change to a role's prompt or tools.
+  (Layer 3 golden-conversation gate on staging: TBD.)
 
 ### Deploy
 - `pnpm typecheck` + `pnpm test:unit` (the gate) then `pnpm build` (mastra build via

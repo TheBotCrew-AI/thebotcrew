@@ -66,7 +66,7 @@ beforeEach(() => {
   vi.mocked(q.countSentDemoReminders).mockResolvedValue(0);
   vi.mocked(q.setGhlMessageId).mockResolvedValue(undefined);
   vi.mocked(q.markDelivered).mockResolvedValue(undefined);
-  vi.mocked(q.updateConversationStatus).mockResolvedValue(undefined);
+  vi.mocked(q.updateConversationStatus).mockResolvedValue(true);
   vi.mocked(q.botActivation).mockResolvedValue('already');
   vi.mocked(q.findUnansweredInbound).mockResolvedValue(null);
   // Explicit default: clearAllMocks() does NOT drop implementations, so a test that
@@ -524,6 +524,29 @@ describe('handleInboundWebhook — demo-mode guards (roleplay must not touch rea
     await handleInboundWebhook(inbound, agentReplying(noQuestion));
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(q.updateConversationStatus).not.toHaveBeenCalled();
+  });
+
+  it('a refused status change does not mirror its tag onto the contact (0044)', async () => {
+    // The lead is `awaiting_human` (tagged by a person in GHL); the classifier guesses
+    // `standby`. The RPC refuses, so the contact must not also get `bot-standby` —
+    // that tag is what would make the state look settled to whoever is looking in GHL.
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: '{"status":"standby"}' } }] }),
+    }));
+    vi.mocked(q.updateConversationStatus).mockResolvedValue(false);
+    await handleInboundWebhook(inbound, agentReplying(noQuestion));
+    expect(q.updateConversationStatus).toHaveBeenCalledWith('conv1', 'standby');
+    expect(ghl.addContactTags).not.toHaveBeenCalledWith('c1', ['bot-standby']);
+  });
+
+  it('control: the same classification DOES tag when the RPC applied it', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: '{"status":"standby"}' } }] }),
+    }));
+    await handleInboundWebhook(inbound, agentReplying(noQuestion));
+    expect(ghl.addContactTags).toHaveBeenCalledWith('c1', ['bot-standby']);
   });
 
   it('control: outside demo, a bot reply schedules follow-up position 1', async () => {

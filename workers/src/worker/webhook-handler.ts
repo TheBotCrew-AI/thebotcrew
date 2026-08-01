@@ -789,10 +789,13 @@ export async function runAgentTurn({
   console.log(`[classify] outcome=${outcome ?? 'null (active or error)'}`);
   if (outcome) {
     try {
-      await updateConversationStatus(parsed.conversationId, outcome);
-      console.log(`[conv] status→${outcome} conv=${parsed.conversationId}`);
+      // false = refused (0044): an `awaiting_human` lead can't be classified into
+      // `standby`/`completed`. The classifier is a guess; the tag a person put on the
+      // contact is not. Skip the tag mirror too — the state did not change.
+      const applied = await updateConversationStatus(parsed.conversationId, outcome);
+      console.log(`[conv] status→${outcome} conv=${parsed.conversationId} applied=${applied}`);
       // Mirror the state onto the GHL contact as a tag (transparency / sync).
-      const tag = STATUS_TAGS[outcome];
+      const tag = applied ? STATUS_TAGS[outcome] : undefined;
       if (tag) {
         ghl.addContactTags(parsed.contactId, [tag]).catch((e: unknown) =>
           console.error('[tags] add on classify failed:', e instanceof Error ? e.message : String(e)),

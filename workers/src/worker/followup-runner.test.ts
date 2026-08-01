@@ -59,7 +59,7 @@ beforeEach(() => {
   vi.mocked(q.markFollowUpSent).mockResolvedValue(undefined);
   vi.mocked(q.markFollowUpFailed).mockResolvedValue(undefined);
   vi.mocked(q.scheduleFollowUp).mockResolvedValue(null);
-  vi.mocked(q.updateConversationStatus).mockResolvedValue(undefined);
+  vi.mocked(q.updateConversationStatus).mockResolvedValue(true);
   // The send gate: open by default so existing cases exercise the happy path.
   vi.mocked(q.getFollowUpStatus).mockResolvedValue('processing');
   vi.mocked(q.commitFollowUpSend).mockResolvedValue(true);

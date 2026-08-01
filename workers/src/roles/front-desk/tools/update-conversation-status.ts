@@ -58,7 +58,16 @@ export const updateConversationStatusTool = createTool({
       return { ok: true };
     }
 
-    await updateConversationStatus(turn.ghlConversationId, status);
+    const applied = await updateConversationStatus(turn.ghlConversationId, status);
+
+    // Refused (0044): the lead is `awaiting_human` and this is `standby`/`completed`.
+    // Nothing changed, so nothing downstream should act as if it had — no tag on the
+    // contact, no disqualification event. The RPC already logged `status_change_blocked`.
+    // Still `ok: true`: the model must close its turn, not retry a call that can't win.
+    if (!applied) {
+      console.log(`[updateConversationStatus] refused conv=${turn.ghlConversationId} status=${status}`);
+      return { ok: true };
+    }
 
     // Why, not just what. Awaited (not fire-and-forget) for the same reason as every
     // other event write: the Worker can be killed the moment the response is sent.

@@ -195,7 +195,12 @@ export type BotEventType =
   // made the send race invisible for so long.
   | 'followup_aborted'
   // An out-of-character "your demo is still open" nudge went out ({rung}, 0043)
-  | 'demo_reminder_sent';
+  | 'demo_reminder_sent'
+  // A status write was refused ({from,to,why}, 0044). Today the only `why` is
+  // `awaiting_human_is_sticky`: the model tried to park a lead who is already
+  // waiting on a person, which would have made her reactivable on her next message.
+  // Written by the RPC, never by the Worker — it's the record of a bug not happening.
+  | 'status_change_blocked';
 
 export interface LogAppointmentParams {
   p_client_id: string;

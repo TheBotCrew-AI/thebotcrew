@@ -39,7 +39,7 @@ const run = (c: unknown, args: Record<string, unknown> = {}) =>
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.mocked(q.updateConversationStatus).mockResolvedValue(undefined);
+  vi.mocked(q.updateConversationStatus).mockResolvedValue(true);
   vi.mocked(q.logBotEvent).mockResolvedValue(undefined);
   ghl.addContactTags.mockResolvedValue(undefined);
 });

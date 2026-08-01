@@ -353,7 +353,25 @@ behavior, and no TypeScript reads it — the logic lives in three RPCs:
 | `handed_off` | **no** | no | **no** (only a human releases it) |
 
 - `app_is_bot_suppressed` mutes on **`handed_off` only** (plus the human 5-min timer).
-- `app_schedule_follow_up` and `app_load_due_follow_ups` both require **`status = 'active'`**.
+- `app_schedule_follow_up`, `app_load_due_follow_ups` and `app_commit_follow_up_send` (the gate
+  right before the send, 0043) all require **`status = 'active'`**.
+
+**`awaiting_human` is sticky (0044).** The table above is only true if the value survives, and
+`app_update_conversation_status` used to overwrite it blindly. The leak ran sideways through the
+one column that matters: classifier (or the model's own tool call) writes `standby`/`completed`
+over `awaiting_human` → those two **are** reactivable → the lead's next message flips her to
+`active` → the cadence re-arms, for someone still tagged and still owed an answer. So the RPC now
+**refuses** `awaiting_human → standby|completed`, logs `status_change_blocked
+{from,to,why}`, and returns **`false`**; only removing the tag clears the state. `handed_off` and
+`opted_out` still pass (stronger signals, neither reactivable) — same precedence
+`app_set_awaiting_human_by_contact` already used. A refused `completed` (the bot managed to book)
+leaves a stale tag until a person removes it: a spare tag in GHL beats a spare nudge to the lead.
+
+`false` also means **the caller must not mirror the status tag onto the contact** — otherwise GHL
+shows `bot-standby` on a lead still tagged `esperando-agenda`. Both call sites honour it
+(`tools/update-conversation-status.ts`, the classifier in `webhook-handler.ts`). The guard is SQL,
+so `pnpm test:unit` can't reach it: it's covered by `pnpm test:db`
+(`supabase/tests/0044_awaiting_human_is_sticky.test.sql`) against the local stack.
 
 So "reactivating" is **not** resuming the conversation — the bot was never stopped. It is
 **re-arming automated nudges**, and that is the only question worth asking when adding a
@@ -427,6 +445,8 @@ measurable.
 to `active` (ContactTagUpdate → `worker/tag-handler.ts` → `app_set_awaiting_human_by_contact`).
 The real "I've handled this" action drives the state, instead of the model guessing when a
 request stops being pending. It never overrides `handed_off` or `opted_out` — stronger signals.
+And since 0044 the tag is the **only** way out toward a reactivable state: the model cannot park
+one of these leads in `standby`/`completed` and thereby hand her back to the nudge ladder (§2a).
 
 **Do not use `handed_off` for this.** It mutes the bot permanently *and* is excluded from
 `app_reactivate_conversation`, so the lead's next message hits silence with no way back except

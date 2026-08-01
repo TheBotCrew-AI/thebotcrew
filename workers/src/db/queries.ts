@@ -989,17 +989,28 @@ export async function markFollowUpFailed(followUpId: string): Promise<void> {
 /**
  * Update conversation status and atomically cancel any pending follow-ups.
  * Called by the front-desk updateConversationStatus tool.
+ *
+ * Returns false when the RPC refused the change (0044): the conversation is in
+ * `awaiting_human` and the caller tried to write `standby`/`completed` — the two
+ * reactivable states, i.e. the ones that would let the next inbound re-arm the
+ * cadence for a lead who is still owed a human answer. Only removing the GHL tag
+ * clears that state. **A false means: do not mirror a status tag onto the contact**,
+ * or GHL ends up showing `bot-standby` on a lead still tagged `esperando-agenda`.
+ *
+ * Ordering note: the RPC returned `void` before 0044 and Supabase surfaces that as
+ * `null`, which reads as false here. Apply the migration before deploying this.
  */
 export async function updateConversationStatus(
   ghlConversationId: string,
   status: ConversationStatus,
-): Promise<void> {
+): Promise<boolean> {
   const supabase = getSupabase();
-  const { error } = await supabase.rpc('app_update_conversation_status', {
+  const { data, error } = await supabase.rpc('app_update_conversation_status', {
     p_ghl_conversation_id: ghlConversationId,
     p_status: status,
   });
   fail('updateConversationStatus', error);
+  return data === true;
 }
 
 /**
