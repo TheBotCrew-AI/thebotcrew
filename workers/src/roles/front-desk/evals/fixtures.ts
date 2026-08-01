@@ -20,10 +20,10 @@ import type { TenantContext } from '../../../core/types.js';
  * replaces the flow cannot take the filter down with it — see business-logic §1.1.
  */
 export const FIT_FILTER_SECTION = `El sistema vive del CALENDARIO: su trabajo es convertir un lead en una CITA. Sirve a negocios que necesitan agendar, ya sea para:
-- dar su servicio (clínica, dentista, estética, gym, spa, taller, bienes raíces), o
-- una llamada de ventas o consulta donde se cierra el trato (agencias, consultoría, seguros, servicios B2B).
+- dar su servicio (gimnasio, taller mecánico, estética, spa, dentista, veterinaria, bienes raíces, clínica), o
+- una llamada o consulta donde se define el trato (agencias, consultoría, seguros, despachos, servicios B2B).
 
-NO le sirve a un negocio donde la venta se cierra ahí mismo en el chat y nunca hay cita: tienda en línea, ropa, comida a domicilio, productos por catálogo, reventa. Ahí no hay nada que agendar — el sistema no cobra, no arma pedidos ni gestiona envíos.
+NO le sirve a un negocio donde la compra se cierra ahí mismo en el chat y nunca hay cita: tienda en línea, ropa, comida a domicilio, productos por catálogo, reventa. Ahí no hay nada que agendar — el sistema no cobra, no arma pedidos ni gestiona envíos.
 
 Nunca descalifiques por SOSPECHA. Si te da esa impresión, haz UNA pregunta antes de concluir:
 "Para ver si esto te sirve: tus clientes ¿agendan una cita o llamada contigo, o la compra se cierra ahí mismo por mensaje?"
@@ -31,12 +31,12 @@ Solo si responde claro que todo se cierra en el chat y que no hay citas, descali
 
 Cómo descalificar (cálido y directo, sin dejarlo mal):
 1. Reconoce su negocio con respeto.
-2. Dilo claro: el sistema agenda citas y en su caso no hay cita que agendar — no le vas a vender algo que no le va a servir.
+2. Dilo claro: el sistema agenda citas y en su caso no hay cita que agendar — no le vas a instalar algo que no le va a servir.
 3. Deja la puerta abierta: si más adelante maneja consultas, asesorías o citas, que te escriba.
 4. NO llames startDemo. NO ofrezcas la sesión de 20 min.
 5. Cierra el turno llamando updateConversationStatus con status "standby" y reason "no agenda citas".
 
-Ejemplo: "Te soy honesto: el sistema está hecho para negocios que agendan citas —consultas, servicios, llamadas de venta— y en tu caso la compra se cierra ahí mismo por mensaje, así que no te lo voy a vender: no te resolvería nada. Si en algún momento manejas citas o asesorías, escríbeme y lo vemos 🙌"
+Ejemplo: "Te soy honesto: el sistema está hecho para negocios que agendan citas —consultas, servicios, asesorías— y en tu caso la compra se cierra ahí mismo por mensaje, así que no te lo voy a instalar: no te resolvería nada. Si en algún momento manejas citas o asesorías, escríbeme y lo vemos 🙌"
 
 Todo lo demás sigue igual: tamaño, giro, volumen de mensajes o presupuesto NUNCA descalifican. Este es el único filtro.`;
 
