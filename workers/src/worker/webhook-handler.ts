@@ -49,6 +49,7 @@ import {
   countSentDemoReminders,
   scheduleFollowUp,
   setGhlMessageId,
+  setMessageContent,
   setPromptVariant,
   updateConversationContact,
   updateConversationStatus,
@@ -57,8 +58,9 @@ import {
 } from '../db/queries.js';
 import { GhlClient } from '../ghl/client.js';
 import { parseInboundWebhook } from '../ghl/webhook.js';
+import { transcribeAudio } from '../core/transcribe.js';
 import { demoEndTag, STATUS_TAGS } from '../ghl/tags.js';
-import type { GhlInboundWebhook, ParsedInbound } from '../ghl/types.js';
+import type { GhlInboundWebhook, InboundAttachment, ParsedInbound } from '../ghl/types.js';
 import { DEFAULT_MODEL, DEFAULT_PROVIDER, FRONT_DESK_ROLE } from '../roles/front-desk/index.js';
 import { buildDemoEndAnnouncement, buildDemoStartAnnouncement } from '../roles/front-desk/prompt.js';
 
@@ -373,6 +375,65 @@ async function correctContactName(
   }
 }
 
+/** Lead-visible stand-in for a media-only message, so no turn is stored blank. */
+function placeholderFor(attachments: InboundAttachment[]): string {
+  if (attachments.some((a) => a.kind === 'audio')) return '[nota de voz]';
+  if (attachments.some((a) => a.kind === 'image')) return '[imagen]';
+  return '[archivo adjunto]';
+}
+
+/**
+ * Turn a media-only inbound into something the agent can actually answer.
+ *
+ * Audio is transcribed and the transcription REPLACES the placeholder in the store, so
+ * every later turn reads plain text instead of "[nota de voz]". Images are not
+ * interpreted yet — the agent is told one arrived so it can acknowledge and ask,
+ * which beats both silence and a guess. Never throws: media that can't be resolved
+ * degrades to the placeholder.
+ */
+async function resolveAttachments(
+  parsed: ParsedInbound,
+  messageId: string,
+  clientId: string,
+  apiKey: string,
+): Promise<string | null> {
+  const audio = parsed.attachments.find((a) => a.kind === 'audio');
+  if (audio) {
+    const result = await transcribeAudio(audio.url, apiKey);
+    if (!result) {
+      await logBotEvent(clientId, parsed.conversationId, 'attachment_failed', {
+        kind: 'audio',
+        stage: 'transcription',
+      });
+      return null;
+    }
+    // Keep the lead's words as the message; the marker tells the agent it was spoken
+    // (people are terser and less punctuated by voice) without editorializing.
+    const text = parsed.text ? `${parsed.text}\n${result.text}` : result.text;
+    try {
+      await setMessageContent(messageId, text);
+    } catch (e) {
+      console.error('[attachments] write-back failed:', e instanceof Error ? e.message : String(e));
+    }
+    await logBotEvent(clientId, parsed.conversationId, 'attachment_received', {
+      kind: 'audio',
+      transcribed: true,
+      durationSec: result.durationSec,
+      chars: result.text.length,
+    });
+    return text;
+  }
+
+  const other = parsed.attachments[0];
+  if (other) {
+    await logBotEvent(clientId, parsed.conversationId, 'attachment_received', {
+      kind: other.kind,
+      transcribed: false,
+    });
+  }
+  return null;
+}
+
 /** Build the closer's context from a demo session's stored lead data. */
 function buildDemoHandoff(
   leadData: Record<string, unknown>,
@@ -514,6 +575,17 @@ export async function runAgentTurn({
       }
     } catch (e) {
       console.error('[closer] latest session read failed (non-blocking):', e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  // Resolve any media the lead sent BEFORE loading history, so the transcription is
+  // already written back and the turn reads it as an ordinary message. Runs here rather
+  // than in the webhook because the webhook must ack GHL fast; the DO owns the slow work.
+  if (parsed.attachments?.length && messageId) {
+    try {
+      await resolveAttachments(parsed, messageId, tenant.clientId, resolveAiApiKey('openai', tenant.config.aiKeyRef).apiKey);
+    } catch (e) {
+      console.error('[attachments] resolve failed (non-blocking):', e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -984,12 +1056,16 @@ export async function handleInboundWebhook(
     p_contact_phone: phone ?? null,
     p_direction: 'inbound',
     p_sender_type: 'lead',
-    p_content: parsed.text,
+    // A media-only message has empty text; store a placeholder so history is never a
+    // blank turn (loadRecentMessages drops empty content). Audio gets replaced with the
+    // real transcription at turn time.
+    p_content: parsed.text || placeholderFor(parsed.attachments),
     p_agent_role: null,
     p_human_agent_id: null,
     p_model: null,
     p_sent_at: null,
     p_ghl_message_id: parsed.messageId ?? null,
+    p_attachments: parsed.attachments.length > 0 ? parsed.attachments.map((a) => a.url) : null,
   });
   if (!conversationId) {
     // GHL retried a webhook we already stored. Normally that's a harmless duplicate —

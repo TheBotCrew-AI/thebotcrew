@@ -1120,3 +1120,78 @@ describe('handleInboundWebhook — a transient failure must not silence a lead',
     expect(res.body).toMatchObject({ ignored: 'trigger keyword required' });
   });
 });
+
+describe('handleInboundWebhook — voice notes and images (0046)', () => {
+  const voice = { ...inbound, body: '', attachments: ['https://x.test/a/44bbff3b.ogg'], messageId: 'gm-1' };
+  const photo = { ...inbound, body: '', attachments: ['https://x.test/p.jpg'], messageId: 'gm-2' };
+
+  it('a voice note is STORED (it used to be dropped before anything was written)', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 500, text: async () => 'x' }));
+    await handleInboundWebhook(voice, agentReplying());
+    expect(q.logMessage).toHaveBeenCalledWith(expect.objectContaining({
+      p_direction: 'inbound',
+      p_sender_type: 'lead',
+      p_content: '[nota de voz]',                       // never a blank turn
+      p_attachments: ['https://x.test/a/44bbff3b.ogg'],
+    }));
+  });
+
+  it('transcribes it and writes the text back over the placeholder', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, headers: { get: () => '2048' }, blob: async () => new Blob(['x']) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ text: 'Sí, agendan citas', duration: 3.2 }) });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await handleInboundWebhook(voice, agentReplying());
+
+    expect(q.setMessageContent).toHaveBeenCalledWith('msg-uuid', 'Sí, agendan citas');
+    expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'attachment_received',
+      expect.objectContaining({ kind: 'audio', transcribed: true }));
+  });
+
+  it('a caption sent with the audio is kept alongside the transcription', async () => {
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce({ ok: true, headers: { get: () => '2048' }, blob: async () => new Blob(['x']) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ text: 'sí agendan' }) }));
+    await handleInboundWebhook({ ...voice, body: 'mira' }, agentReplying());
+    expect(q.setMessageContent).toHaveBeenCalledWith('msg-uuid', 'mira\nsí agendan');
+  });
+
+  it('a failed transcription still answers the lead, and says so in the events', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 502, text: async () => 'bad gateway' }));
+    const agent = agentReplying();
+    const res = await handleInboundWebhook(voice, agent);
+
+    expect(q.setMessageContent).not.toHaveBeenCalled();
+    expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'attachment_failed',
+      expect.objectContaining({ kind: 'audio' }));
+    expect(agent.generate).toHaveBeenCalled();   // the turn is NOT lost
+    expect(res.body).toMatchObject({ replied: true });
+  });
+
+  it('an image is stored and flagged, without pretending we read it', async () => {
+    await handleInboundWebhook(photo, agentReplying());
+    expect(q.logMessage).toHaveBeenCalledWith(expect.objectContaining({
+      p_content: '[imagen]', p_attachments: ['https://x.test/p.jpg'],
+    }));
+    expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'attachment_received',
+      expect.objectContaining({ kind: 'image', transcribed: false }));
+    expect(q.setMessageContent).not.toHaveBeenCalled();
+  });
+
+  it('media cancels the follow-up cadence like any other inbound', async () => {
+    // The second-order damage on 2026-08-01: the drop meant cancelFollowUps never ran,
+    // so the cron kept nudging a lead who had already answered.
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 500, text: async () => '' }));
+    await handleInboundWebhook(voice, agentReplying());
+    expect(q.cancelFollowUps).toHaveBeenCalledWith('cv-uuid');
+  });
+
+  it('a text-only message never touches the transcription path', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    await handleInboundWebhook(inbound, agentReplying());
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(q.logMessage).toHaveBeenCalledWith(expect.objectContaining({ p_attachments: null }));
+  });
+});

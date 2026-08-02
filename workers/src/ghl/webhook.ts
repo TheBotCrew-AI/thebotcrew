@@ -10,6 +10,7 @@ import type {
   GhlContactTagWebhook,
   GhlInboundWebhook,
   GhlOutboundWebhook,
+  InboundAttachment,
   ParsedHumanOutbound,
   ParsedInbound,
   ParsedTagUpdate,
@@ -136,9 +137,14 @@ export function parseInboundWebhook(payload: GhlInboundWebhook): ParsedInbound |
   const locationId = payload.locationId;
   const contactId = payload.contactId;
   const conversationId = payload.conversationId;
-  const text = payload.body;
+  const text = typeof payload.body === 'string' ? payload.body : '';
+  const attachments = parseAttachments(payload.attachments);
 
-  if (!locationId || !contactId || !conversationId || !text) {
+  // A media-only message arrives with `body: ""` — GHL puts the voice note or photo
+  // in `attachments`. Requiring `text` here is what silently dropped those messages
+  // before anything was stored (2026-08-01: a lead answered by voice and vanished).
+  // Text OR media is enough to be a real turn; neither is genuinely nothing.
+  if (!locationId || !contactId || !conversationId || (!text && attachments.length === 0)) {
     return null;
   }
 
@@ -157,7 +163,38 @@ export function parseInboundWebhook(payload: GhlInboundWebhook): ParsedInbound |
     text,
     phone,
     messageId: payload.messageId,
+    attachments,
   };
+}
+
+const AUDIO_EXT = /\.(ogg|oga|opus|mp3|m4a|aac|wav|amr|mp4a)(\?|$)/i;
+const IMAGE_EXT = /\.(jpe?g|png|gif|webp|heic|heif|bmp)(\?|$)/i;
+
+/**
+ * Normalize GHL's `attachments` (an array of URL strings) and classify each by
+ * extension. Anything unrecognized stays 'file' rather than being guessed at —
+ * the runtime only acts on kinds it can actually handle.
+ */
+export function parseAttachments(raw: unknown): InboundAttachment[] {
+  if (!Array.isArray(raw)) return [];
+  const out: InboundAttachment[] = [];
+  for (const item of raw) {
+    // Defensive: GHL sends plain strings today, but tolerate {url} objects.
+    const url =
+      typeof item === 'string'
+        ? item
+        : item && typeof item === 'object' && typeof (item as { url?: unknown }).url === 'string'
+          ? (item as { url: string }).url
+          : null;
+    if (!url || !/^https?:\/\//i.test(url)) continue;
+    const kind: InboundAttachment['kind'] = AUDIO_EXT.test(url)
+      ? 'audio'
+      : IMAGE_EXT.test(url)
+        ? 'image'
+        : 'file';
+    out.push({ url, kind });
+  }
+  return out;
 }
 
 /**

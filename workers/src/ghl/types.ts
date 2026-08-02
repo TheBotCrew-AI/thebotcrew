@@ -25,6 +25,9 @@ export interface GhlInboundWebhook {
   /** 'WhatsApp' | 'IG' | 'SMS' */
   messageType?: string;
   body?: string;
+  /** URL list. Present (and `body` empty) for a voice note, photo or document —
+   *  confirmed against a real GHL payload 2026-08-01. */
+  attachments?: unknown;
   messageId?: string;
   dateAdded?: string;
   timestamp?: string;
@@ -35,16 +38,26 @@ export interface GhlInboundWebhook {
   [key: string]: unknown;
 }
 
+/** A media file the lead sent. `kind` is derived from the URL extension. */
+export interface InboundAttachment {
+  url: string;
+  kind: 'audio' | 'image' | 'file';
+}
+
 /** Normalized inbound turn extracted from the webhook. */
 export interface ParsedInbound {
   locationId: string;
   contactId: string;
   conversationId: string;
   channel: Channel;
+  /** The lead's text. EMPTY when the message was media-only — check `attachments`
+   *  before treating this as "nothing to do". */
   text: string;
   phone?: string;
   /** GHL's own message id — used for deduplication. */
   messageId?: string;
+  /** Media the lead attached; empty array when there is none. */
+  attachments: InboundAttachment[];
 }
 
 /** Raw outbound webhook body — sent by GHL for every message delivered to a contact. */

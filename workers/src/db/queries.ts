@@ -519,6 +519,19 @@ export async function setGhlMessageId(messageId: string, ghlMessageId: string): 
   fail('setGhlMessageId', error);
 }
 
+/**
+ * Replace a message's content (0046). Used to swap the "[nota de voz]" placeholder for
+ * the real transcription, so every later turn reads plain text instead of a marker.
+ */
+export async function setMessageContent(messageId: string, content: string): Promise<void> {
+  const supabase = getSupabase();
+  const { error } = await supabase.rpc('app_set_message_content', {
+    p_message_id: messageId,
+    p_content: content,
+  });
+  fail('setMessageContent', error);
+}
+
 /** Mark an outbound bot message as permanently failed (retries exhausted). */
 export async function markDeliveryFailed(messageId: string): Promise<void> {
   const supabase = getSupabase();

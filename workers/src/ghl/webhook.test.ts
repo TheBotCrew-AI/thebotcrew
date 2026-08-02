@@ -146,3 +146,64 @@ describe('verifyGhlWebhook', () => {
     expect(await verifyGhlWebhook('{}', new Headers({ 'x-ghl-signature': 'bm90LXZhbGlk' }))).toBe(false);
   });
 });
+
+describe('parseInboundWebhook — media-only messages (2026-08-01 regression)', () => {
+  // Shape confirmed against the real GHL payload for the dropped voice note.
+  const media = (attachments: unknown, body = '') => ({
+    type: 'InboundMessage',
+    direction: 'inbound',
+    locationId: 'loc1',
+    contactId: 'c1',
+    conversationId: 'conv1',
+    messageType: 'WhatsApp',
+    body,
+    attachments,
+    messageId: 'm1',
+  });
+
+  it('a voice note with empty body is a REAL turn, not an unparseable payload', () => {
+    const out = parseInboundWebhook(media(['https://x.test/a/44bbff3b.ogg']));
+    expect(out).not.toBeNull();
+    expect(out!.text).toBe('');
+    expect(out!.attachments).toEqual([{ url: 'https://x.test/a/44bbff3b.ogg', kind: 'audio' }]);
+  });
+
+  it('classifies by extension, and query strings do not break it', () => {
+    const out = parseInboundWebhook(media([
+      'https://x.test/p.JPG?sig=abc',
+      'https://x.test/v.opus',
+      'https://x.test/doc.pdf',
+    ]));
+    expect(out!.attachments.map((a) => a.kind)).toEqual(['image', 'audio', 'file']);
+  });
+
+  it('keeps text when the lead sends a caption WITH the media', () => {
+    const out = parseInboundWebhook(media(['https://x.test/p.png'], '¿cuánto por esto?'));
+    expect(out!.text).toBe('¿cuánto por esto?');
+    expect(out!.attachments).toHaveLength(1);
+  });
+
+  it('still rejects a genuinely empty message', () => {
+    expect(parseInboundWebhook(media([], ''))).toBeNull();
+    expect(parseInboundWebhook(media(undefined, ''))).toBeNull();
+  });
+
+  it('ignores junk entries instead of trusting the array blindly', () => {
+    const out = parseInboundWebhook(media([null, 42, 'not-a-url', { nope: 1 }, 'https://x.test/ok.ogg']));
+    expect(out!.attachments).toEqual([{ url: 'https://x.test/ok.ogg', kind: 'audio' }]);
+  });
+
+  it('tolerates {url} objects should GHL ever change shape', () => {
+    const out = parseInboundWebhook(media([{ url: 'https://x.test/a.m4a' }]));
+    expect(out!.attachments).toEqual([{ url: 'https://x.test/a.m4a', kind: 'audio' }]);
+  });
+
+  it('a plain text message still parses with an empty attachment list', () => {
+    const out = parseInboundWebhook({
+      type: 'InboundMessage', direction: 'inbound', locationId: 'loc1',
+      contactId: 'c1', conversationId: 'conv1', body: 'hola', messageType: 'WhatsApp',
+    });
+    expect(out!.text).toBe('hola');
+    expect(out!.attachments).toEqual([]);
+  });
+});

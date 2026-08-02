@@ -134,6 +134,8 @@ export interface LogMessageParams {
   p_sent_at: string | null;
   /** GHL message id for deduplication. Null for outbound. */
   p_ghl_message_id?: string | null;
+  /** Media URLs the lead attached (0046). Null/omitted for text-only messages. */
+  p_attachments?: string[] | null;
 }
 
 /** Params for the app_upsert_human_agent RPC (migration 0013). */
@@ -200,7 +202,11 @@ export type BotEventType =
   // `awaiting_human_is_sticky`: the model tried to park a lead who is already
   // waiting on a person, which would have made her reactivable on her next message.
   // Written by the RPC, never by the Worker — it's the record of a bug not happening.
-  | 'status_change_blocked';
+  | 'status_change_blocked'
+  // An inbound carried media (0046): received = stored (and, for audio, transcribed);
+  // failed = we could not resolve it and fell back to the placeholder.
+  | 'attachment_received'
+  | 'attachment_failed';
 
 export interface LogAppointmentParams {
   p_client_id: string;
