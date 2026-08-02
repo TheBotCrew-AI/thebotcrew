@@ -203,24 +203,52 @@ export class GhlClient {
 
   /** Fetch a contact's stored name — plus its phone/email, the keys GHL merges on, so the
    *  caller can persist them and later re-resolve a merged-away contact (see
-   *  resolveContactByPhoneOrEmail). Returns undefined on failure or if absent. */
-  async getContact(
-    contactId: string,
-  ): Promise<{ firstName?: string; lastName?: string; name?: string; phone?: string; email?: string } | undefined> {
+   *  resolveContactByPhoneOrEmail) — plus the Meta ad attribution GHL stores on the contact
+   *  (ctwaClid/adId live there, not in webhooks; see meta/capi-config.ts extractCtwaClid).
+   *  Returns undefined on failure or if absent. */
+  async getContact(contactId: string): Promise<
+    | {
+        firstName?: string;
+        lastName?: string;
+        name?: string;
+        phone?: string;
+        email?: string;
+        attributionSource?: unknown;
+        lastAttributionSource?: unknown;
+      }
+    | undefined
+  > {
     const token = await this.getAccessToken();
     const res = await fetch(`${this.apiBase}/contacts/${contactId}`, {
       headers: { Authorization: `Bearer ${token}`, Version: '2021-07-28' },
     });
     if (!res.ok) return undefined;
     const data = (await res.json()) as {
-      contact?: { firstName?: string; lastName?: string; contactName?: string; name?: string; phone?: string; email?: string };
+      contact?: {
+        firstName?: string;
+        lastName?: string;
+        contactName?: string;
+        name?: string;
+        phone?: string;
+        email?: string;
+        attributionSource?: unknown;
+        lastAttributionSource?: unknown;
+      };
     };
     const c = data?.contact;
     if (!c) return undefined;
     // GHL sometimes stores an email in the phone field — keep phone phone-shaped.
     const phone = typeof c.phone === 'string' && c.phone && !c.phone.includes('@') ? c.phone : undefined;
     const email = typeof c.email === 'string' && c.email.includes('@') ? c.email : undefined;
-    return { firstName: c.firstName, lastName: c.lastName, name: c.name ?? c.contactName, phone, email };
+    return {
+      firstName: c.firstName,
+      lastName: c.lastName,
+      name: c.name ?? c.contactName,
+      phone,
+      email,
+      attributionSource: c.attributionSource,
+      lastAttributionSource: c.lastAttributionSource,
+    };
   }
 
   /** The GHL location id for this client's tenant, resolved once and cached. Recovery

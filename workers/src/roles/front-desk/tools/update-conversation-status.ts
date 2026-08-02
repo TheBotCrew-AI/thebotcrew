@@ -17,6 +17,7 @@ import { z } from 'zod';
 import { logBotEvent, updateConversationStatus } from '../../../db/queries.js';
 import { GhlClient } from '../../../ghl/client.js';
 import { STATUS_TAGS } from '../../../ghl/tags.js';
+import { queueCapiStatusEvent } from '../../../meta/capi.js';
 import { resolveAgentContext } from './agent-context.js';
 
 /** Cap on the model-written reason: an event payload, not a place to narrate. */
@@ -68,6 +69,10 @@ export const updateConversationStatusTool = createTool({
       console.log(`[updateConversationStatus] refused conv=${turn.ghlConversationId} status=${status}`);
       return { ok: true };
     }
+
+    // Meta CAPI (0048): `completed` is a conversion signal for tenants that opted the
+    // kind in (defaults off). Applied-only — a refused change signals nothing. Never throws.
+    await queueCapiStatusEvent(tenant, turn.ghlConversationId, status);
 
     // Why, not just what. Awaited (not fire-and-forget) for the same reason as every
     // other event write: the Worker can be killed the moment the response is sent.

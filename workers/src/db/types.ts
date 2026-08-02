@@ -51,6 +51,8 @@ export interface TenantConfigRow {
   awaiting_human_tag: string | null;
   /** Whether startDemo may create budgeted per-lead demo sessions (lead-magnet funnel). */
   demo_sessions_enabled: boolean | null;
+  /** Meta Conversions API config ({dataset_id, page_id, token_ref, …}). NULL = off. */
+  meta_capi: unknown;
 }
 
 /** One row returned by app_load_due_follow_ups. */
@@ -104,6 +106,37 @@ export interface MessageRow {
 export interface LogMessageResult {
   conversationId: string | null;
   messageId: string | null;
+}
+
+/** Params for the app_enqueue_capi_event RPC (0048). */
+export interface EnqueueCapiEventParams {
+  p_client_id: string;
+  p_ghl_conversation_id: string;
+  p_kind: string;
+  p_event_name: string;
+  /** `${ghl_conversation_id}:${kind}` — the queue's UNIQUE key and Meta's dedup id. */
+  p_event_id: string;
+  /** Frozen {user_data, custom_data?} snapshot built at enqueue. */
+  p_payload: Record<string, unknown>;
+}
+
+/** One row returned by app_load_pending_capi_events (0048). */
+export interface PendingCapiEvent {
+  id: string;
+  clientId: string;
+  ghlConversationId: string;
+  kind: string;
+  eventName: string;
+  eventId: string;
+  /** ISO timestamp the event happened (sent to Meta as event_time). */
+  eventTime: string;
+  payload: { user_data: Record<string, unknown>; custom_data?: Record<string, unknown> };
+  attempts: number;
+  lastError: string | null;
+  createdAt: string;
+  tenantId: string;
+  /** The tenant's LIVE meta_capi jsonb, joined fresh each drain. */
+  metaCapi: unknown;
 }
 
 /** A pending outbound bot message returned by app_load_pending_deliveries. */
@@ -206,7 +239,12 @@ export type BotEventType =
   // An inbound carried media (0046): received = stored (and, for audio, transcribed);
   // failed = we could not resolve it and fell back to the placeholder.
   | 'attachment_received'
-  | 'attachment_failed';
+  | 'attachment_failed'
+  // Meta CAPI (0048): a conversion signal reached Meta ({kind, eventName, eventId})
+  // / a queued event could not be sent ({stage|error}; missing_token_secret is the
+  // one that self-heals — the row stays pending until the Worker secret lands).
+  | 'capi_event_sent'
+  | 'capi_error';
 
 export interface LogAppointmentParams {
   p_client_id: string;

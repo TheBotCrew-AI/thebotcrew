@@ -1,0 +1,222 @@
+/**
+ * Meta Conversions API — pure config/payload helpers (no I/O, no db imports).
+ *
+ * Why this exists: engagement click-to-WhatsApp ads optimize toward "anyone who
+ * messages" unless Meta hears which conversations became real leads. These
+ * helpers turn a tenant's `meta_capi` jsonb + a conversation's captured
+ * `ctwa_clid` into the exact Graph API event shape Meta's business-messaging
+ * CAPI requires. The side-effectful half (enqueue/send) lives in `capi.ts`;
+ * this file stays importable from `db/queries.ts` without a cycle.
+ */
+
+export const CAPI_GRAPH_VERSION = 'v23.0';
+
+/** Event names Meta accepts for business-messaging (action_source=business_messaging). */
+export const META_BUSINESS_MESSAGING_EVENTS = [
+  'Purchase',
+  'LeadSubmitted',
+  'InitiateCheckout',
+  'AddToCart',
+  'ViewContent',
+  'OrderCreated',
+  'OrderShipped',
+  'OrderDelivered',
+  'OrderCanceled',
+  'OrderReturned',
+  'CartAbandoned',
+  'QualifiedLead',
+  'RatingProvided',
+  'ReviewProvided',
+] as const;
+export type MetaEventName = (typeof META_BUSINESS_MESSAGING_EVENTS)[number];
+
+/**
+ * Internal lifecycle moments that may become a Meta event. Deliberately NOT
+ * per-tenant: the moments are the product's; only their Meta mapping is config.
+ * `lead_disqualified` is intentionally absent — Meta has no negative event, the
+ * ABSENCE of a QualifiedLead is the signal (see docs/business-logic.md).
+ */
+export type CapiEventKind = 'lead_started' | 'appointment_booked' | 'conversation_completed';
+
+/** How one internal kind maps to Meta: the event name + optional monetary value. */
+export interface CapiEventSpec {
+  name: MetaEventName;
+  value?: number;
+  currency?: string;
+}
+
+/**
+ * `tenant_config.meta_capi` after validation. `events` overrides the defaults
+ * per kind; `false` disables a kind entirely.
+ */
+export interface MetaCapiConfig {
+  datasetId: string;
+  pageId: string;
+  /** Slug of the Worker secret with this tenant's CAPI token
+   *  (`'MADI'` → `META_CAPI_TOKEN__MADI`). Never the token itself. */
+  tokenRef: string;
+  /** Events Manager Test Events code — set only while verifying, then remove. */
+  testEventCode?: string;
+  events?: Partial<Record<CapiEventKind, CapiEventSpec | false>>;
+}
+
+/**
+ * Platform defaults per kind. `lead_started`/`appointment_booked` are on for any
+ * tenant that configures meta_capi at all; `conversation_completed` is opt-in
+ * (most tenants' conversion IS the booking — sending both would double-signal).
+ * Booking defaults to QualifiedLead, not Purchase: for service SMBs a booking is
+ * a qualified lead, and QualifiedLead is what Meta's CTWA lead filtering trains
+ * on. A tenant that wants purchase optimization overrides it with a value.
+ */
+const DEFAULT_EVENT_SPECS: Record<CapiEventKind, CapiEventSpec | false> = {
+  lead_started: { name: 'LeadSubmitted' },
+  appointment_booked: { name: 'QualifiedLead' },
+  conversation_completed: false,
+};
+
+function isMetaEventName(v: unknown): v is MetaEventName {
+  return typeof v === 'string' && (META_BUSINESS_MESSAGING_EVENTS as readonly string[]).includes(v);
+}
+
+function parseEventSpec(raw: unknown): CapiEventSpec | false | null {
+  if (raw === false) return false;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const { name, value, currency } = raw as { name?: unknown; value?: unknown; currency?: unknown };
+  if (!isMetaEventName(name)) return null;
+  const spec: CapiEventSpec = { name };
+  if (typeof value === 'number' && Number.isFinite(value) && value > 0) spec.value = value;
+  if (typeof currency === 'string' && currency.trim().length === 3) spec.currency = currency.trim().toUpperCase();
+  return spec;
+}
+
+const CAPI_EVENT_KINDS: CapiEventKind[] = ['lead_started', 'appointment_booked', 'conversation_completed'];
+
+/**
+ * Validate the stored meta_capi jsonb; anything malformed → null (feature off),
+ * loudly. Same contract as parseQuietHours: a broken config must degrade to
+ * "off", never to a half-configured integration sending garbage to Meta.
+ */
+export function parseMetaCapi(raw: unknown): MetaCapiConfig | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const o = raw as Record<string, unknown>;
+  const datasetId = typeof o.dataset_id === 'string' ? o.dataset_id.trim() : '';
+  const pageId = typeof o.page_id === 'string' ? o.page_id.trim() : '';
+  const tokenRef = typeof o.token_ref === 'string' ? o.token_ref.trim() : '';
+  if (!datasetId || !pageId || !tokenRef) {
+    console.error('[capi] meta_capi config invalid (needs dataset_id, page_id, token_ref) — feature off');
+    return null;
+  }
+  const config: MetaCapiConfig = { datasetId, pageId, tokenRef };
+  if (typeof o.test_event_code === 'string' && o.test_event_code.trim()) {
+    config.testEventCode = o.test_event_code.trim();
+  }
+  if (o.events && typeof o.events === 'object' && !Array.isArray(o.events)) {
+    const events: MetaCapiConfig['events'] = {};
+    for (const kind of CAPI_EVENT_KINDS) {
+      const rawSpec = (o.events as Record<string, unknown>)[kind];
+      if (rawSpec === undefined) continue;
+      const spec = parseEventSpec(rawSpec);
+      if (spec === null) {
+        console.error(`[capi] meta_capi.events.${kind} invalid — ignoring that override`);
+        continue;
+      }
+      events[kind] = spec;
+    }
+    if (Object.keys(events).length > 0) config.events = events;
+  }
+  return config;
+}
+
+/**
+ * Worker-secret name for a tenant's CAPI token: `META_CAPI_TOKEN__MADI`.
+ * Same slug normalization as aiKeySecretName (core/env.ts): the DB stores only
+ * the slug, the token stays in Cloudflare's secret store.
+ */
+export function capiTokenSecretName(tokenRef: string): string | null {
+  const slug = tokenRef
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  if (!slug) return null;
+  return `META_CAPI_TOKEN__${slug}`;
+}
+
+/**
+ * Resolve the tenant's CAPI token from Worker secrets. Unlike resolveAiApiKey
+ * there is deliberately NO platform fallback — a Meta token belongs to one
+ * advertiser, so falling back would send tenant A's conversions to tenant B's
+ * dataset. null = missing; the queue keeps the rows pending (loud, self-heals
+ * once the secret lands).
+ */
+export function resolveCapiToken(tokenRef: string): string | null {
+  const secretName = capiTokenSecretName(tokenRef);
+  const token = secretName ? process.env[secretName] : undefined;
+  return token?.trim() ? token : null;
+}
+
+/** The effective Meta mapping for a kind: config override > platform default. null = kind off. */
+export function resolveEventSpec(config: MetaCapiConfig, kind: CapiEventKind): CapiEventSpec | null {
+  const spec = config.events?.[kind] ?? DEFAULT_EVENT_SPECS[kind];
+  return spec === false ? null : spec;
+}
+
+/** One event per conversation per kind — the queue's UNIQUE key and Meta's dedup event_id. */
+export function buildCapiEventId(ghlConversationId: string, kind: CapiEventKind): string {
+  return `${ghlConversationId}:${kind}`;
+}
+
+/**
+ * Pull the click id out of a GHL attribution object. Verified live shape (2026-08-01):
+ * `{ sessionSource: 'Paid Social', ctwaClid: 'Afj…', adId, adName, … }` — but GHL's
+ * field naming is not a contract, so tolerate snake_case too.
+ */
+export function extractCtwaClid(attribution: unknown): string | null {
+  if (!attribution || typeof attribution !== 'object') return null;
+  const o = attribution as Record<string, unknown>;
+  const candidate = o.ctwaClid ?? o.ctwa_clid;
+  return typeof candidate === 'string' && candidate.trim() ? candidate.trim() : null;
+}
+
+/** E.164 digits only (Meta's `ph` format pre-hash: country code + number, no '+'). */
+export function normalizePhoneForCapi(phone: string): string | null {
+  const digits = phone.replace(/\D/g, '');
+  return digits.length >= 8 ? digits : null;
+}
+
+/** Lowercase hex SHA-256 (WebCrypto — available on Workers and in vitest's Node). */
+export async function sha256Hex(input: string): Promise<string> {
+  const bytes = new TextEncoder().encode(input);
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+/**
+ * Build the frozen payload snapshot stored on the queue row: exactly Meta's
+ * `user_data` (+ optional `custom_data`). `ctwa_clid` must NOT be hashed (Meta
+ * requirement — it is their own identifier); the phone MUST be SHA-256 hashed.
+ */
+export async function buildCapiPayload(args: {
+  config: MetaCapiConfig;
+  spec: CapiEventSpec;
+  ctwaClid: string;
+  phone?: string | null;
+}): Promise<{ user_data: Record<string, unknown>; custom_data?: Record<string, unknown> }> {
+  const user_data: Record<string, unknown> = {
+    ctwa_clid: args.ctwaClid,
+    page_id: args.config.pageId,
+  };
+  if (args.phone) {
+    const normalized = normalizePhoneForCapi(args.phone);
+    if (normalized) user_data.ph = [await sha256Hex(normalized)];
+  }
+  if (args.spec.value != null) {
+    return {
+      user_data,
+      custom_data: { value: args.spec.value, currency: args.spec.currency ?? 'MXN' },
+    };
+  }
+  return { user_data };
+}

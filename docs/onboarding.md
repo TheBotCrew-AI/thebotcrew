@@ -292,6 +292,85 @@ group by key_source;
 
 ---
 
+## 7. Meta CAPI — send lead-quality signals back to Meta (0048)
+
+Optional, per tenant. For a client running **click-to-WhatsApp (CTWA) ads**: without
+this, Meta optimizes toward "anyone who messages" and the ads fill with bad leads.
+With it, the platform reports back which conversations became real leads
+(`LeadSubmitted` on first contact, `QualifiedLead` on booking by default), and the
+campaigns can train on that. Full behavior: `docs/business-logic.md` § Meta CAPI.
+
+Attribution is automatic: GHL stores the ad click id on the contact
+(`attributionSource.ctwaClid`) and the Worker captures it on the first turn. Leads that
+didn't come from a CTWA ad simply produce no events. **Events only flow for leads whose
+first turn ran after `meta_capi` was configured** — the capture happens at turn time, so
+there is no backfill for older conversations.
+
+Needs three Meta assets from the account that runs the ads (theirs or ours — for a
+client-owned Business Manager, ask for admin access to Events Manager or have them do
+step 1 and send you the three values):
+
+1. **Dataset + access token** — Events Manager → the ad account's dataset (create one
+   if none) → Settings → Conversions API → **Generate access token**. Note the
+   **dataset id** (the pixel id) and grab a **test event code** from the *Test events*
+   tab while you're there.
+2. **Page id** — the Facebook page the CTWA ads run from.
+3. Store the token as a Worker secret (slug rules same as AI keys — this is the second
+   onboarding step that is not just a DB row):
+
+   ```bash
+   pnpm --filter @thebotcrew/workers exec wrangler secret put META_CAPI_TOKEN__MADI
+   ```
+
+4. Point the tenant at it, **with the test code on** for verification:
+
+   ```sql
+   update tenant_config set meta_capi = '{
+     "dataset_id": "<dataset id>",
+     "page_id":    "<page id>",
+     "token_ref":  "MADI",
+     "test_event_code": "<TESTxxxx>"
+   }' where tenant_id = '<tenant uuid>';
+   ```
+
+5. **Verify end-to-end**: click one of the live CTWA ads from a personal phone, send a
+   message, let the bot answer. Within ~2 minutes a `LeadSubmitted` should appear in
+   Events Manager → Test events, attributed to the ad. Check our side too:
+
+   ```sql
+   select kind, event_name, status, attempts, last_error from capi_events
+   order by created_at desc limit 10;
+   select created_at, event_type, metadata from bot_events
+   where event_type in ('capi_event_sent','capi_error') order by created_at desc limit 10;
+   ```
+
+6. **Remove `test_event_code`** (set the jsonb without that key) — events now count
+   for real ad optimization.
+
+**Order matters, but it self-heals:** a `token_ref` with no secret does NOT lose
+events — the queue parks them `pending` (one loud `capi_error` per tenant, stage
+`missing_token_secret`) and sends as soon as the secret lands. There is deliberately
+**no platform fallback token**: a Meta token belongs to one advertiser. Rows unsent
+after 48h expire (`failed`, reason `expired`) because the click id's attribution value
+decays in days anyway.
+
+Per-tenant event tuning (all optional, in the same jsonb): rename an event or attach a
+value, or disable a kind —
+
+```jsonc
+"events": {
+  "lead_started": false,                                            // don't signal first contact
+  "appointment_booked": { "name": "Purchase", "value": 350, "currency": "MXN" },
+  "conversation_completed": { "name": "QualifiedLead" }             // off unless configured
+}
+```
+
+Ads-side follow-through (the actual payoff, manual): once `QualifiedLead` events flow
+for a couple of weeks, switch the CTWA campaigns from plain engagement to optimizing on
+the dataset's qualified-lead events (or enable lead filtering) in Ads Manager.
+
+---
+
 ## Costs per client — the pricing table
 
 `llm_usage` records **tokens**, which we measure. Turning tokens into USD needs

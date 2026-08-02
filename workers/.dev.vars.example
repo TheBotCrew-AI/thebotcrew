@@ -17,6 +17,14 @@ OPENAI_API_KEY="sk-..."
 # platform key above and logs a `ai_key_fallback` bot_event. See docs/onboarding.md §6.
 # OPENAI_API_KEY__MADI="sk-..."
 
+# Meta Conversions API — per-tenant access token (Events Manager → Settings →
+# Conversions API → Generate access token). Name: META_CAPI_TOKEN__<SLUG>, where
+# <SLUG> matches tenant_config.meta_capi.token_ref (uppercased, non-alphanumerics
+# → `_`). NO platform fallback on purpose: a Meta token belongs to one advertiser,
+# so a missing secret parks the tenant's queue rows (capi_error) instead of
+# sending its conversions to someone else's dataset. See docs/onboarding.md.
+# META_CAPI_TOKEN__MADI="EAAG..."
+
 # GoHighLevel — outbound transport + calendar (live, per-location OAuth).
 GHL_API_BASE="https://services.leadconnectorhq.com"
 # Inbound webhooks are verified by GHL's public keys (Ed25519 `x-ghl-signature` /

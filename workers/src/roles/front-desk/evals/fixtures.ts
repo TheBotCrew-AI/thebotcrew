@@ -104,6 +104,7 @@ export const demoTenant: TenantContext = {
   keywordVariants: null,
   awaitingHumanTag: null,
   demoSessionsEnabled: false,
+  metaCapi: null,
   config: {
     businessName: 'Clínica Demo',
     timezone: 'America/Mexico_City',

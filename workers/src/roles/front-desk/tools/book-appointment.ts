@@ -7,6 +7,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { GhlClient } from '../../../ghl/client.js';
 import { getActiveDemoSession, logAppointment, logBotEvent, logEvent, setSimulatedBooking } from '../../../db/queries.js';
+import { queueCapiEvent } from '../../../meta/capi.js';
 import { resolveAgentContext } from './agent-context.js';
 import { bookingQueryWindow, resolveBookableSlot } from './booking-time.js';
 import { simSlotLabel, simulatedSlots } from './demo-sim.js';
@@ -202,6 +203,15 @@ export const bookAppointmentTool = createTool({
       p_event_type: 'lead_qualified',
       p_metadata: { service: serviceName, startTime: canonicalStart },
     }).catch((e: unknown) => console.error('[bookAppointment] logEvent failed:', e));
+    // Meta CAPI (0048): a real booking is the strongest lead-quality signal. Only the
+    // real path reaches here (the demo short-circuit returned above) and the helper
+    // no-ops for tenants without meta_capi or leads without a CTWA click id.
+    void queueCapiEvent({
+      tenant,
+      ghlConversationId: turn.ghlConversationId,
+      kind: 'appointment_booked',
+      phone: turn.contactPhone ?? null,
+    });
 
     return {
       booked: true,

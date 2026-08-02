@@ -13,9 +13,11 @@ const ghl = {
 vi.mock('../ghl/client.js', () => ({ GhlClient: vi.fn(() => ghl) }));
 vi.mock('../core/env.js');
 vi.mock('../db/queries.js');
+vi.mock('../meta/capi.js');
 
 import * as q from '../db/queries.js';
 import { getAiApiKey, resolveAiApiKey } from '../core/env.js';
+import { queueCapiEvent, queueCapiStatusEvent } from '../meta/capi.js';
 import { handleInboundWebhook, splitIntoMessages } from './webhook-handler.js';
 
 function tenant(overrides: Partial<TenantContext> = {}): TenantContext {
@@ -74,6 +76,7 @@ beforeEach(() => {
   vi.mocked(q.getConversationPersona).mockResolvedValue({ activeRole: null, roleStartedAt: null, demoStartedAt: null, promptVariant: null });
   vi.mocked(q.setConversationContactKeys).mockResolvedValue(undefined);
   vi.mocked(q.getConversationContactKeys).mockResolvedValue({ phone: null, email: null });
+  vi.mocked(q.setConversationAttribution).mockResolvedValue(undefined);
   vi.mocked(q.updateConversationContact).mockResolvedValue(undefined);
   ghl.getContactPhone.mockResolvedValue(undefined);
   ghl.getContact.mockResolvedValue(undefined);
@@ -226,6 +229,97 @@ describe('handleInboundWebhook — merge-key capture & recovery', () => {
     ghl.sendMessage.mockResolvedValue({ ghlMessageId: 'm', resolvedContactId: 'survivor' });
     await handleInboundWebhook(inbound, agentReplying());
     expect(q.updateConversationContact).toHaveBeenCalledWith('conv1', 'survivor');
+  });
+});
+
+describe('handleInboundWebhook — Meta CAPI attribution capture (0048)', () => {
+  const metaCapi = { datasetId: 'ds1', pageId: 'pg1', tokenRef: 'MADI' };
+  // The real shape GHL stores on a CTWA-ad contact (verified live 2026-08-01).
+  const ctwaContact = {
+    name: 'Ana',
+    phone: '+5215550000',
+    attributionSource: {
+      sessionSource: 'Paid Social',
+      medium: 'whatsapp',
+      ctwaClid: 'AfjMi93Y-clid',
+      adId: '120250989588970351',
+      adName: 'Chatea con nosotros',
+    },
+  };
+
+  it('CAPI tenant + CTWA contact → persists the click id (sticky) and queues lead_started', async () => {
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(tenant({ metaCapi } as Partial<TenantContext>));
+    ghl.getContact.mockResolvedValue(ctwaContact);
+    await handleInboundWebhook(inbound, agentReplying());
+    expect(q.setConversationAttribution).toHaveBeenCalledWith('conv1', {
+      ctwaClid: 'AfjMi93Y-clid',
+      attribution: ctwaContact.attributionSource,
+    });
+    expect(queueCapiEvent).toHaveBeenCalledWith({
+      tenant: expect.objectContaining({ tenantId: 't1' }),
+      ghlConversationId: 'conv1',
+      kind: 'lead_started',
+      ctwaClid: 'AfjMi93Y-clid',
+      phone: '+521',
+    });
+  });
+
+  it('falls back to lastAttributionSource when attributionSource has no click id', async () => {
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(tenant({ metaCapi } as Partial<TenantContext>));
+    ghl.getContact.mockResolvedValue({
+      name: 'Ana',
+      attributionSource: { sessionSource: 'Organic' },
+      lastAttributionSource: { sessionSource: 'Paid Social', ctwaClid: 'Afj-last' },
+    });
+    await handleInboundWebhook(inbound, agentReplying());
+    expect(queueCapiEvent).toHaveBeenCalledWith(expect.objectContaining({ ctwaClid: 'Afj-last' }));
+  });
+
+  it('tenant without meta_capi → no capture, even when the contact carries attribution', async () => {
+    ghl.getContact.mockResolvedValue(ctwaContact);
+    await handleInboundWebhook(inbound, agentReplying());
+    expect(q.setConversationAttribution).not.toHaveBeenCalled();
+    expect(queueCapiEvent).not.toHaveBeenCalled();
+  });
+
+  it('organic lead (no attribution on the contact) → nothing persisted or queued', async () => {
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(tenant({ metaCapi } as Partial<TenantContext>));
+    ghl.getContact.mockResolvedValue({ name: 'Ana', phone: '+5215550000' });
+    await handleInboundWebhook(inbound, agentReplying());
+    expect(q.setConversationAttribution).not.toHaveBeenCalled();
+    expect(queueCapiEvent).not.toHaveBeenCalled();
+  });
+
+  it('an attribution persist failure never blocks the turn', async () => {
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(tenant({ metaCapi } as Partial<TenantContext>));
+    ghl.getContact.mockResolvedValue(ctwaContact);
+    vi.mocked(q.setConversationAttribution).mockRejectedValue(new Error('db down'));
+    const res = await handleInboundWebhook(inbound, agentReplying());
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ replied: true });
+  });
+});
+
+describe('handleInboundWebhook — Meta CAPI status hook (0048)', () => {
+  const noQuestion = 'Perfecto, quedamos así. ¡Gracias!'; // no "?" → classifier path opens
+
+  it('a classifier-applied status reaches queueCapiStatusEvent (helper filters to completed)', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: '{"status":"completed"}' } }] }),
+    }));
+    await handleInboundWebhook(inbound, agentReplying(noQuestion));
+    expect(queueCapiStatusEvent).toHaveBeenCalledWith(expect.objectContaining({ tenantId: 't1' }), 'conv1', 'completed');
+  });
+
+  it('a refused status change (0044) signals nothing to Meta', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: '{"status":"completed"}' } }] }),
+    }));
+    vi.mocked(q.updateConversationStatus).mockResolvedValue(false);
+    await handleInboundWebhook(inbound, agentReplying(noQuestion));
+    expect(queueCapiStatusEvent).not.toHaveBeenCalled();
   });
 });
 

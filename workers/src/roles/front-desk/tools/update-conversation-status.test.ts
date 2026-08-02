@@ -4,8 +4,10 @@ import type { TenantContext, TurnContext } from '../../../core/types.js';
 const ghl = { addContactTags: vi.fn() };
 vi.mock('../../../ghl/client.js', () => ({ GhlClient: vi.fn(() => ghl) }));
 vi.mock('../../../db/queries.js');
+vi.mock('../../../meta/capi.js');
 
 import * as q from '../../../db/queries.js';
+import { queueCapiStatusEvent } from '../../../meta/capi.js';
 import { updateConversationStatusTool } from './update-conversation-status.js';
 
 const tenant = { tenantId: 't1', clientId: 'client1', ghlLocationId: 'loc1', config: { businessName: 'X', timezone: 'America/Mexico_City' } } as unknown as TenantContext;
@@ -64,6 +66,11 @@ describe('updateConversationStatus tool', () => {
     expect(q.updateConversationStatus).toHaveBeenCalledWith('conv1', 'standby');
     expect(res).toEqual({ ok: true });
   });
+
+  it('an applied status change reaches the Meta CAPI hook (0048; helper filters to `completed`)', async () => {
+    await run('completed');
+    expect(queueCapiStatusEvent).toHaveBeenCalledWith(tenant, 'conv1', 'completed');
+  });
 });
 
 describe('updateConversationStatus tool — refused write (awaiting_human, 0044)', () => {
@@ -83,6 +90,11 @@ describe('updateConversationStatus tool — refused write (awaiting_human, 0044)
     await run('standby', 'no agenda citas');
     expect(q.logBotEvent).not.toHaveBeenCalled();
   });
+
+  it('a refused change signals nothing to Meta either (0048)', async () => {
+    await run('completed');
+    expect(queueCapiStatusEvent).not.toHaveBeenCalled();
+  });
 });
 
 describe('updateConversationStatus tool — demo guard', () => {
@@ -97,5 +109,7 @@ describe('updateConversationStatus tool — demo guard', () => {
     expect(ghl.addContactTags).not.toHaveBeenCalled();
     // A roleplayed reason must not pollute the real funnel's disqualification stats.
     expect(q.logBotEvent).not.toHaveBeenCalled();
+    // Nor does roleplay signal a conversion to Meta (0048).
+    expect(queueCapiStatusEvent).not.toHaveBeenCalled();
   });
 });

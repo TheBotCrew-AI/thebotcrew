@@ -132,8 +132,9 @@ workers/                       # Mastra + Cloudflare Worker package (@thebotcrew
       front-desk/              # config (zod), prompt (es template), agent, tools/, evals/
       reactivation/            # text-only follow-up/reactivation agent (no tools)
     ghl/                       # webhook parse/verify, OAuth, tags + transport-only API client (live)
+    meta/                      # Meta Conversions API (0048): capi-config (pure parse/payload) + capi (enqueue + Graph send)
     db/                        # service-role Supabase client, queries (config read + RPC writes)
-    worker/                    # webhook-handler (inbound) + conversation-do (per-conversation Durable Object: durable-alarm debounce + serialized turn) + outbound-handler (human takeover) + tag-handler (bot-off) + delivery-retry + followup-runner
+    worker/                    # webhook-handler (inbound) + conversation-do (per-conversation Durable Object: durable-alarm debounce + serialized turn) + outbound-handler (human takeover) + tag-handler (bot-off) + delivery-retry + followup-runner + capi-runner (Meta CAPI queue drain)
   scripts/simulate-webhook.mjs # local dev: fire a fake GHL webhook
   fixtures/                    # sample webhook payloads
   wrangler.jsonc, vitest.config.ts, tsconfig.json
@@ -175,7 +176,11 @@ supabase/
                                # 0046 message_attachments (messages.attachments + app_log_message p_attachments +
                                #      app_set_message_content: voice notes/images were DROPPED at parse — see business-logic §7),
                                # 0047 local_prod_parity (no-op on prod; repairs the schema drift left by the silently
-                               #      skipped 0014a–d — see "Migration numbering" below)
+                               #      skipped 0014a–d — see "Migration numbering" below),
+                               # 0048 meta_capi (per-tenant Meta Conversions API: tenant_config.meta_capi jsonb,
+                               #      conversations.ctwa_clid/attribution captured from the GHL contact, capi_events
+                               #      durable queue + RPCs, drained by the 1-min cron — see business-logic §6a.
+                               #      Per-tenant secret META_CAPI_TOKEN__<SLUG>, NO platform fallback)
   clients.sql, seed-tenants.sql# seeds (run by `supabase db reset` per config.toml)
 sites/                         # client marketing sites: static HTML, no build step, no deps
   _template/                   # starting point for a new client

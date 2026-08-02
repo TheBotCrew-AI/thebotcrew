@@ -16,6 +16,7 @@ function tenant(overrides: Partial<TenantContext> = {}): TenantContext {
     keywordVariants: null,
     awaitingHumanTag: null,
     demoSessionsEnabled: false,
+    metaCapi: null,
     config: {} as TenantContext['config'],
     ...overrides,
   };

@@ -112,6 +112,9 @@ export interface TenantContext {
   /** Whether the startDemo tool may create budgeted per-lead demo sessions on this
    *  tenant (the lead-magnet funnel). false = the tool refuses; nothing else changes. */
   demoSessionsEnabled: boolean;
+  /** Meta Conversions API config (validated). null = no conversion signals for this
+   *  tenant; every CAPI hook no-ops. See meta/capi-config.ts. */
+  metaCapi: import('../meta/capi-config.js').MetaCapiConfig | null;
   config: RawTenantConfig;
 }
 

@@ -12,16 +12,19 @@ import { DEMO_REMINDER_ROLE } from '../core/types.js';
 import { clampToActiveHours, DEFAULT_QUIET_HOURS } from '../core/active-hours.js';
 import type { TokenUsage } from '../core/llm-usage.js';
 import { isAppointmentActive } from './appointment-active.js';
+import { parseMetaCapi } from '../meta/capi-config.js';
 import type { GhlTokenResponse } from '../ghl/oauth.js';
 import type {
   BotEventType,
   DueFollowUp,
+  EnqueueCapiEventParams,
   LogAppointmentParams,
   LogEventParams,
   LogMessageParams,
   LogMessageResult,
   MessageRow,
   OAuthTokenRow,
+  PendingCapiEvent,
   PendingDelivery,
   TenantConfigRow,
   TenantRow,
@@ -44,7 +47,7 @@ export async function loadTenantConfig(ghlLocationId: string): Promise<TenantCon
   const { data, error } = await supabase
     .from('tenant_config')
     .select(
-      'business_name, timezone, tone, services, hours, calendars, faq, enabled_roles, prompt_overrides, ai_provider, ai_model, ai_key_ref, awaiting_human_tag, follow_up_tiers, follow_up_cadence, follow_up_angles, quiet_hours, booking_horizon_days, enabled_channels, test_contact_ids, trigger_keywords, demo_on_keywords, demo_off_keywords, demo_prompt_overrides, keyword_variants, prompt_variants, demo_sessions_enabled,' +
+      'business_name, timezone, tone, services, hours, calendars, faq, enabled_roles, prompt_overrides, ai_provider, ai_model, ai_key_ref, awaiting_human_tag, follow_up_tiers, follow_up_cadence, follow_up_angles, quiet_hours, booking_horizon_days, enabled_channels, test_contact_ids, trigger_keywords, demo_on_keywords, demo_off_keywords, demo_prompt_overrides, keyword_variants, prompt_variants, demo_sessions_enabled, meta_capi,' +
         'tenants!inner(id, client_id, ghl_location_id, is_active)',
     )
     .eq('tenants.ghl_location_id', ghlLocationId)
@@ -72,6 +75,7 @@ export async function loadTenantConfig(ghlLocationId: string): Promise<TenantCon
     keywordVariants: parseKeywordVariants(row.keyword_variants),
     awaitingHumanTag: row.awaiting_human_tag?.trim() ? row.awaiting_human_tag.trim() : null,
     demoSessionsEnabled: row.demo_sessions_enabled === true,
+    metaCapi: parseMetaCapi(row.meta_capi),
     config: {
       businessName: row.business_name,
       timezone: row.timezone,
@@ -495,6 +499,37 @@ export async function getConversationContactKeys(
   return { phone: row?.contact_phone ?? null, email: row?.contact_email ?? null };
 }
 
+/**
+ * Persist the Meta ad attribution captured from the GHL contact (0048).
+ * First-touch sticky: only writes while ctwa_clid is still NULL, so a
+ * re-capture on turn 2 (or a later ad click) never rewrites which click
+ * gets credited. Fire-and-forget safe.
+ */
+export async function setConversationAttribution(
+  ghlConversationId: string,
+  args: { ctwaClid: string; attribution: unknown },
+): Promise<void> {
+  const supabase = getSupabase();
+  const { error } = await supabase
+    .from('conversations')
+    .update({ ctwa_clid: args.ctwaClid, attribution: args.attribution ?? null })
+    .eq('ghl_conversation_id', ghlConversationId)
+    .is('ctwa_clid', null);
+  fail('setConversationAttribution', error);
+}
+
+/** The conversation's stored CTWA click id; null when the lead didn't come from a CTWA ad. */
+export async function getConversationCtwaClid(ghlConversationId: string): Promise<string | null> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from('conversations')
+    .select('ctwa_clid')
+    .eq('ghl_conversation_id', ghlConversationId)
+    .maybeSingle();
+  fail('getConversationCtwaClid', error);
+  return (data as { ctwa_clid: string | null } | null)?.ctwa_clid ?? null;
+}
+
 /** Switch a conversation's persona. Pass null to return it to the normal front-desk agent. */
 export async function setActiveRole(ghlConversationId: string, activeRole: string | null): Promise<void> {
   const supabase = getSupabase();
@@ -571,6 +606,73 @@ export async function loadPendingDeliveries(limit = 20): Promise<PendingDelivery
     tenantId: r.tenant_id,
     retryCount: r.retry_count,
   }));
+}
+
+/** Idempotent CAPI enqueue (0048). Returns true only when THIS call inserted the row. */
+export async function enqueueCapiEvent(params: EnqueueCapiEventParams): Promise<boolean> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase.rpc('app_enqueue_capi_event', params);
+  fail('enqueueCapiEvent', error);
+  return data === true;
+}
+
+/** Pending CAPI events (attempts < 3), oldest first, with each tenant's LIVE meta_capi. */
+export async function loadPendingCapiEvents(limit = 20): Promise<PendingCapiEvent[]> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase.rpc('app_load_pending_capi_events', { p_limit: limit });
+  fail('loadPendingCapiEvents', error);
+  type Row = {
+    id: string;
+    client_id: string;
+    ghl_conversation_id: string;
+    kind: string;
+    event_name: string;
+    event_id: string;
+    event_time: string;
+    payload: PendingCapiEvent['payload'];
+    attempts: number;
+    last_error: string | null;
+    created_at: string;
+    tenant_id: string;
+    meta_capi: unknown;
+  };
+  return ((data ?? []) as Row[]).map((r) => ({
+    id: r.id,
+    clientId: r.client_id,
+    ghlConversationId: r.ghl_conversation_id,
+    kind: r.kind,
+    eventName: r.event_name,
+    eventId: r.event_id,
+    eventTime: r.event_time,
+    payload: r.payload,
+    attempts: r.attempts,
+    lastError: r.last_error,
+    createdAt: r.created_at,
+    tenantId: r.tenant_id,
+    metaCapi: r.meta_capi,
+  }));
+}
+
+/** Transition a CAPI queue row; 'pending' + an error parks it with a diagnostic (logged once). */
+export async function markCapiEvent(
+  id: string,
+  status: 'pending' | 'sent' | 'failed',
+  errorMsg: string | null = null,
+): Promise<void> {
+  const supabase = getSupabase();
+  const { error } = await supabase.rpc('app_mark_capi_event', {
+    p_id: id,
+    p_status: status,
+    p_error: errorMsg,
+  });
+  fail('markCapiEvent', error);
+}
+
+/** Increment a CAPI row's attempt counter before each send attempt. */
+export async function incrementCapiAttempts(id: string): Promise<void> {
+  const supabase = getSupabase();
+  const { error } = await supabase.rpc('app_increment_capi_attempts', { p_id: id });
+  fail('incrementCapiAttempts', error);
 }
 
 /** Record an appointment action (booked / rescheduled / cancelled). Returns appt uuid. */

@@ -9,8 +9,10 @@ const ghl = {
 };
 vi.mock('../../../ghl/client.js', () => ({ GhlClient: vi.fn(() => ghl) }));
 vi.mock('../../../db/queries.js');
+vi.mock('../../../meta/capi.js');
 
 import * as q from '../../../db/queries.js';
+import { queueCapiEvent } from '../../../meta/capi.js';
 import { bookAppointmentTool } from './book-appointment.js';
 
 const tenant = {
@@ -118,6 +120,31 @@ describe('bookAppointment', () => {
     expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'booking_failed', expect.objectContaining({ stage: 'validate_availability' }));
   });
 
+  describe('Meta CAPI hook (0048)', () => {
+    it('a real booking queues appointment_booked (helper gates tenant/clid itself)', async () => {
+      const res = await run({ serviceName: 'Consulta', startTime: START });
+      expect(res.booked).toBe(true);
+      expect(queueCapiEvent).toHaveBeenCalledWith({
+        tenant,
+        ghlConversationId: 'conv1',
+        kind: 'appointment_booked',
+        phone: null,
+      });
+    });
+
+    it('a failed booking queues nothing', async () => {
+      ghl.bookAppointment.mockRejectedValue(new Error('ghl 422'));
+      await run({ serviceName: 'Consulta', startTime: START });
+      expect(queueCapiEvent).not.toHaveBeenCalled();
+    });
+
+    it('an unavailable slot queues nothing', async () => {
+      ghl.getAvailability.mockResolvedValue([{ start: '2026-07-10T18:00:00.000Z', end: '2026-07-10T18:00:00.000Z' }]);
+      await run({ serviceName: 'Consulta', startTime: START });
+      expect(queueCapiEvent).not.toHaveBeenCalled();
+    });
+  });
+
   // Regression: the demo bug where the lead picked 5:15 p.m. (Tijuana) but the model handed
   // bookAppointment an offset-less string. GHL read it as UTC and booked 10:15 a.m. The tool
   // must instead book the canonical slot string GHL returned (with the correct -07:00 offset).
@@ -206,5 +233,7 @@ describe('bookAppointment — demo mode (simulated booking)', () => {
     expect(ghl.bookAppointment).not.toHaveBeenCalled(); // no real GHL traffic
     expect(ghl.getAvailability).not.toHaveBeenCalled();
     expect(q.logAppointment).not.toHaveBeenCalled(); // nothing in the real stats layer
+    // A roleplayed booking is not a conversion — nothing goes to Meta (0048).
+    expect(queueCapiEvent).not.toHaveBeenCalled();
   });
 });

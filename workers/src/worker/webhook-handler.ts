@@ -55,7 +55,10 @@ import {
   updateConversationStatus,
   setConversationContactKeys,
   getConversationContactKeys,
+  setConversationAttribution,
 } from '../db/queries.js';
+import { queueCapiEvent, queueCapiStatusEvent } from '../meta/capi.js';
+import { extractCtwaClid } from '../meta/capi-config.js';
 import { GhlClient } from '../ghl/client.js';
 import { parseInboundWebhook } from '../ghl/webhook.js';
 import { transcribeAudio } from '../core/transcribe.js';
@@ -639,6 +642,29 @@ export async function runAgentTurn({
             (e: unknown) => console.error('[merge-keys] persist failed (non-blocking):', e instanceof Error ? e.message : String(e)),
           );
         }
+        // Meta CAPI capture (0048): GHL only exposes the CTWA click id on the contact
+        // record — this fetch is the one place we see it. First-touch sticky in the DB,
+        // and the queue's unique event_id makes the lead_started enqueue idempotent, so
+        // re-running on turn 2 (bot still hasn't spoken) is a no-op.
+        if (tenant.metaCapi) {
+          const ctwaClid =
+            extractCtwaClid(contact.attributionSource) ?? extractCtwaClid(contact.lastAttributionSource);
+          if (ctwaClid) {
+            await setConversationAttribution(parsed.conversationId, {
+              ctwaClid,
+              attribution: contact.attributionSource ?? contact.lastAttributionSource,
+            }).catch((e: unknown) =>
+              console.error('[capi] attribution persist failed (non-blocking):', e instanceof Error ? e.message : String(e)),
+            );
+            await queueCapiEvent({
+              tenant,
+              ghlConversationId: parsed.conversationId,
+              kind: 'lead_started',
+              ctwaClid,
+              phone: contactPhone ?? null,
+            });
+          }
+        }
       }
     } catch (e) {
       console.error('[contact-name] fetch failed (non-blocking):', e instanceof Error ? e.message : String(e));
@@ -884,6 +910,11 @@ export async function runAgentTurn({
       // contact is not. Skip the tag mirror too — the state did not change.
       const applied = await updateConversationStatus(parsed.conversationId, outcome);
       console.log(`[conv] status→${outcome} conv=${parsed.conversationId} applied=${applied}`);
+      // Meta CAPI (0048): a classifier-applied `completed` is a conversion signal for
+      // tenants that opted the kind in. No-op otherwise; never throws.
+      if (applied) {
+        await queueCapiStatusEvent(tenant, parsed.conversationId, outcome);
+      }
       // Mirror the state onto the GHL contact as a tag (transparency / sync).
       const tag = applied ? STATUS_TAGS[outcome] : undefined;
       if (tag && outcome === 'opted_out') {

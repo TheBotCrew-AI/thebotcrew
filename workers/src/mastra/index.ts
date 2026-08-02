@@ -17,6 +17,7 @@ import { handleTagWebhook } from '../worker/tag-handler.js';
 import { verifyGhlWebhook, webhookAuthDisabled } from '../ghl/webhook.js';
 import { retryPendingDeliveries } from '../worker/delivery-retry.js';
 import { runPendingFollowUps } from '../worker/followup-runner.js';
+import { runPendingCapiEvents } from '../worker/capi-runner.js';
 import { exchangeCode, getInstallUrl } from '../ghl/oauth.js';
 import { upsertOAuthToken } from '../db/queries.js';
 import { resolveTenant } from '../core/tenant.js';
@@ -27,6 +28,7 @@ import type { GhlContactTagWebhook, GhlInboundWebhook, GhlOutboundWebhook } from
 export { executionCtxStorage, workerEnvStorage };
 export { runPendingFollowUps } from '../worker/followup-runner.js';
 export { retryPendingDeliveries } from '../worker/delivery-retry.js';
+export { runPendingCapiEvents } from '../worker/capi-runner.js';
 // The Durable Object class MUST be exported from the built Worker entry (index.mjs) for the
 // runtime to instantiate it. The getEntry() override below re-exports it from '#mastra'.
 export { ConversationDO } from '../worker/conversation-do.js';
@@ -175,6 +177,21 @@ export const mastra = new Mastra({
         },
       }),
 
+      // Triggered by the 1-minute cron to drain the Meta CAPI conversion-event queue (0048).
+      registerApiRoute('/internal/run-capi', {
+        method: 'POST',
+        handler: async (c) => {
+          const expected = (c.env as Record<string, string | undefined>).INTERNAL_CRON_SECRET;
+          const auth = c.req.header('authorization') ?? '';
+          if (!expected || auth !== `Bearer ${expected}`) {
+            return c.json({ error: 'unauthorized' }, 401);
+          }
+          const result = await runPendingCapiEvents();
+          console.log('[cron] run-capi:', result);
+          return c.json(result);
+        },
+      }),
+
       // DO binding health check (Phase 0). Proves CONVERSATION_DO is bound and the RPC
       // path works, locally under `wrangler dev` and post-deploy. Bearer-secured.
       registerApiRoute('/internal/do-ping', {
@@ -263,7 +280,7 @@ export const mastra = new Mastra({
 
         scheduled: async (event, _env, ctx) => {
           ctx.waitUntil((async () => {
-            const { mastra, runPendingFollowUps, retryPendingDeliveries } = await import('#mastra');
+            const { mastra, runPendingFollowUps, retryPendingDeliveries, runPendingCapiEvents } = await import('#mastra');
             const _mastra = mastra();
             try {
               const reactivationAgent = _mastra.getAgent('reactivation');
@@ -271,6 +288,12 @@ export const mastra = new Mastra({
               console.log('[cron] run-followups:', JSON.stringify(result));
             } catch (err) {
               console.error('[cron] run-followups error:', err instanceof Error ? err.message : String(err));
+            }
+            try {
+              const result = await runPendingCapiEvents();
+              console.log('[cron] run-capi:', JSON.stringify(result));
+            } catch (err) {
+              console.error('[cron] run-capi error:', err instanceof Error ? err.message : String(err));
             }
             if (event.cron === '*/5 * * * *') {
               try {

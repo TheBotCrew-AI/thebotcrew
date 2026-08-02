@@ -696,6 +696,61 @@ Observability: `demo_session_started` / `demo_session_ended` (`{reason, botMessa
   and offer to connect a human.
 - Client-facing agent content defaults to **Spanish**.
 
+## 6a. Meta CAPI — conversion signals back to the ad platform (0048)
+
+**Why it exists:** engagement click-to-WhatsApp ads optimize toward "anyone who
+messages". Without feedback they fill with bad leads — Meta never learns which
+conversations qualified. Per-tenant, the platform sends Conversions API events to the
+tenant's own dataset so campaigns can train on lead *quality*. Off by default
+(`tenant_config.meta_capi` NULL = not a single extra call).
+
+**Attribution.** Meta only credits an event to a CTWA ad when it carries the click id
+(`ctwa_clid`). GHL drops it from webhooks but stores it on the contact
+(`attributionSource.ctwaClid` — verified live 2026-08-01 on a MADI ad lead). The Worker
+captures it during the turn-start contact fetch (the same one that grabs merge keys, so
+it exists only until the bot first speaks), persists it **first-touch sticky** on the
+conversation (`ctwa_clid` + the raw `attribution` snapshot with adId/adName for per-ad
+quality reporting). A lead with no click id produces no events, ever — organic traffic
+is silent.
+
+**What fires when** (internal kind → Meta event; per-tenant overridable via
+`meta_capi.events`, `false` disables):
+
+| kind | moment | default |
+|---|---|---|
+| `lead_started` | first turn of a CTWA lead | `LeadSubmitted`, on |
+| `appointment_booked` | real booking success (demo/simulated never) | `QualifiedLead`, on |
+| `conversation_completed` | status → `completed`, applied (tool or classifier) | **off** unless configured |
+
+Deliberate choices:
+- **Booking maps to `QualifiedLead`, not `Purchase`** — for service SMBs a booking is a
+  qualified lead; `QualifiedLead` is what Meta's CTWA lead filtering trains on. A tenant
+  that wants purchase optimization overrides with `{"name":"Purchase","value":...}`.
+- **`lead_disqualified` is never sent.** Meta's business-messaging events have no
+  negative signal; the *absence* of `QualifiedLead` is the signal. Sending nothing for a
+  bad lead IS the feedback.
+- **Demo/roleplay never signals** — a simulated booking or a roleplayed "ya no me
+  interesa" is not a conversion (same guard family as §5c's "no real side effects").
+
+**Delivery is durable, not inline.** Hooks only *enqueue* (idempotent: one event per
+conversation per kind, `event_id = <conv>:<kind>`, which is also Meta's dedup id). The
+1-minute cron (`runPendingCapiEvents`, also `POST /internal/run-capi`) drains the
+`capi_events` table to `graph.facebook.com/v23.0/{dataset_id}/events` with
+`action_source=business_messaging`, `messaging_channel=whatsapp`,
+`user_data={ctwa_clid (never hashed), page_id, ph (SHA-256)}`. Token/test_event_code
+are read fresh from `tenant_config` each drain — a rotation needs no re-enqueue.
+
+**Failure semantics:** 4xx = terminal (`failed` immediately, `capi_error` stage
+`rejected`); 5xx/network = retry up to 3 attempts. A **missing token secret does not
+consume attempts** — the row parks `pending` with one loud `capi_error`
+(`missing_token_secret`) and self-heals when `wrangler secret put META_CAPI_TOKEN__<SLUG>`
+lands. There is **no platform fallback token** (one advertiser per token — the opposite
+call from `ai_key_fallback`, and for the opposite reason: a wrong-key AI turn is
+misattributed spend, a wrong-token CAPI event corrupts another advertiser's dataset).
+Rows unsent after 48h expire: the click id's attribution value decays in days.
+
+Setup per tenant: [`docs/onboarding.md` §7](onboarding.md).
+
 ## 7. Known incidents & rationale
 
 Short log of *why* certain rules exist, so they aren't "simplified away" later.
