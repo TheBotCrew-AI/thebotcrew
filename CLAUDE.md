@@ -171,22 +171,42 @@ supabase/
                                #      **Apply BEFORE deploying**: the old RPC returned void → null → reads as refused),
                                # 0045 opted_out_mutes_the_bot (app_is_bot_suppressed now mutes on opted_out too — the
                                #      farewell still sends, the mute starts at the NEXT inbound — plus the undo:
-                               #      removing the `bot-opted-out` tag clears it, one-directionally. See business-logic §2a)
+                               #      removing the `bot-opted-out` tag clears it, one-directionally. See business-logic §2a),
+                               # 0046 message_attachments (messages.attachments + app_log_message p_attachments +
+                               #      app_set_message_content: voice notes/images were DROPPED at parse — see business-logic §7),
+                               # 0047 local_prod_parity (no-op on prod; repairs the schema drift left by the silently
+                               #      skipped 0014a–d — see "Migration numbering" below)
   clients.sql, seed-tenants.sql# seeds (run by `supabase db reset` per config.toml)
 sites/                         # client marketing sites: static HTML, no build step, no deps
   _template/                   # starting point for a new client
   madi-skincare/               # first client — reference for how far to push identity, not a mold
 ```
 
-**Migration numbering:** files are `NNNN[a-z]_name.sql` and the CLI keys the ledger on the
-`NNNN[a-z]` prefix — **two files sharing a prefix break `supabase start` / `db reset`
-outright** (duplicate key on `schema_migrations_pkey`). That was the state of the repo until
-2026-07-28, which is why local dry-runs had been impossible and every migration since 0006 was
-validated straight against prod. Use a letter suffix (`0013a`, `0014a–d`) when inserting
-between numbers. Renaming is safe for prod: prod's ledger uses timestamp versions
-(`20260613171711`), not these filenames. **`ls supabase/migrations/ | tail` before naming a new
-file** — the highest number in the docs is not always the highest on disk (0043 was almost
-written as a second 0042).
+**Migration numbering — NEVER use a letter suffix.** Files must be `NNNN_name.sql` with a
+**purely numeric** prefix. The CLI parses the version as digits only: a letter-suffixed file
+(`0014a_…`) does not match and is **SKIPPED SILENTLY** — it prints nothing, records nothing,
+and `db reset` still says "Finished". `0014a`–`0014d` were never applied to any local DB;
+only prod had them (applied by hand, backfilled into the repo afterwards). That went unnoticed
+until 2026-08-01, when a local test failed on a `facebook` channel constraint prod does not
+have — meaning **every local dry-run since 2026-07-28 had been validating against a schema
+that silently differed from prod**, which is the one thing dry-runs exist to prevent.
+Migration 0047 repaired the drift (it is a no-op on prod); the audit found only two objects
+had actually diverged, everything else having been overwritten by later migrations.
+
+To insert between numbers, **renumber to the end** instead — order only matters where
+statements depend on each other, and renaming is safe for prod (prod's ledger uses timestamp
+versions like `20260613171711`, not these filenames). Two files sharing a prefix break
+`supabase start` / `db reset` outright (duplicate key on `schema_migrations_pkey`), which is
+the loud failure; the silent skip above is the dangerous one. **`ls supabase/migrations/ | tail`
+before naming a new file** — the highest number in the docs is not always the highest on disk
+(0043 was almost written as a second 0042).
+
+**Verify a migration landed, don't assume.** After `db reset`, confirm the file appears in the
+"Applying migration …" output, and for anything schema-shaped compare local against prod
+directly (`pg_get_constraintdef` / `pg_get_functiondef`, comment-stripped for function bodies)
+rather than trusting that the file ran. Also: the Bash tool's cwd persists between calls — a
+`cd /tmp` earlier in a session makes `supabase db reset` fail with "supabase start is not
+running" while a piped `grep | head` still exits 0, so the failure looks like success.
 
 Two DB layers: **config read-layer** (`tenants`, `tenant_config`) + **conversation/stats
 write-layer** (`conversations`, `messages`, `appointments`, `bot_events`, views). Writes
