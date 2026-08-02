@@ -208,7 +208,13 @@ export const madiTenant: TenantContext = {
         'Depilación láser — zonas individuales (paquete de 6 sesiones):\n' +
         '- Axilas: $2,300\n- Medias piernas: $2,300\n- Bikini brasileño: $2,400\n\n' +
         'Depilación láser — paquetes combinados (6 sesiones):\n' +
-        '- Axilas + Bikini: $2,700\n- Axilas + Medias piernas: $2,800',
+        '- Axilas + Bikini: $2,700\n- Axilas + Medias piernas: $2,800\n- Piernas completas + Bikini: $3,500\n\n' +
+        'Depilación láser — cómo llegar a la sesión (indicaciones previas):\n' +
+        '- Llega con el área a tratar rasurada.\n' +
+        '- Sin cremas ni desodorante en la zona.\n' +
+        'Dalas cuando pregunten cómo prepararse, qué llevar o qué hacer antes de su sesión. Son las ÚNICAS ' +
+        'indicaciones previas que tienes: los cuidados DESPUÉS de la sesión, la frecuencia entre sesiones y las ' +
+        'contraindicaciones siguen sin confirmar, y eso se ve en la valoración.',
       qualificationNotes:
         'ARRANQUE: preséntate corto y cálido y cierra con "¿Cómo te puedo apoyar hoy?".\n' +
         'Avanzas como asesora, no como encuestadora. No pidas datos que no necesitas para ayudarla ' +
