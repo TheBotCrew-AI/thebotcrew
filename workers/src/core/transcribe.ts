@@ -24,6 +24,30 @@ export interface TranscriptionResult {
 }
 
 /**
+ * Business context passed to the model as a decoding hint. Measured on a real
+ * 2.4 KB voice note ("sí, agendan citas"): without it `gpt-4o-mini-transcribe`
+ * returned "Siahendazi." — with it, "Se agenda cita." A WhatsApp voice note is
+ * often ~1 second, which is the worst case for a transcriber, and the hint is
+ * what keeps it anchored to the language and the vocabulary of the business.
+ */
+export interface TranscriptionContext {
+  businessName?: string;
+  /** Service/product names — the proper nouns a generic model mangles most. */
+  terms?: string[];
+}
+
+/** Cap: the API ignores a prompt beyond ~224 tokens, and a long one adds nothing. */
+const MAX_PROMPT_CHARS = 700;
+
+export function buildTranscriptionPrompt(ctx: TranscriptionContext = {}): string {
+  const parts = ['Conversación de WhatsApp en español con un negocio: el cliente pregunta por servicios, precios y citas.'];
+  if (ctx.businessName?.trim()) parts.push(`El negocio se llama ${ctx.businessName.trim()}.`);
+  const terms = (ctx.terms ?? []).map((t) => t.trim()).filter(Boolean).slice(0, 12);
+  if (terms.length) parts.push(`Puede mencionar: ${terms.join(', ')}.`);
+  return parts.join(' ').slice(0, MAX_PROMPT_CHARS);
+}
+
+/**
  * Download an audio URL and transcribe it. Returns null on ANY failure — a lost
  * transcription must degrade to "we got your voice note, tell me in text" rather
  * than blowing up the turn.
@@ -31,7 +55,11 @@ export interface TranscriptionResult {
 export async function transcribeAudio(
   url: string,
   apiKey: string,
-  model = 'gpt-4o-mini-transcribe',
+  context: TranscriptionContext = {},
+  // gpt-4o-transcribe, not the mini: on the real 1-second clip above, mini needed
+  // the context hint to be correct at all, while this one was right with and
+  // without it. Transcription is fractions of a cent either way — buy the margin.
+  model = 'gpt-4o-transcribe',
 ): Promise<TranscriptionResult | null> {
   try {
     const audioRes = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
@@ -56,6 +84,7 @@ export async function transcribeAudio(
     // The leads are Spanish-speaking; naming it avoids the model "detecting" English
     // on a short, noisy clip and transcribing gibberish.
     form.append('language', 'es');
+    form.append('prompt', buildTranscriptionPrompt(context));
 
     const res = await fetch(TRANSCRIBE_URL, {
       method: 'POST',

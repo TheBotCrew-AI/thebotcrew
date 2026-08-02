@@ -394,12 +394,23 @@ function placeholderFor(attachments: InboundAttachment[]): string {
 async function resolveAttachments(
   parsed: ParsedInbound,
   messageId: string,
-  clientId: string,
+  tenant: TenantContext,
   apiKey: string,
 ): Promise<string | null> {
+  const clientId = tenant.clientId;
   const audio = parsed.attachments.find((a) => a.kind === 'audio');
   if (audio) {
-    const result = await transcribeAudio(audio.url, apiKey);
+    // Feed the tenant's own vocabulary to the transcriber — service names are the
+    // proper nouns a generic model mangles, and a voice note is often ~1 second.
+    const services = Array.isArray(tenant.config.services)
+      ? (tenant.config.services as Array<{ name?: unknown }>)
+          .map((s) => (typeof s?.name === 'string' ? s.name : null))
+          .filter((s): s is string => !!s)
+      : [];
+    const result = await transcribeAudio(audio.url, apiKey, {
+      businessName: tenant.config.businessName,
+      terms: services,
+    });
     if (!result) {
       await logBotEvent(clientId, parsed.conversationId, 'attachment_failed', {
         kind: 'audio',
@@ -583,7 +594,7 @@ export async function runAgentTurn({
   // than in the webhook because the webhook must ack GHL fast; the DO owns the slow work.
   if (parsed.attachments?.length && messageId) {
     try {
-      await resolveAttachments(parsed, messageId, tenant.clientId, resolveAiApiKey('openai', tenant.config.aiKeyRef).apiKey);
+      await resolveAttachments(parsed, messageId, tenant, resolveAiApiKey('openai', tenant.config.aiKeyRef).apiKey);
     } catch (e) {
       console.error('[attachments] resolve failed (non-blocking):', e instanceof Error ? e.message : String(e));
     }
