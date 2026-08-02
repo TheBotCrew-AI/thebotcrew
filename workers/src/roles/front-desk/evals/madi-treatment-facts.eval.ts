@@ -91,6 +91,22 @@ describe.skipIf(!evalApiKey)('MADI — pre-session instructions for laser', () =
   });
 });
 
+describe.skipIf(!evalApiKey)('MADI — how the 6-session plan is spaced', () => {
+  it('says the sessions are monthly when asked how often she has to come', async () => {
+    const agent = buildFrontDeskAgent();
+    const res = await agent.generate(
+      [
+        { role: 'user', content: 'Oye, el paquete de axilas, ¿cada cuánto tengo que ir a las sesiones?' },
+      ],
+      { requestContext: rc() },
+    );
+
+    // "al mes" carries "una vez al mes" and "una al mes"; the earlier regex listed
+    // exact phrasings and went red on a correct answer. Assert the fact, not the wording.
+    expect(reply(res)).toMatch(/al mes|cada mes|mensual|por mes/);
+  });
+});
+
 describe.skipIf(!evalApiKey)('MADI — the new combined package', () => {
   it('quotes the piernas completas + bikini package once the connection is made', async () => {
     const agent = buildFrontDeskAgent();
