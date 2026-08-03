@@ -39,7 +39,7 @@ const appt = (o: Record<string, unknown> = {}) => ({ ghlAppointmentId: 'appt1', 
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.mocked(q.loadLatestAppointment).mockResolvedValue(appt() as never);
+  vi.mocked(q.loadAppointmentLog).mockResolvedValue([appt()] as never);
   vi.mocked(q.logAppointment).mockResolvedValue({ appointmentId: 'a-uuid' } as never);
   vi.mocked(q.logBotEvent).mockResolvedValue(undefined);
   ghl.getAvailability.mockResolvedValue([{ start: START, end: START }]);
@@ -49,20 +49,20 @@ beforeEach(() => {
 
 describe('rescheduleAppointment', () => {
   it('no active appointment → not rescheduled', async () => {
-    vi.mocked(q.loadLatestAppointment).mockResolvedValue(null);
+    vi.mocked(q.loadAppointmentLog).mockResolvedValue([]);
     const res = await run(START);
     expect(res).toMatchObject({ rescheduled: false });
     expect(res.message).toContain('No encuentro una cita activa');
   });
 
   it('latest appointment is cancelled → treated as none', async () => {
-    vi.mocked(q.loadLatestAppointment).mockResolvedValue(appt({ action: 'cancelled' }) as never);
+    vi.mocked(q.loadAppointmentLog).mockResolvedValue([appt({ action: 'cancelled' })] as never);
     const res = await run(START);
     expect(res.rescheduled).toBe(false);
   });
 
   it('service has no configured calendar → cannot reschedule', async () => {
-    vi.mocked(q.loadLatestAppointment).mockResolvedValue(appt({ serviceType: 'Desconocido' }) as never);
+    vi.mocked(q.loadAppointmentLog).mockResolvedValue([appt({ serviceType: 'Desconocido' })] as never);
     const res = await run(START);
     expect(res.message).toContain('No pude identificar el calendario');
     expect(ghl.getAvailability).not.toHaveBeenCalled();
@@ -108,7 +108,7 @@ describe('rescheduleAppointment', () => {
   });
 
   it('store miss but GHL has the appointment (booked in GHL) → reschedules it via GHL data', async () => {
-    vi.mocked(q.loadLatestAppointment).mockResolvedValue(null);
+    vi.mocked(q.loadAppointmentLog).mockResolvedValue([]);
     ghl.getContactAppointments.mockResolvedValue([{ id: 'ghl-appt', startTime: inDays(1), status: 'confirmed', calendarId: 'cal1' }]);
     const res = await run(START);
     expect(res.rescheduled).toBe(true);
@@ -148,8 +148,10 @@ describe('rescheduleAppointment — dropped timezone offset (2026-07-30 regressi
   const FOUR_PM = '2026-07-31T16:00:00-07:00'; // 23:00Z — what the lead actually asked for
 
   beforeEach(() => {
-    vi.mocked(q.loadLatestAppointment).mockResolvedValue(
-      { ghlAppointmentId: 'appt1', appointmentDatetime: '2026-08-01T20:30:00Z', serviceType: 'Sesión de instalación', action: 'booked' } as never,
+    vi.mocked(q.loadAppointmentLog).mockResolvedValue(
+      // Far future: the resolver only serves FUTURE store rows (0049), and a hardcoded
+      // near date rots into the past and silently reroutes the test through the GHL fallback.
+      [{ ghlAppointmentId: 'appt1', appointmentDatetime: '2099-01-01T20:30:00Z', serviceType: 'Sesión de instalación', action: 'booked' }] as never,
     );
     ghl.getAvailability.mockResolvedValue([
       { start: NINE_AM, end: NINE_AM },

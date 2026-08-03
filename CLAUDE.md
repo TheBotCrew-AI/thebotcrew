@@ -180,7 +180,15 @@ supabase/
                                # 0048 meta_capi (per-tenant Meta Conversions API: tenant_config.meta_capi jsonb,
                                #      conversations.ctwa_clid/attribution captured from the GHL contact, capi_events
                                #      durable queue + RPCs, drained by the 1-min cron — see business-logic §6a.
-                               #      Per-tenant secret META_CAPI_TOKEN__<SLUG>, NO platform fallback)
+                               #      Per-tenant secret META_CAPI_TOKEN__<SLUG>, NO platform fallback),
+                               # 0049 reactivation_rounds (front-load + taper + stop: conversations.reactivation_round
+                               #      + follow_ups.round + tenant_config.follow_up_rounds; a round is consumed when the
+                               #      first nudge of a cycle SENDS; past the last round the bot answers but never nudges;
+                               #      the farewell teaches "CITA"; a real booking resets the counter; help mode gates all
+                               #      nudges while an upcoming appointment exists (GHL-checked — staff-booked appts have
+                               #      no store row) — see business-logic §4.3. Folded in 0043's contract step (dropped
+                               #      the 3-arg app_schedule_follow_up). PENDING CONTRACT: drop the 4-arg overload in a
+                               #      later release once the 0049 deploy is proven)
   clients.sql, seed-tenants.sql# seeds (run by `supabase db reset` per config.toml)
 sites/                         # client marketing sites: static HTML, no build step, no deps
   _template/                   # starting point for a new client
@@ -356,6 +364,16 @@ for the retry cron.
   the tag opts nobody out; the switch only undoes. See docs/business-logic.md §2a.
 - Webhook routes (configure in the Marketplace app): InboundMessage → `/webhooks/ghl`,
   OutboundMessage → `/webhooks/ghl/outbound`, ContactTagUpdate → `/webhooks/ghl/tags`.
+- Staff-booked appointments → `/webhooks/ghl/appointments` (NOT a Marketplace event: a
+  per-tenant GHL **workflow** "Customer Booked Appointment" → Webhook action posting its
+  DEFAULT payload — parser reads `location.id`, root `contact_id` (phone/email search
+  fallback), `calendar.appointmentId`, optional custom-data `action`; auth =
+  `Bearer GHL_WORKFLOW_SECRET` Worker secret, fails closed while unset). Only IDs are
+  trusted — startTime/title are fetched live from GHL (`calendar.startTime` is offset-less
+  wall-clock, the 5:15→10:15 bug class). Dedups by appointment id+action (the workflow
+  fires for bot bookings too), logs `source='ghl-workflow'`, and on `booked` cancels
+  pending nudges + resets `reactivation_round` (parity with a bot booking, 0049).
+  Setup per tenant: [`docs/onboarding.md` §8](docs/onboarding.md).
 - Per-tenant reply gating (`tenant_config`, enforced in `webhook-handler.ts`; inbound is
   always stored — only the *reply* is gated):
   - `enabled_channels text[]` — channels the bot may reply on. **`NULL` = none** (installed

@@ -11,7 +11,7 @@ import type { AiProvider, Channel, ConversationMessage, ConversationStatus, Foll
 import { DEMO_REMINDER_ROLE } from '../core/types.js';
 import { clampToActiveHours, DEFAULT_QUIET_HOURS } from '../core/active-hours.js';
 import type { TokenUsage } from '../core/llm-usage.js';
-import { isAppointmentActive } from './appointment-active.js';
+import type { AppointmentLogRow } from './appointment-active.js';
 import { parseMetaCapi } from '../meta/capi-config.js';
 import type { GhlTokenResponse } from '../ghl/oauth.js';
 import type {
@@ -47,7 +47,7 @@ export async function loadTenantConfig(ghlLocationId: string): Promise<TenantCon
   const { data, error } = await supabase
     .from('tenant_config')
     .select(
-      'business_name, timezone, tone, services, hours, calendars, faq, enabled_roles, prompt_overrides, ai_provider, ai_model, ai_key_ref, awaiting_human_tag, follow_up_tiers, follow_up_cadence, follow_up_angles, quiet_hours, booking_horizon_days, enabled_channels, test_contact_ids, trigger_keywords, demo_on_keywords, demo_off_keywords, demo_prompt_overrides, keyword_variants, prompt_variants, demo_sessions_enabled, meta_capi,' +
+      'business_name, timezone, tone, services, hours, calendars, faq, enabled_roles, prompt_overrides, ai_provider, ai_model, ai_key_ref, awaiting_human_tag, follow_up_tiers, follow_up_cadence, follow_up_angles, follow_up_rounds, quiet_hours, booking_horizon_days, enabled_channels, test_contact_ids, trigger_keywords, demo_on_keywords, demo_off_keywords, demo_prompt_overrides, keyword_variants, prompt_variants, demo_sessions_enabled, meta_capi,' +
         'tenants!inner(id, client_id, ghl_location_id, is_active)',
     )
     .eq('tenants.ghl_location_id', ghlLocationId)
@@ -95,6 +95,7 @@ export async function loadTenantConfig(ghlLocationId: string): Promise<TenantCon
       followUpAngles: Array.isArray(row.follow_up_angles)
         ? (row.follow_up_angles as unknown[]).filter((s): s is string => typeof s === 'string' && s.length > 0)
         : null,
+      followUpRounds: parseFollowUpRounds(row.follow_up_rounds),
       quietHours: parseQuietHours(row.quiet_hours),
       bookingHorizonDays:
         typeof row.booking_horizon_days === 'number' && row.booking_horizon_days > 0
@@ -127,6 +128,21 @@ function parseKeywordVariants(raw: unknown): Record<string, string> | null {
     if (k.trim().length > 0 && typeof v === 'string' && v.trim().length > 0) out[k] = v;
   }
   return Object.keys(out).length > 0 ? out : null;
+}
+
+/**
+ * Parse follow_up_rounds jsonb (0049): an array of cadence arrays for rounds 1+.
+ * The distinction that matters: a stored `[]` must survive as `[]` (the tenant
+ * opted OUT of extra rounds), while anything malformed falls back to null (the
+ * platform default taper). Inner values keep only positive numbers; a round
+ * that ends up empty is dropped (an empty cadence can never fire).
+ */
+function parseFollowUpRounds(raw: unknown): number[][] | null {
+  if (!Array.isArray(raw)) return null;
+  return raw
+    .filter(Array.isArray)
+    .map((r) => (r as unknown[]).filter((n): n is number => typeof n === 'number' && n > 0))
+    .filter((r) => r.length > 0);
 }
 
 /** Validate the stored quiet_hours jsonb; anything malformed falls back to null (platform default). */
@@ -207,6 +223,9 @@ export interface ConversationPersona {
   /** Legacy demo-only stamp (0029); read as a fallback for rows written pre-0038. */
   demoStartedAt: string | null;
   promptVariant: string | null;
+  /** How many reactivation rounds this lead has already consumed (0049). Picks
+   *  the cadence shape at arming time; `>= totalRounds(config)` = never arm again. */
+  reactivationRound: number;
 }
 
 /** Read the conversation's persona (null activeRole = normal front-desk; 'demo' = demo persona). */
@@ -214,7 +233,7 @@ export async function getConversationPersona(conversationId: string): Promise<Co
   const supabase = getSupabase();
   const { data, error } = await supabase
     .from('conversations')
-    .select('active_role, role_started_at, demo_started_at, prompt_variant')
+    .select('active_role, role_started_at, demo_started_at, prompt_variant, reactivation_round')
     .eq('id', conversationId)
     .maybeSingle();
   fail('getConversationPersona', error);
@@ -223,12 +242,14 @@ export async function getConversationPersona(conversationId: string): Promise<Co
     role_started_at: string | null;
     demo_started_at: string | null;
     prompt_variant: string | null;
+    reactivation_round: number | null;
   } | null;
   return {
     activeRole: row?.active_role ?? null,
     roleStartedAt: row?.role_started_at ?? null,
     demoStartedAt: row?.demo_started_at ?? null,
     promptVariant: row?.prompt_variant ?? null,
+    reactivationRound: row?.reactivation_round ?? 0,
   };
 }
 
@@ -683,64 +704,86 @@ export async function logAppointment(params: LogAppointmentParams): Promise<{ ap
   return { appointmentId: data as string };
 }
 
-/** The contact's most recent appointment (any action), for reschedule/cancel. */
-export interface LatestAppointment {
-  ghlAppointmentId: string;
-  appointmentDatetime: string | null;
-  serviceType: string | null;
-  action: 'booked' | 'rescheduled' | 'cancelled';
-}
-
 /**
- * Load the contact's most recent appointment row (joined via its conversation).
- * Returns null when there is none or the newest row has no GHL id. Callers treat
- * a newest action of 'cancelled' as "no active appointment".
+ * The contact's recent appointment EVENT LOG, newest-first — feed for
+ * `soonestUpcomingAppointment` (appointment-active.ts), which collapses it into
+ * "the lead's next appointment". Kept raw here so the collapse stays pure and
+ * unit-testable. Joined via the row's conversation, same as loadLatestAppointment.
  */
-export async function loadLatestAppointment(
+export async function loadAppointmentLog(
   clientId: string,
   ghlContactId: string,
-): Promise<LatestAppointment | null> {
+  limit = 50,
+): Promise<AppointmentLogRow[]> {
   const supabase = getSupabase();
   const { data, error } = await supabase
     .from('appointments')
-    .select('ghl_appointment_id, appointment_datetime, service_type, action, conversations!inner(ghl_contact_id)')
+    .select('ghl_appointment_id, appointment_datetime, service_type, action, created_at, conversations!inner(ghl_contact_id)')
     .eq('client_id', clientId)
     .eq('conversations.ghl_contact_id', ghlContactId)
     .not('ghl_appointment_id', 'is', null)
     .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  fail('loadLatestAppointment', error);
-  if (!data) return null;
-  const row = data as unknown as {
+    .limit(limit);
+  fail('loadAppointmentLog', error);
+  return ((data ?? []) as unknown as Array<{
     ghl_appointment_id: string;
     appointment_datetime: string | null;
     service_type: string | null;
-    action: 'booked' | 'rescheduled' | 'cancelled';
-  };
-  return {
-    ghlAppointmentId: row.ghl_appointment_id,
-    appointmentDatetime: row.appointment_datetime,
-    serviceType: row.service_type,
-    action: row.action,
-  };
+    action: string;
+    created_at: string;
+  }>).map((r) => ({
+    ghlAppointmentId: r.ghl_appointment_id,
+    appointmentDatetime: r.appointment_datetime,
+    serviceType: r.service_type,
+    action: r.action,
+    createdAt: r.created_at,
+  }));
 }
 
 /**
- * The contact's active (not cancelled, not past) appointment, if any — deterministic
- * turn-start guard input so the agent knows it already has a booking and never re-checks
- * availability against its own just-created appointment (the self-block class).
- * Reads our store only (fresh in the exact self-block scenario); GHL truth still governs
- * reschedule/cancel. Returns null when there is no active appointment.
+ * Has this GHL appointment already been logged with this action? The dedup key
+ * for the workflow appointment webhook (0049 follow-up): GHL workflows fire for
+ * bot bookings too, and workflow deliveries retry — id+action makes both no-ops.
  */
-export async function loadActiveAppointment(
+export async function appointmentActionLogged(
+  clientId: string,
+  ghlAppointmentId: string,
+  action: string,
+): Promise<boolean> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from('appointments')
+    .select('id')
+    .eq('client_id', clientId)
+    .eq('ghl_appointment_id', ghlAppointmentId)
+    .eq('action', action)
+    .limit(1)
+    .maybeSingle();
+  fail('appointmentActionLogged', error);
+  return data != null;
+}
+
+/**
+ * The contact's most recent conversation — the same fuzzy rule
+ * app_log_appointment uses to attach an appointment row, so callers acting on
+ * "the conversation this booking belongs to" stay consistent with the store.
+ */
+export async function getLatestConversationByContact(
   clientId: string,
   ghlContactId: string,
-): Promise<{ startTime: string; service: string | null } | null> {
-  const appt = await loadLatestAppointment(clientId, ghlContactId);
-  if (!isAppointmentActive(appt, Date.now())) return null;
-  // isAppointmentActive guarantees appt and appointmentDatetime are non-null here.
-  return { startTime: appt!.appointmentDatetime!, service: appt!.serviceType };
+): Promise<{ id: string; ghlConversationId: string } | null> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from('conversations')
+    .select('id, ghl_conversation_id')
+    .eq('client_id', clientId)
+    .eq('ghl_contact_id', ghlContactId)
+    .order('last_message_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  fail('getLatestConversationByContact', error);
+  const row = data as { id: string; ghl_conversation_id: string } | null;
+  return row ? { id: row.id, ghlConversationId: row.ghl_conversation_id } : null;
 }
 
 /** Record a value event (lead_qualified, out_of_hours_handled, …). Returns event uuid. */
@@ -971,6 +1014,7 @@ export async function scheduleFollowUp(
   timezone: string,
   quietHours?: QuietHours | null,
   kind: FollowUpKind = 'cadence',
+  round = 0,
 ): Promise<string | null> {
   const base = new Date(Date.now() + delayMinutes * 60_000);
   const scheduledFor = clampToActiveHours(base, timezone, quietHours ?? DEFAULT_QUIET_HOURS);
@@ -980,6 +1024,7 @@ export async function scheduleFollowUp(
     p_tier: tier,
     p_scheduled_for: scheduledFor.toISOString(),
     p_kind: kind,
+    p_round: round,
   });
   fail('scheduleFollowUp', error);
   return (data as string | null) ?? null;
@@ -1046,6 +1091,7 @@ export async function loadDueFollowUps(limit = 20): Promise<DueFollowUp[]> {
     ghl_location_id: string;
     kind: string | null;
     last_inbound_message_id: string | null;
+    round: number | null;
   };
   return ((data ?? []) as Row[]).map((r) => ({
     followUpId: r.follow_up_id,
@@ -1060,6 +1106,8 @@ export async function loadDueFollowUps(limit = 20): Promise<DueFollowUp[]> {
     // kind, and 'cadence' is the behaviour it was scheduled under.
     kind: r.kind === 'demo' ? 'demo' : 'cadence',
     lastInboundMessageId: r.last_inbound_message_id ?? null,
+    // Same defensive default for 0049: no round = scheduled under round 0.
+    round: typeof r.round === 'number' ? r.round : 0,
   }));
 }
 
@@ -1080,6 +1128,20 @@ export async function getFollowUpStatus(followUpId: string): Promise<string | nu
     .maybeSingle();
   fail('getFollowUpStatus', error);
   return (data as { status: string } | null)?.status ?? null;
+}
+
+/**
+ * Wipe the lead's ghost history after a real conversion (0049). Called
+ * fire-and-forget by the booking tool: while they hold an upcoming appointment
+ * the gate keeps every nudge off anyway, so the reset only takes effect once the
+ * last appointment has passed — a returning customer starts pursuit at round 0.
+ */
+export async function resetReactivationRound(ghlConversationId: string): Promise<void> {
+  const supabase = getSupabase();
+  const { error } = await supabase.rpc('app_reset_reactivation_round', {
+    p_ghl_conversation_id: ghlConversationId,
+  });
+  fail('resetReactivationRound', error);
 }
 
 /** Mark a follow-up as successfully sent. */

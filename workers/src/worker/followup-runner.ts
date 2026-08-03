@@ -40,11 +40,13 @@ import {
 } from '../db/queries.js';
 import { parseAngleSelection, resolveAnglePool } from '../roles/reactivation/angle-select.js';
 import { buildAgentRequestContext } from '../core/runtime-context.js';
+import { cadenceForRound, isFinalRound, REENTRY_KEYWORD, totalRounds } from '../core/reactivation-rounds.js';
 import type { AiProvider, Channel, TenantContext } from '../core/types.js';
 import { DEMO_REMINDER_CADENCE, DEMO_REMINDER_ROLE } from '../core/types.js';
 import type { DueFollowUp } from '../db/types.js';
+import { findUpcomingAppointment } from '../db/upcoming-appointment.js';
 import { GhlClient } from '../ghl/client.js';
-import { demoEndTag } from '../ghl/tags.js';
+import { demoEndTag, REACTIVATION_EXHAUSTED_TAG } from '../ghl/tags.js';
 import { REACTIVATION_ROLE } from '../roles/reactivation/index.js';
 import { buildDemoReminder } from '../roles/front-desk/prompt.js';
 import { DEFAULT_MODEL, DEFAULT_PROVIDER } from '../roles/front-desk/index.js';
@@ -173,6 +175,7 @@ async function processDemoReminder(
   followUp: DueFollowUp,
   tenant: TenantContext,
   activeRole: string | null,
+  reactivationRound: number,
 ): Promise<'ok' | 'skip' | 'fail'> {
   // The demo may have ended (booked, exhausted, or the lead typed the exit word)
   // between scheduling and now. A reminder about a closed demo is nonsense.
@@ -204,7 +207,7 @@ async function processDemoReminder(
   if (nextDelay !== undefined) {
     await scheduleFollowUp(
       followUp.conversationId, rung + 1, nextDelay,
-      tenant.config.timezone, tenant.config.quietHours, 'demo',
+      tenant.config.timezone, tenant.config.quietHours, 'demo', 0,
     );
     return 'ok';
   }
@@ -236,13 +239,16 @@ async function processDemoReminder(
 
   // Restart the reactivation ladder under the closer. The angle cursor is
   // untouched by demo reminders (they never carry an angle_index), so the lead
-  // still has the whole pool ahead of them.
-  const firstDelay = tenant.config.followUpCadence?.[0];
-  if (firstDelay !== undefined) {
-    await scheduleFollowUp(
-      followUp.conversationId, 1, firstDelay,
-      tenant.config.timezone, tenant.config.quietHours, 'cadence',
-    );
+  // still has the whole pool ahead of them. Round-aware (0049): the restart runs
+  // the lead's CURRENT round, and a lead past the last round restarts nothing.
+  if (reactivationRound < totalRounds(tenant.config)) {
+    const firstDelay = cadenceForRound(tenant.config, reactivationRound)[0];
+    if (firstDelay !== undefined) {
+      await scheduleFollowUp(
+        followUp.conversationId, 1, firstDelay,
+        tenant.config.timezone, tenant.config.quietHours, 'cadence', reactivationRound,
+      );
+    }
   }
   return 'ok';
 }
@@ -262,14 +268,15 @@ async function processOne(
   let promptVariant: string | null = null;
   let activeRole: string | null = null;
   let roleStartedAt: string | null = null;
+  let reactivationRound = 0;
   try {
-    ({ promptVariant, activeRole, roleStartedAt } = await getConversationPersona(followUp.conversationId));
+    ({ promptVariant, activeRole, roleStartedAt, reactivationRound } = await getConversationPersona(followUp.conversationId));
   } catch (e) {
     console.error('[followup] persona read failed (using tenant angle pool):', e instanceof Error ? e.message : String(e));
   }
 
   if (followUp.kind === 'demo') {
-    return processDemoReminder(followUp, tenant, activeRole);
+    return processDemoReminder(followUp, tenant, activeRole, reactivationRound);
   }
 
   // A cadence nudge that finds the conversation back inside a demo would arrive
@@ -278,18 +285,40 @@ async function processOne(
     return abortFollowUp(followUp, tenant, 'conversation_in_demo');
   }
 
-  // followUp.tier is the 1-based position within the current cadence cycle.
-  const cadence = tenant.config.followUpCadence ?? [];
+  // followUp.tier is the 1-based position within the current cadence cycle, and the
+  // cycle's shape comes from the round the row was SCHEDULED under (0049) — not from
+  // whatever the conversation's counter says now — so a mid-cycle config or counter
+  // change can't re-shape a ladder that's already running.
+  const cadence = cadenceForRound(tenant.config, followUp.round);
   const position = followUp.tier;
   if (position < 1 || position > cadence.length) {
-    console.warn(`[followup] cadence position ${position} out of range (len=${cadence.length}) tenant=${tenant.tenantId}`);
+    console.warn(`[followup] cadence position ${position} out of range (len=${cadence.length}, round=${followUp.round}) tenant=${tenant.tenantId}`);
     return 'skip';
   }
+  const finalTouch = isFinalRound(tenant.config, followUp.round) && position === cadence.length;
 
   // Pre-flight before the expensive part: if the lead's inbound already cancelled
   // this row, bail out now rather than after paying for a generation.
   if ((await getFollowUpStatus(followUp.followUpId)) !== 'processing') {
     return abortFollowUp(followUp, tenant, 'lead_replied');
+  }
+
+  // Help mode (0049): a lead holding an upcoming appointment is a customer, not a
+  // pursuit target. GHL is always consulted when the store says no, because the
+  // appointment this must catch is exactly the one our store can never see — the
+  // next session a package customer booked with STAFF at the clinic, or a nudge
+  // armed moments before the booking landed. Fails open (GHL errors read as "no
+  // appointment"): worst case is one nudge to a booked customer, never silence.
+  try {
+    const appt = await findUpcomingAppointment(
+      tenant.clientId, followUp.ghlContactId, new GhlClient(tenant.tenantId), Date.now(),
+      { alwaysCheckGhl: true },
+    );
+    if (appt) {
+      return abortFollowUp(followUp, tenant, 'has_upcoming_appointment');
+    }
+  } catch (e) {
+    console.error('[followup] upcoming-appointment check failed (fails open):', e instanceof Error ? e.message : String(e));
   }
 
   // Hybrid angle selection: offer only the pool angles not yet SENT on this
@@ -298,15 +327,22 @@ async function processOne(
   // Campaign-aware (0040): a conversation pinned to a prompt variant whose config
   // carries followUpAngles nudges from THAT pool — "¿sigues interesada en la promo?"
   // — falling back to the tenant pool on any missing/malformed config or read error.
-  const { pool: anglePool } = resolveAnglePool(
-    tenant.config.promptVariants,
-    promptVariant,
-    tenant.config.followUpAngles ?? [],
-  );
-  const usedIndexes = await loadSentAngleIndexes(followUp.conversationId);
-  const remaining = anglePool
-    .map((text, index) => ({ text, index }))
-    .filter((a) => !usedIndexes.includes(a.index));
+  // The farewell (final touch of the final round) bypasses the pool entirely: it is
+  // a goodbye, not an angle, and letting it fall through the "no valid tag → consume
+  // remaining[0]" fallback below would silently burn an angle on a message that
+  // deliberately isn't one.
+  let remaining: Array<{ text: string; index: number }> = [];
+  if (!finalTouch) {
+    const { pool: anglePool } = resolveAnglePool(
+      tenant.config.promptVariants,
+      promptVariant,
+      tenant.config.followUpAngles ?? [],
+    );
+    const usedIndexes = await loadSentAngleIndexes(followUp.conversationId);
+    remaining = anglePool
+      .map((text, index) => ({ text, index }))
+      .filter((a) => !usedIndexes.includes(a.index));
+  }
 
   const provider = (tenant.config.provider ?? DEFAULT_PROVIDER) as AiProvider;
   const model = tenant.config.model ?? DEFAULT_MODEL;
@@ -356,6 +392,7 @@ async function processOne(
     llmApiKey: aiKey.apiKey,
     reactivationCandidates: remaining.map((a) => a.text),
     demoContext,
+    reactivationRound: { round: followUp.round, isFinalTouch: finalTouch, reentryKeyword: REENTRY_KEYWORD },
   });
 
   // Same clean-start rule as a live turn: read history from when the CURRENT persona
@@ -406,16 +443,31 @@ async function processOne(
 
   // Advance the cadence cycle: schedule the next attempt, or stop (standby) when the
   // cycle is exhausted with no reply — the "freno". The angle cursor persists across
-  // cycles via angle_index, so a reset cycle keeps advancing to fresh angles.
+  // cycles via angle_index, so a reset cycle keeps advancing to fresh angles. The next
+  // rung keeps the ROW's round: the cycle finishes under the shape it started with.
   const nextPosition = position + 1;
   const nextDelay = cadence[nextPosition - 1];
   if (nextDelay !== undefined) {
     await scheduleFollowUp(
       followUp.conversationId, nextPosition, nextDelay,
-      tenant.config.timezone, tenant.config.quietHours, 'cadence',
+      tenant.config.timezone, tenant.config.quietHours, 'cadence', followUp.round,
     );
   } else {
     await updateConversationStatus(followUp.ghlConversationId, 'standby');
+    if (isFinalRound(tenant.config, followUp.round)) {
+      // The LAST round just exhausted unanswered: this lead got the farewell and will
+      // never be pursued again (the arming gate reads reactivation_round, which the
+      // mark-sent above pushed past totalRounds). Record it + surface it in GHL.
+      await logBotEvent(tenant.clientId, followUp.ghlConversationId, 'reactivation_exhausted', {
+        round: followUp.round,
+        followUpId: followUp.followUpId,
+      });
+      new GhlClient(tenant.tenantId)
+        .addContactTags(followUp.ghlContactId, [REACTIVATION_EXHAUSTED_TAG])
+        .catch((e: unknown) =>
+          console.error('[followup] exhausted tag failed (non-blocking):', e instanceof Error ? e.message : String(e)),
+        );
+    }
   }
 
   return 'ok';

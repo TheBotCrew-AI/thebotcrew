@@ -48,6 +48,7 @@ beforeEach(() => {
   vi.mocked(q.logAppointment).mockResolvedValue({ appointmentId: 'a-uuid' } as never);
   vi.mocked(q.logEvent).mockResolvedValue({ eventId: 'e-uuid' } as never);
   vi.mocked(q.logBotEvent).mockResolvedValue(undefined);
+  vi.mocked(q.resetReactivationRound).mockResolvedValue(undefined);
 });
 
 describe('bookAppointment', () => {
@@ -66,6 +67,14 @@ describe('bookAppointment', () => {
     expect(ghl.getContactPhone).not.toHaveBeenCalled();
     expect(ghl.updateContactPhone).not.toHaveBeenCalled();
     expect(res).toMatchObject({ booked: true, ghlAppointmentId: 'appt1' });
+    // A real conversion wipes the ghost history (0049).
+    expect(q.resetReactivationRound).toHaveBeenCalledWith('conv1');
+  });
+
+  it('a failed round reset is non-blocking → booking still succeeds', async () => {
+    vi.mocked(q.resetReactivationRound).mockRejectedValue(new Error('db down'));
+    const res = await run({ serviceName: 'Consulta', startTime: START });
+    expect(res.booked).toBe(true);
   });
 
   it('phone given + contact has NO phone → saves it (cleaned)', async () => {
@@ -233,6 +242,7 @@ describe('bookAppointment — demo mode (simulated booking)', () => {
     expect(ghl.bookAppointment).not.toHaveBeenCalled(); // no real GHL traffic
     expect(ghl.getAvailability).not.toHaveBeenCalled();
     expect(q.logAppointment).not.toHaveBeenCalled(); // nothing in the real stats layer
+    expect(q.resetReactivationRound).not.toHaveBeenCalled(); // a fake conversion resets nothing (0049)
     // A roleplayed booking is not a conversion — nothing goes to Meta (0048).
     expect(queueCapiEvent).not.toHaveBeenCalled();
   });

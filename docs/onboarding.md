@@ -97,6 +97,7 @@ from t;
 | `faq` | Fed to the `lookupFaq` tool, not inlined into the prompt. |
 | `booking_horizon_days` | Deterministically clamps `getAvailability`, and the prompt states the cutoff as a pre-computed date. `NULL` = no cap. |
 | `quiet_hours` | `NULL` = platform default 21:00–08:00 local. |
+| `follow_up_rounds` | Cadences for reactivation **rounds 1+** (0049) as an array of arrays of minutes, e.g. `'[[360,1080],[960]]'::jsonb` — each time the lead ghosts again the next (shorter, softer) round runs, and past the last one pursuit stops for good. `NULL` = platform default taper (`[[360,1080],[960]]`); `[]` = round 0 only (one ghost cycle, then stop). Round 0 always runs `follow_up_cadence`. See business-logic §4.3. |
 | `ai_provider` / `ai_model` | `NULL` = platform default (`openai` / `gpt-5-mini`). Only override with reason. |
 
 ### What goes inside `prompt_overrides` (the jsonb blob)
@@ -368,6 +369,46 @@ value, or disable a kind —
 Ads-side follow-through (the actual payoff, manual): once `QualifiedLead` events flow
 for a couple of weeks, switch the CTWA campaigns from plain engagement to optimizing on
 the dataset's qualified-lead events (or enable lead filtering) in Ads Manager.
+
+---
+
+## 8. Staff bookings — the appointment workflow webhook (0049 follow-up)
+
+Our `appointments` store only sees what the **bot** books. For tenants where staff books
+in the GHL calendar (every `bookingEnabled=false` tenant, and package rebookings
+anywhere), those citas never reach the stats — unless the tenant has this workflow.
+
+**One-time platform setup** (already done if `wrangler secret list` shows it):
+`wrangler secret put GHL_WORKFLOW_SECRET` with a strong random value
+(`openssl rand -hex 32`). The endpoint 401s (fails closed) while it is unset.
+
+**Per-tenant setup, in the GHL sub-account** — create a workflow:
+
+1. **Trigger:** `Customer Booked Appointment` (all calendars).
+2. **Action:** `Webhook` →
+   - Method `POST`, URL `<worker base>/webhooks/ghl/appointments`
+   - Header: `Authorization` = `Bearer <the GHL_WORKFLOW_SECRET value>`
+   - Body: **the default payload is enough** — the parser reads `location.id`, root
+     `contact_id` (root `phone`/`email` as a search fallback) and
+     `calendar.appointmentId`. The appointment object only rides along when the
+     workflow's trigger is appointment-shaped, which step 1 guarantees.
+   - Custom data (optional but recommended): key `action`, value `booked` — and on
+     the status-change trigger variants, `cancelled` / `rescheduled`. Omitted =
+     `booked`.
+
+Notes that save debugging time:
+
+- **Only the IDs are read.** The endpoint fetches startTime/title live from GHL
+  (`getContactAppointments`) — the default payload's `calendar.startTime` is a
+  wall-clock string in the calendar's timezone with NO offset, the exact class of
+  the 5:15→10:15 booking bug. Everything else in the payload is ignored.
+- **Bot bookings fire the workflow too** — that's fine: the endpoint dedups by
+  appointment id + action (the bot's own row lands first).
+- On `booked` the endpoint also cancels pending nudges, resets
+  `reactivation_round`, **clears `awaiting_human` and removes the tenant's
+  awaiting-human tag** from the contact — staff booking IS the "I've handled this"
+  action, so the esperando-agenda loop closes itself (business-logic §4.3). Rows
+  land with `source='ghl-workflow'`.
 
 ---
 

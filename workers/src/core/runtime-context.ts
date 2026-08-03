@@ -21,6 +21,9 @@ export interface AgentRequestValues {
   /** Set when the conversation has been through a demo, so a reactivation nudge doesn't
    *  chase the lead about the roleplay (its fake appointment, the lead's own services). */
   demoContext?: { businessName?: string; booked?: boolean };
+  /** Which reactivation round this nudge runs under (0049). Round 1+ softens the
+   *  prompt; the final touch of the final round becomes the farewell message. */
+  reactivationRound?: { round: number; isFinalTouch: boolean; reentryKeyword: string };
 }
 
 export type AgentRequestContext = RequestContext<AgentRequestValues>;
@@ -37,6 +40,9 @@ export function buildAgentRequestContext(values: AgentRequestValues): AgentReque
   }
   if (values.demoContext !== undefined) {
     ctx.set('demoContext', values.demoContext);
+  }
+  if (values.reactivationRound !== undefined) {
+    ctx.set('reactivationRound', values.reactivationRound);
   }
   return ctx;
 }

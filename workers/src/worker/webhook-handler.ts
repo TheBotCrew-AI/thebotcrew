@@ -21,6 +21,7 @@ import {
 } from '../core/llm-usage.js';
 import { channelEnabled, hasTriggerKeywords, inTestMode, matchesDemoOff, matchesDemoOn, matchVariantKeyword, messageMatchesTrigger, resolveTenant, roleEnabled } from '../core/tenant.js';
 import { buildAgentRequestContext } from '../core/runtime-context.js';
+import { cadenceForRound, totalRounds } from '../core/reactivation-rounds.js';
 import type { AiProvider, ConversationMessage, ConversationStatus, DemoHandoff, FollowUpKind, TenantContext, TurnContext } from '../core/types.js';
 import { DEMO_REMINDER_CADENCE } from '../core/types.js';
 import {
@@ -38,7 +39,6 @@ import {
   isBotSuppressed,
   isHumanActive,
   isLatestInboundMessage,
-  loadActiveAppointment,
   loadRecentMessages,
   logBotEvent,
   logError,
@@ -57,6 +57,7 @@ import {
   getConversationContactKeys,
   setConversationAttribution,
 } from '../db/queries.js';
+import { findUpcomingAppointment } from '../db/upcoming-appointment.js';
 import { queueCapiEvent, queueCapiStatusEvent } from '../meta/capi.js';
 import { extractCtwaClid } from '../meta/capi-config.js';
 import { GhlClient } from '../ghl/client.js';
@@ -513,8 +514,12 @@ export async function runAgentTurn({
   let roleStartedAt: string | null = null;
   let demoStartedAt: string | null = null;
   let promptVariant: string | null = null;
+  // Fails open to round 0 with the rest of the persona: a transient read failure
+  // costs at most one extra round-0 cycle, never a silenced lead.
+  let reactivationRound = 0;
   try {
-    ({ activeRole, roleStartedAt, demoStartedAt, promptVariant } = await getConversationPersona(conversationId));
+    ({ activeRole, roleStartedAt, demoStartedAt, promptVariant, reactivationRound } =
+      await getConversationPersona(conversationId));
   } catch (e) {
     console.error('[demo] getConversationPersona failed:', e instanceof Error ? e.message : String(e));
   }
@@ -688,12 +693,22 @@ export async function runAgentTurn({
   // booked slot from later availability calls (as a real calendar would), and without this
   // the agent reads its disappearance as "ya se ocupó" and re-offers times — which is
   // exactly what it did on 2026-07-30. Real appointments stay invisible to the demo.
+  //
+  // Since 0049 this is also the HELP-MODE switch (support prompt + no cadence arming), so
+  // the read is GHL-aware: a store row that went stale falls back to getContactAppointments
+  // (the package customer whose next session was staff-booked in the GHL calendar). For a
+  // tenant with booking disabled EVERY appointment is staff-booked and the store is always
+  // empty, so those check GHL on every turn — they're the support-heavy, low-volume ones.
   let activeAppointment: { startTime: string; service?: string } | undefined;
   if (activeRole === 'demo') {
     if (demoBooking) activeAppointment = { startTime: demoBooking.startTime, service: demoBooking.serviceName };
   } else {
     try {
-      const appt = await loadActiveAppointment(tenant.clientId, parsed.contactId);
+      const staffBookedTenant =
+        (tenant.config.promptOverrides as { bookingEnabled?: boolean } | null)?.bookingEnabled === false;
+      const appt = await findUpcomingAppointment(tenant.clientId, parsed.contactId, ghl, Date.now(), {
+        alwaysCheckGhl: staffBookedTenant,
+      });
       if (appt) activeAppointment = { startTime: appt.startTime, service: appt.service ?? undefined };
     } catch (e) {
       console.error('[active-appointment] load failed (non-blocking):', e instanceof Error ? e.message : String(e));
@@ -1028,6 +1043,7 @@ export async function runAgentTurn({
   let firstDelay: number | undefined;
   let followUpKind: FollowUpKind = 'cadence';
   let followUpTier = 1;
+  let followUpRound = 0;
   if (inDemo) {
     followUpKind = 'demo';
     try {
@@ -1036,14 +1052,21 @@ export async function runAgentTurn({
     } catch (e) {
       console.error('[followup] demo rung read failed:', e instanceof Error ? e.message : String(e));
     }
-  } else {
-    firstDelay = tenant.config.followUpCadence?.[0];
+  } else if (activeAppointment) {
+    // Help mode (0049): a lead with an upcoming appointment is a customer being
+    // assisted, not a lead being pursued — no nudge is armed. The bot still answers.
+  } else if (reactivationRound < totalRounds(tenant.config)) {
+    // Rounds (0049): each ghost cycle runs the cadence for the CURRENT round —
+    // round 0 is the tenant's own ladder, later rounds taper. A lead past the last
+    // round is never pursued again (only a real booking resets the counter).
+    firstDelay = cadenceForRound(tenant.config, reactivationRound)[0];
+    followUpRound = reactivationRound;
   }
   if (firstDelay !== undefined) {
     try {
       await scheduleFollowUp(
         conversationId, followUpTier, firstDelay,
-        tenant.config.timezone, tenant.config.quietHours, followUpKind,
+        tenant.config.timezone, tenant.config.quietHours, followUpKind, followUpRound,
       );
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);

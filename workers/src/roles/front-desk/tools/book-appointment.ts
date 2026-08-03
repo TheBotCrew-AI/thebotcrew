@@ -6,7 +6,7 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { GhlClient } from '../../../ghl/client.js';
-import { getActiveDemoSession, logAppointment, logBotEvent, logEvent, setSimulatedBooking } from '../../../db/queries.js';
+import { getActiveDemoSession, logAppointment, logBotEvent, logEvent, resetReactivationRound, setSimulatedBooking } from '../../../db/queries.js';
 import { queueCapiEvent } from '../../../meta/capi.js';
 import { resolveAgentContext } from './agent-context.js';
 import { bookingQueryWindow, resolveBookableSlot } from './booking-time.js';
@@ -203,6 +203,12 @@ export const bookAppointmentTool = createTool({
       p_event_type: 'lead_qualified',
       p_metadata: { service: serviceName, startTime: canonicalStart },
     }).catch((e: unknown) => console.error('[bookAppointment] logEvent failed:', e));
+    // A real conversion wipes the ghost history (0049): while the appointment is
+    // upcoming the gate keeps nudges off, and once it has passed a future silence
+    // starts pursuit at round 0. A reschedule is NOT a new conversion and never resets.
+    resetReactivationRound(turn.ghlConversationId).catch((e: unknown) =>
+      console.error('[bookAppointment] round reset failed (non-blocking):', e instanceof Error ? e.message : String(e)),
+    );
     // Meta CAPI (0048): a real booking is the strongest lead-quality signal. Only the
     // real path reaches here (the demo short-circuit returned above) and the helper
     // no-ops for tenants without meta_capi or leads without a CTWA click id.

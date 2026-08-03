@@ -194,7 +194,12 @@ export const madiTenant: TenantContext = {
     // The promo answer carries a PRICE, and `lookupFaq` reads this list straight from
     // config — that is the real leak path the houseRules line about lookupFaq closes.
     faq: [
-      { q: '¿Dónde están ubicados?', a: 'En Plaza Financiera, Zona Río, Tijuana.' },
+      {
+        q: '¿Dónde están ubicados? ¿Cuál es la dirección? ¿Cómo llego? ¿Me pasas la ubicación o el mapa?',
+        a:
+          'En Plaza Financiera, Blvd. Sánchez Taboada 10110, Zona Urbana Río, Tijuana, Baja California. ' +
+          'Aquí está el mapa: https://maps.app.goo.gl/kGdvv5yfLLVWtHNr9',
+      },
       {
         q: '¿Qué promociones tienen?',
         a: 'Diagnóstico Facial sin costo, Facial Glow MADI a $999 como precio de apertura por tiempo limitado, y masaje relajante de 20 min sin costo para las primeras 10 personas que reserven.',
@@ -233,7 +238,15 @@ export const madiTenant: TenantContext = {
         '- Piernas completas POR SEPARADO no tiene precio de paquete de 6 sesiones; de ésa solo tienes el precio ' +
         'por sesión ($1,000). OJO: piernas completas SÍ está en los paquetes combinados de arriba (con bikini son ' +
         '$3,500) — ése lo das tal cual, sin dudar. Lo único que no existe es el paquete de piernas completas sola: ' +
-        'si lo piden así, no lo calcules ni lo estimes; di que se lo confirman en la valoración gratuita.',
+        'si lo piden así, no lo calcules ni lo estimes; di que se lo confirman en la valoración gratuita.\n\n' +
+        // Mirrors the live tenant's "Datos del centro" block. The map link is the one
+        // fact in this prompt that only survives if it is copied character-for-character.
+        'Datos del centro:\n' +
+        '- Ubicación: Plaza Financiera, Blvd. Sánchez Taboada 10110, Zona Urbana Río, Tijuana, Baja California.\n' +
+        '- Mapa de Google: https://maps.app.goo.gl/kGdvv5yfLLVWtHNr9\n' +
+        '- Cuando pregunten dónde están, cómo llegar, la dirección o el mapa: da la ubicación Y pega ese enlace ' +
+        'TAL CUAL, carácter por carácter, en su propio renglón. No lo acortes, no lo cambies, no lo describas en ' +
+        'palabras y no inventes otro enlace ni otra dirección.',
       toolInstructions: {
         bookAppointment:
           'NO la llames NUNCA. Tú no agendas en MADI. Cuando el lead quiera cita, captura UNA preferencia ' +

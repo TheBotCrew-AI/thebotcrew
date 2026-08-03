@@ -409,19 +409,33 @@ Nunca prometas que sabrá algo que el negocio no le vaya a dar: se entrena con l
 - Si te pregunta cómo funciona o qué incluye, respóndele corto y regresa a la pregunta que tenías abierta.`;
   }
 
-  // Hard guard against the self-block class: when the contact ALREADY has an active
-  // appointment, the agent must not re-check availability — its own booking makes that
-  // slot disappear from getAvailability, which the model would misread as "ya no está libre".
+  // Two jobs in one section. (1) Hard guard against the self-block class: when the
+  // contact ALREADY has an active appointment, the agent must not re-check availability —
+  // its own booking makes that slot disappear from getAvailability, which the model would
+  // misread as "ya no está libre". (2) Help mode (0049): a booked contact is a customer,
+  // not a lead — the bot is support (answer, reconfirm, move/cancel on request), never
+  // sales. Package customers live here for months; re-qualifying them reads as spam.
+  // Rendered even without booking tools: staff books those tenants' appointments in GHL,
+  // and their contacts still write in with questions.
   let existingAppointmentSection = '';
-  if (activeAppointment && bookingEnabled) {
+  if (activeAppointment) {
     const apptLabel = formatApptLabel(activeAppointment.startTime, config.timezone);
     const svc = activeAppointment.service?.trim();
-    existingAppointmentSection = `\n\n# Este contacto YA tiene una cita agendada (regla estricta)
+    const helpModeIntro = `\n\n# Este contacto YA tiene una cita agendada — modo asistencia (regla estricta)
 El contacto ya tiene una cita activa${svc ? ` de "${svc}"` : ''}: ${apptLabel}.
+Tu papel con este contacto es de ASISTENCIA, no de venta: ya agendó.
+- Responde sus dudas con normalidad y ayúdalo con lo que necesite de su cita.
+- NO lo re-califiques, NO le insistas con más servicios ni lo trates como lead nuevo. Si ÉL pide informes o quiere agendar algo más, atiéndelo con gusto — pero la iniciativa de vender no sale de ti.`;
+    existingAppointmentSection = bookingEnabled
+      ? `${helpModeIntro}
 - NO llames getAvailability ni re-ofrezcas horarios. La cita ya existe; no hay nada que volver a consultar.
 - Si el lead solo saluda, aclara algo (p. ej. su zona horaria) o charla, RECONFIRMA esa misma cita usando EXACTAMENTE ese texto. No la muevas ni ofrezcas otra hora.
 - NUNCA digas que esa hora "ya no está libre" ni "está ocupada": es SU cita. Confírmasela.
-- SOLO si el lead pide EXPLÍCITAMENTE mover o cancelar su cita, sigue las reglas de "Reagendar o cancelar".`;
+- SOLO si el lead pide EXPLÍCITAMENTE mover o cancelar su cita, sigue las reglas de "Reagendar o cancelar".`
+      : `${helpModeIntro}
+- Si el lead pregunta por su cita, o te confirma una solicitud de agenda que tenías pendiente con el equipo, la cita YA quedó agendada: RECONFÍRMASELA con exactamente esa fecha y hora. NO vuelvas a pasar la solicitud al equipo ni llames flagAwaitingHuman para agendarla — eso ya sucedió.
+- NUNCA digas que esa hora "ya no está libre" ni "está ocupada": es SU cita. Confírmasela.
+- Si pide MOVER o CANCELAR su cita, ahí sí usa flagAwaitingHuman y dile con naturalidad que una persona del equipo se lo confirma en breve.`;
   }
 
   return `${identityLine}

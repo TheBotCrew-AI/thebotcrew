@@ -14,6 +14,7 @@ import { buildReactivationAgent } from '../roles/reactivation/index.js';
 import { handleInboundWebhook, type TurnDONamespace } from '../worker/webhook-handler.js';
 import { handleOutboundWebhook } from '../worker/outbound-handler.js';
 import { handleTagWebhook } from '../worker/tag-handler.js';
+import { handleAppointmentWebhook } from '../worker/appointment-webhook-handler.js';
 import { verifyGhlWebhook, webhookAuthDisabled } from '../ghl/webhook.js';
 import { retryPendingDeliveries } from '../worker/delivery-retry.js';
 import { runPendingFollowUps } from '../worker/followup-runner.js';
@@ -128,6 +129,26 @@ export const mastra = new Mastra({
             return c.json({ error: 'invalid json body' }, 400);
           }
           const result = await handleTagWebhook(payload);
+          return c.json(result.body, result.status);
+        },
+      }),
+
+      // Tenant-configured GHL WORKFLOW webhook (NOT a Marketplace event): staff books
+      // an appointment in the GHL calendar → the workflow POSTs the ids here so the
+      // booking reaches our stats + the 0049 parity actions run. Workflow webhooks are
+      // unsigned, so auth is the shared GHL_WORKFLOW_SECRET (fails closed when unset).
+      registerApiRoute('/webhooks/ghl/appointments', {
+        method: 'POST',
+        handler: async (c) => {
+          let payload: unknown;
+          try {
+            payload = await c.req.json();
+          } catch {
+            return c.json({ error: 'invalid json body' }, 400);
+          }
+          const secret =
+            (c.env as Record<string, string | undefined>).GHL_WORKFLOW_SECRET ?? process.env.GHL_WORKFLOW_SECRET;
+          const result = await handleAppointmentWebhook(payload, c.req.header('authorization') ?? null, secret);
           return c.json(result.body, result.status);
         },
       }),

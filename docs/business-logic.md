@@ -172,7 +172,9 @@ Core mechanics — **one follow-up at a time**:
   attempts (the cadence **clock resets**).
 - **The freno:** when a cadence cycle is exhausted **with no reply**, the conversation goes to
   `standby`. So an unresponsive lead gets at most `cadence.length` nudges per silence; replying is
-  what "refuels" a new cycle. The stop condition is the lead going silent through a full cycle.
+  what "refuels" a new cycle — but each refuel runs a **shorter, softer round**, and after the
+  last round pursuit ends for good (see §4.3 — reactivation rounds). A lead holding an upcoming
+  appointment is never nudged at all (help mode, §4.3).
 
 The reactivation agent is text-only (no `getAvailability`, no booking horizon): it **never
 proposes dates/days/timeframes** (e.g. "next week") — doing so contradicts what the front-desk
@@ -247,6 +249,80 @@ rescue them. A conversation now runs **exactly one** of the two ladders (`follow
   `countBotMessagesSince` — the demo budget is only 7 messages, so counting three reminders
   against it would eat almost half of what the lead came to see. They carry no `angle_index`
   either, so the closer inherits the whole angle pool.
+
+### 4.3 Reactivation rounds (0049) — front-load + taper + stop
+
+Before 0049 the ladder was effectively infinite: the freno parked an exhausted lead in
+`standby`, but their next inbound reactivated the conversation and the bot's reply re-armed the
+**full** cadence — every time, forever. Now every ghost→pursuit cycle is a **round**, and each
+round is shorter and softer than the last:
+
+- **Round 0** = the tenant's own `follow_up_cadence` (unchanged; still the opt-in switch — no
+  cadence, no rounds). Pursue hard while interest is fresh.
+- **Rounds 1+** = platform defaults `[[360,1080],[960]]`: round 1 is two soft touches (6 h,
+  18 h — the prompt drops the intensity and offers an easy out), round 2 is **one farewell**
+  (16 h). Per-tenant override: `tenant_config.follow_up_rounds` jsonb (array of cadence arrays
+  for rounds 1+; `NULL` = platform default, `[]` = round 0 only). Overriding it changes both the
+  shapes and how many rounds exist.
+- **The farewell** (last touch of the last round) is the one nudge whose job is to close, not to
+  bait a reply: warm goodbye, no question, and it teaches the re-entry word — *"escribe CITA
+  para retomar"*. The word is rhetorical (`REENTRY_KEYWORD`, a constant): ANY inbound already
+  wakes the bot; only a real booking resets the counter. The farewell bypasses the angle pool
+  entirely (`angle_index` NULL, no angle burned).
+
+**When a round is consumed.** `conversations.reactivation_round` counts rounds, and it advances
+only when the **first nudge of a cycle actually lands**: `app_mark_follow_up_sent` bumps it
+(`GREATEST(counter, row.round + 1)`) for a `kind='cadence'` tier-1 row. Position 1 is armed
+after every bot reply and cancelled by every inbound, so a lead who answers before any nudge
+fires burns nothing — only real silence costs a round. Each `follow_ups` row is **stamped with
+its round** at scheduling time; mid-cycle progression follows the row's shape even if the
+counter or config move mid-flight.
+
+**The arming gate.** At both arming sites (bot reply in `webhook-handler.ts`, demo-exit restart
+in `followup-runner.ts`), a lead with `reactivation_round >= totalRounds(config)` gets **no**
+cadence armed — the bot still answers anything they write; only the pursuit is over. No new
+conversation status (per §2a's warning): the gate lives in the counter. When the final round
+exhausts unanswered, the runner logs `bot_events.reactivation_exhausted` and tags the contact
+`reactivacion-agotada` in GHL (smart-listable; the archive of politely-dropped leads).
+
+**Help mode — booked customers are support, not pursuit.** A lead holding an **upcoming**
+(future, non-cancelled) appointment gets no nudges and a support-mode prompt
+(`modo asistencia` in the front-desk prompt: answer, reconfirm, move/cancel on request, never
+re-sell). Two layers enforce the no-nudge half, because our `appointments` store only ever
+sees what the bot itself booked — a package customer's next session is usually **staff-booked
+in the GHL calendar** and invisible to us (no appointment webhook exists):
+
+- **Arm-time** (`findUpcomingAppointment`, `db/upcoming-appointment.ts`): store row still
+  future → yes, free. Store row stale (the package trap) → ask GHL (`getContactAppointments`).
+  No store row at all → no GHL call (fresh leads stay cheap) — except for tenants with
+  `bookingEnabled=false`, where every appointment is staff-booked, so GHL is checked each turn.
+- **Send-time backstop** (runner, before generating): always store + GHL; an upcoming
+  appointment aborts the nudge (`followup_aborted` reason `has_upcoming_appointment`). This is
+  what catches the walk-in with zero store presence and the nudge armed moments before a
+  booking. Fails **open** (a GHL error reads as "no appointment"): worst case one nudge to a
+  booked customer, never a silenced lead.
+
+The same predicate fixed a live resolver bug: `resolveActiveAppointment`'s store branch had no
+future check, so a package customer's *past* bot-booked row shadowed their staff-booked next
+session and lookup/reschedule/cancel operated on a bygone appointment.
+
+**The reset.** A **real** booking (`bookAppointment`, non-demo path) resets
+`reactivation_round` to 0 (`app_reset_reactivation_round`, fire-and-forget). Timing trick: while
+the appointment is upcoming, help mode keeps the counter irrelevant anyway — so resetting at
+booking behaves exactly like "reset when the package ends" without needing a package-end event.
+Once the last appointment passes, the next ghost cycle starts fresh at round 0 (a returning
+customer is a new pursuit). A reschedule never resets (not a new conversion); a simulated demo
+booking never resets (nothing converted). **Staff bookings** reset too — via the per-tenant GHL
+workflow webhook (`/webhooks/ghl/appointments`, onboarding §8), which logs the cita to the store
+(stats), cancels pending nudges, resets the counter, **and closes the awaiting-human loop**:
+staff booking IS the "I've handled this" action, so the webhook clears `awaiting_human` and
+removes the tenant's awaiting-human tag (e.g. `esperando-agenda`) from the GHL contact — before
+this, the tag stayed on until someone remembered to remove it and the bot kept re-flagging
+requests the team had already resolved (the 2026-08-02 MADI test). Tenants without that
+workflow keep the passive protection only (help mode gates nudges; the counter doesn't reset;
+the tag stays manual). When a lead holds several upcoming citas, "their appointment" is always
+the **soonest** one (`soonestUpcomingAppointment` collapses the append-only log: latest action
+per cita wins, then earliest start time) — both for the prompt and for lookup/reschedule/cancel.
 
 ## 5. Availability & booking
 

@@ -40,3 +40,10 @@ GHL_API_TOKEN="<ghl-api-token>"
 # INTERNAL_CRON_SECRET is any strong random secret; generate with: openssl rand -hex 32
 WORKER_URL="http://localhost:4111"
 INTERNAL_CRON_SECRET="<random-secret>"
+
+# Auth for /webhooks/ghl/appointments — the tenant-configured GHL WORKFLOW webhook
+# (staff bookings → stats). Workflow Custom Webhooks are unsigned, so this shared
+# bearer secret is the gate; the endpoint 401s (fails closed) while it is unset.
+# Generate with: openssl rand -hex 32. The same value goes in each GHL workflow's
+# Custom Webhook "Authorization: Bearer <value>" header.
+GHL_WORKFLOW_SECRET="<random-secret>"

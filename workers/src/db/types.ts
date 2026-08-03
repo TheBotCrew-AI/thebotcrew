@@ -25,6 +25,9 @@ export interface TenantConfigRow {
   follow_up_cadence: unknown;
   /** Pool of angle directives for reactivation, decoupled from cadence. */
   follow_up_angles: unknown;
+  /** Cadences for reactivation rounds 1+ as an array of arrays of minutes (0049).
+   *  NULL = platform default taper; [] = round 0 only. */
+  follow_up_rounds: unknown;
   /** Quiet (DND) window for follow-ups as {start,end} local hours. NULL = platform default. */
   quiet_hours: unknown;
   /** Max days ahead the bot may offer appointment slots. NULL = no cap. */
@@ -67,6 +70,9 @@ export interface DueFollowUp {
   ghlLocationId: string;
   /** Which ladder this row belongs to (0042). Rows written before 0042 read 'cadence'. */
   kind: FollowUpKind;
+  /** The reactivation round this row was scheduled under (0049) — resolves the
+   *  cadence shape for rung progression. Rows written before 0049 read 0. */
+  round: number;
   /**
    * The conversation's last inbound as of the CLAIM. The runner hands it back to
    * `app_commit_follow_up_send` right before sending: if it no longer matches, the
@@ -244,7 +250,11 @@ export type BotEventType =
   // / a queued event could not be sent ({stage|error}; missing_token_secret is the
   // one that self-heals — the row stays pending until the Worker secret lands).
   | 'capi_event_sent'
-  | 'capi_error';
+  | 'capi_error'
+  // The FINAL reactivation round exhausted unanswered ({round, followUpId}, 0049):
+  // the lead got the farewell and the arming gate now keeps every nudge off. The
+  // runner also writes the `reactivacion-agotada` GHL tag alongside this.
+  | 'reactivation_exhausted';
 
 export interface LogAppointmentParams {
   p_client_id: string;

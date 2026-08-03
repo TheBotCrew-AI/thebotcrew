@@ -74,6 +74,10 @@ export interface RawTenantConfig {
   /** Pool of angle directives for reactivation messages, decoupled from cadence. A
    *  per-conversation cursor advances across cycles so angles never repeat. */
   followUpAngles?: string[] | null;
+  /** Cadences (minutes) for reactivation rounds 1+ — each ghost cycle after the
+   *  first runs a shorter, softer ladder (0049). null = platform default taper;
+   *  [] = round 0 only. Round 0 always runs followUpCadence. */
+  followUpRounds?: number[][] | null;
   /** Quiet window for follow-ups; null/absent uses the platform default (21:00–08:00). */
   quietHours?: QuietHours | null;
   /** Max days ahead the bot may look for / offer appointment slots; null = no cap. */

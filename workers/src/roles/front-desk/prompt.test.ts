@@ -59,6 +59,12 @@ describe('buildFrontDeskInstructions', () => {
     // Label is formatted in the tenant tz (America/Mexico_City = -06:00 → 3:30 p.m.).
     expect(withAppt).toContain('3:30');
     expect(withAppt).toContain('NUNCA digas que esa hora "ya no está libre"');
+    // Help mode (0049): a booked contact is support, not a sales target.
+    expect(withAppt).toContain('modo asistencia');
+    expect(withAppt).toContain('ASISTENCIA, no de venta');
+    expect(withAppt).toContain('NO lo re-califiques');
+    // The booking-tools rules stay for booking-enabled tenants.
+    expect(withAppt).toContain('NO llames getAvailability');
     // No active appointment → section absent.
     expect(buildFrontDeskInstructions(cfg(), NOW)).not.toContain('# Este contacto YA tiene una cita agendada');
   });
@@ -193,12 +199,23 @@ describe('buildFrontDeskInstructions', () => {
       expect(out).not.toContain('# Número para confirmación y recordatorios');
     });
 
-    it('suppresses the existing-appointment section', () => {
+    it('renders help mode WITHOUT booking-tool rules: reconfirm + flagAwaitingHuman for changes (0049)', () => {
+      // Staff books these tenants' appointments in GHL; their booked contacts still
+      // write in with questions, so the section must render — just without tool rules
+      // the agent can't follow.
       const out = buildFrontDeskInstructions(noBooking(), NOW, undefined, undefined, undefined, {
         startTime: '2026-07-03T17:00:00-06:00',
         service: 'Corte',
       });
-      expect(out).not.toContain('# Este contacto YA tiene una cita agendada');
+      expect(out).toContain('# Este contacto YA tiene una cita agendada — modo asistencia');
+      expect(out).toContain('NUNCA digas que esa hora "ya no está libre"');
+      expect(out).toContain('usa flagAwaitingHuman');
+      expect(out).not.toContain('NO llames getAvailability');
+      expect(out).not.toContain('las reglas de "Reagendar o cancelar"');
+      // The 2026-08-02 MADI incident: the lead confirmed a pending booking request, the
+      // staff cita already existed, and the bot re-flagged the team instead of confirming.
+      expect(out).toContain('RECONFÍRMASELA');
+      expect(out).toContain('NO vuelvas a pasar la solicitud al equipo');
     });
 
     it('splits the request into two turns and forbids closing on a question', () => {

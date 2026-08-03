@@ -19,11 +19,13 @@ const ctx = { requestContext: { get: (k: string) => (k === 'tenant' ? tenant : k
 const run = () =>
   (cancelAppointmentTool.execute as (i: Record<string, never>, c: typeof ctx) => Promise<{ cancelled: boolean; message: string }>)({}, ctx);
 
-const appt = (o: Record<string, unknown> = {}) => ({ ghlAppointmentId: 'appt1', appointmentDatetime: '2026-07-10T17:00:00Z', serviceType: 'Consulta', action: 'booked', ...o });
+// Far future: the resolver only serves FUTURE store rows (0049) — a near date rots
+// into the past and silently reroutes the test through the GHL fallback.
+const appt = (o: Record<string, unknown> = {}) => ({ ghlAppointmentId: 'appt1', appointmentDatetime: '2099-07-10T17:00:00Z', serviceType: 'Consulta', action: 'booked', ...o });
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.mocked(q.loadLatestAppointment).mockResolvedValue(appt() as never);
+  vi.mocked(q.loadAppointmentLog).mockResolvedValue([appt()] as never);
   vi.mocked(q.logAppointment).mockResolvedValue({ appointmentId: 'a-uuid' } as never);
   vi.mocked(q.logBotEvent).mockResolvedValue(undefined);
   vi.mocked(q.reactivateConversation).mockResolvedValue(undefined);
@@ -33,14 +35,14 @@ beforeEach(() => {
 
 describe('cancelAppointment', () => {
   it('no active appointment → not cancelled, GHL never called', async () => {
-    vi.mocked(q.loadLatestAppointment).mockResolvedValue(null);
+    vi.mocked(q.loadAppointmentLog).mockResolvedValue([]);
     const res = await run();
     expect(res).toMatchObject({ cancelled: false });
     expect(ghl.cancelAppointment).not.toHaveBeenCalled();
   });
 
   it('already cancelled → treated as none', async () => {
-    vi.mocked(q.loadLatestAppointment).mockResolvedValue(appt({ action: 'cancelled' }) as never);
+    vi.mocked(q.loadAppointmentLog).mockResolvedValue([appt({ action: 'cancelled' })] as never);
     const res = await run();
     expect(res.cancelled).toBe(false);
     expect(ghl.cancelAppointment).not.toHaveBeenCalled();
@@ -55,7 +57,7 @@ describe('cancelAppointment', () => {
   });
 
   it('store miss but GHL has an upcoming appointment (booked in GHL) → cancels it via GHL', async () => {
-    vi.mocked(q.loadLatestAppointment).mockResolvedValue(null);
+    vi.mocked(q.loadAppointmentLog).mockResolvedValue([]);
     const ghlTime = new Date(Date.now() + 20 * 86_400_000).toISOString();
     ghl.getContactAppointments.mockResolvedValue([{ id: 'ghl-appt', startTime: ghlTime, status: 'confirmed', calendarId: 'cal' }]);
     const res = await run();

@@ -15,7 +15,8 @@
  */
 
 import type { GhlClient } from '../../../ghl/client.js';
-import { loadLatestAppointment } from '../../../db/queries.js';
+import { soonestUpcomingAppointment } from '../../../db/appointment-active.js';
+import { loadAppointmentLog } from '../../../db/queries.js';
 
 export interface ResolvedAppointment {
   ghlAppointmentId: string;
@@ -31,10 +32,15 @@ export async function resolveActiveAppointment(
   ghlContactId: string,
   nowMs: number,
 ): Promise<ResolvedAppointment | null> {
-  // 1) Our store — the bot's own bookings. Keep current behaviour: the latest non-cancelled
-  //    row wins, and the caller's live GHL read governs staleness.
-  const stored = await loadLatestAppointment(clientId, ghlContactId);
-  if (stored && stored.action !== 'cancelled') {
+  // 1) Our store — bot bookings + workflow-webhook rows. The event log is collapsed
+  //    to "the SOONEST upcoming appointment" (soonestUpcomingAppointment): a past
+  //    store row used to win here unconditionally, which made the GHL fallback
+  //    unreachable for exactly the contacts that need it — a package customer whose
+  //    bot-booked first session already happened had lookup/reschedule/cancel
+  //    operating on that bygone appointment while their staff-booked next one sat
+  //    unseen in GHL. With several future citas, the next one is the lead's "mi cita".
+  const stored = soonestUpcomingAppointment(await loadAppointmentLog(clientId, ghlContactId), nowMs);
+  if (stored) {
     return {
       ghlAppointmentId: stored.ghlAppointmentId,
       startTime: stored.appointmentDatetime,

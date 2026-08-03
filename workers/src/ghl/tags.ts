@@ -35,6 +35,15 @@ export const STATUS_TAGS: Partial<Record<ConversationStatus, string>> = {
 };
 
 /**
+ * Written when the FINAL reactivation round exhausts unanswered (0049): the lead
+ * received every tapered pursuit they will ever get, including the farewell.
+ * NOT a STATUS_TAGS entry — the conversation status written is still `standby`;
+ * this is orthogonal round-state, applied only by the follow-up runner. Smart
+ * lists / manual campaigns can key on it (the archive of politely-dropped leads).
+ */
+export const REACTIVATION_EXHAUSTED_TAG = 'reactivacion-agotada';
+
+/**
  * Demo-session funnel tags (0038). Written on the GHL contact at each stage so
  * the funnel is visible in GHL: smart lists, and workflows can key on them
  * (e.g. "demo-iniciada 24h ago AND NOT demo-completada" → template nudge).

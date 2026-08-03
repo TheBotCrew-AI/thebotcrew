@@ -45,3 +45,44 @@ describe('buildReactivationInstructions — demo context', () => {
     expect(out).not.toContain('fue SIMULADA');
   });
 });
+
+describe('buildReactivationInstructions — reactivation rounds (0049)', () => {
+  const roundCtx = (round: number, isFinalTouch = false) => ({
+    round, isFinalTouch, reentryKeyword: 'CITA',
+  });
+
+  it('round 0 is byte-identical to the classic prompt', () => {
+    const classic = buildReactivationInstructions('Clínica Luz', 'divertido', ['angle A']);
+    const round0 = buildReactivationInstructions('Clínica Luz', 'divertido', ['angle A'], undefined, roundCtx(0));
+    expect(round0).toBe(classic);
+  });
+
+  it('round 1+ appends the soft-retry section and keeps the question mandate', () => {
+    const out = buildReactivationInstructions('Clínica Luz', null, ['angle A'], undefined, roundCtx(1));
+    expect(out).toContain('reintento tardío (ronda 2)');
+    expect(out).toContain('Baja la intensidad');
+    expect(out).toContain('"no por ahora"');
+    // Still a normal nudge: angle machinery and question mandate intact.
+    expect(out).toContain('ANGULO: n');
+    expect(out).toContain('SIEMPRE termina con una pregunta');
+  });
+
+  it('the final touch is a farewell: teaches the re-entry word, no question, no angles', () => {
+    const out = buildReactivationInstructions('Clínica Luz', null, [], undefined, roundCtx(2, true));
+    expect(out).toContain('Mensaje FINAL de despedida');
+    expect(out).toContain('"CITA"');
+    expect(out).toContain('NO termines con una pregunta');
+    expect(out).not.toContain('ANGULO: n');
+    expect(out).not.toContain('SIEMPRE termina con una pregunta');
+    expect(out).not.toContain('reavivar la conversación con una pregunta');
+    expect(out).not.toContain('la pregunta final');
+    // The farewell subsumes the soft-retry framing; no duplicate section.
+    expect(out).not.toContain('reintento tardío');
+  });
+
+  it('the farewell wins even if candidates were passed by mistake', () => {
+    const out = buildReactivationInstructions('Clínica Luz', null, ['angle A'], undefined, roundCtx(1, true));
+    expect(out).toContain('Mensaje FINAL de despedida');
+    expect(out).not.toContain('ANGULO: n');
+  });
+});
