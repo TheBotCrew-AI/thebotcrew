@@ -113,6 +113,11 @@ export interface TenantContext {
   /** Tag written on the GHL contact when the bot leaves a request for a person to pick
    *  up (flagAwaitingHuman). null = this tenant doesn't use that signal. */
   awaitingHumanTag: string | null;
+  /** Tag written when the lead asked something that is NOT in the config and the bot
+   *  promised to confirm it (flagPendingInfo). Deliberately a SECOND tag: this queue is
+   *  ours (the config has a hole), `awaitingHumanTag` is the client's (someone must
+   *  book). null = this tenant doesn't use that signal. */
+  pendingInfoTag: string | null;
   /** Whether the startDemo tool may create budgeted per-lead demo sessions on this
    *  tenant (the lead-magnet funnel). false = the tool refuses; nothing else changes. */
   demoSessionsEnabled: boolean;

@@ -52,6 +52,8 @@ export interface TenantConfigRow {
   ai_key_ref: string | null;
   /** Tag applied when the bot leaves a request awaiting a human. NULL = unused. */
   awaiting_human_tag: string | null;
+  /** Tag applied when the bot owes the lead a fact its config doesn't have. NULL = unused. */
+  pending_info_tag: string | null;
   /** Whether startDemo may create budgeted per-lead demo sessions (lead-magnet funnel). */
   demo_sessions_enabled: boolean | null;
   /** Meta Conversions API config ({dataset_id, page_id, token_ref, …}). NULL = off. */
@@ -225,6 +227,11 @@ export type BotEventType =
   | 'demo_session_ended'
   // Bot left a request ready for a person to pick up (flagAwaitingHuman)
   | 'awaiting_human'
+  // The lead asked something the config does not answer, and the bot promised to
+  // confirm it (flagPendingInfo, 0050). Metadata carries her question VERBATIM —
+  // this event is the ranked backlog of what each tenant's config still lacks, and
+  // it outlives the GHL tag, which disappears the moment someone handles it.
+  | 'pending_info'
   // Conversation switched into / out of the demo persona ({to} in metadata)
   | 'demo_toggled'
   // The bot ruled a lead out and parked it ({status, reason} in metadata, 0042).

@@ -22,6 +22,7 @@ import { lookupAppointmentTool } from './tools/lookup-appointment.js';
 import { updateConversationStatusTool } from './tools/update-conversation-status.js';
 import { updateContactNameTool } from './tools/update-contact-name.js';
 import { flagAwaitingHumanTool } from './tools/flag-awaiting-human.js';
+import { flagPendingInfoTool } from './tools/flag-pending-info.js';
 import { startDemoTool } from './tools/start-demo.js';
 
 export const FRONT_DESK_ROLE = 'front-desk';
@@ -69,6 +70,7 @@ export function buildFrontDeskAgent(): Agent {
       updateConversationStatus: updateConversationStatusTool,
       updateContactName: updateContactNameTool,
       flagAwaitingHuman: flagAwaitingHumanTool,
+      flagPendingInfo: flagPendingInfoTool,
       startDemo: startDemoTool,
     },
   });

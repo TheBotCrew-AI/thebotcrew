@@ -5,10 +5,12 @@
  *   present → handed_off (bot stays silent until the tag is removed)
  *   absent  → reactivate any handed_off conversation back to active
  *
- * The tenant's `awaiting_human_tag` (per-tenant, e.g. `esperando-agenda`) — the
- * "a person owes this lead an answer" switch:
- *   present → awaiting_human (bot still answers; automated nudges off)
- *   absent  → back to active, which is what re-arms follow-ups
+ * The tenant's owed-answer tags (`awaiting_human_tag`, e.g. `esperando-agenda`, and
+ * `pending_info_tag`, e.g. `dato-pendiente`) — the "a person owes this lead an
+ * answer" switch. They are two queues (booking vs. a fact the config lacks) but one
+ * state, so they OR together:
+ *   either present → awaiting_human (bot still answers; automated nudges off)
+ *   both absent    → back to active, which is what re-arms follow-ups
  *
  * The second one closes the loop on the booking-by-hand flow: the owner removing
  * the tag *is* the "I've handled this" action, so it drives the state instead of
@@ -73,13 +75,23 @@ export async function handleTagWebhook(
   // one, so a failure here must not turn the whole webhook into a 500 and make GHL
   // retry a kill-switch that already applied.
   let awaitingAffected = 0;
-  const awaitingTag = tenant.awaitingHumanTag?.trim();
-  if (awaitingTag) {
-    const awaiting = parsed.tags.includes(awaitingTag);
+  // TWO tags, ONE signal. `awaiting_human_tag` (someone must book) and
+  // `pending_info_tag` (we owe her a fact the config lacks, 0050) point at different
+  // queues and different people, but drive the same conversation state — so the flip
+  // is an OR: the lead leaves `awaiting_human` only when BOTH are gone. Clearing the
+  // booking tag while a data point is still pending deliberately keeps the nudges off;
+  // we still owe her an answer.
+  const owedTags = [tenant.awaitingHumanTag, tenant.pendingInfoTag]
+    .map((t) => t?.trim())
+    .filter((t): t is string => !!t);
+  if (owedTags.length > 0) {
+    const awaiting = owedTags.some((t) => parsed.tags.includes(t));
     try {
       awaitingAffected = await setAwaitingHumanByContact(parsed.contactId, awaiting);
       if (awaitingAffected > 0) {
-        console.log(`[tags] contact=${parsed.contactId} ${awaitingTag}=${awaiting} affected=${awaitingAffected}`);
+        console.log(
+          `[tags] contact=${parsed.contactId} owed=[${owedTags.join(',')}]=${awaiting} affected=${awaitingAffected}`,
+        );
       }
     } catch (e) {
       console.error('[tags] setAwaitingHumanByContact failed:', e instanceof Error ? e.message : String(e));

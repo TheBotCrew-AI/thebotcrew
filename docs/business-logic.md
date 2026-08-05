@@ -769,8 +769,57 @@ Observability: `demo_session_started` / `demo_session_ended` (`{reason, botMessa
   `ai_model`; `NULL` inherits the default.
 - **Anti-hallucination rule:** agents only state facts present in tenant config or returned by
   tools. No invented prices, addresses, hours, availability, or promotions. When unsure, say so
-  and offer to connect a human.
+  — and see §6b for what "say so" now means.
 - Client-facing agent content defaults to **Spanish**.
+
+## 6b. When the bot doesn't have the answer (`flagPendingInfo`, 0050)
+
+Not knowing something is normal — a config is never complete. What matters is what the bot
+*does* with it, and until 0050 it did the two worst things available: it **asked permission**
+("¿quieres que lo pregunte?") and then let the gap die in the thread.
+
+- Asking permission reads as unsure to the lead, and her "sí, porfa" spends a message that
+  moves nothing. She asked a question; the answer to "shall I find out?" was never in doubt.
+- Worse, nobody downstream learned anything. The config kept its hole and the next lead hit
+  the same wall — a bug that reproduces on every lead and is invisible in every metric.
+
+**The behavior now** (base prompt, §"Cuando te preguntan algo que NO tienes" — it is a
+product rule, not a per-tenant one): try `lookupFaq` first, and if the fact genuinely isn't
+there, **assert** it in one line — *"déjame lo confirmo con el equipo y te aviso"* — call
+`flagPendingInfo` in the same turn, and keep the conversation moving. No promised timeframe,
+no repeating it every message, and never inventing the answer later.
+
+`flagPendingInfo` does three things:
+
+| | what | who reads it |
+|---|---|---|
+| status | `awaiting_human` — nudges off, **bot NOT muted** | the runtime |
+| tag | `tenant_config.pending_info_tag` (e.g. `dato-pendiente`) | whoever operates the platform |
+| event | `pending_info` with her question **verbatim** | the backlog, forever |
+
+**Why a second tag and not `awaiting_human_tag`.** They are two queues with two different
+owners: `esperando-agenda` means *the client owes her a booking* and the receptionist clears
+it; `dato-pendiente` means *we owe her a fact the config lacks* and only we can fix that. On
+one tag the receptionist answers, clears it, and the config gap is never learned — the signal
+dies exactly where it was worth the most. `NULL` = the tenant doesn't use the queue (the bot
+still promises and still parks; it just writes no tag).
+
+**Why the same status.** §2a's rule applies unchanged: we owe *her* an answer, so sending
+"¿sigues interesada?" is backwards. The consequence is the same as §5a's, and it is the real
+cost of this design: **a flagged lead gets no automated nudges until a tag is removed.** The
+tag handler treats both tags as one signal (OR) — clearing only the booking tag keeps her
+parked while a data point is still open — so this is a work queue someone has to actually
+work. Rank it by what's missing, and fix the config, not just the lead:
+
+```sql
+select metadata->>'topic' as tema, count(*), max(created_at) as ultima
+from bot_events where event_type = 'pending_info'
+group by 1 order by 2 desc;
+```
+
+**Not for:** a booking request (→ `flagAwaitingHuman`), anger or a clinical question
+(→ `handed_off`, which mutes), or anything `lookupFaq` answers. In demo mode the tool
+no-ops: the roleplay business has no config at all, so *everything* would be a gap.
 
 ## 6a. Meta CAPI — conversion signals back to the ad platform (0048)
 

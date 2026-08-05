@@ -237,6 +237,32 @@ Optional: `trigger_keywords` for ad-CTA flows — an **entry** gate, not a per-m
 one. Once a conversation is activated (`conversations.bot_activated`) it flows without
 the keyword.
 
+### Recommended for every tenant: the pending-info queue (0050)
+
+```sql
+update tenant_config set pending_info_tag = 'dato-pendiente'
+where tenant_id = '<tenant uuid>';
+```
+
+When a lead asks something the config doesn't answer, the bot says it will confirm with
+the team and tags the contact with this (business-logic §6b). **Create the tag in GHL**
+and make a smart list for it — it is *your* queue, not the client's: each hit is a hole
+in the config you can close, and closing it is what stops the next lead from hitting it.
+Keep it distinct from `awaiting_human_tag` (the client's booking queue) or the signal is
+lost the moment the receptionist answers and clears the tag.
+
+The lead stays parked (no automated nudges) until **both** tags are off the contact — so
+this queue has to actually be worked. What's pending, ranked:
+
+```sql
+select metadata->>'topic' as tema, count(*), max(created_at) as ultima
+from bot_events where event_type = 'pending_info'
+group by 1 order by 2 desc;
+```
+
+`NULL` = the tenant doesn't use it: the bot still promises to confirm and still stops the
+nudges, it just writes no tag — the promise is then only visible in `bot_events`.
+
 ---
 
 ## 6. Give the tenant its own AI key
@@ -408,7 +434,9 @@ Notes that save debugging time:
   `reactivation_round`, **clears `awaiting_human` and removes the tenant's
   awaiting-human tag** from the contact — staff booking IS the "I've handled this"
   action, so the esperando-agenda loop closes itself (business-logic §4.3). Rows
-  land with `source='ghl-workflow'`.
+  land with `source='ghl-workflow'`. It does **not** touch `pending_info_tag`: a
+  booking doesn't answer a question we still owe her, so if that tag is still on, the
+  ContactTagUpdate webhook parks her again on purpose (§6b).
 
 ---
 

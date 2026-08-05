@@ -47,7 +47,7 @@ export async function loadTenantConfig(ghlLocationId: string): Promise<TenantCon
   const { data, error } = await supabase
     .from('tenant_config')
     .select(
-      'business_name, timezone, tone, services, hours, calendars, faq, enabled_roles, prompt_overrides, ai_provider, ai_model, ai_key_ref, awaiting_human_tag, follow_up_tiers, follow_up_cadence, follow_up_angles, follow_up_rounds, quiet_hours, booking_horizon_days, enabled_channels, test_contact_ids, trigger_keywords, demo_on_keywords, demo_off_keywords, demo_prompt_overrides, keyword_variants, prompt_variants, demo_sessions_enabled, meta_capi,' +
+      'business_name, timezone, tone, services, hours, calendars, faq, enabled_roles, prompt_overrides, ai_provider, ai_model, ai_key_ref, awaiting_human_tag, pending_info_tag, follow_up_tiers, follow_up_cadence, follow_up_angles, follow_up_rounds, quiet_hours, booking_horizon_days, enabled_channels, test_contact_ids, trigger_keywords, demo_on_keywords, demo_off_keywords, demo_prompt_overrides, keyword_variants, prompt_variants, demo_sessions_enabled, meta_capi,' +
         'tenants!inner(id, client_id, ghl_location_id, is_active)',
     )
     .eq('tenants.ghl_location_id', ghlLocationId)
@@ -74,6 +74,7 @@ export async function loadTenantConfig(ghlLocationId: string): Promise<TenantCon
     demoOffKeywords: row.demo_off_keywords ?? null,
     keywordVariants: parseKeywordVariants(row.keyword_variants),
     awaitingHumanTag: row.awaiting_human_tag?.trim() ? row.awaiting_human_tag.trim() : null,
+    pendingInfoTag: row.pending_info_tag?.trim() ? row.pending_info_tag.trim() : null,
     demoSessionsEnabled: row.demo_sessions_enabled === true,
     metaCapi: parseMetaCapi(row.meta_capi),
     config: {

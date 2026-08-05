@@ -103,6 +103,7 @@ export const demoTenant: TenantContext = {
   demoOffKeywords: null,
   keywordVariants: null,
   awaitingHumanTag: null,
+  pendingInfoTag: null,
   demoSessionsEnabled: false,
   metaCapi: null,
   config: {
@@ -181,6 +182,7 @@ export const madiTenant: TenantContext = {
   ghlLocationId: 'loc_madi_0001',
   enabledChannels: ['whatsapp'],
   awaitingHumanTag: 'esperando-agenda',
+  pendingInfoTag: 'dato-pendiente',
   config: {
     businessName: 'MADI Skin Care',
     timezone: 'America/Tijuana',
@@ -198,7 +200,7 @@ export const madiTenant: TenantContext = {
         q: '¿Dónde están ubicados? ¿Cuál es la dirección? ¿Cómo llego? ¿Me pasas la ubicación o el mapa?',
         a:
           'En Plaza Financiera, Blvd. Sánchez Taboada 10110, Zona Urbana Río, Tijuana, Baja California. ' +
-          'Aquí está el mapa: https://maps.app.goo.gl/kGdvv5yfLLVWtHNr9',
+          'Aquí está el mapa: https://madiskincare.com/mapa',
       },
       {
         q: '¿Qué promociones tienen?',
@@ -223,9 +225,15 @@ export const madiTenant: TenantContext = {
         'Depilación láser — cómo cotizarla:\n' +
         '- Se vende por PAQUETE DE 6 SESIONES; di siempre "6 sesiones" junto al precio.\n' +
         '- Las sesiones van UNA CADA MES, así que el paquete de 6 se completa en unos 6 meses. Dilo si preguntan ' +
-        'cada cuánto son, cada cuánto tienen que ir o cuánto dura el tratamiento completo.\n\n' +
+        'cada cuánto son, cada cuánto tienen que ir o cuánto dura el tratamiento completo.\n' +
+        // MADI sells ONE bikini; leads ask for it by at least four names. Without this the
+        // catch-all below ("cualquier zona que no esté escrita arriba") eats "bikini completo".
+        '- Cómo la nombra la gente: "bikini brasileño", "bikini completo", "brasileño", "brasilero" y "bikini" ' +
+        'a secas son la MISMA zona y el MISMO precio — en MADI el bikini es uno solo. Cotízalo de inmediato con ' +
+        'cualquiera de esos nombres: no preguntes cuál de todos quiere, no digas que no lo tienes y no la mandes ' +
+        'a valoración por el nombre. Donde los paquetes combinados dicen "Bikini", es esa misma zona.\n\n' +
         'Depilación láser — zonas individuales (paquete de 6 sesiones):\n' +
-        '- Axilas: $2,300\n- Medias piernas: $2,300\n- Bikini brasileño: $2,400\n\n' +
+        '- Axilas: $2,300\n- Medias piernas: $2,300\n- Bikini brasileño (= bikini completo): $2,400\n\n' +
         'Depilación láser — paquetes combinados (6 sesiones):\n' +
         '- Axilas + Bikini: $2,700\n- Axilas + Medias piernas: $2,800\n- Piernas completas + Bikini: $3,500\n\n' +
         'Depilación láser — cómo llegar a la sesión (indicaciones previas):\n' +
@@ -238,12 +246,15 @@ export const madiTenant: TenantContext = {
         '- Piernas completas POR SEPARADO no tiene precio de paquete de 6 sesiones; de ésa solo tienes el precio ' +
         'por sesión ($1,000). OJO: piernas completas SÍ está en los paquetes combinados de arriba (con bikini son ' +
         '$3,500) — ése lo das tal cual, sin dudar. Lo único que no existe es el paquete de piernas completas sola: ' +
-        'si lo piden así, no lo calcules ni lo estimes; di que se lo confirman en la valoración gratuita.\n\n' +
+        'si lo piden así, no lo calcules ni lo estimes; di que se lo confirman en la valoración gratuita.\n' +
+        '- Cualquier zona o combinación que no esté escrita arriba: no la cotices. Ofrece la valoración gratuita. ' +
+        'OJO con los nombres: "bikini completo" SÍ está escrito arriba —es el bikini brasileño— y no tiene nada que ' +
+        'ver con "piernas completas"; ése cotízalo normal.\n\n' +
         // Mirrors the live tenant's "Datos del centro" block. The map link is the one
         // fact in this prompt that only survives if it is copied character-for-character.
         'Datos del centro:\n' +
         '- Ubicación: Plaza Financiera, Blvd. Sánchez Taboada 10110, Zona Urbana Río, Tijuana, Baja California.\n' +
-        '- Mapa de Google: https://maps.app.goo.gl/kGdvv5yfLLVWtHNr9\n' +
+        '- Mapa / cómo llegar: https://madiskincare.com/mapa (es nuestro enlace, abre la ubicación en Google Maps)\n' +
         '- Cuando pregunten dónde están, cómo llegar, la dirección o el mapa: da la ubicación Y pega ese enlace ' +
         'TAL CUAL, carácter por carácter, en su propio renglón. No lo acortes, no lo cambies, no lo describas en ' +
         'palabras y no inventes otro enlace ni otra dirección.',
@@ -259,6 +270,14 @@ export const madiTenant: TenantContext = {
         updateConversationStatus:
           'NO la uses para cerrar una solicitud de cita: para eso es flagAwaitingHuman. handed_off deja al bot MUDO ' +
           'de forma permanente; resérvalo para derivación real (queja, tema médico delicado, o piden una persona).',
+        flagPendingInfo:
+          'Úsala cuando el lead pregunte un dato CONCRETO de MADI que no tienes (formas de pago, mensualidades, ' +
+          'duración exacta, políticas de cancelación, un precio que no está escrito en tu información) y que tampoco ' +
+          'venga en lookupFaq. Llámala en el MISMO turno en que le dices que lo confirmas con el equipo, con su ' +
+          'pregunta tal cual la escribió. No te deja muda ni cierra el tema: sigue atendiéndola con normalidad. ' +
+          'NO la uses para: pedir cita (eso es flagAwaitingHuman), temas clínicos o molestia real (eso es handoff ' +
+          'con una compañera), ni para algo que SÍ está en tu información. Una sola vez por duda: si ya la marcaste, ' +
+          'no lo vuelvas a anunciar.',
       },
       qualificationNotes:
         'ARRANQUE: preséntate corto y cálido y cierra con "¿Cómo te puedo apoyar hoy?".\n' +

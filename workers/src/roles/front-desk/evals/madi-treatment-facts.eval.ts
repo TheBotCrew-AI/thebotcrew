@@ -122,3 +122,42 @@ describe.skipIf(!evalApiKey)('MADI — the new combined package', () => {
     expect(reply(res)).toMatch(/3[.,]?500/);
   });
 });
+
+describe.skipIf(!evalApiKey)('MADI — the bikini goes by more than one name', () => {
+  // MADI sells ONE bikini zone but leads ask for it as "brasileño" or "completo".
+  // Before the naming rule, "bikini completo" fell through to "cualquier zona que no
+  // esté escrita arriba: no la cotices" — a real, quotable $2,400 package answered
+  // with a deflection to the valoración. Both names must reach the same price.
+  for (const zona of ['bikini brasileño', 'bikini completo']) {
+    it(`quotes $2,400 for "${zona}"`, async () => {
+      const agent = buildFrontDeskAgent();
+      const res = await agent.generate(
+        [
+          { role: 'user', content: `Hola, ¿cuánto cuesta la depilación de ${zona}?` },
+          { role: 'assistant', content: '¡Claro! ¿Se te irrita la piel o te salen bolitas con el rastrillo?' },
+          { role: 'user', content: 'Sí, bastante. ¿Cuánto sale?' },
+        ],
+        { requestContext: rc() },
+      );
+
+      expect(reply(res)).toMatch(/2[.,]?400/);
+      // The failure mode is a deflection, not a wrong number — assert it didn't punt.
+      expect(reply(res)).not.toMatch(/no (lo )?(tengo|manejo)|no contamos con/);
+    });
+  }
+
+  it('does not ask which bikini she means — there is only one', async () => {
+    const agent = buildFrontDeskAgent();
+    const res = await agent.generate(
+      [
+        { role: 'user', content: 'Me interesa el bikini completo, ya me dijeron que sí me sirve' },
+        { role: 'assistant', content: '¡Va! ¿Te ha pasado que se te irrita al rasurarte?' },
+        { role: 'user', content: 'Sí. ¿Cuánto es?' },
+      ],
+      { requestContext: rc() },
+    );
+
+    expect(reply(res)).toMatch(/2[.,]?400/);
+    expect(reply(res)).not.toMatch(/brasileño o|cuál de los dos|a qué te refieres con/);
+  });
+});

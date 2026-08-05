@@ -27,7 +27,14 @@ import type { TurnContext } from '../../../core/types.js';
 import { madiTenant } from './fixtures.js';
 import { evalApiKey, evalModel, evalProvider } from './eval-model.js';
 
-const MAP_URL = 'https://maps.app.goo.gl/kGdvv5yfLLVWtHNr9';
+/**
+ * Our own branded redirect, NOT the raw goo.gl link: madiskincare.com/mapa 301s to
+ * the clinic's Maps place. It is a Cloudflare redirect rule on the live domain, not
+ * a file in `sites/madi-skincare/` — so a future rebuild of that site can silently
+ * take the bot's location answer down with it. If this link ever dies, the fix is
+ * the redirect rule, not the prompt.
+ */
+const MAP_URL = 'https://madiskincare.com/mapa';
 
 const turn: TurnContext = {
   ghlConversationId: 'conv_eval_madi_location',

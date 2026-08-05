@@ -188,7 +188,14 @@ supabase/
                                #      nudges while an upcoming appointment exists (GHL-checked — staff-booked appts have
                                #      no store row) — see business-logic §4.3. Folded in 0043's contract step (dropped
                                #      the 3-arg app_schedule_follow_up). PENDING CONTRACT: drop the 4-arg overload in a
-                               #      later release once the 0049 deploy is proven)
+                               #      later release once the 0049 deploy is proven),
+                               # 0050 pending_info_tag (el bot dejó de pedir permiso: cuando le preguntan algo que la
+                               #      config no tiene, AFIRMA que lo confirma con el equipo y llama flagPendingInfo →
+                               #      status awaiting_human + tenant_config.pending_info_tag + evento pending_info con
+                               #      la pregunta TEXTUAL. Tag SEPARADO de awaiting_human_tag a propósito: esa cola es
+                               #      del cliente (agendar), ésta es de quien opera la plataforma (a la config le falta
+                               #      un dato). El tag handler trata ambos como UNA señal (OR): quitar sólo el de
+                               #      agenda deja los nudges apagados si el dato sigue pendiente — ver business-logic §6b)
   clients.sql, seed-tenants.sql# seeds (run by `supabase db reset` per config.toml)
 sites/                         # client marketing sites: static HTML, no build step, no deps
   _template/                   # starting point for a new client
@@ -359,6 +366,12 @@ for the retry cron.
   `ghl_contact_id`). The bot also writes tags when IT sets a status (`ghl/tags.ts`
   `STATUS_TAGS`), so state stays visible/synced in GHL. **Requires the `contacts.write`
   scope** (`ghl/oauth.ts`) — adding it means tenants must re-authorize the Marketplace app.
+- Owed-answer tags — **two queues, one state**: `awaiting_human_tag` (e.g. `esperando-agenda`,
+  0034: the CLIENT owes a booking) and `pending_info_tag` (e.g. `dato-pendiente`, 0050: WE owe a
+  fact the config lacks, written by `flagPendingInfo`). Different owners, so they must be
+  different tags — but both mean "don't nudge her", so `tag-handler.ts` ORs them: she leaves
+  `awaiting_human` only when **both** are gone. Clearing just the booking tag deliberately keeps
+  the nudges off while a data point is still pending. See docs/business-logic.md §6b.
 - Opt-out undo (0045): `opted_out` now mutes the bot like `handed_off`, and since a classifier
   (an LLM) sets it, **removing the `bot-opted-out` tag clears it** — same route/handler. Adding
   the tag opts nobody out; the switch only undoes. See docs/business-logic.md §2a.

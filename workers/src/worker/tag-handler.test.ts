@@ -122,6 +122,62 @@ describe('handleTagWebhook', () => {
     });
   });
 
+  describe('the pending-info tag (0050) — a second queue, the same state', () => {
+    // `esperando-agenda` = the client owes her a booking. `dato-pendiente` = WE owe her
+    // a fact the config lacks. Different people clear them, so they must be different
+    // tags — but both mean "don't nudge her, we owe her an answer", so they OR.
+    const bothTags = {
+      ...tenant,
+      awaitingHumanTag: 'esperando-agenda',
+      pendingInfoTag: 'dato-pendiente',
+    } as unknown as TenantContext;
+
+    it('pending-info tag alone → parks the contact, even with no booking tag', async () => {
+      vi.mocked(resolveTenant).mockResolvedValue(bothTags);
+      vi.mocked(parseContactTagWebhook).mockReturnValue({ locationId: 'loc1', contactId: 'c1', tags: ['dato-pendiente'] });
+      vi.mocked(q.setAwaitingHumanByContact).mockResolvedValue(1);
+
+      await handleTagWebhook({} as never);
+
+      expect(q.setAwaitingHumanByContact).toHaveBeenCalledWith('c1', true);
+    });
+
+    it('clearing ONLY the booking tag keeps her parked while the data point is pending', async () => {
+      // The trap this closes: two tags, one state. If the booking tag drove the flip on
+      // its own, answering the scheduling half would re-arm the nudges — and she'd get
+      // "¿sigues interesada?" while still waiting on the answer we promised.
+      vi.mocked(resolveTenant).mockResolvedValue(bothTags);
+      vi.mocked(parseContactTagWebhook).mockReturnValue({ locationId: 'loc1', contactId: 'c1', tags: ['dato-pendiente'] });
+      vi.mocked(q.setAwaitingHumanByContact).mockResolvedValue(1);
+
+      await handleTagWebhook({} as never);
+
+      expect(q.setAwaitingHumanByContact).not.toHaveBeenCalledWith('c1', false);
+    });
+
+    it('both tags gone → back to active and the follow-ups resume', async () => {
+      vi.mocked(resolveTenant).mockResolvedValue(bothTags);
+      vi.mocked(parseContactTagWebhook).mockReturnValue({ locationId: 'loc1', contactId: 'c1', tags: ['otro'] });
+      vi.mocked(q.setAwaitingHumanByContact).mockResolvedValue(1);
+
+      await handleTagWebhook({} as never);
+
+      expect(q.setAwaitingHumanByContact).toHaveBeenCalledWith('c1', false);
+    });
+
+    it('a tenant with ONLY the pending-info tag still gets the switch', async () => {
+      // awaiting_human_tag is NULL for every tenant that books through the bot; the
+      // config-gap queue is not theirs to opt out of.
+      vi.mocked(resolveTenant).mockResolvedValue({ ...tenant, pendingInfoTag: 'dato-pendiente' } as unknown as TenantContext);
+      vi.mocked(parseContactTagWebhook).mockReturnValue({ locationId: 'loc1', contactId: 'c1', tags: ['dato-pendiente'] });
+      vi.mocked(q.setAwaitingHumanByContact).mockResolvedValue(1);
+
+      await handleTagWebhook({} as never);
+
+      expect(q.setAwaitingHumanByContact).toHaveBeenCalledWith('c1', true);
+    });
+  });
+
   describe('the opt-out undo tag (0045)', () => {
     // Since 0045 `opted_out` mutes the bot like `handed_off`, and it is set by an LLM
     // classifier. Removing this tag is the only way back from a false positive that
