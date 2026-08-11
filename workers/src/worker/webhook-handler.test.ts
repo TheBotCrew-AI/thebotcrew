@@ -163,7 +163,7 @@ describe('handleInboundWebhook — per-tenant AI key & token accounting', () => 
         clientId: 'client1',
         ghlConversationId: 'conv1',
         callKind: 'front-desk',
-        model: 'gpt-5-mini',
+        model: 'gpt-5.6-luna',
         keySource: 'MADI',
         usage: { inputTokens: 1500, outputTokens: 40, cachedInputTokens: 0 },
       }),
@@ -470,7 +470,28 @@ describe('handleInboundWebhook — contact-name backstop', () => {
     const body = JSON.parse((call![1] as { body: string }).body) as Record<string, unknown>;
     expect(body).not.toHaveProperty('max_tokens');
     expect(body.max_completion_tokens).toBeGreaterThanOrEqual(200);
-    // gpt-4o-mini 400s on reasoning_effort, and ai_model may name any model.
+    // The budget is the fallback; on a model that takes it, the reasoning pass is turned
+    // off outright so the 300 tokens go to the answer.
+    expect(body.reasoning_effort).toBe('none');
+  });
+
+  // The other half of the same guard: ai_model may name a model that 400s on the
+  // parameter, and a 400 on a fire-and-forget call is a silent death.
+  it('omits reasoning_effort on a model that does not accept it', async () => {
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(
+      tenant({
+        config: { ...nameConfirmTenant().config, model: 'gpt-4o-mini' },
+      }),
+    );
+    vi.mocked(q.loadRecentMessages).mockResolvedValue(openingHistory);
+    ghl.getContact.mockResolvedValue({ name: 'Gimnasio X' });
+    mockExtractor('Carlos');
+
+    await handleInboundWebhook(inbound, agentReplying('¿Te agendo el sábado?'));
+
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+    const call = fetchMock.mock.calls.find(([url]) => String(url).includes('openai.com'));
+    const body = JSON.parse((call![1] as { body: string }).body) as Record<string, unknown>;
     expect(body).not.toHaveProperty('reasoning_effort');
   });
 

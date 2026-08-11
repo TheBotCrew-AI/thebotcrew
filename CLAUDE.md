@@ -443,11 +443,25 @@ for the retry cron.
 
 - Provider and model are per-tenant, with platform-level defaults (`DEFAULT_PROVIDER` /
   `DEFAULT_MODEL` in `roles/front-desk/agent.ts`).
-- Platform default: `openai` / `gpt-5-mini` (raised from `gpt-4o-mini` — the older mini
-  contradicted its own availability slot list; see `bot_events.availability_checked`).
-  Per-tenant override stored in `tenant_config.ai_provider` + `tenant_config.ai_model`.
+- Platform default: `openai` / `gpt-5.6-luna` (2026-08-11; before that `gpt-5-mini`, itself
+  raised from `gpt-4o-mini` — the older mini contradicted its own availability slot list; see
+  `bot_events.availability_checked`). Per-tenant override stored in `tenant_config.ai_provider`
+  + `tenant_config.ai_model`; **no tenant overrides today** — all four inherit the default.
 - Both `@ai-sdk/openai` and `@ai-sdk/anthropic` are installed. The agent creates the right
   provider at request time from the key in the request context.
+- **Reasoning effort** (`core/reasoning.ts`). The OpenAI provider function resolves to the
+  **Responses API** (`createOpenAI(...)(modelId)` → responses model), so effort rides along as
+  `providerOptions: { openai: { reasoningEffort } }`. Set per role on the agent's
+  `defaultOptions`, which Mastra deep-merges into every `generate()` — so **evals run at the
+  same effort as production**, which is the whole reason it isn't set at the call site:
+  - front-desk `high` (it picks the tool and decides what may not be said),
+  - reactivation `low` (a one-line nudge, paid per silent lead by the cron),
+  - the two auxiliary Chat Completions calls `none` (see below).
+  `tenant_config.ai_model` may name any model, so the effort is only sent where the model
+  takes it — outside the gpt-5 family the parameter is a 400, and on a fire-and-forget aux
+  call a 400 dies silently. `none` needs a minor version (flat `gpt-5` rejects it), which is
+  why `auxReasoningEffort` returns `undefined` rather than falling back to `minimal` —
+  `minimal` still runs a reasoning pass, and that pass is what eats `AUX_MAX_COMPLETION_TOKENS`.
 - **Per-tenant API keys + token accounting** (migration 0033). Goal: know what each client
   costs. Two halves:
   - **Key per tenant.** `tenant_config.ai_key_ref` holds a *slug*, never key material —
@@ -472,7 +486,9 @@ for the retry cron.
   - **Cost needs prices.** `model_pricing` (USD per 1M tokens, with `effective_from`) is
     filled **by hand** from the provider's pricing page — nothing here guesses a price, and
     `llm_cost_monthly` reports `cost_usd = NULL` for a model with no price row rather than
-    inventing one. Loaded so far: `gpt-5-mini` @ $0.25 / $0.025 cached / $2.00 output.
+    inventing one. Loaded so far: `gpt-5-mini` @ $0.25 / $0.025 cached / $2.00 output;
+    `gpt-5.6-luna` @ $0.20 / $0.02 cached / $1.20 output (from 2026-08-11). Reasoning
+    tokens bill as **output**, so a raised effort lands on the output side of this view.
     **A price change is a new row with a new `effective_from`, never an `update`** — the view
     prices each call at the rate in force when the tokens were burned, so an update would
     silently rewrite last month's reports. How to add/read prices:

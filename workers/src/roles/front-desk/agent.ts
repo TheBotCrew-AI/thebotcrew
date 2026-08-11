@@ -11,6 +11,7 @@ import { Agent } from '@mastra/core/agent';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createAnthropic } from '@ai-sdk/anthropic';
 import type { AiProvider, TenantContext, TurnContext } from '../../core/types.js';
+import { reasoningProviderOptions, type ReasoningEffort } from '../../core/reasoning.js';
 import { buildFrontDeskInstructions } from './prompt.js';
 import { parseFrontDeskConfig } from './config.js';
 import { lookupFaqTool } from './tools/lookup-faq.js';
@@ -28,7 +29,14 @@ import { startDemoTool } from './tools/start-demo.js';
 export const FRONT_DESK_ROLE = 'front-desk';
 
 export const DEFAULT_PROVIDER: AiProvider = 'openai';
-export const DEFAULT_MODEL = 'gpt-5-mini';
+export const DEFAULT_MODEL = 'gpt-5.6-luna';
+
+/**
+ * Reasoning effort for a front-desk turn: this agent picks the tool, decides whether the
+ * lead qualifies and what it may not state, so it runs at the top level. Reasoning tokens
+ * bill as output — a raise here shows up in `llm_cost_monthly`.
+ */
+const REASONING_EFFORT: ReasoningEffort = 'high';
 
 export function buildFrontDeskAgent(): Agent {
   return new Agent({
@@ -60,6 +68,14 @@ export function buildFrontDeskAgent(): Agent {
       if (provider === 'anthropic') return createAnthropic({ apiKey })(modelId);
       return createOpenAI({ apiKey })(modelId);
     },
+    // Deep-merged into every generate() call, so evals run at the same effort as production.
+    defaultOptions: ({ requestContext }) => ({
+      providerOptions: reasoningProviderOptions(
+        requestContext.get('provider') as AiProvider,
+        requestContext.get('model') as string,
+        REASONING_EFFORT,
+      ),
+    }),
     tools: {
       lookupFaq: lookupFaqTool,
       getAvailability: getAvailabilityTool,

@@ -22,6 +22,7 @@ import {
 import { channelEnabled, hasTriggerKeywords, inTestMode, matchesDemoOff, matchesDemoOn, matchVariantKeyword, messageMatchesTrigger, resolveTenant, roleEnabled } from '../core/tenant.js';
 import { buildAgentRequestContext } from '../core/runtime-context.js';
 import { cadenceForRound, totalRounds } from '../core/reactivation-rounds.js';
+import { auxReasoningEffort } from '../core/reasoning.js';
 import type { AiProvider, ConversationMessage, ConversationStatus, DemoHandoff, FollowUpKind, TenantContext, TurnContext } from '../core/types.js';
 import { DEMO_REMINDER_CADENCE } from '../core/types.js';
 import {
@@ -90,10 +91,10 @@ const DEBOUNCE_MS = 15_000;
  *    HTTP 200 with an empty string (`finish_reason: "length"`) — a silent failure that
  *    looks healthier than the 400 it replaced. 300 leaves room for the reasoning pass.
  *
- * `reasoning_effort: 'minimal'` would trim it further but is rejected by gpt-4o-mini
- * ("Unrecognized request argument"), and `tenant_config.ai_model` may name any model —
- * so this stays portable across both families. Anthropic keeps `max_tokens: 32`: it is
- * that API's required parameter and it does not spend the budget on hidden reasoning.
+ * The budget stays at 300 because it is the fallback: `reasoning_effort: 'none'` is sent
+ * only where the model accepts it (`auxReasoningEffort`), and any model that doesn't
+ * still spends the budget on hidden reasoning. Anthropic keeps `max_tokens: 32` — that
+ * API's required parameter, and it does not spend it on reasoning.
  */
 const AUX_MAX_COMPLETION_TOKENS = 300;
 
@@ -276,12 +277,14 @@ async function classifyConversationOutcome(
       recordAuxUsage(llm, 'classify', data);
       raw = data.content[0]?.text ?? '';
     } else {
+      const auxEffort = auxReasoningEffort(llm.model);
       const res = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: { authorization: `Bearer ${llm.apiKey}`, 'content-type': 'application/json' },
         body: JSON.stringify({
           model: llm.model,
           max_completion_tokens: AUX_MAX_COMPLETION_TOKENS,
+          ...(auxEffort && { reasoning_effort: auxEffort }),
           response_format: { type: 'json_object' },
           messages: [{ role: 'user', content: CLASSIFY_PROMPT(leadMessage, botReply) }],
         }),
@@ -351,12 +354,14 @@ async function correctContactName(
       recordAuxUsage(llm, 'extract-name', data);
       raw = data.content[0]?.text ?? '';
     } else {
+      const auxEffort = auxReasoningEffort(llm.model);
       const res = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: { authorization: `Bearer ${llm.apiKey}`, 'content-type': 'application/json' },
         body: JSON.stringify({
           model: llm.model,
           max_completion_tokens: AUX_MAX_COMPLETION_TOKENS,
+          ...(auxEffort && { reasoning_effort: auxEffort }),
           response_format: { type: 'json_object' },
           messages: [{ role: 'user', content: EXTRACT_NAME_PROMPT(assistantQuestion, leadMessage, storedName) }],
         }),

@@ -98,7 +98,7 @@ from t;
 | `booking_horizon_days` | Deterministically clamps `getAvailability`, and the prompt states the cutoff as a pre-computed date. `NULL` = no cap. |
 | `quiet_hours` | `NULL` = platform default 21:00–08:00 local. |
 | `follow_up_rounds` | Cadences for reactivation **rounds 1+** (0049) as an array of arrays of minutes, e.g. `'[[360,1080],[960]]'::jsonb` — each time the lead ghosts again the next (shorter, softer) round runs, and past the last one pursuit stops for good. `NULL` = platform default taper (`[[360,1080],[960]]`); `[]` = round 0 only (one ghost cycle, then stop). Round 0 always runs `follow_up_cadence`. See business-logic §4.3. |
-| `ai_provider` / `ai_model` | `NULL` = platform default (`openai` / `gpt-5-mini`). Only override with reason. |
+| `ai_provider` / `ai_model` | `NULL` = platform default (`openai` / `gpt-5.6-luna`). Only override with reason — an override also opts the tenant out of the per-role reasoning effort unless the model accepts it. |
 
 ### What goes inside `prompt_overrides` (the jsonb blob)
 
@@ -468,6 +468,7 @@ Currently loaded:
 | model | effective_from | input | cached input | output |
 | --- | --- | ---: | ---: | ---: |
 | `gpt-5-mini` | 2026-01-01 | $0.25 | $0.025 | $2.00 |
+| `gpt-5.6-luna` | 2026-08-11 | $0.20 | $0.02 | $1.20 |
 
 ### When a price changes — insert, don't update
 

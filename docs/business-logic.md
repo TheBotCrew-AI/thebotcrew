@@ -764,9 +764,12 @@ Observability: `demo_session_started` / `demo_session_ended` (`{reason, botMessa
 
 ## 6. Models & factual grounding
 
-- **Platform default: `openai` / `gpt-5-mini`** (`DEFAULT_PROVIDER` / `DEFAULT_MODEL` in
+- **Platform default: `openai` / `gpt-5.6-luna`** (`DEFAULT_PROVIDER` / `DEFAULT_MODEL` in
   `roles/front-desk/agent.ts`). Per-tenant override in `tenant_config.ai_provider` /
   `ai_model`; `NULL` inherits the default.
+- **Reasoning effort per role:** front-desk `high`, reactivation `low`, the auxiliary
+  classifier/name-extractor calls `none` — wired in `core/reasoning.ts` and only sent to
+  models that accept it. See CLAUDE.md § Models.
 - **Anti-hallucination rule:** agents only state facts present in tenant config or returned by
   tools. No invented prices, addresses, hours, availability, or promotions. When unsure, say so
   — and see §6b for what "say so" now means.

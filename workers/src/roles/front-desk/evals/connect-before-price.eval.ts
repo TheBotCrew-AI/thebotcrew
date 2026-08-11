@@ -14,10 +14,11 @@
  *     question, or already told us what she needs. That one loses the lead, so every
  *     case below except the first asserts the NUMBER shows up.
  *
- * ⚠️ The first case is NOT deterministic. Measured over 13 runs on `gpt-5-mini`
- * (what MADI runs), it holds about **85%** of the time; the other ~15% quotes
- * cold. Treat a single failure as the known rate, not a regression — re-run 5-6
- * times before touching the prompt. The failure is benign by design: quoting cold
+ * ⚠️ The first case is NOT deterministic. It holds about **85%** of the time (13 runs
+ * on `gpt-5-mini`; re-measured at 9/11 on `gpt-5.6-luna` at a high reasoning effort —
+ * the rate did not move); the other ~15% quotes cold. Treat a single failure as the
+ * known rate, not a regression — re-run 5-6 times before touching the prompt. Raising
+ * the effort is not the lever. The failure is benign by design: quoting cold
  * is exactly what the bot did before this rule existed, so the downside is a lost
  * bit of value-framing, never a wrong price or a stuck lead. Raising it further
  * means a stronger model for this tenant (`tenant_config.ai_model`), which the
