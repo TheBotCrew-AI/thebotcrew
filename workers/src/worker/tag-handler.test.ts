@@ -8,7 +8,7 @@ vi.mock('../ghl/webhook.js');
 import { resolveTenant } from '../core/tenant.js';
 import * as q from '../db/queries.js';
 import { parseContactTagWebhook } from '../ghl/webhook.js';
-import { BOT_OFF_TAG, OPTED_OUT_TAG } from '../ghl/tags.js';
+import { BOT_OFF_TAG, MARKETING_OPT_OUT_TAG, OPTED_OUT_TAG } from '../ghl/tags.js';
 import { handleTagWebhook } from './tag-handler.js';
 
 const tenant = { tenantId: 't1', clientId: 'client1', ghlLocationId: 'loc1' } as unknown as TenantContext;
@@ -20,6 +20,7 @@ beforeEach(() => {
   vi.mocked(q.setBotOffByContact).mockResolvedValue(0);
   vi.mocked(q.setAwaitingHumanByContact).mockResolvedValue(0);
   vi.mocked(q.clearOptedOutByContact).mockResolvedValue(0);
+  vi.mocked(q.setMarketingOptOutByContact).mockResolvedValue(0);
   vi.mocked(q.logBotEvent).mockResolvedValue(undefined);
 });
 
@@ -213,6 +214,81 @@ describe('handleTagWebhook', () => {
       const res = await handleTagWebhook({} as never);
       expect(res.status).toBe(200);
       expect(res.body).toMatchObject({ ok: true, optOutCleared: 0 });
+    });
+  });
+
+  describe('the marketing opt-out tag (0051)', () => {
+    // Records a date, changes nothing. The campaigns this consent covers are sent by
+    // GHL, not by the bot — so unlike every other tag here, no state moves.
+    it('tag present → stamps the date on the contact', async () => {
+      vi.mocked(parseContactTagWebhook).mockReturnValue({
+        locationId: 'loc1', contactId: 'c1', tags: [MARKETING_OPT_OUT_TAG],
+      });
+      vi.mocked(q.setMarketingOptOutByContact).mockResolvedValue(2);
+
+      const res = await handleTagWebhook({} as never);
+
+      expect(q.setMarketingOptOutByContact).toHaveBeenCalledWith('c1');
+      expect(res.body).toMatchObject({ marketingOptOut: 2 });
+    });
+
+    it('tag absent → never called', async () => {
+      vi.mocked(parseContactTagWebhook).mockReturnValue({ locationId: 'loc1', contactId: 'c1', tags: ['otro'] });
+      const res = await handleTagWebhook({} as never);
+      expect(q.setMarketingOptOutByContact).not.toHaveBeenCalled();
+      expect(res.body).toMatchObject({ marketingOptOut: 0 });
+    });
+
+    it('removing the tag does NOT clear the date', async () => {
+      // The tag says whether they're opted out right now; GHL already answers that
+      // live. The date is the only thing this column adds, so it is never unset.
+      vi.mocked(parseContactTagWebhook).mockReturnValue({ locationId: 'loc1', contactId: 'c1', tags: [] });
+      await handleTagWebhook({} as never);
+      expect(q.setMarketingOptOutByContact).not.toHaveBeenCalled();
+    });
+
+    it('already stamped → 0 rows, still a clean 200', async () => {
+      // The normal case on every repeat webhook: GHL re-sends the full tag list on
+      // ANY tag change, so this fires constantly and must stay a no-op.
+      vi.mocked(parseContactTagWebhook).mockReturnValue({
+        locationId: 'loc1', contactId: 'c1', tags: [MARKETING_OPT_OUT_TAG, 'bot-standby'],
+      });
+      vi.mocked(q.setMarketingOptOutByContact).mockResolvedValue(0);
+
+      const res = await handleTagWebhook({} as never);
+
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({ ok: true, marketingOptOut: 0 });
+    });
+
+    it('a failure here does not 500 the webhook', async () => {
+      // A lost date stamp is a reporting gap; a retried kill-switch is an outage.
+      vi.mocked(parseContactTagWebhook).mockReturnValue({
+        locationId: 'loc1', contactId: 'c1', tags: [MARKETING_OPT_OUT_TAG],
+      });
+      vi.mocked(q.setMarketingOptOutByContact).mockRejectedValue(new Error('db down'));
+
+      const res = await handleTagWebhook({} as never);
+
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({ ok: true, marketingOptOut: 0 });
+    });
+
+    it('is independent of the bot opt-out: marketing consent is not conversation consent', async () => {
+      // Both tags at once. The bot mute stays untouched by the marketing stamp, and
+      // `bot-opted-out` being present still blocks the undo path.
+      vi.mocked(parseContactTagWebhook).mockReturnValue({
+        locationId: 'loc1', contactId: 'c1', tags: [MARKETING_OPT_OUT_TAG],
+      });
+      vi.mocked(q.setMarketingOptOutByContact).mockResolvedValue(1);
+
+      const res = await handleTagWebhook({} as never);
+
+      // Marketing opt-out alone must not touch bot state — and since `bot-opted-out`
+      // is absent here, the undo still runs exactly as it would without this tag.
+      expect(q.setBotOffByContact).toHaveBeenCalledWith('c1', false);
+      expect(q.clearOptedOutByContact).toHaveBeenCalledWith('c1');
+      expect(res.body).toMatchObject({ marketingOptOut: 1 });
     });
   });
 });

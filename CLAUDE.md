@@ -195,7 +195,13 @@ supabase/
                                #      la pregunta TEXTUAL. Tag SEPARADO de awaiting_human_tag a propósito: esa cola es
                                #      del cliente (agendar), ésta es de quien opera la plataforma (a la config le falta
                                #      un dato). El tag handler trata ambos como UNA señal (OR): quitar sólo el de
-                               #      agenda deja los nudges apagados si el dato sigue pendiente — ver business-logic §6b)
+                               #      agenda deja los nudges apagados si el dato sigue pendiente — ver business-logic §6b),
+                               # 0051 marketing_opt_out (conversations.marketing_opted_out_at + el RPC
+                               #      app_set_marketing_opt_out_by_contact: el tag `marketing-opt-out` de GHL estampa la
+                               #      fecha y ya. NO es `bot-opted-out`/0045 — eso es consentimiento de la conversación y
+                               #      calla al bot; esto es de las campañas de GHL, que no manda el bot. Nada en el Worker
+                               #      lee la columna: es registro histórico. Write-once por el `IS NULL` del RPC, así que
+                               #      quitar el tag NO borra la fecha y volver a darse de baja conserva la original)
   clients.sql, seed-tenants.sql# seeds (run by `supabase db reset` per config.toml)
 sites/                         # client marketing sites: static HTML, no build step, no deps
   _template/                   # starting point for a new client
@@ -375,6 +381,14 @@ for the retry cron.
 - Opt-out undo (0045): `opted_out` now mutes the bot like `handed_off`, and since a classifier
   (an LLM) sets it, **removing the `bot-opted-out` tag clears it** — same route/handler. Adding
   the tag opts nobody out; the switch only undoes. See docs/business-logic.md §2a.
+- Marketing opt-out (0051) — a date, not a switch. The `marketing-opt-out` tag stamps
+  `conversations.marketing_opted_out_at` and changes nothing else: it is consent about the GHL
+  **campaigns**, which the bot neither sends nor reads. Do not confuse it with `bot-opted-out`
+  above (consent about the conversation, and it mutes). **Write-once** — removing the tag does
+  NOT clear the date, because whether they're opted out *now* is already live on the tag in GHL;
+  the date is the only thing the column adds. Scope: it only reaches contacts that have a
+  conversation row, and a row created after the opt-out is born NULL, so query "does this contact
+  have ANY row with a date". Covering contacts the bot never spoke to needs a real `contacts` table.
 - Webhook routes (configure in the Marketplace app): InboundMessage → `/webhooks/ghl`,
   OutboundMessage → `/webhooks/ghl/outbound`, ContactTagUpdate → `/webhooks/ghl/tags`.
 - Staff-booked appointments → `/webhooks/ghl/appointments` (NOT a Marketplace event: a

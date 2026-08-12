@@ -917,6 +917,27 @@ export async function clearOptedOutByContact(ghlContactId: string): Promise<numb
 }
 
 /**
+ * Stamp when a contact opted out of GHL's marketing campaigns (0051).
+ *
+ * Write-once: the RPC only fills rows where the column is still NULL, so calling
+ * it on every webhook is safe and a re-opt-out keeps the original date. Returns
+ * how many conversations were stamped — 0 is the ordinary answer once the date is
+ * already there, and also what a contact who never messaged the bot returns
+ * (no rows to stamp; see the migration's scope caveat).
+ *
+ * Records only. Nothing in the Worker reads the column; the campaigns this
+ * consent governs are sent by GHL, not by us.
+ */
+export async function setMarketingOptOutByContact(ghlContactId: string): Promise<number> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase.rpc('app_set_marketing_opt_out_by_contact', {
+    p_ghl_contact_id: ghlContactId,
+  });
+  fail('setMarketingOptOutByContact', error);
+  return (data as number | null) ?? 0;
+}
+
+/**
  * Observability event (run outcome, suppression, …). Never throws — swallows its
  * own errors. AWAIT it in request handlers: on Cloudflare a detached promise is
  * killed once the response is sent (no waitUntil in the route), so fire-and-forget

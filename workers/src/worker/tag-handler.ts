@@ -25,14 +25,25 @@
  * one-directional: the lead's "stop" is never something an operator can assert on
  * their behalf, only something they can decide was misread.
  *
- * None of the three loops on the bot's own writes: every RPC no-ops when the
+ * `marketing-opt-out` (global, 0051) — the odd one out: it changes no state at
+ * all. The contact left the GHL marketing campaigns, which we don't send and the
+ * bot has no part in, so all this does is stamp the date on their conversations
+ * for the record. Write-once in SQL; absence is ignored.
+ *
+ * None of the four loops on the bot's own writes: every RPC no-ops when the
  * conversation is already in the target state, and GHL fires this webhook for
  * bot-written tags too.
  */
 
 import { resolveTenant } from '../core/tenant.js';
-import { clearOptedOutByContact, logBotEvent, setAwaitingHumanByContact, setBotOffByContact } from '../db/queries.js';
-import { BOT_OFF_TAG, OPTED_OUT_TAG } from '../ghl/tags.js';
+import {
+  clearOptedOutByContact,
+  logBotEvent,
+  setAwaitingHumanByContact,
+  setBotOffByContact,
+  setMarketingOptOutByContact,
+} from '../db/queries.js';
+import { BOT_OFF_TAG, MARKETING_OPT_OUT_TAG, OPTED_OUT_TAG } from '../ghl/tags.js';
 import type { GhlContactTagWebhook } from '../ghl/types.js';
 import { parseContactTagWebhook } from '../ghl/webhook.js';
 import type { WebhookResult } from './webhook-handler.js';
@@ -113,5 +124,21 @@ export async function handleTagWebhook(
     }
   }
 
-  return { status: 200, body: { ok: true, botOff, affected, awaitingAffected, optOutCleared } };
+  // Marketing opt-out — bookkeeping, not a switch. Same non-fatal treatment: losing
+  // a date stamp must not make GHL retry the kill-switch half of this webhook. Fired
+  // unconditionally while the tag is present because the RPC is write-once, so the
+  // repeat calls (GHL sends the full tag list on ANY tag change) stamp nothing.
+  let marketingOptOut = 0;
+  if (parsed.tags.includes(MARKETING_OPT_OUT_TAG)) {
+    try {
+      marketingOptOut = await setMarketingOptOutByContact(parsed.contactId);
+      if (marketingOptOut > 0) {
+        console.log(`[tags] contact=${parsed.contactId} ${MARKETING_OPT_OUT_TAG} → stamped=${marketingOptOut}`);
+      }
+    } catch (e) {
+      console.error('[tags] setMarketingOptOutByContact failed:', e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  return { status: 200, body: { ok: true, botOff, affected, awaitingAffected, optOutCleared, marketingOptOut } };
 }

@@ -24,6 +24,16 @@ export const BOT_OFF_TAG = 'bot-off';
 export const OPTED_OUT_TAG = 'bot-opted-out';
 
 /**
+ * Marketing opt-out (0051). The contact asked to stop receiving the GHL campaigns
+ * we send OUTSIDE the bot — a different consent from `bot-opted-out` above, which
+ * is about the conversation and mutes the bot. This one mutes nothing here: GHL
+ * owns the campaigns and the tag, we only record the date on the conversation
+ * (`marketing_opted_out_at`) so there's a track record of when consent was
+ * withdrawn. Never written by the bot, only read.
+ */
+export const MARKETING_OPT_OUT_TAG = 'marketing-opt-out';
+
+/**
  * Tags the bot applies to the GHL contact when it sets a conversation status.
  * Additive — kept for transparency so a human can see, in GHL, what the bot did.
  */
