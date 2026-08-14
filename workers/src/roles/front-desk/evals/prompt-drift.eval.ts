@@ -29,11 +29,17 @@
 
 import { describe, it, expect } from 'vitest';
 import { createClient } from '@supabase/supabase-js';
-import { FIT_FILTER_SECTION, MADI_HOUSE_RULES } from './fixtures.js';
+import { FIT_FILTER_SECTION, MADI_HOUSE_RULES, MONEY_DISCLOSURE_RULES } from './fixtures.js';
 
-/** Tenants whose `houseRules` an eval fixture mirrors, and must keep mirroring. */
+/**
+ * Tenants whose `houseRules` an eval fixture mirrors, and must keep mirroring.
+ * A tenant may appear more than once: each entry is one contiguous section, so
+ * mirroring two rules that live apart in the row does not force the fixture to
+ * copy everything between them.
+ */
 const MIRRORED_HOUSE_RULES: { label: string; tenantId: string; fixture: string }[] = [
-  { label: 'The Bot Crew', tenantId: '04385692-5c0d-436e-af77-4b1aa3fcc223', fixture: FIT_FILTER_SECTION },
+  { label: 'The Bot Crew — fit filter', tenantId: '04385692-5c0d-436e-af77-4b1aa3fcc223', fixture: FIT_FILTER_SECTION },
+  { label: 'The Bot Crew — money rules', tenantId: '04385692-5c0d-436e-af77-4b1aa3fcc223', fixture: MONEY_DISCLOSURE_RULES },
   { label: 'MADI Skin Care', tenantId: '19cf934b-2e36-4f4b-aa77-d3287e8d38fb', fixture: MADI_HOUSE_RULES },
 ];
 

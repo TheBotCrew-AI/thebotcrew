@@ -18,46 +18,82 @@ import type { TenantContext } from '../../../core/types.js';
  *
  * It lives in `houseRules` (not `qualificationNotes`) so a campaign variant that
  * replaces the flow cannot take the filter down with it — see business-logic §1.1.
+ *
+ * The filter itself changed with the offer (2026-08-14): it used to ask whether the
+ * business BOOKS APPOINTMENTS, because we sold an install whose job was to fill a
+ * calendar. The Club sells automated ATTENTION, so the question is now whether
+ * customers already write to them — a shop that sells by DM used to be ruled out and
+ * is now a candidate.
  */
-export const FIT_FILTER_SECTION = `El sistema vive del CALENDARIO: su trabajo es convertir un lead en una CITA. Sirve a negocios que necesitan agendar, ya sea para:
-- dar su servicio (gimnasio, taller mecánico, estética, spa, dentista, veterinaria, bienes raíces, clínica), o
-- una llamada o consulta donde se define el trato (agencias, consultoría, seguros, despachos, servicios B2B).
+export const FIT_FILTER_SECTION = `## A quién le sirve el Club
+Le sirve a un dueño de negocio que YA vende o atiende por WhatsApp, Instagram o Facebook y quiere automatizar respuestas y citas. No importa el tamaño, el giro ni cuántos mensajes reciba: si ya le escriben clientes por esos canales, es candidato.
 
-NO le sirve a un negocio donde la compra se cierra ahí mismo en el chat y nunca hay cita: tienda en línea, ropa, comida a domicilio, productos por catálogo, reventa. Ahí no hay nada que agendar — el sistema no cobra, no arma pedidos ni gestiona envíos.
+No le sirve a quien todavía no tiene negocio, o a quien no recibe mensajes de clientes por esos canales.
 
-Nunca descalifiques por SOSPECHA. Si te da esa impresión, haz UNA pregunta antes de concluir:
-"Para ver si esto te sirve: tus clientes ¿agendan una cita o llamada contigo, o la compra se cierra ahí mismo por mensaje?"
-Solo si responde claro que todo se cierra en el chat y que no hay citas, descalifica.
+Nunca descalifiques por sospecha. Si te da esa impresión, haz UNA pregunta antes de concluir:
+"Para ver si te sirve: ¿hoy te escriben clientes por WhatsApp, Instagram o Facebook?"
+Solo si contesta claro que no —que no tiene negocio todavía o que no le llegan mensajes por ahí— descalifica.
 
-Cómo descalificar (cálido y directo, sin dejarlo mal):
-1. Reconoce su negocio con respeto.
-2. Dilo claro: el sistema agenda citas y en su caso no hay cita que agendar — no le vas a instalar algo que no le va a servir.
-3. Deja la puerta abierta: si más adelante maneja consultas, asesorías o citas, que te escriba.
-4. NO llames startDemo. NO ofrezcas la sesión de 20 min.
-5. Cierra el turno llamando updateConversationStatus con status "standby" y reason "no agenda citas".
+Cómo descalificar, cálido y directo, sin dejar mal a nadie:
+1. Reconoce lo que te contó con respeto.
+2. Dilo claro: el Club es para automatizar los mensajes que ya llegan, y en su caso todavía no hay mensajes que automatizar — no le vas a vender algo que no le va a servir hoy.
+3. Deja la puerta abierta: cuando ya esté recibiendo clientes por esos canales, que te escriba.
+4. Cierra el turno llamando updateConversationStatus con status "standby" y reason "aún no recibe mensajes por WhatsApp/IG/FB".`;
 
-Ejemplo: "Te soy honesto: el sistema está hecho para negocios que agendan citas —consultas, servicios, asesorías— y en tu caso la compra se cierra ahí mismo por mensaje, así que no te lo voy a instalar: no te resolvería nada. Si en algún momento manejas citas o asesorías, escríbeme y lo vemos 🙌"
+/**
+ * The money rules, same byte-for-byte contract as FIT_FILTER_SECTION (they are a
+ * contiguous block of The Bot Crew's `## Reglas absolutas`) and mirrored for the
+ * same reason: they are the rules whose breach is INVISIBLE.
+ *
+ * The Club is 5–30 USD/month AND the AI consumption on top. A lead told only the
+ * fee signs up and discovers the rest later — the exact "ok, ¿y el servicio?"
+ * complaint that killed the previous offer's first wording. Nothing fails when the
+ * model omits it; the lead just feels lied to a week in. Same for the price of the
+ * day, which moves every 5 members and therefore cannot be stated from the prompt.
+ */
+export const MONEY_DISCLOSURE_RULES = `- NUNCA inventes el precio de hoy, los lugares disponibles, fechas de cierre ni resultados de otros miembros.
+- NUNCA hables de la cuota sin mencionar, en ese MISMO mensaje, que el consumo de IA corre aparte. Es la primera vez que se habla de dinero o no es ninguna: que nunca se descubra después como letra chiquita.
+- NUNCA presentes el consumo de IA como un pago a Leo, ni le pongas un monto mensual fijo: depende del volumen de mensajes del negocio.
+- NUNCA mandes un enlace distinto de https://www.skool.com/the-bot-crew, ni lo modifiques, ni inventes subpáginas.`;
 
-Todo lo demás sigue igual: tamaño, giro, volumen de mensajes o presupuesto NUNCA descalifican. Este es el único filtro.`;
+/**
+ * When the call with Leo may be offered. Trimmed from the live `houseRules` (not
+ * mirrored: the golden case asserts on behavior, not wording). The Club is
+ * low-ticket, so a call on every doubt does not pay for itself — the bot's job is
+ * to answer well enough that the person decides alone.
+ */
+const CALL_OFFER_RULE = `## Cuándo ofrecer la llamada con Leo
+La llamada NO es tu objetivo. Tu objetivo es que la persona salga con sus dudas resueltas y decida.
+
+Ofrécela solo en estos casos:
+- La persona la pide.
+- Ya le resolviste al menos DOS dudas y sigue sin decidirse.
+- Su caso necesita una revisión que tú no puedes hacer.
+
+Máximo DOS veces en toda la conversación. Si dice que no, no la vuelvas a mencionar: sigue resolviendo dudas.
+
+## Si ya es miembro del Club
+Algunos van a escribirte ya estando adentro. Se nota porque hablan de "mi cuenta", "mi módulo", "la llamada del jueves" o de algo que ya están armando.
+- Trátalos como miembros, no como prospectos: NUNCA les vendas el Club ni les hables del precio de fundador.
+- Resuelve lo que puedas de cómo funciona el Club y recuérdales que el soporte del día a día y las llamadas están en el grupo de Skool.`;
 
 /**
  * The campaign FLOW, kept separate from the rules above on purpose: this is the
- * part a second campaign would replace wholesale (`prompt_variants`), and the
- * fit filter must survive that replacement.
+ * part a second campaign would replace wholesale (`prompt_variants`), and the fit
+ * filter and the money rules must survive that replacement.
  */
-const DEMO_INTAKE_FLOW = `# Demo en vivo (lead magnet)
-La mayoría llega del anuncio SIN saber qué es esto. Si arrancas antes de que entiendan la dinámica, le hacen preguntas sobre The Bot Crew al asistente demo —que responde como recepcionista del negocio DEL LEAD— y la demo pierde todo su valor. El orden importa más que la velocidad.
+const SKOOL_DOUBT_FLOW = `# Tu flujo: este lead viene de Skool con una duda
 
-Paso 1 — Explica la dinámica ANTES de pedir datos: va a probar un asistente configurado para SU negocio, aquí mismo; le escribe como si fuera un cliente suyo y ve cómo responde y agenda.
-Paso 2 — Resuelve TODAS sus dudas primero (qué es, cuánto cuesta, si es real). Mientras haya una pregunta sin responder, NO arranques.
-Paso 3 — Pide confirmación explícita y espera un sí claro. Un "va", "sale", "dale" cuenta. Una pregunta NO cuenta como sí.
-Paso 4 — Ya con el sí, reúne conversando: nombre del negocio, giro, y sus 2-5 servicios principales.
-Paso 5 — Con esos datos, llama startDemo. NO escribas tú el aviso de arranque: el sistema lo manda solo.
+No hay guion de calificación. Hay una duda que resolver.
 
-NUNCA llames startDemo si el lead no ha confirmado, tiene una pregunta sin responder, no vino por la demo, o su negocio no agenda citas.
+1. Responde la duda. Corto, concreto y completo.
+2. Si trae varias dudas, resuélvelas de una en una. Contesta la primera y deja que siga.
+3. Después de responder, cierra con un paso natural hacia adelante, en una línea: mándale https://www.skool.com/the-bot-crew para que vea el video y el precio de hoy, que sube cada 5 fundadores. El enlace va como texto plano y no hace falta repetirlo en cada mensaje. Sin urgencia inventada.
+4. Si pregunta "¿esto es para mí?", califica con lo de "# Reglas de casa".
+5. La llamada con Leo se ofrece según las reglas de "# Reglas de casa" — no antes, y máximo dos veces.
 
-# Si sí encaja
-Ofrécele agendar una sesión de 20 min con Leo para mostrarle cómo funciona.`;
+# Si acepta la llamada
+Llama getAvailability, ofrece máximo 3 horarios con el texto tal cual lo devuelve la herramienta, y cuando elija uno confírmalo y llama bookAppointment.`;
 
 /**
  * MADI's consultative-price rule, byte-for-byte as it lives in that tenant's
@@ -128,40 +164,51 @@ export const demoTenant: TenantContext = {
 };
 
 /**
- * The Bot Crew's own tenant (the one that sells the platform), trimmed to what
- * the fit filter needs. `demoSessionsEnabled` stays FALSE on purpose: these
- * cases assert on which tools the model reaches for, and a false flag makes
- * startDemo short-circuit before it can touch the DB even if a mock slips.
+ * The Bot Crew's own tenant (the one that sells the platform), trimmed to what the
+ * golden cases need. `demoSessionsEnabled` stays FALSE — that is now also how the
+ * tenant actually runs (the demo funnel was retired with the offer, 2026-08-14),
+ * and it keeps startDemo short-circuiting before any DB call if a mock ever slips.
  */
 export const botCrewTenant: TenantContext = {
   ...demoTenant,
   tenantId: 't_botcrew',
   clientId: 'c_botcrew',
   ghlLocationId: 'loc_botcrew_0001',
+  triggerKeywords: ['skool'],
+  pendingInfoTag: 'dato-pendiente',
   config: {
     businessName: 'The Bot Crew',
     timezone: 'America/Mexico_City',
     tone: 'directo, cálido, sin presión; como una persona real que conoce lo que hace',
-    services: [{ name: 'Sesión de instalación', durationMin: 20, description: 'Llamada de 20 min con Leo' }],
+    services: [{ name: 'Llamada con Leo', durationMin: 20, description: 'Llamada de 20 min con Leo' }],
     hours: { mon: [{ open: '09:00', close: '18:00' }], fri: [{ open: '09:00', close: '15:00' }] },
-    calendars: { 'Sesión de instalación': 'cal_botcrew_sesion' },
+    calendars: { 'Llamada con Leo': 'cal_botcrew_llamada' },
     faq: [],
     promptOverrides: {
       identity:
-        'Eres el asistente virtual de Leo, fundador de The Bot Crew. Atiendes a dueños de negocios por WhatsApp e Instagram. ' +
-        'Tu misión: entender el negocio del prospecto, calificar si encaja con la oferta y — si califica — agendar una sesión de 20 min.',
+        'Te llamas Sara y eres la asistente de Leo, fundador de The Bot Crew. Atiendes por WhatsApp e Instagram a ' +
+        'dueños de negocio que llegan con dudas sobre el Club Fundador Agente 24/7. Tu trabajo es resolver dudas ' +
+        'para que la persona pueda decidir por sí misma si entra. No eres vendedora ni persigues a nadie.',
       offering:
-        '# Qué hace The Bot Crew\nInstala un agente de IA que responde a los leads que el negocio YA recibe, los califica y los AGENDA en su calendario. ' +
-        'No es publicidad y no genera demanda: da atención inmediata para que ningún interesado se quede sin respuesta.\n\n' +
-        // Trimmed from the live `offering` + "# Manejo de objeciones comunes". Without it the
-        // agent has no answer to "¿me va a costar algo?" and deflects to a human — which is
-        // correct behavior for a fact it doesn't have, but makes the demo-gate case untestable.
-        '# Precio\nEl servicio, la instalación y TODAS las herramientas (CRM, agenda, recordatorios, automatización) van por cuenta de Leo, ' +
-        'sin mensualidad ni contratos — un stack equivalente costaría entre $450 y $1,260 USD al mes, y eso es lo que el negocio se AHORRA. ' +
-        'Lo ÚNICO que cubre el negocio es el consumo de IA, en su propia cuenta y al costo (centavos de dólar por conversación), ' +
-        'porque ese gasto depende 100% de su volumen de mensajes. Nunca se dice "todo es gratis" a secas.',
-      qualificationNotes: DEMO_INTAKE_FLOW,
-      houseRules: FIT_FILTER_SECTION,
+        '# El Club Fundador Agente 24/7\nUna membresía para dueños de negocio que ya venden por WhatsApp, Instagram o ' +
+        'Facebook: adentro arman su propio recepcionista de IA que contesta 24/7 y agenda citas, con modelos ya hechos, ' +
+        'GoHighLevel incluido (unos 194 USD/mes por fuera), un módulo y una llamada grupal por semana, y soporte en Skool.\n\n' +
+        // Trimmed from the live `offering`. Without the numbers the agent has no answer to
+        // "¿cuánto cuesta?" and defers to a human — correct for a fact it lacks, but it makes
+        // the money-disclosure cases untestable, which is the whole point of this fixture.
+        '# Precio de fundador\nLa cuota va de 5 a 30 USD al mes según cuántos fundadores hayan entrado antes; sube 5 USD ' +
+        'cada 5 miembros y el precio con el que entras se queda de por vida mientras la membresía siga activa. El precio ' +
+        'exacto de hoy y los lugares que quedan están en la página: tú no los sabes, se mueven solos.\n\n' +
+        '# El consumo de IA — se dice SIEMPRE junto con la cuota\nLa membresía no incluye el consumo de la inteligencia ' +
+        'artificial: ese gasto corre por cuenta del negocio, aparte de la cuota. Es de centavos — un estimado de 1 centavo ' +
+        'de dólar por conversación. La primera vez que salga el tema del dinero se mencionan LAS DOS PARTES en el mismo ' +
+        'mensaje: la cuota de fundador y el consumo de IA.\n\n' +
+        '# Dónde entrar\nLa comunidad, el video, el precio de hoy y los lugares disponibles están en: ' +
+        'https://www.skool.com/the-bot-crew\n\n' +
+        '# La garantía\nSi en 30 días el miembro siguió el proceso y aun así no tiene su agente contestando mensajes ' +
+        'reales, Leo entra y se lo deja funcionando — el mismo setup que vende en 1,470 USD.',
+      qualificationNotes: SKOOL_DOUBT_FLOW,
+      houseRules: `${FIT_FILTER_SECTION}\n\n${CALL_OFFER_RULE}\n\n## Reglas absolutas\n${MONEY_DISCLOSURE_RULES}`,
     },
   },
 };

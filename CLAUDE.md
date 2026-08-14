@@ -303,6 +303,25 @@ for the retry cron.
   runs typecheck + `test:unit` on every push/PR, no keys).
 - **`pnpm eval`** — adds the role eval cases (`*.eval.ts`): offline (prompt) cases always run;
   live (model-calling) golden cases run only when `OPENAI_API_KEY`/`ANTHROPIC_API_KEY` is set.
+  Run it **serially** (`pnpm --filter @thebotcrew/workers exec vitest run --fileParallelism=false`)
+  — the whole suite in parallel exceeds OpenAI's 200k tokens/min and fails as rate limits that
+  look exactly like assertion failures.
+- **The eval fixtures MIRROR prod, and that copy must be kept in sync.** A tenant's real
+  behavior is DB text (`tenant_config.prompt_overrides`), which evals can't read at test time,
+  so `roles/front-desk/evals/fixtures.ts` carries a **hand-typed copy** of the rules under test
+  (`FIT_FILTER_SECTION`, `MONEY_DISCLOSURE_RULES`, `MADI_HOUSE_RULES`). Edit a tenant row in
+  Supabase without updating it and every golden case keeps passing against text nobody runs —
+  green tests that prove nothing. **So: whenever you change a tenant's prompt, update the
+  fixture in the same change, by pasting the live text back, verbatim** (no reflowing, no
+  "small" wording fixes). `prompt-drift.eval.ts` is the alarm: the only case that talks to the
+  DB, it asserts prod still CONTAINS each mirrored section byte-for-byte and self-skips without
+  Supabase env vars. When it fails, decide which side is right — usually prod is (Leo edits the
+  tenant) and the fixture must be re-copied.
+- **A new golden case must be shown FAILING before it is trusted.** Delete the rule it defends
+  from the fixture and confirm the case goes red; a case that passes either way tests nothing.
+  Model behavior is a rate, not a switch, so measure 3–5 runs on both sides and write the
+  numbers in the file's header — and reproduce an incident on the model that produced it
+  (`EVAL_MODEL=gpt-5-mini pnpm eval`), not on the one we just moved to. See business-logic §6c.
 - **`pnpm test:db`** — the layer the mocks can't reach. Several invariants live **inside the
   RPCs** (follow-up gating on `status='active'`, the 0043 send gate, the 0044 `awaiting_human`
   guard), and `test:unit` mocks `db/queries` wholesale, so it proves only what the Worker does

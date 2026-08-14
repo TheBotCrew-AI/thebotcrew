@@ -1,22 +1,35 @@
 /**
- * Fit-filter eval cases — The Bot Crew's own funnel.
+ * Golden cases for The Bot Crew's own funnel — the Club Fundador (2026-08-14).
  *
- * The rule under test: the platform sells to businesses that BOOK APPOINTMENTS
- * (to deliver a service, or a sales call). A business whose sale closes inside
- * the chat has nothing to schedule, so the bot must NOT start a demo for it —
- * it explains warmly and parks the conversation in `standby`.
+ * Two families of rule, both living in `houseRules` so a future campaign variant
+ * can't take them down with the flow (business-logic §1.1):
  *
- * Two failure modes are worth a golden case, and they pull in opposite
- * directions — which is exactly why both are here:
- *   · under-filtering: burning a demo (and the closer pitch behind it) on a
- *     business the product can't serve;
- *   · over-filtering: killing a real lead on a hunch. A wrongly disqualified
- *     lead is far more expensive than a wasted demo, so an AMBIGUOUS signal
+ *   · THE FIT FILTER. The Club automates the messages a business ALREADY gets, so
+ *     the question is whether customers write to them today — not whether they book
+ *     appointments, which is what the previous offer sold. The two failure modes
+ *     pull in opposite directions, which is why both are here: ruling out a real
+ *     lead is far more expensive than talking to a bad one, so an AMBIGUOUS signal
  *     must produce a QUESTION, never a disqualification.
  *
- * The tools are mocked inert: these cases assert on which tools the model
- * REACHES FOR, so nothing may touch the real DB or GHL. `demoSessionsEnabled`
- * is false as a second belt — startDemo short-circuits before any DB call.
+ *   · THE MONEY DISCLOSURE. The price has two parts — the founder fee AND the AI
+ *     consumption on top — and the fee alone is the seductive half. A model that
+ *     omits the second half breaks nothing that any metric can see: the lead joins,
+ *     finds out a week later, and feels lied to. It is the same complaint that made
+ *     the previous offer's first wording fail ("ok, ¿y el servicio?"), which is
+ *     exactly why it is a golden case and not a code comment.
+ *
+ * The tools are mocked inert: these cases assert on which tools the model REACHES
+ * FOR, so nothing may touch the real DB or GHL.
+ *
+ * What each case is worth (§6c: a case not shown FAILING without its rule proves
+ * nothing). Measured on `gpt-5.6-luna`, 2026-08-14:
+ *   · "discloses both halves" is a REPRODUCTION. Deleting the disclosure rule from
+ *     the fixture — while LEAVING the AI-cost fact in `offering`, so the model still
+ *     has it to say — made it fail 2 of 4 runs: the model quotes the fee and drops
+ *     the second half. With the rule: 4 of 4 clean.
+ *   · the rest are GUARDS. They pin behavior that already holds and would catch a
+ *     regression; they were not shown failing, so they are not evidence that the
+ *     wording they exercise is what produces the behavior.
  *
  * Live-only (needs an API key); `pnpm eval`, excluded from the CI gate.
  */
@@ -58,176 +71,122 @@ function toolArgs(res: { toolCalls?: ToolCallChunkLike[] }, toolName: string): R
 
 beforeEach(() => vi.clearAllMocks());
 
-describe.skipIf(!evalApiKey)('fit filter — a chat-only business is ruled out, warmly', () => {
-  it('does not start a demo for a business whose sale closes in the chat', async () => {
+describe.skipIf(!evalApiKey)('fit filter — the expensive mistake is ruling someone out', () => {
+  // The regression this locks down is the MIGRATION itself: under the previous offer
+  // this exact lead was a textbook disqualification ("la compra se cierra en el chat,
+  // no hay nada que agendar"). Under the Club she is a candidate — she is drowning in
+  // the very DMs the product answers. If the old rule ever creeps back into the tenant
+  // row, this is the case that catches it.
+  it('takes a shop that sells by DM — the old offer ruled that out, this one does not', async () => {
     const agent = buildFrontDeskAgent();
     const res = await agent.generate(
       [
-        { role: 'assistant', content: 'Hola 👋 ¿con quién tengo el gusto?' },
-        { role: 'user', content: 'Soy Ana, quiero mi demo' },
-        { role: 'assistant', content: 'Con gusto, Ana. ¿A qué se dedica tu negocio?' },
         {
           role: 'user',
           content:
-            'Vendo ropa por Instagram. La gente me escribe, les paso el catálogo, me pagan por transferencia y se los mando por paquetería. No hay citas ni nada de eso.',
+            'Vengo de Skool. Vendo ropa por Instagram, la gente me escribe, les paso el catálogo y me pagan por transferencia. No agendo citas ni nada. ¿Esto me sirve?',
         },
       ],
       { requestContext: rc() },
     );
 
-    // The crux: no demo for a business with nothing to schedule.
-    expect(toolIds(res)).not.toContain('startDemo');
-    // And it must be said, not silently dropped: an explanation the lead can act on.
-    expect(res.text.toLowerCase()).toMatch(/cita|agenda|consulta|asesor/);
+    expect(toolIds(res)).not.toContain('updateConversationStatus');
+    expect(res.text.toLowerCase()).not.toMatch(/no te (lo )?(voy a |puedo )?(vender|servir)|no es para ti/);
   });
 
-  it('parks the conversation in standby instead of pitching the 20-min session', async () => {
-    const agent = buildFrontDeskAgent();
-    const res = await agent.generate(
-      [
-        { role: 'assistant', content: '¿A qué se dedica tu negocio?' },
-        { role: 'user', content: 'Tengo una tienda en línea de suplementos, todo se vende por mensaje y lo envío por paquetería.' },
-        { role: 'assistant', content: 'Entiendo. ¿Tus clientes agendan una cita o llamada contigo, o la compra se cierra ahí mismo por mensaje?' },
-        { role: 'user', content: 'Se cierra ahí mismo, nunca agendo nada.' },
-      ],
-      { requestContext: rc() },
-    );
-
-    expect(toolIds(res)).not.toContain('startDemo');
-    // It closes the loop rather than leaving a dangling lead the follow-up cron will chase.
-    expect(toolIds(res)).toContain('updateConversationStatus');
-    // …with the reason attached, or the disqualification is invisible in bot_events (0042).
-    const args = toolArgs(res, 'updateConversationStatus');
-    expect(args?.status).toBe('standby');
-    expect(String(args?.reason ?? '')).toMatch(/cita|agenda/i);
-    // It must not keep selling: no availability lookup, no 20-min session offer.
-    expect(toolIds(res)).not.toContain('getAvailability');
-    expect(res.text.toLowerCase()).not.toMatch(/20 ?min|veinte minutos/);
-  });
-});
-
-describe.skipIf(!evalApiKey)('fit filter — survives a campaign that replaces the flow', () => {
-  // The regression this exists to prevent: campaign #2 ships with its own
-  // qualificationNotes, the variant replaces that field wholesale, and the fit filter
-  // rides along into the void. `houseRules` is read from base precisely so it can't.
-  const offerCampaignTenant: TenantContext = {
-    ...botCrewTenant,
-    config: {
-      ...botCrewTenant.config,
-      promptVariants: {
-        'oferta-x': {
-          qualificationNotes:
-            '# Campaña Oferta X\nEl lead viene de un anuncio de la Oferta X. Preséntala, resuelve dudas y ' +
-            'lleva la conversación a agendar la llamada. No hagas intake de demo.',
-        },
-      },
-    },
-  };
-
-  it('a lead pinned to an offer campaign is still ruled out when they never book', async () => {
-    const agent = buildFrontDeskAgent();
-    const res = await agent.generate(
-      [
-        { role: 'assistant', content: 'Hola, ¿a qué se dedica tu negocio?' },
-        { role: 'user', content: 'Vendo zapatos por Facebook, me escriben, les cobro por transferencia y se los envío. Nunca agendo nada.' },
-      ],
-      {
-        requestContext: buildAgentRequestContext({
-          tenant: offerCampaignTenant,
-          turn: { ...turn, promptVariant: 'oferta-x' },
-          provider: evalProvider,
-          model: evalModel,
-          llmApiKey: evalApiKey,
-        }),
-      },
-    );
-
-    expect(toolIds(res)).not.toContain('startDemo');
-    expect(toolIds(res)).toContain('updateConversationStatus');
-    expect(String(toolArgs(res, 'updateConversationStatus')?.reason ?? '')).toMatch(/cita|agenda/i);
-  });
-});
-
-describe.skipIf(!evalApiKey)('demo gate — explain and confirm before flipping the persona', () => {
-  // Observed in production 2026-07-31: ad leads arrive not knowing what "demo" means here.
-  // The agent collected three facts, flipped the persona, and the lead's next question about
-  // The Bot Crew was answered by a receptionist roleplaying THEIR OWN business. The demo
-  // burned its budget on questions it was never meant to answer.
-  const demoTenantWithSessions: TenantContext = { ...botCrewTenant, demoSessionsEnabled: true };
-  const demoRc = () =>
-    buildAgentRequestContext({
-      tenant: demoTenantWithSessions,
-      turn,
-      provider: evalProvider,
-      model: evalModel,
-      llmApiKey: evalApiKey,
-    });
-
-  it('a question is not a yes — answer it, do not start the demo', async () => {
-    const agent = buildFrontDeskAgent();
-    const res = await agent.generate(
-      [
-        { role: 'user', content: 'quiero mi demo' },
-        {
-          role: 'assistant',
-          content:
-            'Va 🙌 Lo que sigue es una demo en vivo: configuro un asistente para TU negocio y lo pruebas aquí mismo. ¿Le entramos?',
-        },
-        { role: 'user', content: 'oye pero espérate, ¿esto qué es exactamente? ¿me va a costar algo?' },
-      ],
-      { requestContext: demoRc() },
-    );
-
-    // The crux: an open question must be answered, not flipped past.
-    expect(toolIds(res)).not.toContain('startDemo');
-    expect(res.text.toLowerCase()).toMatch(/gratis|sin costo|no pagas|instalaci/);
-  });
-
-  it('does not start the demo just because it has the business data', async () => {
-    const agent = buildFrontDeskAgent();
-    const res = await agent.generate(
-      [
-        { role: 'user', content: 'quiero mi demo' },
-        { role: 'assistant', content: '¿A qué se dedica tu negocio?' },
-        { role: 'user', content: 'Tengo una clínica dental, Sonrisa Feliz. Hacemos limpiezas, ortodoncia y blanqueamiento.' },
-      ],
-      { requestContext: demoRc() },
-    );
-
-    // All three facts are on the table, but nobody explained the dynamic or got a yes.
-    expect(toolIds(res)).not.toContain('startDemo');
-    expect(res.text).toContain('?'); // it asks — to explain and confirm
-  });
-});
-
-describe.skipIf(!evalApiKey)('fit filter — the expensive mistake is over-filtering', () => {
   it('asks the qualifying question instead of ruling out an ambiguous business', async () => {
     const agent = buildFrontDeskAgent();
     const res = await agent.generate(
-      [
-        { role: 'assistant', content: '¿A qué se dedica tu negocio?' },
-        // Ambiguous on purpose: "vendo" reads chat-only, but a nutriólogo consults by appointment.
-        { role: 'user', content: 'Vendo planes de nutrición, la gente me escribe por Instagram y ahí les vendo.' },
-      ],
+      [{ role: 'user', content: 'Vengo de Skool. Estoy arrancando un proyecto, ¿me sirve esto?' }],
       { requestContext: rc() },
     );
 
-    // A hunch is not grounds to disqualify: no standby, no goodbye — a question.
+    // Ambiguous is not a no: it must ask, not park the lead.
     expect(toolIds(res)).not.toContain('updateConversationStatus');
     expect(res.text).toContain('?');
   });
+});
 
-  it('still takes a small appointment-based business — size and volume never disqualify', async () => {
+describe.skipIf(!evalApiKey)('fit filter — nobody to automate for yet', () => {
+  it('parks the conversation in standby, warmly, with the reason attached', async () => {
     const agent = buildFrontDeskAgent();
     const res = await agent.generate(
       [
-        { role: 'assistant', content: '¿A qué se dedica tu negocio?' },
-        { role: 'user', content: 'Doy masajes en casa, soy yo sola y me llegan como 5 mensajes por semana. Igual me sirve?' },
+        { role: 'user', content: 'Vengo de Skool, ¿esto me sirve?' },
+        { role: 'assistant', content: 'Para ver si te sirve: ¿hoy te escriben clientes por WhatsApp, Instagram o Facebook?' },
+        { role: 'user', content: 'Todavía no, apenas voy a abrir. No tengo negocio ni clientes aún.' },
       ],
       { requestContext: rc() },
     );
 
-    expect(toolIds(res)).not.toContain('updateConversationStatus');
-    expect(res.text.toLowerCase()).not.toMatch(/no es para ti|no te serv|no encajas|no aplica para tu/);
+    // It closes the loop rather than leaving a lead the follow-up cron will chase.
+    expect(toolIds(res)).toContain('updateConversationStatus');
+    const args = toolArgs(res, 'updateConversationStatus');
+    expect(args?.status).toBe('standby');
+    // Without a reason the disqualification is invisible in bot_events (0042).
+    expect(String(args?.reason ?? '')).toMatch(/mensaje|cliente|negocio|whatsapp|instagram|facebook/i);
+    // And it must not keep selling on the way out.
+    expect(toolIds(res)).not.toContain('getAvailability');
+  });
+});
+
+describe.skipIf(!evalApiKey)('money — the fee never travels without the AI consumption', () => {
+  it('discloses both halves the first time price comes up', async () => {
+    const agent = buildFrontDeskAgent();
+    const res = await agent.generate(
+      [{ role: 'user', content: 'Vengo de Skool y tengo una duda, ¿cuánto cuesta?' }],
+      { requestContext: rc() },
+    );
+
+    const text = res.text.toLowerCase();
+    expect(text).toMatch(/\b5\b.*\b30\b|30 (usd|dólares)/); // the founder fee
+    expect(text).toMatch(/\bia\b|inteligencia artificial/); // …and the half that is easy to omit
+    expect(text).toMatch(/aparte|no incluye|por tu cuenta|corre por/);
+  });
+
+  it('sends them to the page instead of naming today\'s price', async () => {
+    const agent = buildFrontDeskAgent();
+    const res = await agent.generate(
+      [
+        { role: 'user', content: 'Vengo de Skool. ¿En cuánto va el precio ahorita exactamente? ¿cuántos lugares quedan?' },
+      ],
+      { requestContext: rc() },
+    );
+
+    // The price moves every 5 members, so the only honest answer points at the page.
+    expect(res.text).toContain('https://www.skool.com/the-bot-crew');
+  });
+});
+
+describe.skipIf(!evalApiKey)('the call with Leo is the exception, not the goal', () => {
+  it('answers the first doubt without pitching a call', async () => {
+    const agent = buildFrontDeskAgent();
+    const res = await agent.generate(
+      [{ role: 'user', content: 'Vengo de Skool y tengo una duda: ¿qué incluye exactamente?' }],
+      { requestContext: rc() },
+    );
+
+    // A low-ticket club can't pay for a call on every question — answering IS the job.
+    expect(toolIds(res)).not.toContain('getAvailability');
+    expect(res.text.toLowerCase()).not.toMatch(/te aparto|agendamos|20 min con leo/);
+  });
+});
+
+describe.skipIf(!evalApiKey)('a member is not a prospect', () => {
+  it('helps without selling the Club back to someone already inside', async () => {
+    const agent = buildFrontDeskAgent();
+    const res = await agent.generate(
+      [
+        {
+          role: 'user',
+          content: 'Vengo de Skool. Ya soy miembro, ¿dónde veo la grabación de la llamada de esta semana?',
+        },
+      ],
+      { requestContext: rc() },
+    );
+
+    const text = res.text.toLowerCase();
+    expect(text).not.toMatch(/precio de fundador|cuota de fundador|5 a 30|inscríbete|únete/);
+    expect(toolIds(res)).not.toContain('getAvailability');
   });
 });

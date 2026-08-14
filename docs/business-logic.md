@@ -642,6 +642,11 @@ Bot Crew's own tenant; gated per tenant by `tenant_config.demo_sessions_enabled`
 (default **false** — no other tenant is affected). Manual keyword demos (§5b) are unchanged
 and never create sessions.
 
+> **Estado: dormido desde 2026-08-14.** La oferta de The Bot Crew pasó a ser una membresía
+> (Club Fundador) y su embudo de demo se apagó — `demo_sessions_enabled=false`, la variante
+> `demo-funnel` y sus keywords borradas, la única keyword de entrada es `skool`. Es un cambio
+> de **config**, no de código: todo lo de abajo sigue implementado y se reenciende con una fila.
+
 **Flow.**
 1. Ad → `wa.me` link with a static keyword (e.g. "DEMO"). The keyword doubles as the
    `trigger_keywords` entry gate — no special-casing in the gate order.
