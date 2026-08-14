@@ -1,3 +1,5 @@
+import { CLOSED_QUESTION_RULE } from '../../core/prompt-rules.js';
+
 export interface DemoContext {
   businessName?: string;
   booked?: boolean;
@@ -56,7 +58,8 @@ Este lead ya dejó pasar una ronda completa de seguimientos sin responder.
     : '- Escribe exactamente UN mensaje corto y natural: máximo 2 oraciones + la pregunta final. Sin párrafos largos.';
   const closingRules = isFinalTouch
     ? `- NO termines con una pregunta y NO pidas respuesta. Es una despedida: cero presión y cero reproche.`
-    : `- SIEMPRE termina con una pregunta directa y fácil de responder con una sola palabra o sí/no.
+    : `- SIEMPRE termina con una pregunta directa y fácil de responder.
+${CLOSED_QUESTION_RULE}
 - NUNCA termines con frases pasivas como "aquí estoy si me necesitas", "cuando quieras escríbeme" o similares — eso cierra la conversación en lugar de abrirla.`;
   const noDatesRule = isFinalTouch
     ? '- NUNCA propongas, ofrezcas ni menciones fechas, días ni rangos concretos para agendar. No tienes acceso a la disponibilidad real.'

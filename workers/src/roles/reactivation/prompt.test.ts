@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { CLOSED_QUESTION_RULE } from '../../core/prompt-rules.js';
 import { buildReactivationInstructions } from './prompt.js';
 
 describe('buildReactivationInstructions', () => {
@@ -19,6 +20,37 @@ describe('buildReactivationInstructions', () => {
 
   it('falls back to a default tone when none is given', () => {
     expect(buildReactivationInstructions('X', null, [])).toContain('cálido, natural y cercano');
+  });
+});
+
+describe('buildReactivationInstructions — closed questions, never the "¿sí o no?" label', () => {
+  it('demands a one-word answer WITHOUT ever asking for the label', () => {
+    const out = buildReactivationInstructions('Clínica Luz', null, ['angle A']);
+    expect(out).toContain(CLOSED_QUESTION_RULE);
+    // The old spec is what the model rendered verbatim into the nudge.
+    expect(out).not.toContain('fácil de responder con una sola palabra o sí/no');
+  });
+
+  it('tells the model a tenant angle phrased "pregunta de sí o no" is a SHAPE, not text', () => {
+    // Several live angles read exactly like this one; the rule has to outrank them.
+    const out = buildReactivationInstructions('MADI Skin Care', null, [
+      'Retoma con ligereza: pregunta si quiere que le aparten un espacio. Pregunta de sí o no.',
+    ]);
+    expect(out).toContain('describe la FORMA de la pregunta, no un texto que debas copiar');
+  });
+
+  it('applies on a late round too — softer tone, same ban', () => {
+    const out = buildReactivationInstructions('Clínica Luz', null, ['angle A'], undefined, {
+      round: 1, isFinalTouch: false, reentryKeyword: 'CITA',
+    });
+    expect(out).toContain(CLOSED_QUESTION_RULE);
+  });
+
+  it('the farewell stays out of it — it asks nothing at all', () => {
+    const out = buildReactivationInstructions('Clínica Luz', null, [], undefined, {
+      round: 2, isFinalTouch: true, reentryKeyword: 'CITA',
+    });
+    expect(out).not.toContain(CLOSED_QUESTION_RULE);
   });
 });
 

@@ -114,7 +114,7 @@ describe.skipIf(!evalApiKey)('MADI — it must not flag what it already knows', 
     // The two tags feed different people. Crossing them makes both queues useless.
     const res = await buildFrontDeskAgent().generate(
       [
-        { role: 'user', content: 'Quiero agendar mi diagnóstico facial' },
+        { role: 'user', content: 'Quiero agendar mi Facial Glow' },
         { role: 'assistant', content: '¡Claro! ¿Te acomoda mejor por la mañana o por la tarde?' },
         { role: 'user', content: 'Por la tarde está perfecto' },
       ],

@@ -6,6 +6,7 @@
  * sections are suppressed — the tenant's custom flow takes over entirely.
  */
 
+import { CLOSED_QUESTION_RULE } from '../../core/prompt-rules.js';
 import type { DemoHandoff } from '../../core/types.js';
 import { resolveEffectiveOverrides, type FrontDeskConfig } from './config.js';
 
@@ -456,6 +457,7 @@ ${usingDemo
 - Si sabes mucho de un tema, resume en UNA frase y ofrece contar más si le interesa. Nadie contesta un WhatsApp con cinco renglones de explicación.
 - Máximo 1 emoji, y no en todos los mensajes. URLs como texto plano.`
   : 'Mensajes breves, una idea a la vez. Sin listas. Sin negritas. Sin emojis (a menos que el lead los use). WhatsApp no renderiza markdown — manda URLs como texto plano.'}
+${CLOSED_QUESTION_RULE}
 
 ${usingDemo
   ? `# Regla de oro (modo demo)

@@ -824,6 +824,60 @@ group by 1 order by 2 desc;
 (→ `handed_off`, which mutes), or anything `lookupFaq` answers. In demo mode the tool
 no-ops: the roleplay business has no config at all, so *everything* would be a gap.
 
+## 6c. Closed questions, never the "¿sí o no?" label (2026-08-11)
+
+Every prompt here asks for **closed** questions — one word or a choice of two — because that's
+what a lead answers from a phone in three seconds. The bot started writing the *specification*
+instead of a question:
+
+> "¿Quieres que te ayudemos a apartar tu sesión, sí o no?" — reactivation, 2026-08-12
+> "¿Confirmo que te refieres a axilas + medias piernas (paquete de 6 sesiones)? (sí/no)" — front-desk, ×6 between 08-01 and 08-10
+
+Nothing was broken; the model rendered its instructions literally. Three of them, all meaning
+shape and none meaning copy: the reactivation prompt asked for an answer "con una sola palabra o
+sí/no", MADI's flow said "TODAS son cerradas (sí/no o de 2–3 opciones)", and several tenant
+angles read "Pregunta de sí o no".
+
+**Why it matters more than it looks.** Appending the label turns an invitation into a demand —
+it reads as an interrogation with a deadline, and the lead doesn't complain, she just stops
+answering. That is precisely the outcome a follow-up exists to prevent, and it is invisible in
+every metric we have: the message sent fine, the lead simply never wrote back.
+
+**The rule** is `CLOSED_QUESTION_RULE` in `core/prompt-rules.ts`, rendered into both roles'
+prompts (front-desk: `# Tono y formato`, both personas; reactivation: every nudge except the
+farewell, which asks nothing). It bans the words, and — because the model has to tell the two
+apart — states next to them that an instruction saying *"pregunta de sí o no"* describes the
+FORM of the question, never text to copy.
+
+It lives in code, not in a tenant, for the reason §6b's rule does: it is a product rule. A
+client writes their own flow and will phrase this the natural way again, so the base prompt has
+to outrank their wording rather than depend on it. The tenant copies that caused it were fixed
+too (MADI + HappyNatyNat `qualificationNotes`, The Bot Crew's demo persona, MADI + Bot Crew
+`follow_up_angles`) — belt and braces, since the pool is theirs to edit.
+
+Tested at both layers: `prompt.test.ts` in each role asserts the rule ships in the prompt (CI
+gate), and `question-style.eval.ts` in each role generates under the exact tenant wording that
+produced the incident. What each case is worth differs, and the difference matters:
+
+- **front-desk, "confirming what a photo shows" — a real reproduction.** With the rule removed
+  it fired on 1 of 3 runs (`gpt-5-mini`): *"¿Esa foto es de la zona que quieres tratar, sí o
+  no?"*. With the rule: 4/4 clean on `gpt-5-mini` and 4/4 on `gpt-5.6-luna`.
+- **everything else — a guard, not a reproduction.** The reactivation cases (including the late
+  round the incident came from) never produced the label on either model, even with the old
+  prompt restored. They prove the rule doesn't break the nudge; they cannot prove it's what
+  stopped the label.
+
+Two lessons worth keeping. A new eval case must be shown FAILING before it's trusted — the
+first three cases written here passed identically with the old prompt, i.e. tested nothing. And
+an incident is usually reported on the model the platform just moved off (6 of these 7 messages
+were `gpt-5-mini`, the default until 2026-08-11), so reproduce with
+`EVAL_MODEL=gpt-5-mini pnpm eval`.
+
+Because a prompt rule buys a rate and not a guarantee, the deterministic option stays on the
+shelf: stripping the label from the outbound in code, the way booking never trusts a
+model-typed timestamp (§5). Not implemented — it rewrites what the model wrote, which is its
+own risk — but it is the escalation if this recurs.
+
 ## 6a. Meta CAPI — conversion signals back to the ad platform (0048)
 
 **Why it exists:** engagement click-to-WhatsApp ads optimize toward "anyone who

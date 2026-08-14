@@ -21,6 +21,16 @@ const openaiKey = process.env.OPENAI_API_KEY;
 const anthropicKey = process.env.ANTHROPIC_API_KEY;
 
 export const evalProvider: AiProvider = openaiKey ? 'openai' : 'anthropic';
-export const evalModel = openaiKey ? DEFAULT_MODEL : ANTHROPIC_EVAL_MODEL;
+
+/**
+ * `EVAL_MODEL=gpt-5-mini pnpm eval` — reproduce a case on the model that produced it.
+ *
+ * An incident is usually reported on a model the platform has since moved off (the
+ * "(sí/no)" messages were `gpt-5-mini`; the default became `gpt-5.6-luna` the same
+ * week). Without this, "the new case passes" can mean the fix works OR that the new
+ * model never had the bug — and those are very different facts. Unset in normal runs,
+ * so `pnpm eval` still gates the model that actually serves tenants.
+ */
+export const evalModel = process.env.EVAL_MODEL ?? (openaiKey ? DEFAULT_MODEL : ANTHROPIC_EVAL_MODEL);
 /** Empty when neither key is set — live suites self-skip on this. */
 export const evalApiKey = openaiKey ?? anthropicKey ?? '';

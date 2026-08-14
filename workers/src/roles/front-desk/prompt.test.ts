@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { CLOSED_QUESTION_RULE } from '../../core/prompt-rules.js';
 import type { DemoHandoff } from '../../core/types.js';
 import { parseFrontDeskConfig } from './config.js';
 import { buildDemoEndAnnouncement, buildDemoStartAnnouncement, buildFrontDeskInstructions } from './prompt.js';
@@ -265,6 +266,16 @@ describe('buildFrontDeskInstructions', () => {
     const out = buildFrontDeskInstructions(cfg(), NOW);
     expect(out).toContain('Sin listas. Sin negritas. Sin emojis');
     expect(out).not.toContain('UN solo mensaje por turno');
+  });
+
+  // A tenant flow that says "todas las preguntas son cerradas (sí/no…)" is describing a
+  // shape; the model used to write the label. The ban is a product rule, so it rides in
+  // both personas and cannot be dropped by a tenant's own copy.
+  it('bans the literal "¿sí o no?" label in both personas', () => {
+    expect(buildFrontDeskInstructions(cfg(), NOW)).toContain(CLOSED_QUESTION_RULE);
+    expect(
+      buildFrontDeskInstructions(cfg({ demoPromptOverrides: { identity: 'Demo persona' } }), NOW, undefined, 'demo'),
+    ).toContain(CLOSED_QUESTION_RULE);
   });
 });
 

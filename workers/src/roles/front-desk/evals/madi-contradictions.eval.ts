@@ -54,7 +54,7 @@ const reply = (res: { text: string }) => res.text.trim().toLowerCase();
 
 /** The lead has answered the morning/afternoon question — the turn that closes. */
 const READY_TO_CLOSE = [
-  { role: 'user' as const, content: 'Quiero agendar mi diagnóstico facial' },
+  { role: 'user' as const, content: 'Quiero agendar mi Facial Glow' },
   { role: 'assistant' as const, content: '¡Claro! ¿Te acomoda mejor por la mañana o por la tarde?' },
   { role: 'user' as const, content: 'Por la tarde está perfecto' },
 ];
