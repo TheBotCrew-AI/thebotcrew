@@ -159,6 +159,34 @@ describe.skipIf(!evalApiKey)('money — the fee never travels without the AI con
 });
 
 describe.skipIf(!evalApiKey)('the call with Leo is the exception, not the goal', () => {
+  // The failure this exists for (2026-08-14, live test thread): across ELEVEN answered
+  // doubts the agent never once offered the call, and the moment it mattered most it
+  // sent the landing page instead — twice. The old rule fired on "ya resolviste dos
+  // dudas y sigue sin decidirse", and "sigue sin decidirse" is not an event the model
+  // can see: someone asking questions emits no signal of indecision. A trigger the
+  // model cannot observe is a trigger that never fires.
+  //
+  // Trust is the case that cannot be answered with a link, so it is the one the rule
+  // must catch: a stranger asking for money on WhatsApp is right to ask.
+  it('offers the call when the lead doubts that Leo is a real person', async () => {
+    const res = await buildFrontDeskAgent().generate(
+      [
+        { role: 'user', content: 'Vengo de Skool y tengo una duda, ¿qué incluye?' },
+        {
+          role: 'assistant',
+          content:
+            'Incluye el agente de IA para WhatsApp, Instagram y Facebook, GoHighLevel completo y los modelos ya armados.',
+        },
+        { role: 'user', content: 'Quien es Leo ?' },
+        { role: 'assistant', content: 'Leo es el fundador de The Bot Crew: da las llamadas semanales y responde en la comunidad.' },
+        { role: 'user', content: 'Leo es real? Como se que no me están estafando. No lo conozco, como puedo confiar' },
+      ],
+      { requestContext: rc() },
+    );
+
+    expect(res.text.toLowerCase()).toMatch(/llamada|videollamada|conocer(lo|te)|platicar con leo|20 min/);
+  });
+
   it('answers the first doubt without pitching a call', async () => {
     const agent = buildFrontDeskAgent();
     const res = await agent.generate(

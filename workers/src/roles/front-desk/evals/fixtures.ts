@@ -57,22 +57,30 @@ export const MONEY_DISCLOSURE_RULES = `- NUNCA inventes el precio de hoy, los lu
 - NUNCA mandes un enlace distinto de https://www.skool.com/the-bot-crew, ni lo modifiques, ni inventes subpáginas.`;
 
 /**
- * When the call with Leo may be offered. Trimmed from the live `houseRules` (not
- * mirrored: the golden case asserts on behavior, not wording). The Club is
- * low-ticket, so a call on every doubt does not pay for itself — the bot's job is
- * to answer well enough that the person decides alone.
+ * When the call with Leo may be offered — byte-for-byte from the live `houseRules`,
+ * same copy-and-drift-check contract as the two constants above.
+ *
+ * It is mirrored because its FIRST version was wrong in a way only a golden case
+ * catches (2026-08-14). It fired on "ya resolviste dos dudas y sigue sin decidirse",
+ * and "sigue sin decidirse" is not an event the model can observe — a lead asking
+ * questions emits no signal of indecision. Across eleven answered doubts in a live
+ * thread the call was never offered once, including at the two messages where it was
+ * the only possible answer ("Leo es real? Como se que no me están estafando").
+ * The rewrite trades the inferred state for observable triggers, and trust is the
+ * one that matters: a link cannot answer "I don't know you".
  */
-const CALL_OFFER_RULE = `## Cuándo ofrecer la llamada con Leo
-La llamada NO es tu objetivo. Tu objetivo es que la persona salga con sus dudas resueltas y decida.
+export const CALL_OFFER_RULE = `## Cuándo ofrecer la llamada con Leo
+Tu trabajo es resolver dudas, no llenar la agenda — pero hay momentos en que la llamada ES la respuesta, y no ofrecerla ahí deja a la persona atorada. Ofrécela cuando pase cualquiera de estas:
+- La pide.
+- Duda de que esto sea real: pregunta si Leo existe, si es una estafa, o dice que no lo conoce ni sabe en quién confiar. Un enlace no resuelve la desconfianza; conocer a la persona sí. Aquí la ofreces en el MISMO mensaje en que le contestas.
+- Ya le contestaste TRES o más dudas y todavía no dice que va a entrar.
+- Te pregunta algo de su caso que tú no puedes resolver.
 
-Ofrécela solo en estos casos:
-- La persona la pide.
-- Ya le resolviste al menos DOS dudas y sigue sin decidirse.
-- Su caso necesita una revisión que tú no puedes hacer.
+Cómo se ofrece: corta y humana — 20 minutos con Leo para conocerse y que le pregunte lo que quiera. No la presentes como asesoría ni como llamada de ventas.
+Máximo DOS veces en toda la conversación. Si dice que no, no la vuelvas a mencionar: sigue resolviendo dudas.`;
 
-Máximo DOS veces en toda la conversación. Si dice que no, no la vuelvas a mencionar: sigue resolviendo dudas.
-
-## Si ya es miembro del Club
+/** Trimmed from the live `houseRules` (not mirrored: no golden case pins its wording). */
+const MEMBER_RULE = `## Si ya es miembro del Club
 Algunos van a escribirte ya estando adentro. Se nota porque hablan de "mi cuenta", "mi módulo", "la llamada del jueves" o de algo que ya están armando.
 - Trátalos como miembros, no como prospectos: NUNCA les vendas el Club ni les hables del precio de fundador.
 - Resuelve lo que puedas de cómo funciona el Club y recuérdales que el soporte del día a día y las llamadas están en el grupo de Skool.`;
@@ -208,7 +216,7 @@ export const botCrewTenant: TenantContext = {
         '# La garantía\nSi en 30 días el miembro siguió el proceso y aun así no tiene su agente contestando mensajes ' +
         'reales, Leo entra y se lo deja funcionando — el mismo setup que vende en 1,470 USD.',
       qualificationNotes: SKOOL_DOUBT_FLOW,
-      houseRules: `${FIT_FILTER_SECTION}\n\n${CALL_OFFER_RULE}\n\n## Reglas absolutas\n${MONEY_DISCLOSURE_RULES}`,
+      houseRules: `${FIT_FILTER_SECTION}\n\n${CALL_OFFER_RULE}\n\n${MEMBER_RULE}\n\n## Reglas absolutas\n${MONEY_DISCLOSURE_RULES}`,
     },
   },
 };
