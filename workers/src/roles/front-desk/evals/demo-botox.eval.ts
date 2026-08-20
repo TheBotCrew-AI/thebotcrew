@@ -13,6 +13,10 @@
  * Red side, breaking the rule each case defends — and the honest result for each:
  *   - opens on the ad       → 0/3 with the PREVIOUS opening restored. Discriminates.
  *   - thank-you dead end    → 1/3 with the old DEMO_FLOW_SECTION. Discriminates.
+ *   - dodged-close dead end → 3/5 before the prohibitions were bounded, then 1/3 (whole
+ *                             suite) with them bounded but no hard rule, then 6/6 with it.
+ *                             Discriminates, and it took two passes: bounding the "don'ts"
+ *                             was not the same as carrying a "do".
  *   - price dead end        → 7/8 without the price rule, 10/10 with it. Does NOT
  *                             discriminate: the new DEMO_FLOW_SECTION does the work, and
  *                             the persona rule on top is redundant in every sample taken.
@@ -257,6 +261,29 @@ describe.skipIf(!evalApiKey)('demo botox — never leaves the conversation in th
 
     expect(reply(res)).not.toMatch(/aquí estoy|aqui estoy|cuando (quieras|gustes)|cualquier (cosa|duda) (me )?(dime|dices|avisas)/);
     expect(advances(reply(res)), `dead end: ${res.text}`).toBe(true);
+  });
+
+  it('keeps moving after the lead dodges a close with another question', async () => {
+    // Transcribed from conv 1fca0261, 19:12. The bot had just spent "¿te muestro horarios
+    // para venir?" — the exact phrasing DEMO_FLOW_SECTION bans repeating — the lead dodged
+    // it with a question, and the reply answered her and stopped. It was obeying: the close
+    // was spent, and a persona rule said not to re-offer after a brake. Two holes: a
+    // question is not a brake, and a spent move means pick another, never stop.
+    const agent = buildFrontDeskAgent();
+    const res = await agent.generate(
+      [
+        { role: 'user', content: 'Me gustaría suavizar mi frente y patas de gallo, pero no se si hacerme las dos a la vez' },
+        { role: 'assistant', content: 'Sí, frente y patas de gallo se pueden tratar en la misma sesión; el médico confirma la dosis ideal para que el gesto se vea natural. Son dos zonas: $5,200, y la valoración es sin costo. ¿Es tu primera vez con bótox?' },
+        { role: 'user', content: 'Cuánto me saldría por una sola zona?' },
+        { role: 'assistant', content: 'Una zona cuesta $2,900. En la valoración sin costo, el médico te ayuda a elegir cuál tratar primero; ¿te muestro horarios para venir?' },
+        { role: 'user', content: 'Importa la zona ? O es lo mismo cualquiera de las dos' },
+      ],
+      { requestContext: rc() },
+    );
+
+    expect(advances(reply(res)), `dead end: ${res.text}`).toBe(true);
+    // …and the move has to be a NEW one, not the close it already spent.
+    expect(reply(res)).not.toMatch(/te muestro (los )?horarios/);
   });
 
   it('does not re-ask a closing question the lead already dodged', async () => {

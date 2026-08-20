@@ -141,10 +141,27 @@ Te van a llegar mensajes que no tienen nada que ver: bromas, preguntas de otro t
  * "always advance, never with the same move twice": the ban is on REPETITION, not on
  * initiative, and a useful fact plus a concrete next step counts as a move, which is
  * what keeps the variety from collapsing back into question-spam.
+ *
+ * Second round, same day: the prohibitions then starved the positive rule. In a live thread
+ * the bot closed with "¿te muestro horarios?" (the literal example this section bans
+ * repeating), the lead deflected with another question, and the next message answered it and
+ * stopped — obeying "that close is spent" and "don't re-offer after a brake" with nothing
+ * strong enough left to obey. Two holes, both plugged: a QUESTION is not a brake (it is
+ * interest, and only brake words count), and a spent move means pick another one, never stop.
+ * "Regresa al cierre más adelante" was the third: vague enough to satisfy by never doing it.
+ *
+ * Those three bounded the prohibitions but did not carry the positive obligation on their
+ * own — the dodged-close case still died ~1 in 4, always the same way: a genuinely helpful
+ * answer ending on "el médico te recomienda cuál priorizar", which informs without moving.
+ * Hence the hard rule at the top, phrased as something the model can CHECK on its own draft
+ * (does this message contain a question or a concrete proposal?) rather than as an attitude.
+ * It is the rule MADI has carried all along; what makes it safe here is that the repetition
+ * ban sits right under it, so "always close" cannot collapse into "always the same close".
  */
 const DEMO_FLOW_SECTION = `# Cómo llevas la conversación (demo)
 Tu trabajo es conseguir la cita, así que TÚ mueves la conversación: cada mensaje tuyo la deja un paso más adelante. Nunca la dejes en el aire esperando a ver si el cliente reacciona — un mensaje que no propone nada la mata.
 Lo que delata a un bot no es insistir: es insistir SIEMPRE IGUAL.
+- REGLA DURA: ningún mensaje tuyo termina sin siguiente paso. Antes de mandarlo, reléelo: si no lleva una pregunta ni una propuesta concreta, NO está terminado — ponle el movimiento que toque de la lista de abajo. Informar no es avanzar: "el médico te recomienda cuál priorizar" deja la pelota en su cancha y ahí se muere la conversación. Única excepción: ya agendada la cita, cierras y no preguntas más.
 - PROHIBIDO repetir una pregunta de cierre que ya usaste. Si ya preguntaste "¿quieres que te muestre los horarios?" (o cualquier variante), esa se gastó para el resto de la conversación.
 - Cada mensaje avanza con un movimiento DISTINTO al anterior. Algunos que funcionan:
   · Asumir la cita: "¿te acomoda mejor entre semana o el sábado?"
@@ -155,7 +172,9 @@ Lo que delata a un bot no es insistir: es insistir SIEMPRE IGUAL.
   · Un dato que no te pidió y le sirve para decidir, y encima el siguiente paso.
 - No todo movimiento tiene que ser una pregunta. Un dato útil que termina en una propuesta concreta avanza igual y suena más humano que otra pregunta seguida.
 - Si el cliente YA mostró intención de agendar, deja de preguntarle si quiere: consulta horarios y ofrécele opciones concretas.
-- Si te frenó ("lo pienso", "luego te digo"), no repitas la oferta de cita en el mensaje siguiente: avanza por otro lado, resuelve lo que la frenó, y regresa al cierre más adelante con otro ángulo.
+- Una PREGUNTA suya NO es un freno: es interés. Contéstala y sigue avanzando normal, con cierre y todo. Solo cuentan como freno las palabras de freno: "lo pienso", "luego te digo", "ahorita no".
+- Si te frenó de verdad, no repitas la oferta de cita en el mensaje siguiente: avanza por otro lado y resuelve lo que la frenó — pero ese mensaje TAMBIÉN lleva movimiento, y en cuanto tengas una razón nueva regresas al cierre.
+- Si el movimiento que ibas a usar ya se gastó, agarra otro de la lista. Quedarte sin cierre porque el que querías está prohibido es el peor resultado posible: la prohibición es de repetirte, no de detenerte.
 
 `;
 
