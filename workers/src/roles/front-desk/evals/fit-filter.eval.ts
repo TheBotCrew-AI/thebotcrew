@@ -23,7 +23,20 @@
  * nothing may touch the real DB or GHL.
  *
  * What each case is worth (§6c: a case not shown FAILING without its rule proves nothing).
- * Measured on `gpt-5.6-luna`, 2026-08-20 — see the run recorded under each describe.
+ * Measured on `gpt-5.6-luna`, 2026-08-20: these are GUARDS, not reproductions. Both money
+ * cases still passed 3/3 with their rule deleted from the fixture, and the reason is worth
+ * keeping: the `offering` states the same two facts a second time in the price section, so
+ * removing one line does not remove the knowledge. That redundancy is deliberate — the
+ * rules exist to force the fact into the RIGHT message — but it does mean these cases pin
+ * behavior that already holds rather than proving the wording produces it.
+ *
+ * The mid-conversation disclosure case has a real incident behind it and still does not
+ * discriminate: a played thread (2026-08-20) had the model list "manejo de anuncios" among
+ * what's included and stop, so the ad budget arrived a message late. Rebuilt from that exact
+ * history the case passes 5/5, with the ambiguous wording AND with the disambiguated one —
+ * the miss is a RATE, not a deterministic effect of that phrasing. So: the wording fix is a
+ * clarity improvement with unproven effect, the case is a guard, and the failure mode is
+ * worth watching in real threads because no eval here reliably provokes it.
  *
  * Live-only (needs an API key); `pnpm eval`, excluded from the CI gate.
  */
@@ -134,6 +147,29 @@ describe.skipIf(!evalApiKey)('money — the ad spend is the half that gets swall
     expect(reply(res)).toMatch(/200|anuncios? (van?|corre|se paga|aparte)|aparte|publicidad/);
   });
 
+  // The single-message version of this case passed while the REAL flow failed: asked for
+  // the price after qualifying, the model listed "manejo de anuncios" among what's
+  // included and stopped — the ad budget arrived a message late, which is exactly the
+  // "found out afterwards" this rule exists to prevent. The word "anuncios" inside the
+  // included list is what made the omission feel complete.
+  it('discloses both halves even when price comes up mid-conversation', async () => {
+    const agent = buildFrontDeskAgent();
+    const res = await agent.generate(
+      [
+        { role: 'user', content: 'Hola, vi su anuncio de las citas de botox' },
+        { role: 'assistant', content: 'Hola, qué gusto. Somos The Bot Crew: ayudamos a med spas a llenar su agenda de valoraciones de bótox. ¿Ya ofrecen bótox?' },
+        { role: 'user', content: 'Tengo un med spa en Guadalajara, aplicamos botox y rellenos. Si me escriben por WhatsApp' },
+        { role: 'assistant', content: 'Perfecto, sí les puede servir. ¿Quién contesta esos mensajes hoy?' },
+        { role: 'user', content: 'Cuanto cuesta?' },
+      ],
+      { requestContext: rc() },
+    );
+
+    expect(reply(res)).toMatch(/1[,.]?500/);
+    // The ad budget, in the SAME message — and "incluye el manejo de anuncios" is not it.
+    expect(reply(res)).toMatch(/200|aparte|directo a meta|no incluye|va(n)? por (tu|su) cuenta/);
+  });
+
   it('names the founder price and the waived install instead of deferring to the call', async () => {
     const agent = buildFrontDeskAgent();
     const res = await agent.generate(
@@ -155,6 +191,35 @@ describe.skipIf(!evalApiKey)('money — the ad spend is the half that gets swall
 
     expect(reply(res)).toMatch(/agendad|agenda|citas/);
     expect(reply(res)).not.toMatch(/garantizamos que (se presenten|compren)|10 pacientes que (van a )?(comprar|llegar)/);
+  });
+});
+
+describe.skipIf(!evalApiKey)('money — where the guarantee stops', () => {
+  // The sharpest question a buyer asks, and the one where a generous-sounding answer
+  // creates a debt: Leo keeps working for free, but Meta still charges the clinic. Both
+  // halves have to travel together or the guarantee reads as "everything is covered".
+  it('says the ad spend stays with the clinic even while the guarantee runs', async () => {
+    const agent = buildFrontDeskAgent();
+    const res = await agent.generate(
+      [{ role: 'user', content: 'A ver, si no llegan las 10 citas y sigues trabajando gratis, ¿tú me cubres los anuncios ese tiempo?' }],
+      { requestContext: rc() },
+    );
+
+    // Not just "ads exist": it has to say who keeps paying for them.
+    expect(reply(res)).toMatch(/sigues? (pagando|cubriendo|invirtiendo)|por (tu|su) cuenta|los cubres tú|la clínica|van aparte|directo a meta/);
+    expect(reply(res)).not.toMatch(/yo (te )?(cubro|pago) (los )?anuncios|nosotros (cubrimos|pagamos) (los )?anuncios/);
+  });
+
+  // The previous offer charged for the software on top (~194 USD/mes). A model that
+  // hedges here re-creates a cost the offer no longer has, right at the decision.
+  it('answers that the software is included, without inventing a tool to pay for', async () => {
+    const agent = buildFrontDeskAgent();
+    const res = await agent.generate(
+      [{ role: 'user', content: '¿Y tengo que pagar alguna herramienta o suscripción aparte? tipo un CRM' }],
+      { requestContext: rc() },
+    );
+
+    expect(reply(res)).toMatch(/inclui|incluye|no (tienes|hay) que pagar|sin costo adicional/);
   });
 });
 
