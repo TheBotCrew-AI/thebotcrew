@@ -30,9 +30,20 @@
  * rules exist to force the fact into the RIGHT message — but it does mean these cases pin
  * behavior that already holds rather than proving the wording produces it.
  *
- * The info-dump case IS a reproduction: with the old structure (contract/payment/invoicing
- * inside the "# Precio" block, and the looser drip wording) it failed 1 of 5; with the facts
- * moved into their own "solo si lo preguntan" sections, 0 of 5. Note what the first attempt
+ * The info-dump HALF of the price case is a reproduction: with the old structure
+ * (contract/payment/invoicing inside the "# Precio" block, and the looser drip wording) it
+ * failed 1 of 5; with the facts moved into their own "solo si lo preguntan" sections, 0 of 5.
+ *
+ * The STALL half is not, and the honest record matters more than a clean story. Fixing the
+ * dump introduced it: the price block ended with "Y ahí te paras", meaning stop adding facts,
+ * and live (23:10) the model read it as stop and ended the thread on the three numbers with
+ * no next step. The wording is now scoped to DATOS and the flow rule is marked as outranking
+ * any instruction to stop — a defensible fix aimed at the most plausible cause — but 16 runs
+ * across three history shapes, WITH the offending wording restored, never reproduced it:
+ * plain history 5/5, history with the close already spent 6/6, and again 5/5 once the turn
+ * carried a contactPhone so the prompt matched production's shape. So the fix has an unproven
+ * effect and this assertion is a guard. What the live thread proves is that the failure is
+ * reachable; what the harness proves is that it is rare enough not to surface in ~16 samples. Note what the first attempt
  * at falsifying it got wrong — reverting only the offering left the tightened drip rule in
  * `qualificationNotes` doing the work, and the case passed 5/5, which would have been read
  * as "does not discriminate". Revert the WHOLE change or the red side is not the old state.
@@ -61,9 +72,14 @@ import type { TenantContext, TurnContext } from '../../../core/types.js';
 import { botCrewTenant } from './fixtures.js';
 import { evalApiKey, evalModel, evalProvider } from './eval-model.js';
 
+// A WhatsApp lead arrives WITH a phone, and the prompt branches on it: with one, the
+// reminder section says "just book"; without, it tells the agent to ask for the number
+// before booking. Leaving it out builds a prompt production never renders — cases here
+// were being measured against a shape no real lead of this campaign produces.
 const turn: TurnContext = {
   ghlConversationId: 'conv_eval_fit',
   ghlContactId: 'contact_eval_fit',
+  contactPhone: '+5216641234567',
   channel: 'whatsapp',
 };
 
@@ -182,17 +198,22 @@ describe.skipIf(!evalApiKey)('money — the ad spend is the half that gets swall
   // anytime, payment methods, invoicing. Not the model ignoring the drip rule: the offering
   // kept contract/payment/invoicing INSIDE the "# Precio" section, so the price question
   // pulled the whole block. The facts now live in their own "solo si lo preguntan" sections.
-  it('answers the price with the three numbers and stops', async () => {
+  it('answers the price with the three numbers, and still moves', async () => {
     const agent = buildFrontDeskAgent();
     const res = await agent.generate(
       [
         { role: 'user', content: '¡Hola! Vi su anuncio y me interesa recibir más información.' },
-        { role: 'assistant', content: '¡Hola! Soy Sara, de The Bot Crew. Ayudamos a clínicas estéticas a llenar su agenda de valoraciones de bótox.\n\n¿Ya ofrecen bótox en su clínica?' },
+        { role: 'assistant', content: '¡Hola! Soy Sara, de The Bot Crew. Ayudamos a med spas a llenar su agenda de valoraciones de bótox.\n\nPara ubicarme: ¿los mensajes los contestas tú o alguien de tu equipo?' },
+        { role: 'user', content: 'Marina, mi recepcionista' },
+        { role: 'assistant', content: 'La idea no es reemplazar a Marina, sino cubrirla cuando está en cabina o fuera de horario.\n\n¿Ya han probado anuncios de bótox?' },
+        { role: 'user', content: 'Nop, aún no' },
+        { role: 'assistant', content: 'Entonces se puede instalar desde cero.\n\n¿Ya ofrecen bótox en la clínica?' },
         { role: 'user', content: 'Sip' },
-        { role: 'assistant', content: '¿Quién contesta hoy esos mensajes: tú o alguien del equipo?' },
-        { role: 'user', content: 'Yo cuando puedo, o mi recepcionista' },
-        { role: 'assistant', content: 'Justo ahí entra: no reemplaza a tu recepcionista, la cubre cuando está ocupada o fuera de horario.' },
-        { role: 'user', content: 'Cuánto cuesta?' },
+        // The close is SPENT here. That is the ingredient that made it stall live: the
+        // model may not reuse this question, so if the price block also tells it to stop,
+        // it has no move left. A history without this line does not reproduce the bug.
+        { role: 'assistant', content: 'Entonces sí les puede servir. En una videollamada de 20 minutos, Leo te muestra el sistema funcionando con el caso de tu clínica.\n\n¿Te aparto un espacio con Leo?' },
+        { role: 'user', content: 'Cuando me va costar?' },
       ],
       { requestContext: rc() },
     );
@@ -203,6 +224,8 @@ describe.skipIf(!evalApiKey)('money — the ad spend is the half that gets swall
     // The four that were riding along uninvited.
     expect(reply(res), `info dump: ${res.text}`).not.toMatch(/factura|transferencia|tarjeta de (crédito|debito|débito)/);
     expect(reply(res), `info dump: ${res.text}`).not.toMatch(/sin contrato|plazo forzoso|mes a mes|cancela(n|r)? cuando/);
+    // …and it still has to MOVE.
+    expect(/\?/.test(reply(res)) || /agend|apart|horario/.test(reply(res)), `sin siguiente paso: ${res.text}`).toBe(true);
   });
 
   it('names the founder price and the waived install instead of deferring to the call', async () => {
