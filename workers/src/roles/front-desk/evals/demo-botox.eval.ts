@@ -9,25 +9,37 @@
  *
  * Live-only (needs an API key); `pnpm eval`, excluded from the CI gate.
  *
- * MEASURED on gpt-5.6-luna (the platform default), 2026-08-20. Green side: the suite
- * ran 3/3 clean. Red side, breaking from the FIXTURE the rule each case defends:
- *   - opens on the ad       → 0/3 pass with the PREVIOUS opening restored
- *   - price quoted          → 0/3 pass without the price block
- *   - payment answered      → 0/3 pass without the "Pagos y políticas" block
- *   - stays in character    → 0/3 pass with demoPromptOverrides set to null
- *   - offers a real slot    → could not be falsified from config, see that case
+ * MEASURED on gpt-5.6-luna (the platform default), 2026-08-20. Green side: 3/3 clean.
+ * Red side, breaking the rule each case defends — and the honest result for each:
+ *   - opens on the ad       → 0/3 with the PREVIOUS opening restored. Discriminates.
+ *   - thank-you dead end    → 1/3 with the old DEMO_FLOW_SECTION. Discriminates.
+ *   - price dead end        → 7/8 without the price rule, 10/10 with it. Does NOT
+ *                             discriminate: the new DEMO_FLOW_SECTION does the work, and
+ *                             the persona rule on top is redundant in every sample taken.
+ *   - never re-asks         → 3/3 with the ban deleted. Does NOT discriminate.
+ *   - price quoted          → 0/3 without the price block. Discriminates.
+ *   - payment answered      → 0/3 without the "Pagos y políticas" block. Discriminates.
+ *   - stays in character    → 0/3 with demoPromptOverrides null. Discriminates.
+ *   - offers a real slot    → not falsifiable from config; its red side was real all the
+ *                             same (see that case).
  *
- * Note the first one: DELETING its rule does not falsify it (3/3 still pass — the persona
- * is botox-shaped throughout, so the model talks about botox with no opening rule at all).
- * Only restoring the old "¿cómo te puedo ayudar hoy?" opening turns it red. When a case
- * defends a CHANGE rather than a fact, the honest red side is the previous behaviour, not
- * an empty prompt.
+ * The two non-discriminating cases are kept, unlike the deleted one below, because they
+ * are transcribed from the thread where the failure actually happened (conv 1fca0261) —
+ * they document a real dead end even where this model no longer reproduces it. Read them
+ * as regression guards, not as proof the rule they sit under is load-bearing.
  *
- * A sixth case ("does not ask a WhatsApp lead for their number") was written and then
- * DELETED: it passed 3/3 with its rule removed, so it tested nothing. The dangling step 3
- * of the shared booking sequence never made this model ask. The persona keeps the rule —
- * three runs are not proof of absence and the line is free — but no green-either-way case
- * pretends to guard it.
+ * Two lessons paid for here, both worth not re-learning:
+ *   1. When a case defends a CHANGE rather than a fact, the honest red side is the PREVIOUS
+ *      behaviour, not an empty prompt. Deleting the opening rule leaves the case green
+ *      (the persona is botox-shaped throughout); restoring the old opening turns it red.
+ *   2. Write the assertion against the message that actually failed. The first version of
+ *      `advances()` accepted "mentions la valoración" — and the real dead-end message says
+ *      "con valoración sin costo", so the case passed on the exact reply that motivated it.
+ *
+ * A ninth case ("does not ask a WhatsApp lead for their number") was written and DELETED:
+ * it passed 3/3 with its rule removed AND had no real incident behind it, which is the
+ * difference between it and the two kept above. The persona keeps the rule; no case pretends
+ * to guard it.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -185,6 +197,79 @@ describe.skipIf(!evalApiKey)('demo botox — answers price straight', () => {
     expect(reply(res)).toMatch(/tarjeta/);
     // The tell of a demo that has run out of material: promising to find out.
     expect(reply(res)).not.toMatch(/lo confirmo|te confirmo|pregunto|averiguo/);
+  });
+});
+
+/**
+ * Proactive without going quiet — both cases are lifted VERBATIM from the thread where
+ * Leo watched the demo die (2026-08-20, conv 1fca0261), not invented. That matters: the
+ * invented versions of these two ("the lead says 'ah ok'") passed 3/3 with the rule
+ * removed, because this model handles a bare acknowledgment fine. The real dead ends were
+ * more specific, and only the real ones discriminate.
+ *
+ * Both were produced by the FIRST DEMO_FLOW_SECTION, which bought variety with "a veces
+ * contesta y ya, sin cierre". In a demo watched by the person deciding whether to buy, a
+ * bot that stalls right after the price is the worst possible moment to stall.
+ */
+describe.skipIf(!evalApiKey)('demo botox — never leaves the conversation in the air', () => {
+  /**
+   * A move = a question, a concrete time, or an actual invitation to book. Deliberately
+   * NOT "mentions la valoración": the first version accepted that, and the real dead-end
+   * message ("$2,900, con valoración sin costo y retoque incluido.") contains the word —
+   * so the case passed on the exact message that motivated it. Naming the service is
+   * describing what you sell; proposing a step is asking for the next move.
+   */
+  const advances = (text: string) => /\?/.test(text) || /\d{1,2}:\d{2}/.test(text) || /agend|apart|reserv/.test(text);
+
+  it('proposes a next step right after quoting the price, with the zone already known', async () => {
+    // The real failure: "Sí, depende de las zonas. Si es únicamente patas de gallo,
+    // corresponde a una zona: $2,900, con valoración sin costo y retoque incluido." — and
+    // nothing else. She had already named her zone; there was nothing left to qualify.
+    const agent = buildFrontDeskAgent();
+    const res = await agent.generate(
+      [
+        { role: 'user', content: 'Demo Botox' },
+        { role: 'assistant', content: '¡Hola! 👋 Soy Vale, de Alenza Med Spa. ¿Ya traes una zona en mente para el bótox o prefieres que el médico te diga qué te conviene?' },
+        { role: 'user', content: 'Que zonas manejan?' },
+        { role: 'assistant', content: 'Manejamos entrecejo, frente, patas de gallo, cuello, mentón y sonrisa gingival. ¿Cuál te interesa suavizar?' },
+        { role: 'user', content: 'Principalmente mis patas de gallo' },
+        { role: 'user', content: 'Cambia el precio por zona?' },
+      ],
+      { requestContext: rc() },
+    );
+
+    expect(reply(res)).toMatch(/2[,.]?900/); // still answers the question
+    expect(advances(reply(res)), `dead end: ${res.text}`).toBe(true);
+  });
+
+  it('does not answer a thank-you with "aquí estoy cuando quieras"', async () => {
+    // The real closing message. It reads polite and it ends the funnel: the lead is warm,
+    // the zone is known, the price is out, and the bot hands the next move back to her.
+    const agent = buildFrontDeskAgent();
+    const res = await agent.generate(
+      [
+        { role: 'user', content: 'Principalmente mis patas de gallo' },
+        { role: 'assistant', content: 'Si es únicamente patas de gallo, corresponde a una zona: $2,900, con valoración sin costo y retoque a los 15 días incluido.' },
+        { role: 'user', content: 'Okok gracias' },
+      ],
+      { requestContext: rc() },
+    );
+
+    expect(reply(res)).not.toMatch(/aquí estoy|aqui estoy|cuando (quieras|gustes)|cualquier (cosa|duda) (me )?(dime|dices|avisas)/);
+    expect(advances(reply(res)), `dead end: ${res.text}`).toBe(true);
+  });
+
+  it('does not re-ask a closing question the lead already dodged', async () => {
+    const agent = buildFrontDeskAgent();
+    const res = await agent.generate(
+      [
+        { role: 'assistant', content: '¿Quieres que te muestre los horarios que tengo?' },
+        { role: 'user', content: 'oye y el bótox duele?' },
+      ],
+      { requestContext: rc() },
+    );
+
+    expect(reply(res)).not.toMatch(/quieres que te (muestre|comparta|pase) los horarios/);
   });
 });
 

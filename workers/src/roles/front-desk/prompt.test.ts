@@ -467,10 +467,20 @@ describe('buildFrontDeskInstructions — demo conversational variety', () => {
 
   it('bans repeating the same closing question and offers alternative angles', () => {
     const out = demo();
-    expect(out).toContain('NUNCA repitas la misma pregunta de cierre');
+    expect(out).toContain('PROHIBIDO repetir una pregunta de cierre que ya usaste');
     expect(out).toContain('¿te acomoda mejor entre semana o el sábado?');
     expect(out).toContain('¿mañana o tarde te funciona mejor?');
-    expect(out).toContain('A veces contesta y ya, sin cierre');
+  });
+
+  // The first version bought variety with permission to go quiet, and the demo started
+  // letting threads die. The ban is on repetition, never on initiative — so the section
+  // must keep telling it to move, and must NOT carry the old "answer and stop" licence.
+  it('tells it to keep moving the conversation, not to go quiet', () => {
+    const out = demo();
+    expect(out).toContain('cada mensaje tuyo la deja un paso más adelante');
+    expect(out).toContain('movimiento DISTINTO al anterior');
+    expect(out).not.toContain('A veces contesta y ya, sin cierre');
+    expect(out).not.toContain('no la persigas en cada mensaje');
   });
 
   it('tells it to stop asking once intent is clear', () => {
