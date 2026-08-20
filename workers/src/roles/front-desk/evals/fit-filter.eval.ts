@@ -30,6 +30,13 @@
  * rules exist to force the fact into the RIGHT message — but it does mean these cases pin
  * behavior that already holds rather than proving the wording produces it.
  *
+ * The info-dump case IS a reproduction: with the old structure (contract/payment/invoicing
+ * inside the "# Precio" block, and the looser drip wording) it failed 1 of 5; with the facts
+ * moved into their own "solo si lo preguntan" sections, 0 of 5. Note what the first attempt
+ * at falsifying it got wrong — reverting only the offering left the tightened drip rule in
+ * `qualificationNotes` doing the work, and the case passed 5/5, which would have been read
+ * as "does not discriminate". Revert the WHOLE change or the red side is not the old state.
+ *
  * The mid-conversation disclosure case has a real incident behind it and still does not
  * discriminate: a played thread (2026-08-20) had the model list "manejo de anuncios" among
  * what's included and stop, so the ad budget arrived a message late. Rebuilt from that exact
@@ -168,6 +175,34 @@ describe.skipIf(!evalApiKey)('money — the ad spend is the half that gets swall
     expect(reply(res)).toMatch(/1[,.]?500/);
     // The ad budget, in the SAME message — and "incluye el manejo de anuncios" is not it.
     expect(reply(res)).toMatch(/200|aparte|directo a meta|no incluye|va(n)? por (tu|su) cuenta/);
+  });
+
+  // Transcribed from a live thread (2026-08-20, 22:02): asked "¿cuánto cuesta?", Sara
+  // answered SEVEN things — price, what's included, no contract, month to month, cancel
+  // anytime, payment methods, invoicing. Not the model ignoring the drip rule: the offering
+  // kept contract/payment/invoicing INSIDE the "# Precio" section, so the price question
+  // pulled the whole block. The facts now live in their own "solo si lo preguntan" sections.
+  it('answers the price with the three numbers and stops', async () => {
+    const agent = buildFrontDeskAgent();
+    const res = await agent.generate(
+      [
+        { role: 'user', content: '¡Hola! Vi su anuncio y me interesa recibir más información.' },
+        { role: 'assistant', content: '¡Hola! Soy Sara, de The Bot Crew. Ayudamos a clínicas estéticas a llenar su agenda de valoraciones de bótox.\n\n¿Ya ofrecen bótox en su clínica?' },
+        { role: 'user', content: 'Sip' },
+        { role: 'assistant', content: '¿Quién contesta hoy esos mensajes: tú o alguien del equipo?' },
+        { role: 'user', content: 'Yo cuando puedo, o mi recepcionista' },
+        { role: 'assistant', content: 'Justo ahí entra: no reemplaza a tu recepcionista, la cubre cuando está ocupada o fuera de horario.' },
+        { role: 'user', content: 'Cuánto cuesta?' },
+      ],
+      { requestContext: rc() },
+    );
+
+    // The three that DO belong together.
+    expect(reply(res)).toMatch(/1[,.]?500/);
+    expect(reply(res)).toMatch(/200|aparte|directo a meta/);
+    // The four that were riding along uninvited.
+    expect(reply(res), `info dump: ${res.text}`).not.toMatch(/factura|transferencia|tarjeta de (crédito|debito|débito)/);
+    expect(reply(res), `info dump: ${res.text}`).not.toMatch(/sin contrato|plazo forzoso|mes a mes|cancela(n|r)? cuando/);
   });
 
   it('names the founder price and the waived install instead of deferring to the call', async () => {
