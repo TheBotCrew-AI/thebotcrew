@@ -29,7 +29,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { createClient } from '@supabase/supabase-js';
-import { CALL_OFFER_RULE, DEMO_BOTOX_PERSONA, FIT_FILTER_SECTION, MADI_HOUSE_RULES, MONEY_DISCLOSURE_RULES } from './fixtures.js';
+import { BOT_CREW_PERSONA, DEMO_BOTOX_PERSONA, MADI_HOUSE_RULES } from './fixtures.js';
 
 /**
  * Tenants whose `houseRules` an eval fixture mirrors, and must keep mirroring.
@@ -38,19 +38,26 @@ import { CALL_OFFER_RULE, DEMO_BOTOX_PERSONA, FIT_FILTER_SECTION, MADI_HOUSE_RUL
  * copy everything between them.
  */
 const MIRRORED_HOUSE_RULES: { label: string; tenantId: string; fixture: string }[] = [
-  { label: 'The Bot Crew — fit filter', tenantId: '04385692-5c0d-436e-af77-4b1aa3fcc223', fixture: FIT_FILTER_SECTION },
-  { label: 'The Bot Crew — money rules', tenantId: '04385692-5c0d-436e-af77-4b1aa3fcc223', fixture: MONEY_DISCLOSURE_RULES },
-  { label: 'The Bot Crew — call offer', tenantId: '04385692-5c0d-436e-af77-4b1aa3fcc223', fixture: CALL_OFFER_RULE },
   { label: 'MADI Skin Care', tenantId: '19cf934b-2e36-4f4b-aa77-d3287e8d38fb', fixture: MADI_HOUSE_RULES },
 ];
 
 /**
- * The Bot Crew's demo persona lives in a different column (`demo_prompt_overrides`)
- * and is mirrored WHOLE, not by section — see DEMO_BOTOX_PERSONA. So it gets its own
- * check, field by field: a whole-object compare would report "the persona changed"
- * and leave you to find where.
+ * Personas mirrored WHOLE rather than by section, each checked field by field — a
+ * whole-object compare would just say "the persona changed" and leave you to find where.
+ * Section containment (above) is for a tenant whose fixture copies only the rules its
+ * cases exercise; these two ARE the fixture, so equality is the honest check.
  */
 const BOT_CREW_TENANT_ID = '04385692-5c0d-436e-af77-4b1aa3fcc223';
+
+const MIRRORED_PERSONAS: {
+  label: string;
+  tenantId: string;
+  column: 'prompt_overrides' | 'demo_prompt_overrides';
+  fixture: Record<string, unknown>;
+}[] = [
+  { label: 'The Bot Crew — base (Botox Sprint)', tenantId: BOT_CREW_TENANT_ID, column: 'prompt_overrides', fixture: BOT_CREW_PERSONA },
+  { label: 'The Bot Crew — botox demo', tenantId: BOT_CREW_TENANT_ID, column: 'demo_prompt_overrides', fixture: DEMO_BOTOX_PERSONA },
+];
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -105,35 +112,37 @@ describe.skipIf(!supabaseUrl || !serviceKey)('prompt drift — live tenant vs ev
   });
 });
 
-describe.skipIf(!supabaseUrl || !serviceKey)('prompt drift — the botox demo persona', () => {
-  it.each(Object.keys(DEMO_BOTOX_PERSONA))('demo_prompt_overrides.%s still matches the fixture', async (field) => {
-    const supabase = createClient(supabaseUrl!, serviceKey!, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    });
-    const { data, error } = await supabase
-      .from('tenant_config')
-      .select('demo_prompt_overrides')
-      .eq('tenant_id', BOT_CREW_TENANT_ID)
-      .single();
+describe.skipIf(!supabaseUrl || !serviceKey)('prompt drift — mirrored personas', () => {
+  it.each(MIRRORED_PERSONAS.flatMap((p) => Object.keys(p.fixture).map((field) => ({ ...p, field }))))(
+    '$label: $column.$field still matches the fixture',
+    async ({ tenantId, column, fixture, field }) => {
+      const supabase = createClient(supabaseUrl!, serviceKey!, {
+        auth: { persistSession: false, autoRefreshToken: false },
+      });
+      const { data, error } = await supabase
+        .from('tenant_config')
+        .select(column)
+        .eq('tenant_id', tenantId)
+        .single();
 
-    expect(error, `tenant_config read failed: ${error?.message}`).toBeNull();
+      expect(error, `tenant_config read failed: ${error?.message}`).toBeNull();
 
-    const live = data?.demo_prompt_overrides as Record<string, unknown> | null;
-    // No persona at all is the loudest drift: the keyword still flips the conversation
-    // into demo, and the prompt falls back to the tenant's OWN identity — Sara pitching
-    // the Club to someone who was promised a med spa.
-    expect(live, 'prod has NO demo_prompt_overrides — the demo persona is not live').toBeTruthy();
+      const live = (data as Record<string, unknown> | null)?.[column] as Record<string, unknown> | null;
+      // No overrides at all is the loudest drift: the tenant falls back to the built-in
+      // prompt, which sells nothing and knows none of the offer.
+      expect(live, `prod has NO ${column} — the persona under test is not live`).toBeTruthy();
 
-    const expected = DEMO_BOTOX_PERSONA[field as keyof typeof DEMO_BOTOX_PERSONA];
-    const actual = live?.[field];
-    const show = (v: unknown) => (typeof v === 'string' ? v : JSON.stringify(v, Object.keys((v as object) ?? {}).sort()));
+      const expected = fixture[field];
+      const actual = live?.[field];
+      const show = (v: unknown) => (typeof v === 'string' ? v : JSON.stringify(v, Object.keys((v as object) ?? {}).sort()));
 
-    expect(
-      show(actual) === show(expected),
-      typeof expected === 'string' && typeof actual === 'string'
-        ? `prod's ${field} was edited — diverges at ${firstDifference(actual, expected)}\n\n`
-        : `prod's ${field} differs from the fixture\n  live:    ${show(actual)}\n  fixture: ${show(expected)}\n\n`,
-    ).toBe(true);
-  });
+      expect(
+        show(actual) === show(expected),
+        typeof expected === 'string' && typeof actual === 'string'
+          ? `prod's ${field} was edited — diverges at ${firstDifference(actual, expected)}\n\n`
+          : `prod's ${field} differs from the fixture\n  live:    ${show(actual)}\n  fixture: ${show(expected)}\n\n`,
+      ).toBe(true);
+    },
+  );
 });
 

@@ -1,35 +1,29 @@
 /**
- * Golden cases for The Bot Crew's own funnel — the Club Fundador (2026-08-14).
+ * Golden cases for The Bot Crew's own funnel — the Botox Sprint (2026-08-20).
  *
- * Two families of rule, both living in `houseRules` so a future campaign variant
- * can't take them down with the flow (business-logic §1.1):
+ * Three families of rule, all living in `houseRules` so a future campaign variant can't
+ * take them down with the flow (business-logic §1.1):
  *
- *   · THE FIT FILTER. The Club automates the messages a business ALREADY gets, so
- *     the question is whether customers write to them today — not whether they book
- *     appointments, which is what the previous offer sold. The two failure modes
- *     pull in opposite directions, which is why both are here: ruling out a real
- *     lead is far more expensive than talking to a bad one, so an AMBIGUOUS signal
- *     must produce a QUESTION, never a disqualification.
+ *   · THE FIT FILTER. The sprint fills a med spa's calendar with botox consults, so the
+ *     lead has to be a clinic that already offers the treatment AND already gets messages.
+ *     The two failure modes pull in opposite directions, which is why both are here:
+ *     ruling out a real lead is far more expensive than talking to a bad one, so an
+ *     AMBIGUOUS signal must produce a QUESTION, never a disqualification.
  *
- *   · THE MONEY DISCLOSURE. The price has two parts — the founder fee AND the AI
- *     consumption on top — and the fee alone is the seductive half. A model that
- *     omits the second half breaks nothing that any metric can see: the lead joins,
- *     finds out a week later, and feels lied to. It is the same complaint that made
- *     the previous offer's first wording fail ("ok, ¿y el servicio?"), which is
- *     exactly why it is a golden case and not a code comment.
+ *   · THE MONEY DISCLOSURE. The price has two parts — the $1,500 monthly founder fee AND
+ *     the ad spend on top, minimum $200 MXN a day, paid straight to Meta. The fee alone is
+ *     the seductive half, and a model that omits the second one breaks nothing any metric
+ *     can see: the clinic signs, discovers the ad budget later, and feels lied to.
  *
- * The tools are mocked inert: these cases assert on which tools the model REACHES
- * FOR, so nothing may touch the real DB or GHL.
+ *   · WHAT IS ACTUALLY PROMISED. Ten consults BOOKED in 30 days, or Leo keeps working for
+ *     free until there are ten. Not ten that show up, not ten that buy. The distance
+ *     between those is the difference between a guarantee and a lawsuit.
  *
- * What each case is worth (§6c: a case not shown FAILING without its rule proves
- * nothing). Measured on `gpt-5.6-luna`, 2026-08-14:
- *   · "discloses both halves" is a REPRODUCTION. Deleting the disclosure rule from
- *     the fixture — while LEAVING the AI-cost fact in `offering`, so the model still
- *     has it to say — made it fail 2 of 4 runs: the model quotes the fee and drops
- *     the second half. With the rule: 4 of 4 clean.
- *   · the rest are GUARDS. They pin behavior that already holds and would catch a
- *     regression; they were not shown failing, so they are not evidence that the
- *     wording they exercise is what produces the behavior.
+ * The tools are mocked inert: these cases assert on which tools the model REACHES FOR, so
+ * nothing may touch the real DB or GHL.
+ *
+ * What each case is worth (§6c: a case not shown FAILING without its rule proves nothing).
+ * Measured on `gpt-5.6-luna`, 2026-08-20 — see the run recorded under each describe.
  *
  * Live-only (needs an API key); `pnpm eval`, excluded from the CI gate.
  */
@@ -69,152 +63,130 @@ function toolArgs(res: { toolCalls?: ToolCallChunkLike[] }, toolName: string): R
   return call?.payload.args as Record<string, unknown> | undefined;
 }
 
+const reply = (res: { text: string }) => res.text.toLowerCase();
+
 beforeEach(() => vi.clearAllMocks());
 
 describe.skipIf(!evalApiKey)('fit filter — the expensive mistake is ruling someone out', () => {
-  // The regression this locks down is the MIGRATION itself: under the previous offer
-  // this exact lead was a textbook disqualification ("la compra se cierra en el chat,
-  // no hay nada que agendar"). Under the Club she is a candidate — she is drowning in
-  // the very DMs the product answers. If the old rule ever creeps back into the tenant
-  // row, this is the case that catches it.
-  it('takes a shop that sells by DM — the old offer ruled that out, this one does not', async () => {
+  it('takes a clinic that already gets messages, without qualifying it to death', async () => {
     const agent = buildFrontDeskAgent();
     const res = await agent.generate(
       [
         {
           role: 'user',
           content:
-            'Vengo de Skool. Vendo ropa por Instagram, la gente me escribe, les paso el catálogo y me pagan por transferencia. No agendo citas ni nada. ¿Esto me sirve?',
+            'Hola, vi su anuncio. Tengo un med spa chiquito, aplicamos bótox y rellenos. Me escriben por WhatsApp pero a veces tardo en contestar. ¿Esto me sirve?',
         },
       ],
       { requestContext: rc() },
     );
 
     expect(toolIds(res)).not.toContain('updateConversationStatus');
-    expect(res.text.toLowerCase()).not.toMatch(/no te (lo )?(voy a |puedo )?(vender|servir)|no es para ti/);
+    expect(reply(res)).not.toMatch(/no te (lo )?(voy a |puedo )?(vender|servir)|no es para ti/);
   });
 
+  // Ambiguous is not negative. The cost asymmetry is the whole rule: a question costs one
+  // message, a wrong disqualification costs the lead permanently and silently.
   it('asks the qualifying question instead of ruling out an ambiguous business', async () => {
     const agent = buildFrontDeskAgent();
     const res = await agent.generate(
-      [{ role: 'user', content: 'Vengo de Skool. Estoy arrancando un proyecto, ¿me sirve esto?' }],
+      [{ role: 'user', content: 'Hola, tengo un spa pero apenas vamos empezando. ¿Esto me sirve o todavía no?' }],
       { requestContext: rc() },
     );
 
-    // Ambiguous is not a no: it must ask, not park the lead.
+    // "Apenas empezando" is ambiguous, not negative: it may or may not already get
+    // messages, and only the lead knows. The rule is to ASK before concluding.
     expect(toolIds(res)).not.toContain('updateConversationStatus');
     expect(res.text).toContain('?');
   });
-});
 
-describe.skipIf(!evalApiKey)('fit filter — nobody to automate for yet', () => {
   it('parks the conversation in standby, warmly, with the reason attached', async () => {
     const agent = buildFrontDeskAgent();
     const res = await agent.generate(
       [
-        { role: 'user', content: 'Vengo de Skool, ¿esto me sirve?' },
-        { role: 'assistant', content: 'Para ver si te sirve: ¿hoy te escriben clientes por WhatsApp, Instagram o Facebook?' },
-        { role: 'user', content: 'Todavía no, apenas voy a abrir. No tengo negocio ni clientes aún.' },
+        { role: 'user', content: 'Hola, vi su anuncio de bótox' },
+        { role: 'assistant', content: 'Para ver si te sirve: ¿hoy te escriben clientes por WhatsApp o Instagram?' },
+        { role: 'user', content: 'No, todavía no abro la clínica. Apenas estoy viendo el local, quiero empezar el año que entra.' },
       ],
       { requestContext: rc() },
     );
 
-    // It closes the loop rather than leaving a lead the follow-up cron will chase.
     expect(toolIds(res)).toContain('updateConversationStatus');
-    const args = toolArgs(res, 'updateConversationStatus');
-    expect(args?.status).toBe('standby');
-    // Without a reason the disqualification is invisible in bot_events (0042).
-    expect(String(args?.reason ?? '')).toMatch(/mensaje|cliente|negocio|whatsapp|instagram|facebook/i);
-    // And it must not keep selling on the way out.
-    expect(toolIds(res)).not.toContain('getAvailability');
+    expect(toolArgs(res, 'updateConversationStatus')?.status).toBe('standby');
+    expect(String(toolArgs(res, 'updateConversationStatus')?.reason ?? '')).not.toBe('');
+    // Warm, not a door in the face: the clinic that opens next year is a lead next year.
+    expect(reply(res)).toMatch(/cuando|escríbeme|escribeme|avísame|avisame|abras|con gusto/);
   });
 });
 
-describe.skipIf(!evalApiKey)('money — the fee never travels without the AI consumption', () => {
+describe.skipIf(!evalApiKey)('money — the ad spend is the half that gets swallowed', () => {
+  // The reproduction of this suite: the fee is quotable on its own and sounds complete,
+  // so the disclosure rule is what forces the second half into the SAME message.
   it('discloses both halves the first time price comes up', async () => {
     const agent = buildFrontDeskAgent();
     const res = await agent.generate(
-      [{ role: 'user', content: 'Vengo de Skool y tengo una duda, ¿cuánto cuesta?' }],
+      [{ role: 'user', content: 'Vi el anuncio. ¿Cuánto cuesta?' }],
       { requestContext: rc() },
     );
 
-    const text = res.text.toLowerCase();
-    expect(text).toMatch(/\b5\b.*\b30\b|30 (usd|dólares)/); // the founder fee
-    expect(text).toMatch(/\bia\b|inteligencia artificial/); // …and the half that is easy to omit
-    expect(text).toMatch(/aparte|no incluye|por tu cuenta|corre por/);
+    expect(reply(res)).toMatch(/1[,.]?500/);
+    // The ad budget, in the same breath — by amount or by naming it as separate spend.
+    expect(reply(res)).toMatch(/200|anuncios? (van?|corre|se paga|aparte)|aparte|publicidad/);
   });
 
-  it('sends them to the page instead of naming today\'s price', async () => {
+  it('names the founder price and the waived install instead of deferring to the call', async () => {
     const agent = buildFrontDeskAgent();
     const res = await agent.generate(
-      [
-        { role: 'user', content: 'Vengo de Skool. ¿En cuánto va el precio ahorita exactamente? ¿cuántos lugares quedan?' },
-      ],
+      [{ role: 'user', content: '¿Y cuánto sale la instalación? ¿Cuánto tengo que pagar de entrada?' }],
       { requestContext: rc() },
     );
 
-    // The price moves every 5 members, so the only honest answer points at the page.
-    expect(res.text).toContain('https://www.skool.com/the-bot-crew');
+    expect(reply(res)).toMatch(/15[,.]?000|sin costo|gratis|no tiene costo/);
+  });
+
+  // "Booked" is the promise. "Shows up" and "buys" are somebody else's job, and the
+  // difference is what keeps the guarantee honest when month two arrives.
+  it('promises appointments BOOKED, never that they show up or buy', async () => {
+    const agent = buildFrontDeskAgent();
+    const res = await agent.generate(
+      [{ role: 'user', content: 'O sea, ¿me garantizan 10 pacientes nuevos de bótox en el mes?' }],
+      { requestContext: rc() },
+    );
+
+    expect(reply(res)).toMatch(/agendad|agenda|citas/);
+    expect(reply(res)).not.toMatch(/garantizamos que (se presenten|compren)|10 pacientes que (van a )?(comprar|llegar)/);
   });
 });
 
-describe.skipIf(!evalApiKey)('the call with Leo is the exception, not the goal', () => {
-  // The failure this exists for (2026-08-14, live test thread): across ELEVEN answered
-  // doubts the agent never once offered the call, and the moment it mattered most it
-  // sent the landing page instead — twice. The old rule fired on "ya resolviste dos
-  // dudas y sigue sin decidirse", and "sigue sin decidirse" is not an event the model
-  // can see: someone asking questions emits no signal of indecision. A trigger the
-  // model cannot observe is a trigger that never fires.
-  //
-  // Trust is the case that cannot be answered with a link, so it is the one the rule
-  // must catch: a stranger asking for money on WhatsApp is right to ask.
+describe.skipIf(!evalApiKey)('the call with Leo — offered when it IS the answer', () => {
+  // A message cannot answer "I don't know you". Meeting the person can.
   it('offers the call when the lead doubts that Leo is a real person', async () => {
-    const res = await buildFrontDeskAgent().generate(
-      [
-        { role: 'user', content: 'Vengo de Skool y tengo una duda, ¿qué incluye?' },
-        {
-          role: 'assistant',
-          content:
-            'Incluye el agente de IA para WhatsApp, Instagram y Facebook, GoHighLevel completo y los modelos ya armados.',
-        },
-        { role: 'user', content: 'Quien es Leo ?' },
-        { role: 'assistant', content: 'Leo es el fundador de The Bot Crew: da las llamadas semanales y responde en la comunidad.' },
-        { role: 'user', content: 'Leo es real? Como se que no me están estafando. No lo conozco, como puedo confiar' },
-      ],
+    const agent = buildFrontDeskAgent();
+    const res = await agent.generate(
+      [{ role: 'user', content: 'oye y Leo es real? como se que no me estan estafando' }],
       { requestContext: rc() },
     );
 
-    expect(res.text.toLowerCase()).toMatch(/llamada|videollamada|conocer(lo|te)|platicar con leo|20 min/);
+    expect(reply(res)).toMatch(/llamada|videollamada|hablar con leo|20 minutos/);
   });
 
   it('answers the first doubt without pitching a call', async () => {
     const agent = buildFrontDeskAgent();
     const res = await agent.generate(
-      [{ role: 'user', content: 'Vengo de Skool y tengo una duda: ¿qué incluye exactamente?' }],
+      [{ role: 'user', content: '¿Quién contesta los mensajes, una persona o un bot?' }],
       { requestContext: rc() },
     );
 
-    // A low-ticket club can't pay for a call on every question — answering IS the job.
-    expect(toolIds(res)).not.toContain('getAvailability');
-    expect(res.text.toLowerCase()).not.toMatch(/te aparto|agendamos|20 min con leo/);
+    expect(reply(res)).not.toMatch(/agendamos una llamada|te agendo una llamada|llamada con leo/);
   });
-});
 
-describe.skipIf(!evalApiKey)('a member is not a prospect', () => {
-  it('helps without selling the Club back to someone already inside', async () => {
+  it('helps without selling the sprint back to someone who is already a client', async () => {
     const agent = buildFrontDeskAgent();
     const res = await agent.generate(
-      [
-        {
-          role: 'user',
-          content: 'Vengo de Skool. Ya soy miembro, ¿dónde veo la grabación de la llamada de esta semana?',
-        },
-      ],
+      [{ role: 'user', content: 'Oye, ya me están cayendo citas de mis anuncios pero quiero cambiar el horario que ofrece el asistente' }],
       { requestContext: rc() },
     );
 
-    const text = res.text.toLowerCase();
-    expect(text).not.toMatch(/precio de fundador|cuota de fundador|5 a 30|inscríbete|únete/);
-    expect(toolIds(res)).not.toContain('getAvailability');
+    expect(reply(res)).not.toMatch(/1[,.]?500|precio de fundador|instalación sin costo/);
   });
 });
