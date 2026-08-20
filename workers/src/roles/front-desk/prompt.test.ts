@@ -39,6 +39,19 @@ describe('buildFrontDeskInstructions', () => {
     expect(out).toContain('Solo puedes agendar dentro de los próximos 7 días');
   });
 
+  // The horizon is OUR cap and the demo branch of getAvailability never applies it: the
+  // simulator's own window bounds a demo. Left in, the line states a limit in our calendar's
+  // terms — a 3-day cap can name a Sunday the roleplayed business has closed.
+  it('booking horizon → the clamp line is suppressed in demo mode', () => {
+    const out = buildFrontDeskInstructions(
+      cfg({ bookingHorizonDays: 3, demoPromptOverrides: { identity: 'Otra clínica' } }),
+      NOW,
+      undefined, // contactPhone
+      'demo',    // activeRole
+    );
+    expect(out).not.toContain('Solo puedes agendar dentro de los próximos');
+  });
+
   it('reminder section reflects whether we already have a phone', () => {
     expect(buildFrontDeskInstructions(cfg(), NOW, '+5216641234567')).toContain('Ya tenemos el número del lead');
     expect(buildFrontDeskInstructions(cfg(), NOW, undefined)).toContain('No tenemos número de WhatsApp');
@@ -107,6 +120,33 @@ describe('buildFrontDeskInstructions', () => {
         'demo',
       );
       expect(out).not.toContain('# Preguntas frecuentes');
+    });
+  });
+
+  describe('# Horario — our own weekly schedule', () => {
+    it('renders outside demo mode', () => {
+      const out = buildFrontDeskInstructions(cfg(), NOW);
+      expect(out).toContain('# Horario (zona horaria: America/Mexico_City)');
+      expect(out).toContain('Lunes: 09:00–18:00');
+    });
+
+    // These hours are OURS. In a roleplay for another business they are not just
+    // irrelevant, they contradict what the demo can offer: simulated slots run
+    // Mon–Sat 10:00–17:30 whatever this config says, so a tenant open Sundays would
+    // have the demo promise a Sunday and then find no slot for it.
+    it('is suppressed in demo mode — the demo states its hours in its own offering', () => {
+      const out = buildFrontDeskInstructions(
+        cfg({
+          hours: { sun: [{ open: '07:00', close: '19:00' }] },
+          demoPromptOverrides: { identity: 'Otra clínica', offering: 'Abrimos lunes a sábado de 10 a 6.' },
+        }),
+        NOW,
+        undefined, // contactPhone
+        'demo',    // activeRole
+      );
+      expect(out).not.toContain('# Horario');
+      expect(out).not.toContain('Domingo: 07:00–19:00');
+      expect(out).toContain('Abrimos lunes a sábado de 10 a 6.');
     });
   });
 

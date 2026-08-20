@@ -1044,12 +1044,24 @@ export async function runAgentTurn({
   // The demo rung is the number already DELIVERED, not this row's position: every
   // inbound cancels the pending nudge, so a lead who keeps playing never climbs, and
   // resetting to rung 1 would mean reminder #2 (how to close the demo) never lands.
+  //
+  // The demo ladder belongs to the SESSION funnel, which is why it is gated on one. A
+  // manual keyword demo (§5b) has no session, no budget and no expiry: it is a live
+  // showing, driven by whoever typed the keyword, and it ends when they type the exit
+  // word. Nothing there can strand a lead — the stranding 0043 fixed comes from expiry
+  // being evaluated only on the next inbound, which a manual demo has no concept of — so
+  // there is nothing for a reminder to rescue, and a "(tu demo sigue activo)" line landing
+  // half an hour after a live demo is just noise on a real prospect's thread. It gets
+  // NEITHER ladder: falling through to the cadence would be worse than the reminders,
+  // since the reactivation agent is persona-blind and would nudge from inside the roleplay.
   const inDemo = activeRole === 'demo';
   let firstDelay: number | undefined;
   let followUpKind: FollowUpKind = 'cadence';
   let followUpTier = 1;
   let followUpRound = 0;
-  if (inDemo) {
+  if (inDemo && !activeDemoSession) {
+    // Manual keyword demo: no nudge of either kind (firstDelay stays undefined).
+  } else if (inDemo) {
     followUpKind = 'demo';
     try {
       followUpTier = (await countSentDemoReminders(conversationId)) + 1;

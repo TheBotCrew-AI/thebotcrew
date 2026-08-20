@@ -627,6 +627,17 @@ describe('handleInboundWebhook — campaign prompt variants', () => {
 
 describe('handleInboundWebhook — demo-mode guards (roleplay must not touch real state)', () => {
   const demoPersona = { activeRole: 'demo', roleStartedAt: null, demoStartedAt: '2026-07-29T10:00:00Z', promptVariant: null, reactivationRound: 0 };
+  /** A running session: far-future expiry and a budget the default message count can't reach. */
+  const liveSession = {
+    id: 'sess-1',
+    activatedAt: '2026-07-29T10:00:00Z',
+    expiresAt: '2099-01-01T00:00:00Z',
+    messageBudget: 15,
+    personaVersion: 1,
+    leadData: { businessName: 'Clínica Sonrisa', businessType: 'clínica dental' },
+    promptOverrides: { identity: 'PERSONA GENERADA' },
+    simulatedBooking: null,
+  };
   const noQuestion = 'Entendido, muchas gracias por tu visita.'; // no "?" → classifier path opens
 
   it('control: outside demo, a no-question reply triggers the outcome classifier', async () => {
@@ -751,18 +762,34 @@ describe('handleInboundWebhook — demo-mode guards (roleplay must not touch rea
     );
   });
 
-  it('demo: arms the demo reminder ladder instead of going silent', async () => {
+  // The reminder ladder belongs to the session funnel. A manual keyword demo (§5b) is a
+  // live showing with no budget and no expiry: nothing can strand its lead, so there is
+  // nothing to rescue, and a "(tu demo sigue activo)" line half an hour later lands on a
+  // real prospect's thread. Neither ladder — the cadence would be worse than the reminders,
+  // since the reactivation agent is persona-blind and would nudge from inside the roleplay.
+  it('manual keyword demo (no session): arms NOTHING, neither ladder', async () => {
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(
+      tenant({ config: { ...tenant().config, followUpCadence: [30, 180] } }),
+    );
+    vi.mocked(q.getConversationPersona).mockResolvedValue(demoPersona);
+    await handleInboundWebhook(inbound, agentReplying());
+    expect(q.scheduleFollowUp).not.toHaveBeenCalled();
+  });
+
+  it('session demo: arms the demo reminder ladder instead of going silent', async () => {
     // Before 0043 this scheduled nothing at all, which left a lead who walked away
     // mid-demo unreachable forever — expiry is only evaluated on the next inbound.
     vi.mocked(q.getConversationPersona).mockResolvedValue(demoPersona);
+    vi.mocked(q.getActiveDemoSession).mockResolvedValue(liveSession as never);
     await handleInboundWebhook(inbound, agentReplying());
     expect(q.scheduleFollowUp).toHaveBeenCalledWith(
       'cv-uuid', 1, 30, 'America/Mexico_City', undefined, 'demo', 0,
     );
   });
 
-  it('demo: the rung follows what already landed, so reminder #2 is reachable', async () => {
+  it('session demo: the rung follows what already landed, so reminder #2 is reachable', async () => {
     vi.mocked(q.getConversationPersona).mockResolvedValue(demoPersona);
+    vi.mocked(q.getActiveDemoSession).mockResolvedValue(liveSession as never);
     vi.mocked(q.countSentDemoReminders).mockResolvedValue(1);
     await handleInboundWebhook(inbound, agentReplying());
     expect(q.scheduleFollowUp).toHaveBeenCalledWith(
@@ -770,8 +797,9 @@ describe('handleInboundWebhook — demo-mode guards (roleplay must not touch rea
     );
   });
 
-  it('demo: past the last rung nothing is re-armed (the runner closes the demo there)', async () => {
+  it('session demo: past the last rung nothing is re-armed (the runner closes the demo there)', async () => {
     vi.mocked(q.getConversationPersona).mockResolvedValue(demoPersona);
+    vi.mocked(q.getActiveDemoSession).mockResolvedValue(liveSession as never);
     vi.mocked(q.countSentDemoReminders).mockResolvedValue(3);
     await handleInboundWebhook(inbound, agentReplying());
     expect(q.scheduleFollowUp).not.toHaveBeenCalled();

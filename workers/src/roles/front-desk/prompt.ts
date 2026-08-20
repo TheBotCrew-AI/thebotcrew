@@ -265,6 +265,16 @@ Hay ${config.faq.length} respuestas oficiales cargadas y NO están en este promp
       ? `\n\n# Reglas de casa — mandan sobre el flujo de arriba\n${houseRules.trim()}`
       : '';
 
+  // The tenant's own weekly schedule. Suppressed in demo mode for the same reason as the FAQ:
+  // the agent is roleplaying ANOTHER business, and these hours are ours. Worse than merely
+  // irrelevant — they contradict what the demo can actually offer, because simulated slots
+  // (demo-sim.ts) run Mon–Sat 10:00–17:30 regardless of this config. A tenant open Sundays
+  // 07:00–19:00 makes the demo promise a Sunday and then find no slot for it. The demo's
+  // hours belong in its `offering`, where they can be written to match the simulator.
+  const hoursSection = usingDemo
+    ? ''
+    : `\n\n# Horario (zona horaria: ${config.timezone})\n${renderHours(config)}`;
+
   const toneBody = config.tone?.trim()
     ? config.tone.trim()
     : 'Habla como una persona real que conoce muy bien lo que hace, pero no necesita demostrarlo a cada momento. Directo, cálido, sin presión.';
@@ -295,8 +305,14 @@ Hay ${config.faq.length} respuestas oficiales cargadas y NO están en este promp
   // date math) so the agent sets expectations up front: when a lead asks for a time
   // past the window, it says so instead of silently offering near-term slots (the tool
   // clamps the range either way — this makes the agent aware of it).
+  //
+  // Not in demo: the horizon is OUR cap and getAvailability's demo branch never applies it
+  // — the simulator's own window is what bounds a demo, and it already stops at 3 days. So
+  // the line adds no limit the demo doesn't have, and states it in OUR calendar's terms: a
+  // 3-day cap can name a Sunday out loud while the simulator (and the persona) has the
+  // roleplayed business closed that day. The demo just offers what the simulator returns.
   let horizonLine = '';
-  if (config.bookingHorizonDays != null && bookingEnabled) {
+  if (config.bookingHorizonDays != null && bookingEnabled && !usingDemo) {
     let maxReadable = '';
     try {
       const maxDate = new Date(new Date(nowIso).getTime() + config.bookingHorizonDays * 24 * 60 * 60 * 1000);
@@ -481,10 +497,7 @@ En vez de eso AFIRMA que lo vas a confirmar, en UNA línea corta y natural — "
 - No prometas un tiempo concreto ("en 5 minutos", "hoy mismo") ni des el dato después por tu cuenta: si no lo tienes, no lo tienes.
 - No lo repitas en cada mensaje ni lo conviertas en el tema. Una vez que dijiste que lo confirmas, ya quedó: no lo vuelvas a anunciar ni a marcar por lo mismo.`}
 
-${offeringSection}
-
-# Horario (zona horaria: ${config.timezone})
-${renderHours(config)}${flowSection}${faqSection}${houseRulesSection}${toolInstructionsSection}${reminderSection}${contactNameSection}${demoHandoffSection}${existingAppointmentSection}
+${offeringSection}${hoursSection}${flowSection}${faqSection}${houseRulesSection}${toolInstructionsSection}${reminderSection}${contactNameSection}${demoHandoffSection}${existingAppointmentSection}
 
 # Uso de herramientas
 Cuando necesites llamar una herramienta, NO generes texto antes de la llamada. Llama la herramienta en silencio y escribe tu respuesta al lead ÚNICAMENTE después de tener el resultado final. Un solo mensaje, sin intermedios.

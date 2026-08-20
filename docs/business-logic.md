@@ -230,6 +230,13 @@ suppressing follow-ups outright stranded people — session expiry is only evalu
 inbound**, so a lead who walked away mid-demo sat in `active_role='demo'` forever with nothing to
 rescue them. A conversation now runs **exactly one** of the two ladders (`follow_ups.kind`).
 
+- **Session demos only.** The ladder is gated on an active `demo_sessions` row. A manual keyword
+  demo (§5b) is a live showing — no budget, no expiry, ended by whoever typed the keyword — so
+  nothing can strand its lead and there is nothing for a reminder to rescue; a "(tu demo sigue
+  activo)" line half an hour later just lands on a real prospect's thread. It gets **neither**
+  ladder: falling through to the cadence would be worse, since that agent is persona-blind and
+  would nudge from inside the roleplay. A session read that FAILS degrades the same way (the
+  turn already proceeds as a manual demo), so no nudge is armed that turn either.
 - **Three rungs, no model.** `buildDemoReminder` (`roles/front-desk/prompt.ts`) — static
   templates, zero tokens, and impossible to free-form into the roleplay. Every one is wrapped in
   **parentheses**: the lead is mid-conversation with an assistant playing their own business, and
@@ -639,14 +646,38 @@ persona**, controlled by keywords — useful for showing the bot to a prospect o
     or tag the real GHL contact;
   - **follow-ups are not scheduled** — the reactivation agent is persona-blind (full history,
     normal tenant config + angles); a nudge mid-demo shatters the roleplay. They resume once the
-    conversation leaves demo;
+    conversation leaves demo. **A manual keyword demo gets NO ladder at all** — not even the
+    demo reminders of §4.2, which are gated on a session (see below);
   - the **contact-name backstop is skipped** — demo-truncated history re-opens the "opening
     exchanges" window, and a roleplay name must never overwrite the real contact's name;
-  - the three side-effect tools (`updateConversationStatus`, `updateContactName`,
-    `flagAwaitingHuman`) **no-op and pretend success**, and the demo prompt replaces the
-    terminal-state instructions with a "sin efectos reales" rule.
+  - the four side-effect tools (`updateConversationStatus`, `updateContactName`,
+    `flagAwaitingHuman`, `flagPendingInfo`) **no-op and pretend success**, and the demo prompt
+    replaces the terminal-state instructions with a "sin efectos reales" rule.
+- **The prompt drops what is OURS, so the roleplay stays coherent.** `demo_prompt_overrides`
+  replaces identity/offering/flow, but the rest of `tenant_config` is still ours, and rendering
+  it inside someone else's business is at best noise and at worst a contradiction. Suppressed
+  while `active_role='demo'`: the FAQ section, `houseRules`, and **`# Horario`** — our weekly
+  schedule contradicts what the demo can actually offer, since simulated slots run Mon–Sat
+  10:00–17:30 whatever `hours` says (a tenant open Sundays had the demo promise a Sunday and
+  then find no slot for it). **The demo's hours belong in its `offering`**, written to match
+  the simulator. The **booking-horizon line** goes too: `getAvailability`'s demo branch never
+  applies the horizon (the simulator's own 3-day window is what bounds a demo), so the line adds
+  no limit the demo has and states it in OUR calendar's terms — a 3-day cap can name a Sunday
+  out loud while the simulator and the persona have the roleplayed business closed that day.
+  `lookupFaq` is guarded in the **tool** too, not just the prompt: it stays registered with a
+  generic description, and its no-overlap branch returns the ENTIRE FAQ — our pricing and our
+  offer, mid-roleplay. In demo it returns nothing.
+- **What the prompt still says that the demo can't honour.** The shared booking sequence keeps
+  step 3 ("confirma o captura el número de WhatsApp"), but the reminder section it points at is
+  suppressed in demo — a simulated booking discards `whatsappPhone`. The dangling step can have
+  the demo ask a WhatsApp lead for their WhatsApp number. Today each demo persona closes it in
+  its own `qualificationNotes`; making `BOOKING_SECTIONS` demo-aware would fix it once.
 - **Off by default & safe.** If a tenant sets no demo keywords, nothing changes. `off` returns to
   the normal front-desk (to fully silence a thread, use the `bot-off` tag instead).
+- **The entry keyword must also clear the trigger gate.** The demo flip is written *after* the
+  `trigger_keywords` gate in `handleInboundWebhook`, so on a tenant that gates entry, a first
+  message carrying only the demo keyword is dropped as `keyword_required` and the demo never
+  starts. Put the demo keyword in `trigger_keywords` as well.
 
 ## 5c. Demo sessions — the lead-magnet funnel (0038)
 

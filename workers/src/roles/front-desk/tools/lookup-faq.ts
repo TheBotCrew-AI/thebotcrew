@@ -34,7 +34,15 @@ export const lookupFaqTool = createTool({
     matches: z.array(z.object({ q: z.string(), a: z.string() })),
   }),
   execute: async ({ question }, ctx) => {
-    const { config } = resolveAgentContext(ctx);
+    const { config, turn } = resolveAgentContext(ctx);
+
+    // Demo mode: the agent is roleplaying ANOTHER business and this FAQ holds OURS. The
+    // prompt stops announcing the tool while a demo is active, but it stays registered with
+    // a generic description, so the model can still reach for it — and the no-overlap branch
+    // below returns the WHOLE FAQ, which would drop our own offer and pricing into the middle
+    // of someone else's roleplay. In demo the answers come from the persona, not from here.
+    if (turn.activeRole === 'demo') return { matches: [] };
+
     if (config.faq.length === 0) return { matches: [] };
 
     const qTokens = new Set(tokens(question));

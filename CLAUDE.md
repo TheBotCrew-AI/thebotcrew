@@ -309,7 +309,9 @@ for the retry cron.
 - **The eval fixtures MIRROR prod, and that copy must be kept in sync.** A tenant's real
   behavior is DB text (`tenant_config.prompt_overrides`), which evals can't read at test time,
   so `roles/front-desk/evals/fixtures.ts` carries a **hand-typed copy** of the rules under test
-  (`FIT_FILTER_SECTION`, `MONEY_DISCLOSURE_RULES`, `MADI_HOUSE_RULES`). Edit a tenant row in
+  (`FIT_FILTER_SECTION`, `MONEY_DISCLOSURE_RULES`, `CALL_OFFER_RULE`, `MADI_HOUSE_RULES`, and
+  `DEMO_BOTOX_PERSONA` — the botox demo persona, mirrored WHOLE from `demo_prompt_overrides`
+  rather than by section, since the persona is small and entirely under test). Edit a tenant row in
   Supabase without updating it and every golden case keeps passing against text nobody runs —
   green tests that prove nothing. **So: whenever you change a tenant's prompt, update the
   fixture in the same change, by pasting the live text back, verbatim** (no reflowing, no
