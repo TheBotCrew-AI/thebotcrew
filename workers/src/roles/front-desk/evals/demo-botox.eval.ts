@@ -10,13 +10,20 @@
  * Live-only (needs an API key); `pnpm eval`, excluded from the CI gate.
  *
  * MEASURED on gpt-5.6-luna (the platform default), 2026-08-20. Green side: the suite
- * ran 3/3 clean. Red side, deleting from the FIXTURE the rule each case defends:
+ * ran 3/3 clean. Red side, breaking from the FIXTURE the rule each case defends:
+ *   - opens on the ad       → 0/3 pass with the PREVIOUS opening restored
  *   - price quoted          → 0/3 pass without the price block
  *   - payment answered      → 0/3 pass without the "Pagos y políticas" block
  *   - stays in character    → 0/3 pass with demoPromptOverrides set to null
  *   - offers a real slot    → could not be falsified from config, see that case
  *
- * A fourth case ("does not ask a WhatsApp lead for their number") was written and then
+ * Note the first one: DELETING its rule does not falsify it (3/3 still pass — the persona
+ * is botox-shaped throughout, so the model talks about botox with no opening rule at all).
+ * Only restoring the old "¿cómo te puedo ayudar hoy?" opening turns it red. When a case
+ * defends a CHANGE rather than a fact, the honest red side is the previous behaviour, not
+ * an empty prompt.
+ *
+ * A sixth case ("does not ask a WhatsApp lead for their number") was written and then
  * DELETED: it passed 3/3 with its rule removed, so it tested nothing. The dangling step 3
  * of the shared booking sequence never made this model ask. The persona keeps the rule —
  * three runs are not proof of absence and the line is free — but no green-either-way case
@@ -120,6 +127,36 @@ describe.skipIf(!evalApiKey)('demo botox — stays in character', () => {
 });
 
 /**
+ * The opening is the whole conceit of this demo: `demo botox` stands in for a lead
+ * arriving from the ad, so the first reply has to read like an instant reply to
+ * "vi su anuncio, quiero info de bótox" — not like a receptionist asking a stranger
+ * what they need. An open "¿cómo te puedo ayudar?" tells the med spa owner watching
+ * that the bot ignored where the lead came from, which is the one thing the campaign
+ * is selling.
+ *
+ * The second half is the guard against the failure this repo keeps re-learning: the
+ * opening must NOT reach for the appointment. Offering a slot to someone who has said
+ * one word is the aggressive-close behaviour that made earlier personas read as bots.
+ */
+describe.skipIf(!evalApiKey)('demo botox — opens like an answer to the ad', () => {
+  it('answers the ad instead of asking what they need, and does not pitch the appointment yet', async () => {
+    const agent = buildFrontDeskAgent();
+    const res = await agent.generate(
+      [{ role: 'user', content: 'demo botox' }],
+      { requestContext: rc() },
+    );
+
+    // Knows what they came for.
+    expect(reply(res)).toMatch(/botox|bótox/);
+    // Does not open with the generic question the ad already answered.
+    expect(reply(res)).not.toMatch(/en qué te (puedo )?ayud|cómo te puedo (ayudar|apoyar)|qué necesitas|qué te trae/);
+    // Does not reach for the calendar on message one.
+    expect(toolIds(res)).not.toContain('getAvailability');
+    expect(reply(res)).not.toMatch(/\d{1,2}:\d{2}/);
+  });
+});
+
+/**
  * A demo that dodges the price is a demo of a bot that dodges the price, and price
  * is the first thing a med spa owner tests. The persona carries the numbers exactly
  * so this answer lands in one message.
@@ -129,7 +166,7 @@ describe.skipIf(!evalApiKey)('demo botox — answers price straight', () => {
     const agent = buildFrontDeskAgent();
     const res = await agent.generate(
       [
-        { role: 'assistant', content: '¡Hola! Soy Vale, de Alenza Med Spa 😊 ¿Cómo te puedo ayudar hoy?' },
+        { role: 'assistant', content: '¡Hola! 👋 Soy Vale, de Alenza Med Spa. ¿Ya traes una zona en mente para el bótox o prefieres que el médico te diga qué te conviene?' },
         { role: 'user', content: 'hola, ¿cuánto cuesta el botox?' },
       ],
       { requestContext: rc() },
@@ -169,7 +206,7 @@ describe.skipIf(!evalApiKey)('demo botox — books like a real front desk', () =
     const agent = buildFrontDeskAgent();
     const res = await agent.generate(
       [
-        { role: 'assistant', content: '¡Hola! Soy Vale, de Alenza Med Spa 😊 ¿Cómo te puedo ayudar hoy?' },
+        { role: 'assistant', content: '¡Hola! 👋 Soy Vale, de Alenza Med Spa. ¿Ya traes una zona en mente para el bótox o prefieres que el médico te diga qué te conviene?' },
         { role: 'user', content: 'quiero agendar la valoración para botox' },
       ],
       { requestContext: rc() },
