@@ -1123,8 +1123,10 @@ own URL; it rides in the query string so the page opens in a browser without too
 cargar* (a human already answered it N times — the drafted text is there), *preguntar al
 cliente* (nobody has answered), *el bot lo tenía y no lo usó* (prompt bugs + closed
 topics still being asked), *sin respuesta de nadie* (queued questions in threads no
-human ever replied in). Only topics touched by THIS run appear; the accumulated table is
-the DB.
+human ever replied in), and **5. pendientes de corridas anteriores** — every gap still
+`open` that this window did not touch. 1–4 are this run's news; 5 is the carry-over, so the
+latest report is always the whole picture even if earlier ones were never opened. Every
+run's report is kept in `info_gap_reports`; the page lists them and `?run=<id>` opens one.
 
 `already_in_config` is judged against TODAY's config, so a fact loaded AFTER the lead
 asked looks like a prompt bug. The report reads the tenant's last config change

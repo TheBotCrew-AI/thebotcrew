@@ -285,8 +285,10 @@ where tenant_id = '<tenant uuid>';
   `POST /internal/run-info-gaps` with the cron bearer, every 5 minutes until
   `runsFinished` is 1 — or just wait. Read it in a browser at
   `https://thebotcrew-agents.floral-credit-be7e.workers.dev/reports/info-gaps/<tenant uuid>?key=<report_key>`
-  (HTML; add `&format=md` for the markdown; a `Authorization: Bearer` header also works for
-  curl). The key is the tenant's own `tenant_config.report_key` (0055) — the DB generated
+  (HTML; add `&format=md` for the markdown; `&run=<id>` opens an earlier report — the page
+  lists them; a `Authorization: Bearer` header also works for curl). The last report always
+  carries every still-open gap in its section 5, so skipping one loses nothing. The key is
+  the tenant's own `tenant_config.report_key` (0055) — the DB generated
   it, nothing to set: `select report_key from tenant_config where tenant_id = '…'`. It can
   be handed to the client (it opens only their report). It travels in the URL so the page
   opens without tooling, which means it lands in browser history — rotate it with

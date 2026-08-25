@@ -48,4 +48,15 @@ describe('markdownToHtml — the subset report.ts emits', () => {
     expect(page).toContain('<title>MADI Skin Care — huecos de información</title>');
     expect(page).toContain('href="?format=md"');
   });
+
+  it('lists the other runs as links and the current one as text', () => {
+    const page = renderReportPage('# X', {
+      runId: 'run-2', createdAt: '2026-09-01T13:00:00Z', mdUrl: '?format=md',
+      runs: [
+        { runId: 'run-2', createdAt: '2026-09-01T13:00:00Z', url: '?run=run-2&key=k' },
+        { runId: 'run-1', createdAt: '2026-08-25T20:41:00Z', url: '?run=run-1&key=k' },
+      ],
+    });
+    expect(page).toContain('Corridas: <strong>2026-09-01</strong> · <a href="?run=run-1&amp;key=k">2026-08-25</a>');
+  });
 });

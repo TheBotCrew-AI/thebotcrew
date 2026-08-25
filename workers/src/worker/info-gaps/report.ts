@@ -7,7 +7,9 @@
  *   3. El bot lo tenía y no lo usó — the config has the fact; that is a prompt bug.
  *   3b. Ya está en la config — the fact was loaded AFTER the lead asked (not a bug).
  *   4. Sin respuesta de nadie — pending questions no human picked up (lost leads).
- * Only gaps touched by THIS run appear in 1–3; the accumulated table is the DB.
+ *   5. Pendientes de corridas anteriores — still `open`, not asked in THIS window.
+ * 1–4 are this run's news; 5 is the carry-over, so the latest report is always the
+ * whole picture even when the previous ones were never opened.
  */
 
 export interface ReportGap {
@@ -59,6 +61,8 @@ export interface ReportSummary {
   stillAskedAfterClose: number;
   /** already_in_config gaps whose last question predates the config change — closed, not broken. */
   closedAfterAsked: number;
+  /** Still-open gaps from earlier runs that this window did not touch. */
+  carriedOpen: number;
   unanswered: number;
   candidates: number;
   extracted: number;
@@ -96,6 +100,11 @@ export function buildReport(input: ReportInput): { markdown: string; summary: Re
   const bugs = open.filter((g) => g.target === 'prompt_bug' && !predatesConfig(g));
   const closedAfterAsked = open.filter((g) => g.target === 'prompt_bug' && predatesConfig(g));
   const stillAsked = touched.filter((g) => g.status === 'closed');
+  // Carry-over: open, not part of this run, and not a "loaded after asked" leftover.
+  const carried = input.gaps.filter(
+    (g) => g.status === 'open' && !input.touched.has(g.topicKey) && g.target !== 'none'
+      && !(g.target === 'prompt_bug' && predatesConfig(g)),
+  );
 
   const byCount = (a: ReportGap, b: ReportGap) => b.occurrences - a.occurrences;
   ready.sort(byCount);
@@ -103,6 +112,7 @@ export function buildReport(input: ReportInput): { markdown: string; summary: Re
   bugs.sort(byCount);
   closedAfterAsked.sort(byCount);
   stillAsked.sort(byCount);
+  carried.sort(byCount);
 
   const summary: ReportSummary = {
     readyToLoad: ready.length,
@@ -110,6 +120,7 @@ export function buildReport(input: ReportInput): { markdown: string; summary: Re
     promptBugs: bugs.length + stillAsked.length,
     stillAskedAfterClose: stillAsked.length,
     closedAfterAsked: closedAfterAsked.length,
+    carriedOpen: carried.length,
     unanswered: input.unanswered.length,
     candidates: input.candidates,
     extracted: input.extracted,
@@ -123,9 +134,9 @@ export function buildReport(input: ReportInput): { markdown: string; summary: Re
       (input.failed > 0 ? `, ${input.failed} fallidas` : '') +
       ` · corrida \`${input.runId}\``,
     ``,
-    `| Listo para cargar | Preguntar al cliente | El bot lo tenía | Sin respuesta de nadie |`,
-    `|---|---|---|---|`,
-    `| ${ready.length} | ${ask.length} | ${bugs.length + stillAsked.length} | ${input.unanswered.length} |`,
+    `| Listo para cargar | Preguntar al cliente | El bot lo tenía | Sin respuesta de nadie | Pendientes de antes |`,
+    `|---|---|---|---|---|`,
+    `| ${ready.length} | ${ask.length} | ${bugs.length + stillAsked.length} | ${input.unanswered.length} | ${carried.length} |`,
     ``,
     `## 1. Listo para cargar — el equipo ya lo contestó`,
     ``,
@@ -161,6 +172,19 @@ export function buildReport(input: ReportInput): { markdown: string; summary: Re
           .map((u) => `- ${u.lastMessageAt ? day(u.lastMessageAt) : '—'} · \`${u.conversationId.slice(0, 8)}\` · ${u.question ? `"${u.question.replace(/\s+/g, ' ').trim()}"` : '(sin pregunta registrada)'}`)
           .join('\n')
       : `_Ninguna: todo \`pending_info\` de la ventana tuvo respuesta humana._`,
+    ``,
+    `## 5. Pendientes de corridas anteriores`,
+    ``,
+    carried.length > 0
+      ? [
+          `_Siguen abiertos y nadie los preguntó en esta ventana. Ciérralos en \`info_gaps\` cuando los cargues._`,
+          ``,
+          ...carried.map((g) =>
+            `- **${g.topicLabel}** · ${g.occurrences}× · \`${g.topic}\` → \`${g.target}\` · desde ${day(g.firstSeen)}` +
+            (g.humanAnswers.length > 0 ? ` · el equipo ya lo contestó` : ` · sin respuesta aún`),
+          ),
+        ].join('\n')
+      : `_Ninguno: todo lo abierto se preguntó en esta ventana (o ya está cerrado)._`,
     ``,
   ];
 

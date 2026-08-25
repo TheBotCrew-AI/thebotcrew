@@ -22,7 +22,7 @@ import { runPendingCapiEvents } from '../worker/capi-runner.js';
 import { runInfoGapExtractions, runPendingInfoAlerts } from '../worker/info-gap-runner.js';
 import { renderReportPage } from '../worker/info-gaps/report-html.js';
 import { exchangeCode, getInstallUrl } from '../ghl/oauth.js';
-import { loadLatestInfoGapReport, loadTenantReportKey, upsertOAuthToken } from '../db/queries.js';
+import { loadInfoGapReportRuns, loadLatestInfoGapReport, loadTenantReportKey, upsertOAuthToken } from '../db/queries.js';
 import { resolveTenant } from '../core/tenant.js';
 import { executionCtxStorage, workerEnvStorage } from '../core/execution-ctx.js';
 import type { GhlContactTagWebhook, GhlInboundWebhook, GhlOutboundWebhook } from '../ghl/types.js';
@@ -251,8 +251,9 @@ export const mastra = new Mastra({
       // set, one URL per client that can be handed to that client. It rides as `?key=` so
       // the page opens in a browser (a query-string key lands in browser history and access
       // logs — rotate the row if a URL leaks); a bearer header still works for curl.
-      // Default is an HTML page; `?format=md` is the raw markdown. Unknown tenant and wrong
-      // key are the same 401 — no probing which tenant ids exist.
+      // Default is an HTML page; `?format=md` is the raw markdown; `?run=<id>` opens an
+      // earlier report (the page lists them). Unknown tenant and wrong key are the same
+      // 401 — no probing which tenant ids exist.
       registerApiRoute('/reports/info-gaps/:tenantId', {
         method: 'GET',
         handler: async (c) => {
@@ -264,14 +265,22 @@ export const mastra = new Mastra({
           if (!expected || (key !== expected && auth !== `Bearer ${expected}`)) {
             return c.json({ error: 'unauthorized' }, 401);
           }
-          const report = await loadLatestInfoGapReport(tenantId);
-          if (!report) return c.json({ error: 'no report yet' }, 404);
+          const runParam = c.req.query('run');
+          const runId = runParam && /^[0-9a-f-]{36}$/i.test(runParam) ? runParam : undefined;
+          const report = await loadLatestInfoGapReport(tenantId, runId);
+          if (!report) return c.json({ error: runId ? 'no such run' : 'no report yet' }, 404);
           const headers = { 'x-report-run': report.runId, 'x-report-created-at': report.createdAt };
+          const keyQs = key ? `&key=${encodeURIComponent(key)}` : '';
           if (c.req.query('format') === 'md') {
             return c.body(report.markdown, 200, { ...headers, 'content-type': 'text/markdown; charset=utf-8' });
           }
-          const mdUrl = `?format=md${key ? `&key=${encodeURIComponent(key)}` : ''}`;
-          return c.body(renderReportPage(report.markdown, { runId: report.runId, createdAt: report.createdAt, mdUrl }), 200, {
+          const mdUrl = `?format=md&run=${report.runId}${keyQs}`;
+          const runs = (await loadInfoGapReportRuns(tenantId)).map((r) => ({
+            runId: r.runId,
+            createdAt: r.createdAt,
+            url: `?run=${r.runId}${keyQs}`,
+          }));
+          return c.body(renderReportPage(report.markdown, { runId: report.runId, createdAt: report.createdAt, mdUrl, runs }), 200, {
             ...headers,
             'content-type': 'text/html; charset=utf-8',
             'cache-control': 'no-store',

@@ -1660,22 +1660,38 @@ export async function loadTenantReportKey(tenantId: string): Promise<string | nu
   return (data as { report_key: string } | null)?.report_key ?? null;
 }
 
-/** The newest report for a tenant, or null if none was produced yet. */
+/** A tenant's report: the newest one, or the one for `runId` when given. */
 export async function loadLatestInfoGapReport(
   tenantId: string,
+  runId?: string,
 ): Promise<{ runId: string; markdown: string; createdAt: string } | null> {
   const supabase = getSupabase();
-  const { data, error } = await supabase
+  let query = supabase
     .from('info_gap_reports')
     .select('run_id, markdown, created_at')
-    .eq('tenant_id', tenantId)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .eq('tenant_id', tenantId);
+  if (runId) query = query.eq('run_id', runId);
+  const { data, error } = await query.order('created_at', { ascending: false }).limit(1).maybeSingle();
   fail('loadLatestInfoGapReport', error);
   if (!data) return null;
   const r = data as { run_id: string; markdown: string; created_at: string };
   return { runId: r.run_id, markdown: r.markdown, createdAt: r.created_at };
+}
+
+/** The tenant's reports, newest first — the page's run navigation. */
+export async function loadInfoGapReportRuns(
+  tenantId: string,
+  limit = 24,
+): Promise<{ runId: string; createdAt: string }[]> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from('info_gap_reports')
+    .select('run_id, created_at')
+    .eq('tenant_id', tenantId)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  fail('loadInfoGapReportRuns', error);
+  return ((data ?? []) as { run_id: string; created_at: string }[]).map((r) => ({ runId: r.run_id, createdAt: r.created_at }));
 }
 
 /** pending_info questions past the tenant's escalation window with no human reply since. */

@@ -79,8 +79,25 @@ export function markdownToHtml(md: string): string {
   return out.join('\n');
 }
 
-export function renderReportPage(markdown: string, meta: { runId: string; createdAt: string; mdUrl: string }): string {
+export interface ReportNavRun {
+  runId: string;
+  createdAt: string;
+  url: string;
+}
+
+export function renderReportPage(
+  markdown: string,
+  meta: { runId: string; createdAt: string; mdUrl: string; runs?: ReportNavRun[] },
+): string {
   const title = /^# (.*)$/m.exec(markdown)?.[1] ?? 'Reporte';
+  const nav = (meta.runs ?? [])
+    .map((r) => {
+      const label = escapeHtml(r.createdAt.slice(0, 10));
+      return r.runId === meta.runId
+        ? `<strong>${label}</strong>`
+        : `<a href="${escapeHtml(r.url)}">${label}</a>`;
+    })
+    .join(' · ');
   return `<!doctype html>
 <html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${escapeHtml(title)}</title>
@@ -95,7 +112,7 @@ export function renderReportPage(markdown: string, meta: { runId: string; create
   em{color:#6e5f67}.meta{color:#6e5f67;font-size:.8rem;margin-bottom:24px}.meta a{color:#7a2e4a}
   @media(prefers-color-scheme:dark){body{background:#1b1619;color:#f1e9ec}h2{border-color:#3a2f34}blockquote{background:#1e2622;border-color:#34493b}th,td{border-color:#3a2f34}th,code{background:#241d21}em,.meta{color:#a8969e}.meta a{color:#d98ba6}}
 </style></head><body><main>
-<div class="meta">Generado ${escapeHtml(meta.createdAt.slice(0, 16).replace('T', ' '))} UTC · corrida <code>${escapeHtml(meta.runId.slice(0, 8))}</code> · <a href="${escapeHtml(meta.mdUrl)}">markdown</a></div>
+<div class="meta">Generado ${escapeHtml(meta.createdAt.slice(0, 16).replace('T', ' '))} UTC · corrida <code>${escapeHtml(meta.runId.slice(0, 8))}</code> · <a href="${escapeHtml(meta.mdUrl)}">markdown</a>${nav ? `<br>Corridas: ${nav}` : ''}</div>
 ${markdownToHtml(markdown)}
 </main></body></html>`;
 }

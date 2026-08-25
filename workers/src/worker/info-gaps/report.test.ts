@@ -46,6 +46,7 @@ describe('buildReport', () => {
       promptBugs: 2,
       stillAskedAfterClose: 1,
       closedAfterAsked: 0,
+      carriedOpen: 1,
       unanswered: 1,
       candidates: 34,
       extracted: 33,
@@ -64,8 +65,11 @@ describe('buildReport', () => {
     expect(between(s3, s4)).toContain('aún se pregunta');
     expect(markdown.slice(s4)).toContain('¿desde qué edad?');
     expect(markdown.slice(s4)).toContain('abcdef12');
-    // A gap this run did not touch stays in the DB, not in the report.
-    expect(markdown).not.toContain('no tocado en esta corrida');
+    // A gap this run did not touch is carry-over: section 5, not 1–3.
+    const s5 = markdown.indexOf('## 5.');
+    expect(markdown.slice(s1, s5)).not.toContain('no tocado en esta corrida');
+    expect(markdown.slice(s5)).toContain('**no tocado en esta corrida** · 9×');
+    expect(markdown.slice(s5)).toContain('el equipo ya lo contestó');
   });
 
   it('says so when a section is empty instead of leaving it blank', () => {
@@ -73,6 +77,7 @@ describe('buildReport', () => {
     expect(markdown.match(/_Nada nuevo en esta ventana\._/g)).toHaveLength(2);
     expect(markdown).toContain('_Ninguno._');
     expect(markdown).toContain('tuvo respuesta humana');
+    expect(markdown).toContain('todo lo abierto se preguntó en esta ventana');
   });
 
   it('orders gaps by how often they were asked', () => {
@@ -112,5 +117,21 @@ describe('buildReport — a fact loaded AFTER the lead asked is not a prompt bug
     const { markdown, summary } = buildReport({ ...base, gaps, touched, configChangedAt: null });
     expect(summary).toMatchObject({ promptBugs: 2, closedAfterAsked: 0 });
     expect(markdown).not.toContain('## 3b.');
+  });
+});
+
+describe('buildReport — section 5 does not resurrect "loaded after asked" leftovers', () => {
+  it('excludes open prompt_bug gaps that predate the config change, and target none', () => {
+    const gaps: ReportGap[] = [
+      g({ topicKey: 'a', topicLabel: 'viejo bug aparente', target: 'prompt_bug', lastSeen: '2026-08-20T00:00:00Z' }),
+      g({ topicKey: 'b', topicLabel: 'queja', target: 'none' }),
+      g({ topicKey: 'c', topicLabel: 'edad mínima', topic: 'edad', target: 'faq', occurrences: 2 }),
+    ];
+    const { markdown, summary } = buildReport({ ...base, gaps, touched: new Set(), configChangedAt: '2026-08-25T18:00:00Z' });
+    expect(summary.carriedOpen).toBe(1);
+    const s5 = markdown.slice(markdown.indexOf('## 5.'));
+    expect(s5).toContain('**edad mínima**');
+    expect(s5).not.toContain('viejo bug aparente');
+    expect(s5).not.toContain('queja');
   });
 });
