@@ -68,7 +68,14 @@ export function recordAuxUsage(llm: AuxLlmCall, callKind: string, body: unknown)
  * One prompt in, the model's raw text out, tokens billed under `callKind`. Throws on a
  * non-2xx response — the caller decides what a failure means for its flow.
  */
-export async function auxJsonCompletion(prompt: string, llm: AuxLlmCall, callKind: string): Promise<string> {
+export async function auxJsonCompletion(
+  prompt: string,
+  llm: AuxLlmCall,
+  callKind: string,
+  // The classifier/extractor/resume-gate answers fit in the default; the info-gap
+  // extraction (a JSON list per conversation) needs room.
+  maxCompletionTokens: number = AUX_MAX_COMPLETION_TOKENS,
+): Promise<string> {
   if (llm.provider === 'anthropic') {
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -79,7 +86,7 @@ export async function auxJsonCompletion(prompt: string, llm: AuxLlmCall, callKin
       },
       body: JSON.stringify({
         model: llm.model,
-        max_tokens: 32,
+        max_tokens: maxCompletionTokens === AUX_MAX_COMPLETION_TOKENS ? 32 : maxCompletionTokens,
         messages: [{ role: 'user', content: prompt }],
       }),
     });
@@ -95,7 +102,7 @@ export async function auxJsonCompletion(prompt: string, llm: AuxLlmCall, callKin
     headers: { authorization: `Bearer ${llm.apiKey}`, 'content-type': 'application/json' },
     body: JSON.stringify({
       model: llm.model,
-      max_completion_tokens: AUX_MAX_COMPLETION_TOKENS,
+      max_completion_tokens: maxCompletionTokens,
       ...(auxEffort && { reasoning_effort: auxEffort }),
       response_format: { type: 'json_object' },
       messages: [{ role: 'user', content: prompt }],

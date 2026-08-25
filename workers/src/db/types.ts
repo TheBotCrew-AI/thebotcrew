@@ -206,6 +206,9 @@ export type BotEventType =
   | 'run_superseded'   // debounced run skipped: a newer inbound message arrived
   | 'run_suppressed'   // run skipped: human active or handed_off (see metadata.stage; metadata.resumeAt when the DO will retry at pause expiry)
   | 'resume_skipped'   // a turn re-run after the human pause chose silence (metadata.reason: answered | no_reply_needed)
+  // Info gaps (0054)
+  | 'pending_info_escalated' // a pending_info nobody answered in time got the escalation tag on the contact
+  | 'info_gap_error'   // escalation tag failed (metadata.stage 'escalation') or an extraction failed for good ('extract')
   | 'handoff_tag_on'   // `bot-off` tag added → conversation(s) handed off
   | 'handoff_tag_off'  // `bot-off` tag removed → conversation(s) reactivated
   // Per-tenant gating
@@ -281,4 +284,88 @@ export interface LogEventParams {
   p_ghl_conversation_id: string;
   p_event_type: BotEventType;
   p_metadata: Record<string, unknown>;
+}
+
+// ---------- info gaps (0054) ----------
+
+/** One tenant with the info-gap report on, plus what "is a run due" needs. */
+export interface InfoGapTenantRow {
+  tenantId: string;
+  clientId: string;
+  ghlLocationId: string;
+  /** Raw `tenant_config.info_gaps` jsonb — parsed by worker/info-gaps/config.ts. */
+  infoGaps: unknown;
+  /** Where the next window starts (last finished run's window_to); null = never ran. */
+  lastWindowTo: string | null;
+  lastStartedAt: string | null;
+  hasOpenRun: boolean;
+}
+
+/** A queue row claimed for extraction (status already 'processing', attempts counted). */
+export interface ClaimedInfoGapExtraction {
+  id: string;
+  runId: string;
+  tenantId: string;
+  clientId: string;
+  conversationId: string;
+  ghlConversationId: string;
+  reasons: string[];
+  attempts: number;
+}
+
+export interface FinalizableInfoGapRun {
+  id: string;
+  tenantId: string;
+  clientId: string;
+  windowFrom: string;
+  windowTo: string;
+  candidates: number;
+}
+
+/** A queue row read back at finalize time, with the model's validated result. */
+export interface InfoGapExtractionRow {
+  conversationId: string;
+  reasons: string[];
+  status: 'pending' | 'processing' | 'done' | 'failed';
+  result: unknown;
+  lastMessageAt: string | null;
+}
+
+export interface UpsertInfoGapParams {
+  tenantId: string;
+  topicKey: string;
+  topic: string;
+  topicLabel: string;
+  target: string;
+  question: string;
+  humanAnswer: string | null;
+  suggestedText: string | null;
+  seenAt: string;
+}
+
+/** One accumulated gap row (`info_gaps`). */
+export interface InfoGapRow {
+  topicKey: string;
+  topic: string;
+  topicLabel: string;
+  status: 'open' | 'closed' | 'dismissed';
+  target: string;
+  occurrences: number;
+  questionExamples: string[];
+  humanAnswers: string[];
+  suggestedText: string | null;
+  firstSeen: string;
+  lastSeen: string;
+}
+
+/** A pending_info nobody answered inside the tenant's escalation window. */
+export interface UnansweredPendingInfo {
+  tenantId: string;
+  clientId: string;
+  conversationId: string;
+  ghlConversationId: string;
+  ghlContactId: string;
+  escalationTag: string;
+  question: string | null;
+  flaggedAt: string;
 }

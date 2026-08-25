@@ -1050,3 +1050,81 @@ Short log of *why* certain rules exist, so they aren't "simplified away" later.
   `getAvailability` can't tell "taken by someone else" from "taken because I just booked it."
   Fix: the **already-booked guard** (§5) — inject the contact's active future appointment at
   turn start and forbid re-checking/re-offering. Conversation `8pfXVxb3mTjh9j49RCXE`.
+
+## 8. Info gaps — what the bot could not answer, per tenant (0054)
+
+Two signals already existed and nobody was reading them: the bot marks the moment it
+lacks a fact (`pending_info`, §6b), and a human's reply in the thread IS the fact the
+config was missing. On MADI the team typed the same payment answer by hand in ten of
+the thirty human-touched threads over four weeks, and four leads with a queued
+question were never answered by anyone. 0054 turns the two signals into two jobs.
+
+### 8.1 Escalation — a queued question nobody picked up
+
+`tenant_config.pending_info_escalation_tag` (e.g. `dato-sin-respuesta`; NULL = off) and
+`pending_info_escalation_hours` (NULL = 24). Daily cron (`0 13 * * *`, 06:00 Tijuana):
+`app_unanswered_pending_info()` lists conversations whose FIRST `pending_info` is older
+than the window, with no `human_agent` message since, not `opted_out`/`completed`, and
+not yet escalated; the runner ADDS the tag on the GHL contact and logs
+`pending_info_escalated`. That event is the idempotency key — a failed tag logs
+`info_gap_error` (`stage: 'escalation'`) instead, so it retries the next day.
+
+Why a tag and not an email: there is no mail channel in the Worker, and the team already
+works its inbox by tags. The escalation tag is a THIRD tag, deliberately: `pending_info_tag`
+is "we owe a fact", `awaiting_human_tag` is "someone must book", and this one is "that
+first one aged out". Removing it does nothing (the tag handler only reads the two
+owed-answer tags).
+
+### 8.2 The report — a periodic read of the threads worth reading
+
+`tenant_config.info_gaps` jsonb (NULL = off):
+`{"enabled": true, "min_candidates": 10, "max_days": 7, "min_for_time_run": 3}`.
+
+**Cadence is by volume, with a time cap.** A run opens when at least `min_candidates`
+conversations qualified since the last run, or when `max_days` passed and at least
+`min_for_time_run` did. Two conversations are an anecdote; the report's value is
+"the human answered the SAME thing N times", and that needs N. Never two open runs
+per tenant. The first window ever looks back 30 days; every later one starts where
+the previous finished (`info_gap_runs.window_to`).
+
+**Candidates** (`app_info_gap_candidates`, pure SQL, no model): a conversation with a
+`pending_info` event, a `human_agent` message that follows a lead message (a human
+message that OPENS a thread is a cold-outreach template, not an answer), or a
+`status_changed → handed_off` — inside the window. Each carries its `reasons`.
+
+**Extraction** (`worker/info-gaps/extract.ts`): one model call per conversation, on
+the 5-minute cron, 5 per tick (a MADI-sized run of ~30 finishes in half an hour). The
+prompt carries the transcript AND the tenant's current `offering`, `faq` and hours,
+because the two failure modes look identical in a transcript ("déjame lo confirmo con
+el equipo") but need opposite fixes: a fact the config lacks is loaded; a fact the
+config HAS that the bot did not use is a prompt bug. `already_in_config` is that
+verdict, and it forces `target: prompt_bug`. Output is validated with zod; a bad shape
+is a retryable failure (3 attempts, then `failed` + `info_gap_error`). Tokens bill as
+`info_gap_extract` in `llm_usage`, on the tenant's key like every other call. It is a
+queue in the DB rather than a batch API on purpose: same "no time pressure", no second
+"collect results" job, and cost is centavos either way (~100k tokens/month for MADI).
+
+**Aggregation** (`aggregate.ts`) is deterministic — no second model call. Grouping key
+= `topic` (a controlled list: `precio`, `formas_pago`, `horario`, `ubicacion`,
+`resultados`, `edad`, `sucursales`, `empleo`, `cancelacion`, `equipo`, `preparacion`,
+`promocion`, `servicio_no_listado`, `otro`) + the `topic_label` normalized (accents
+stripped, stopwords dropped, tokens sorted), so "precio de piernas completas" and
+"piernas completas precio" are one row in `info_gaps`. One occurrence per
+(conversation, topic): a lead who asked five times is one. `app_upsert_info_gap`
+accumulates examples (capped at 8), human answers, and counts; a `closed` row keeps
+counting but is NOT reopened (the report shows it as "still asked after we loaded it" —
+a prompt bug); a `dismissed` row is ignored.
+
+**The report** (`report.ts`), markdown per run in `info_gap_reports`, served by
+`GET /reports/info-gaps/:tenantId` (Bearer `REPORTS_SECRET`, its own secret so the URL
+never carries the cron secret). Sections in the reader's priority order: *listo para
+cargar* (a human already answered it N times — the drafted text is there), *preguntar al
+cliente* (nobody has answered), *el bot lo tenía y no lo usó* (prompt bugs + closed
+topics still being asked), *sin respuesta de nadie* (queued questions in threads no
+human ever replied in). Only topics touched by THIS run appear; the accumulated table is
+the DB.
+
+**Nothing here writes `tenant_config`.** Loading a fact is a prompt change, and prompt
+changes ship with evals (§6c) — the report drafts the text, a person decides. The first
+MADI report's acceptance test was the manual tracker it replaced
+(`docs/madi-info-gaps.md`): it must rediscover the open gaps and none of the closed ones.

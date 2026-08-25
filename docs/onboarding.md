@@ -265,6 +265,34 @@ nudges, it just writes no tag — the promise is then only visible in `bot_event
 
 ---
 
+### Recommended once the tenant has traffic: escalation + the info-gap report (0054)
+
+Two columns and one jsonb, all NULL by default (off):
+
+```sql
+update tenant_config set
+  pending_info_escalation_tag   = 'dato-sin-respuesta',  -- added when a pending_info aged out unanswered
+  pending_info_escalation_hours = 24,                    -- NULL = 24
+  info_gaps = '{"enabled": true, "min_candidates": 10, "max_days": 7, "min_for_time_run": 3}'
+where tenant_id = '<tenant uuid>';
+```
+
+- The escalation tag needs the `contacts.write` scope (same as the other tags). Tell the
+  client's team what the third tag means: *the bot promised to confirm something and
+  nobody answered the lead in a day*.
+- The report runs by itself (5-minute cron drains the queue, a run opens when the
+  cadence says so). To force a tenant's FIRST report right after enabling it:
+  `POST /internal/run-info-gaps` with the cron bearer, every 5 minutes until
+  `runsFinished` is 1 — or just wait. Read it at `GET /reports/info-gaps/<tenant uuid>`
+  with `Authorization: Bearer $REPORTS_SECRET` (`wrangler secret put REPORTS_SECRET`
+  once per deploy target).
+- Loading what the report proposes is a prompt change: edit the tenant row, mirror the
+  fixture, add the golden case, run it red then green — same as any other prompt edit.
+  Then mark the `info_gaps` row `closed` (or `dismissed` for noise) so the next report
+  stops proposing it; a `closed` topic that keeps being asked is reported as a prompt bug.
+
+See docs/business-logic.md §8.
+
 ## 6. Give the tenant its own AI key
 
 **No longer optional for The Bot Crew's current offer** (2026-07-31): the commercial model

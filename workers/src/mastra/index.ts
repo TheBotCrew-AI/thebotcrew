@@ -19,8 +19,9 @@ import { verifyGhlWebhook, webhookAuthDisabled } from '../ghl/webhook.js';
 import { retryPendingDeliveries } from '../worker/delivery-retry.js';
 import { runPendingFollowUps } from '../worker/followup-runner.js';
 import { runPendingCapiEvents } from '../worker/capi-runner.js';
+import { runInfoGapExtractions, runPendingInfoAlerts } from '../worker/info-gap-runner.js';
 import { exchangeCode, getInstallUrl } from '../ghl/oauth.js';
-import { upsertOAuthToken } from '../db/queries.js';
+import { loadLatestInfoGapReport, upsertOAuthToken } from '../db/queries.js';
 import { resolveTenant } from '../core/tenant.js';
 import { executionCtxStorage, workerEnvStorage } from '../core/execution-ctx.js';
 import type { GhlContactTagWebhook, GhlInboundWebhook, GhlOutboundWebhook } from '../ghl/types.js';
@@ -30,6 +31,7 @@ export { executionCtxStorage, workerEnvStorage };
 export { runPendingFollowUps } from '../worker/followup-runner.js';
 export { retryPendingDeliveries } from '../worker/delivery-retry.js';
 export { runPendingCapiEvents } from '../worker/capi-runner.js';
+export { runInfoGapExtractions, runPendingInfoAlerts } from '../worker/info-gap-runner.js';
 // The Durable Object class MUST be exported from the built Worker entry (index.mjs) for the
 // runtime to instantiate it. The getEntry() override below re-exports it from '#mastra'.
 export { ConversationDO } from '../worker/conversation-do.js';
@@ -213,6 +215,58 @@ export const mastra = new Mastra({
         },
       }),
 
+      // Info gaps (0054): the extraction drain (also rides the 5-minute cron) and the
+      // daily escalation. Exposed so a run can be forced by hand — e.g. a tenant's first
+      // report right after turning the feature on.
+      registerApiRoute('/internal/run-info-gaps', {
+        method: 'POST',
+        handler: async (c) => {
+          const expected = (c.env as Record<string, string | undefined>).INTERNAL_CRON_SECRET;
+          const auth = c.req.header('authorization') ?? '';
+          if (!expected || auth !== `Bearer ${expected}`) {
+            return c.json({ error: 'unauthorized' }, 401);
+          }
+          const result = await runInfoGapExtractions();
+          console.log('[cron] run-info-gaps:', result);
+          return c.json(result);
+        },
+      }),
+      registerApiRoute('/internal/run-pending-info-alerts', {
+        method: 'POST',
+        handler: async (c) => {
+          const expected = (c.env as Record<string, string | undefined>).INTERNAL_CRON_SECRET;
+          const auth = c.req.header('authorization') ?? '';
+          if (!expected || auth !== `Bearer ${expected}`) {
+            return c.json({ error: 'unauthorized' }, 401);
+          }
+          const result = await runPendingInfoAlerts();
+          console.log('[cron] run-pending-info-alerts:', result);
+          return c.json(result);
+        },
+      }),
+
+      // The latest info-gap report for a tenant, as markdown. Read-only; its own secret
+      // (REPORTS_SECRET) so sharing the report URL never shares the cron secret.
+      registerApiRoute('/reports/info-gaps/:tenantId', {
+        method: 'GET',
+        handler: async (c) => {
+          const expected = (c.env as Record<string, string | undefined>).REPORTS_SECRET;
+          const auth = c.req.header('authorization') ?? '';
+          if (!expected || auth !== `Bearer ${expected}`) {
+            return c.json({ error: 'unauthorized' }, 401);
+          }
+          const tenantId = c.req.param('tenantId');
+          if (!/^[0-9a-f-]{36}$/i.test(tenantId)) return c.json({ error: 'bad tenant id' }, 400);
+          const report = await loadLatestInfoGapReport(tenantId);
+          if (!report) return c.json({ error: 'no report yet' }, 404);
+          return c.body(report.markdown, 200, {
+            'content-type': 'text/markdown; charset=utf-8',
+            'x-report-run': report.runId,
+            'x-report-created-at': report.createdAt,
+          });
+        },
+      }),
+
       // DO binding health check (Phase 0). Proves CONVERSATION_DO is bound and the RPC
       // path works, locally under `wrangler dev` and post-deploy. Bearer-secured.
       registerApiRoute('/internal/do-ping', {
@@ -259,7 +313,8 @@ export const mastra = new Mastra({
       name: 'thebotcrew-agents',
       compatibility_date: '2025-06-01',
       compatibility_flags: ['nodejs_compat'],
-      triggers: { crons: ['* * * * *', '*/5 * * * *'] },
+      // 13:00 UTC = 06:00 Tijuana / 07:00 CDMX: the daily pending-info escalation (0054).
+      triggers: { crons: ['* * * * *', '*/5 * * * *', '0 13 * * *'] },
       // Per-conversation Durable Object (turn/follow-up durability — see
       // docs/durable-objects-migration.md). CloudflareDeployer spreads this into the
       // generated wrangler.jsonc. Names are STICKY: don't rename ConversationDO / tag v1.
@@ -301,7 +356,7 @@ export const mastra = new Mastra({
 
         scheduled: async (event, _env, ctx) => {
           ctx.waitUntil((async () => {
-            const { mastra, runPendingFollowUps, retryPendingDeliveries, runPendingCapiEvents } = await import('#mastra');
+            const { mastra, runPendingFollowUps, retryPendingDeliveries, runPendingCapiEvents, runInfoGapExtractions, runPendingInfoAlerts } = await import('#mastra');
             const _mastra = mastra();
             try {
               const reactivationAgent = _mastra.getAgent('reactivation');
@@ -322,6 +377,20 @@ export const mastra = new Mastra({
                 console.log('[cron] retry-deliveries:', JSON.stringify(result));
               } catch (err) {
                 console.error('[cron] retry-deliveries error:', err instanceof Error ? err.message : String(err));
+              }
+              try {
+                const result = await runInfoGapExtractions();
+                console.log('[cron] run-info-gaps:', JSON.stringify(result));
+              } catch (err) {
+                console.error('[cron] run-info-gaps error:', err instanceof Error ? err.message : String(err));
+              }
+            }
+            if (event.cron === '0 13 * * *') {
+              try {
+                const result = await runPendingInfoAlerts();
+                console.log('[cron] run-pending-info-alerts:', JSON.stringify(result));
+              } catch (err) {
+                console.error('[cron] run-pending-info-alerts error:', err instanceof Error ? err.message : String(err));
               }
             }
           })());

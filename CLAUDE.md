@@ -136,7 +136,7 @@ workers/                       # Mastra + Cloudflare Worker package (@thebotcrew
     ghl/                       # webhook parse/verify, OAuth, tags + transport-only API client (live)
     meta/                      # Meta Conversions API (0048): capi-config (pure parse/payload) + capi (enqueue + Graph send)
     db/                        # service-role Supabase client, queries (config read + RPC writes)
-    worker/                    # webhook-handler (inbound) + conversation-do (per-conversation Durable Object: durable-alarm debounce + serialized turn) + outbound-handler (human takeover) + tag-handler (bot-off) + delivery-retry + followup-runner + capi-runner (Meta CAPI queue drain)
+    worker/                    # webhook-handler (inbound) + conversation-do (per-conversation Durable Object: durable-alarm debounce + serialized turn) + outbound-handler (human takeover) + tag-handler (bot-off) + delivery-retry + followup-runner + capi-runner (Meta CAPI queue drain) + info-gap-runner + info-gaps/ (0054: what the bot couldn't answer — extraction queue, aggregate, report; pending_info escalation)
   scripts/simulate-webhook.mjs # local dev: fire a fake GHL webhook
   fixtures/                    # sample webhook payloads
   wrangler.jsonc, vitest.config.ts, tsconfig.json
@@ -208,7 +208,14 @@ supabase/
                                #      MADI = 30 — su equipo trabaja los hilos más de 5 min y el bot re-entraba),
                                # 0053 resume_after_human_pause (evento `resume_skipped`: un turno suprimido por la
                                #      pausa ya no se pierde — el DO re-arma la alarma al vencer y re-corre el turno
-                               #      por el resume gate; cada silencio queda con su motivo)
+                               #      por el resume gate; cada silencio queda con su motivo),
+                               # 0054 info_gaps (lo que el bot no supo contestar, por tenant: cola de extracción
+                               #      `info_gap_extractions` drenada 5/tick por el cron de 5 min, acumulado por tema en
+                               #      `info_gaps`, reporte markdown en `info_gap_reports` servido por
+                               #      GET /reports/info-gaps/:tenantId con `REPORTS_SECRET`; cadencia en
+                               #      tenant_config.info_gaps. Aparte, la escalación diaria (cron `0 13 * * *`): un
+                               #      pending_info sin respuesta humana en N horas recibe un TERCER tag
+                               #      (`pending_info_escalation_tag`). Nada escribe tenant_config — ver business-logic §8)
   clients.sql, seed-tenants.sql# seeds (run by `supabase db reset` per config.toml)
 sites/                         # client marketing sites: static HTML, no build step, no deps
   _template/                   # starting point for a new client
@@ -339,12 +346,15 @@ for the retry cron.
   Needs `supabase start`; **not** in CI (no DB there).
 - Run `pnpm test:unit` before any change to orchestration/parsing, `pnpm test:db` after touching
   a migration or an `app_*` RPC, and `pnpm eval` before a change to a role's prompt or tools.
+  `worker/info-gaps/extract.eval.ts` is the one live eval outside a role: the info-gap extractor
+  on a real MADI thread, old config vs new config (the `already_in_config` verdict).
   (Layer 3 golden-conversation gate on staging: TBD.)
 
 ### Deploy
 - `pnpm typecheck` + `pnpm test:unit` (the gate) then `pnpm build` (mastra build via
   CloudflareDeployer) → `pnpm --filter @thebotcrew/workers exec wrangler deploy`. Set Worker
   secrets with `wrangler secret put <NAME>` (see `.env.example`). Staging step TBD.
+  `REPORTS_SECRET` (0054) gates `GET /reports/info-gaps/:tenantId` and fails closed while unset.
 - **Gradual rollout (preferred now that a client is live):** `wrangler versions upload` →
   `wrangler versions deploy` at a percentage → ramp → `wrangler rollback` if needed. Caveat:
   a deploy that includes new **Durable Object migrations** cannot roll out gradually.
@@ -405,6 +415,10 @@ for the retry cron.
   `ghl_contact_id`). The bot also writes tags when IT sets a status (`ghl/tags.ts`
   `STATUS_TAGS`), so state stays visible/synced in GHL. **Requires the `contacts.write`
   scope** (`ghl/oauth.ts`) — adding it means tenants must re-authorize the Marketplace app.
+- Escalation tag (0054) — the **third** tag, and it is not a queue: `pending_info_escalation_tag`
+  (e.g. `dato-sin-respuesta`) is ADDED by the daily cron when a `pending_info` got no human reply
+  within `pending_info_escalation_hours` (NULL = 24). The tag handler ignores it; it exists so the
+  aged-out question shows up in the team's inbox. Idempotent via `pending_info_escalated`. §8.
 - Owed-answer tags — **two queues, one state**: `awaiting_human_tag` (e.g. `esperando-agenda`,
   0034: the CLIENT owes a booking) and `pending_info_tag` (e.g. `dato-pendiente`, 0050: WE owe a
   fact the config lacks, written by `flagPendingInfo`). Different owners, so they must be

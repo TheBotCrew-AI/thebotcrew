@@ -29,6 +29,13 @@ import type {
   TenantConfigRow,
   TenantRow,
   UpsertHumanAgentParams,
+  ClaimedInfoGapExtraction,
+  FinalizableInfoGapRun,
+  InfoGapExtractionRow,
+  InfoGapRow,
+  InfoGapTenantRow,
+  UnansweredPendingInfo,
+  UpsertInfoGapParams,
 } from './types.js';
 
 function fail(scope: string, error: { message: string } | null): void {
@@ -1426,4 +1433,256 @@ export async function reactivateConversation(ghlConversationId: string): Promise
     p_ghl_conversation_id: ghlConversationId,
   });
   fail('reactivateConversation', error);
+}
+
+// ============================================================
+// Info gaps (0054): the report queue + the escalation feed.
+// ============================================================
+
+/** Tenants with `info_gaps` set, with their last run (for the "due" decision). */
+export async function loadInfoGapTenants(): Promise<InfoGapTenantRow[]> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase.rpc('app_info_gap_tenants');
+  fail('loadInfoGapTenants', error);
+  type Row = {
+    tenant_id: string; client_id: string; ghl_location_id: string; info_gaps: unknown;
+    last_window_to: string | null; last_started_at: string | null; has_open_run: boolean;
+  };
+  return ((data ?? []) as Row[]).map((r) => ({
+    tenantId: r.tenant_id,
+    clientId: r.client_id,
+    ghlLocationId: r.ghl_location_id,
+    infoGaps: r.info_gaps,
+    lastWindowTo: r.last_window_to,
+    lastStartedAt: r.last_started_at,
+    hasOpenRun: r.has_open_run === true,
+  }));
+}
+
+/** How many conversations would qualify for a run over [from, to). */
+export async function countInfoGapCandidates(clientId: string, fromIso: string, toIso: string): Promise<number> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase.rpc('app_info_gap_candidates', {
+    p_client_id: clientId,
+    p_from: fromIso,
+    p_to: toIso,
+  });
+  fail('countInfoGapCandidates', error);
+  return ((data ?? []) as unknown[]).length;
+}
+
+/** Open a run and enqueue its candidates atomically. Returns the run id. */
+export async function openInfoGapRun(
+  tenantId: string,
+  clientId: string,
+  fromIso: string,
+  toIso: string,
+  limit = 60,
+): Promise<string> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase.rpc('app_open_info_gap_run', {
+    p_tenant_id: tenantId,
+    p_client_id: clientId,
+    p_from: fromIso,
+    p_to: toIso,
+    p_limit: limit,
+  });
+  fail('openInfoGapRun', error);
+  return data as string;
+}
+
+/** Claim up to `limit` pending extractions (pending → processing, attempts + 1). */
+export async function claimInfoGapExtractions(limit = 5): Promise<ClaimedInfoGapExtraction[]> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase.rpc('app_claim_info_gap_extractions', { p_limit: limit });
+  fail('claimInfoGapExtractions', error);
+  type Row = {
+    id: string; run_id: string; tenant_id: string; client_id: string; conversation_id: string;
+    ghl_conversation_id: string; reasons: string[] | null; attempts: number;
+  };
+  return ((data ?? []) as Row[]).map((r) => ({
+    id: r.id,
+    runId: r.run_id,
+    tenantId: r.tenant_id,
+    clientId: r.client_id,
+    conversationId: r.conversation_id,
+    ghlConversationId: r.ghl_conversation_id,
+    reasons: r.reasons ?? [],
+    attempts: r.attempts,
+  }));
+}
+
+/** Finish one extraction: 'done' with its result, 'pending' to retry, 'failed' for good. */
+export async function completeInfoGapExtraction(
+  id: string,
+  status: 'pending' | 'done' | 'failed',
+  result: unknown = null,
+  errorMsg: string | null = null,
+): Promise<void> {
+  const supabase = getSupabase();
+  const { error } = await supabase.rpc('app_complete_info_gap_extraction', {
+    p_id: id,
+    p_status: status,
+    p_result: result,
+    p_error: errorMsg,
+  });
+  fail('completeInfoGapExtraction', error);
+}
+
+/** Open runs whose queue has fully drained. */
+export async function loadFinalizableInfoGapRuns(): Promise<FinalizableInfoGapRun[]> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase.rpc('app_info_gap_finalizable_runs');
+  fail('loadFinalizableInfoGapRuns', error);
+  type Row = { id: string; tenant_id: string; client_id: string; window_from: string; window_to: string; candidates: number };
+  return ((data ?? []) as Row[]).map((r) => ({
+    id: r.id,
+    tenantId: r.tenant_id,
+    clientId: r.client_id,
+    windowFrom: r.window_from,
+    windowTo: r.window_to,
+    candidates: r.candidates,
+  }));
+}
+
+/** Every extraction of a run with the conversation's last activity (for first/last_seen). */
+export async function loadInfoGapExtractions(runId: string): Promise<InfoGapExtractionRow[]> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from('info_gap_extractions')
+    .select('conversation_id, reasons, status, result, conversations(last_message_at)')
+    .eq('run_id', runId);
+  fail('loadInfoGapExtractions', error);
+  type Row = {
+    conversation_id: string; reasons: string[] | null; status: InfoGapExtractionRow['status']; result: unknown;
+    conversations: { last_message_at: string | null } | { last_message_at: string | null }[] | null;
+  };
+  return ((data ?? []) as unknown as Row[]).map((r) => {
+    const conv = Array.isArray(r.conversations) ? r.conversations[0] : r.conversations;
+    return {
+      conversationId: r.conversation_id,
+      reasons: r.reasons ?? [],
+      status: r.status,
+      result: r.result,
+      lastMessageAt: conv?.last_message_at ?? null,
+    };
+  });
+}
+
+/** Merge one extracted gap into the tenant's accumulated row; returns the row's status. */
+export async function upsertInfoGap(p: UpsertInfoGapParams): Promise<'open' | 'closed' | 'dismissed'> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase.rpc('app_upsert_info_gap', {
+    p_tenant_id: p.tenantId,
+    p_topic_key: p.topicKey,
+    p_topic: p.topic,
+    p_topic_label: p.topicLabel,
+    p_target: p.target,
+    p_question: p.question,
+    p_human_answer: p.humanAnswer,
+    p_suggested_text: p.suggestedText,
+    p_seen_at: p.seenAt,
+  });
+  fail('upsertInfoGap', error);
+  return (data as 'open' | 'closed' | 'dismissed' | null) ?? 'dismissed';
+}
+
+/** The tenant's accumulated gaps (open + closed; dismissed rows never surface). */
+export async function loadInfoGaps(tenantId: string): Promise<InfoGapRow[]> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from('info_gaps')
+    .select('topic_key, topic, topic_label, status, target, occurrences, question_examples, human_answers, suggested_text, first_seen, last_seen')
+    .eq('tenant_id', tenantId)
+    .in('status', ['open', 'closed'])
+    .order('occurrences', { ascending: false });
+  fail('loadInfoGaps', error);
+  type Row = {
+    topic_key: string; topic: string; topic_label: string; status: InfoGapRow['status']; target: string;
+    occurrences: number; question_examples: unknown; human_answers: unknown; suggested_text: string | null;
+    first_seen: string; last_seen: string;
+  };
+  const strings = (v: unknown): string[] =>
+    Array.isArray(v) ? v.filter((s): s is string => typeof s === 'string') : [];
+  return ((data ?? []) as Row[]).map((r) => ({
+    topicKey: r.topic_key,
+    topic: r.topic,
+    topicLabel: r.topic_label,
+    status: r.status,
+    target: r.target,
+    occurrences: r.occurrences,
+    questionExamples: strings(r.question_examples),
+    humanAnswers: strings(r.human_answers),
+    suggestedText: r.suggested_text,
+    firstSeen: r.first_seen,
+    lastSeen: r.last_seen,
+  }));
+}
+
+export async function saveInfoGapReport(
+  runId: string,
+  tenantId: string,
+  markdown: string,
+  summary: Record<string, unknown>,
+): Promise<void> {
+  const supabase = getSupabase();
+  const { error } = await supabase
+    .from('info_gap_reports')
+    .insert({ run_id: runId, tenant_id: tenantId, markdown, summary });
+  fail('saveInfoGapReport', error);
+}
+
+export async function finishInfoGapRun(
+  runId: string,
+  status: 'done' | 'failed',
+  extracted: number,
+  gapsFound: number,
+): Promise<void> {
+  const supabase = getSupabase();
+  const { error } = await supabase.rpc('app_finish_info_gap_run', {
+    p_run_id: runId,
+    p_status: status,
+    p_extracted: extracted,
+    p_gaps_found: gapsFound,
+  });
+  fail('finishInfoGapRun', error);
+}
+
+/** The newest report for a tenant, or null if none was produced yet. */
+export async function loadLatestInfoGapReport(
+  tenantId: string,
+): Promise<{ runId: string; markdown: string; createdAt: string } | null> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from('info_gap_reports')
+    .select('run_id, markdown, created_at')
+    .eq('tenant_id', tenantId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  fail('loadLatestInfoGapReport', error);
+  if (!data) return null;
+  const r = data as { run_id: string; markdown: string; created_at: string };
+  return { runId: r.run_id, markdown: r.markdown, createdAt: r.created_at };
+}
+
+/** pending_info questions past the tenant's escalation window with no human reply since. */
+export async function loadUnansweredPendingInfo(): Promise<UnansweredPendingInfo[]> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase.rpc('app_unanswered_pending_info');
+  fail('loadUnansweredPendingInfo', error);
+  type Row = {
+    tenant_id: string; client_id: string; conversation_id: string; ghl_conversation_id: string;
+    ghl_contact_id: string; escalation_tag: string; question: string | null; flagged_at: string;
+  };
+  return ((data ?? []) as Row[]).map((r) => ({
+    tenantId: r.tenant_id,
+    clientId: r.client_id,
+    conversationId: r.conversation_id,
+    ghlConversationId: r.ghl_conversation_id,
+    ghlContactId: r.ghl_contact_id,
+    escalationTag: r.escalation_tag,
+    question: r.question,
+    flaggedAt: r.flagged_at,
+  }));
 }
