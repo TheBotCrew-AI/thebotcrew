@@ -7,6 +7,13 @@
 >
 > Estado: ☐ pendiente · ◐ el equipo ya lo contestó en chat, falta pasarlo a la config · ☑ en config.
 >
+> **Desde 2026-08-25 este tracker se genera solo.** El runner de 0054 produce el mismo reporte por
+> corrida (docs/business-logic.md §8); se abre en el navegador en
+> `https://thebotcrew-agents.floral-credit-be7e.workers.dev/reports/info-gaps/19cf934b-2e36-4f4b-aa77-d3287e8d38fb?key=<report_key>`
+> con `select report_key from tenant_config where tenant_id = '19cf934b-…'`. Este archivo queda como
+> la base de comparación de la primera corrida (que redescubrió los huecos abiertos de abajo) y no se
+> actualiza a mano de aquí en adelante.
+>
 > **2026-08-25 — primer cierre.** Los huecos 1, 2, 4, 5, 8, 9, 10, 11, 12, 14, 15 y la mitad segura de 6 y 13 pasaron a la config
 > de prod con la respuesta que el equipo ya daba en chat (`offering`: reglas que afectan la cotización; `faq`: respuestas
 > cerradas que se buscan con `lookupFaq`). Gate: `madi-info-gaps.eval.ts` (5 casos, rojo→verde). Lo que sigue abierto
