@@ -13,7 +13,7 @@ import * as q from '../db/queries.js';
 import { parseOutboundWebhook } from '../ghl/webhook.js';
 import { handleOutboundWebhook } from './outbound-handler.js';
 
-const tenant = { tenantId: 't1', clientId: 'client1', ghlLocationId: 'loc1' } as unknown as TenantContext;
+const tenant = { tenantId: 't1', clientId: 'client1', ghlLocationId: 'loc1', config: {} } as unknown as TenantContext;
 
 const parsed = (): ParsedHumanOutbound => ({
   locationId: 'loc1',
@@ -79,13 +79,22 @@ describe('handleOutboundWebhook — filters', () => {
 });
 
 describe('handleOutboundWebhook — takeover vs opener', () => {
-  it('mid-thread human message → logs + opens 5-min pause + cancels follow-ups', async () => {
+  it('mid-thread human message → logs + opens default 5-min pause + cancels follow-ups', async () => {
     const res = await handleOutboundWebhook({} as never);
 
     expect(q.logMessage).toHaveBeenCalledWith(expect.objectContaining({ p_sender_type: 'human_agent', p_content: 'hola desde el equipo' }));
-    expect(q.setHumanActive).toHaveBeenCalledWith('conv1');
+    expect(q.setHumanActive).toHaveBeenCalledWith('conv1', 5);
     expect(q.cancelFollowUps).toHaveBeenCalledWith('cv1');
     expect(res.body).toMatchObject({ logged: true, conversationId: 'cv1' });
+  });
+
+  it('tenant with human_pause_minutes → pause uses the configured length', async () => {
+    vi.mocked(resolveTenant).mockResolvedValue({
+      ...tenant,
+      config: { humanPauseMinutes: 30 },
+    } as unknown as TenantContext);
+    await handleOutboundWebhook({} as never);
+    expect(q.setHumanActive).toHaveBeenCalledWith('conv1', 30);
   });
 
   it('cold-outreach opener (first message) → logs only, NO pause, NO cancel', async () => {

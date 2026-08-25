@@ -173,6 +173,17 @@ deliberately (see the KEY INSIGHT at the top).
    Requires single-alarm multiplexing (turn vs follow-up) in `ConversationDO`; keep the cron as a
    net with an atomic due-claim. Not worth the risk unless the cron becomes a problem.
 
+**▶ 2026-08-25 — the alarm now does double duty (pause-resume, 0053).** Deleting the
+reconciliation cron in Phase 3 quietly lost one thing it did by accident: re-running a turn that
+had been *suppressed* by the human pause once the pause expired (`app_load_unanswered_turns`
+filtered on `human_active_until < NOW()`). With the DO, a suppressed turn was simply dropped.
+Fixed inside the DO rather than with a new cron: `alarm()` reads `resumeAt` off the suppressed
+turn's result, stores the turn back flagged `resumed`, and re-arms the same alarm for the expiry
+(+5 s). No multiplexing needed — a newer inbound's `scheduleTurn` overwrites the pending turn
+and its 15 s alarm wins (the DO checks for that before putting the resumed turn back). This is
+NOT Phase 2 (follow-ups stay on the cron); it is the one piece of "re-check later" the DO now
+owns. Gate + classifier: `worker/resume-gate.ts`, business-logic §3.
+
 **Rollback of the whole DO path if ever needed:** set `DO_TURNS` empty (`echo -n "" | wrangler
 secret put DO_TURNS`) → every tenant instantly falls back to the legacy `waitUntil` path; the DO
 class stays deployed but idle. No redeploy needed.

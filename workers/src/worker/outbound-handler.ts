@@ -15,8 +15,8 @@
  *   6. Log message to our store (sender_type='human_agent').
  *   7. If this is the conversation's FIRST message, it's a cold-outreach opener
  *      (e.g. a WhatsApp template) — log only, no pause. Otherwise:
- *   8. Start/refresh the 5-min human-active timer + cancel pending follow-ups
- *      (a human is in the conversation).
+ *   8. Start/refresh the human-active timer (tenant_config.human_pause_minutes,
+ *      default 5) + cancel pending follow-ups (a human is in the conversation).
  */
 
 import { resolveTenant } from '../core/tenant.js';
@@ -103,8 +103,9 @@ export async function handleOutboundWebhook(
 
   // These must be awaited — fire-and-forget gets killed when the Worker response is sent
   // on Cloudflare (no waitUntil available here).
+  const pauseMinutes = tenant.config.humanPauseMinutes ?? 5;
   try {
-    await setHumanActive(parsed.conversationId);
+    await setHumanActive(parsed.conversationId, pauseMinutes);
   } catch (e) {
     console.error('[outbound] setHumanActive failed:', e instanceof Error ? e.message : String(e));
   }
@@ -117,7 +118,7 @@ export async function handleOutboundWebhook(
   }
 
   console.log(
-    `[outbound] human message conv=${parsed.conversationId} agent=${humanAgentId ?? 'unknown'} timer=5min`,
+    `[outbound] human message conv=${parsed.conversationId} agent=${humanAgentId ?? 'unknown'} timer=${pauseMinutes}min`,
   );
   return { status: 200, body: { logged: true, conversationId } };
 }

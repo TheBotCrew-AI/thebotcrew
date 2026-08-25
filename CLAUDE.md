@@ -65,7 +65,9 @@ then calls `ConversationDO.scheduleTurn()`, which stores the turn and arms a **d
 (each new inbound resets it → debounce/coalescing). On the alarm the DO runs `runAgentTurn`.
 Because a DO instance is single-threaded, all processing for a conversation is **serialized**
 (kills the double-run / self-block-on-booking class), and the Alarm is **durable** (kills the
-silent-drop class). This is the Durable Objects migration — Phase 1 done; see
+silent-drop class). The same alarm also carries the **pause-resume** (0053): a turn suppressed
+by the human pause is stored back and the alarm re-armed for the pause expiry, flagged
+`resumed` (see `worker/resume-gate.ts`). This is the Durable Objects migration — Phase 1 done; see
 [`docs/durable-objects-migration.md`](docs/durable-objects-migration.md).
 
 The old compensating patches were **deleted in Phase 3 (2026-07-03, migration 0030)** once the DO
@@ -201,7 +203,12 @@ supabase/
                                #      fecha y ya. NO es `bot-opted-out`/0045 — eso es consentimiento de la conversación y
                                #      calla al bot; esto es de las campañas de GHL, que no manda el bot. Nada en el Worker
                                #      lee la columna: es registro histórico. Write-once por el `IS NULL` del RPC, así que
-                               #      quitar el tag NO borra la fecha y volver a darse de baja conserva la original)
+                               #      quitar el tag NO borra la fecha y volver a darse de baja conserva la original),
+                               # 0052 human_pause_minutes (pausa de takeover humano por tenant: NULL = 5 min;
+                               #      MADI = 30 — su equipo trabaja los hilos más de 5 min y el bot re-entraba),
+                               # 0053 resume_after_human_pause (evento `resume_skipped`: un turno suprimido por la
+                               #      pausa ya no se pierde — el DO re-arma la alarma al vencer y re-corre el turno
+                               #      por el resume gate; cada silencio queda con su motivo)
   clients.sql, seed-tenants.sql# seeds (run by `supabase db reset` per config.toml)
 sites/                         # client marketing sites: static HTML, no build step, no deps
   _template/                   # starting point for a new client
@@ -382,8 +389,13 @@ for the retry cron.
   `messageType` (`FB`/`IG`/`WhatsApp`, normalized in `ghl/webhook.ts`); outbound sends with
   the matching `type`. FB/IG have no phone — delivery routes by `contactId`, and a real
   inbound (FB/IG/WhatsApp messaging window) must be open for GHL to deliver.
-- Human takeover (hybrid): a human reply (`source:'app'` outbound webhook) opens a 5-min
-  sliding pause; `status='handed_off'` is a permanent pause. Both are enforced by
+- Human takeover (hybrid): a human reply (`source:'app'` outbound webhook) opens a
+  sliding pause — per-tenant length via `tenant_config.human_pause_minutes` (0052),
+  NULL = 5 min default (MADI: 30); `status='handed_off'` is a permanent pause. A lead
+  message that arrives DURING the pause is not dropped (0053): the DO re-arms its alarm
+  for the pause expiry and re-runs the turn through the **resume gate**
+  (`worker/resume-gate.ts`: skip if someone already answered, skip if the last message is
+  a courtesy close — a cheap classifier biased to reply). See docs/business-logic.md §3. Both are enforced by
   `isBotSuppressed`, re-checked again right before send (anti-double-message). **Exception:** a
   `source:'app'` message that is the conversation's FIRST message is a cold-outreach opener (e.g.
   a WhatsApp template on a new contact) — logged but no pause, so the bot answers the lead's reply.

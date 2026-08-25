@@ -116,14 +116,40 @@ Statuses (`conversations.status`): `active`, `standby`, `completed`, `opted_out`
 Hybrid human ↔ AI. Enforced by `isBotSuppressed`, re-checked again right before send
 (anti-double-message). See `worker/outbound-handler.ts`, `worker/tag-handler.ts`.
 
-- **Human reply** (`source:'app'` outbound webhook) opens a **5-minute sliding pause**
-  (`conversations.human_active_until`). Each human message extends it.
+- **Human reply** (`source:'app'` outbound webhook) opens a **sliding pause**
+  (`conversations.human_active_until`). Each human message extends it. Length is
+  per-tenant: `tenant_config.human_pause_minutes` (0052), NULL = platform default
+  **5 minutes**. MADI runs at **30** — their team works threads for longer than 5
+  minutes, and the window kept expiring seconds before the lead's next message
+  scheduled a bot turn, so the bot re-entered live human conversations.
 - **Cold-outreach opener exception.** If a `source:'app'` message is the conversation's
   **first** message (`conversationMessageCount == 0`), it's an outreach opener — e.g. a WhatsApp
   template Leo sends to open the 24h window on a **new** contact — not a human taking over an
   ongoing thread. It's still logged (history context; maps to an assistant turn) but does **not**
   open the pause, so the bot answers the lead's reply. A real takeover happens mid-thread and
   still pauses. (Fixed the 2026-07-02 "template opener → lead replies → bot muted 5 min" bug.)
+- **Resume after the pause (0053).** A lead message that lands while the pause is running
+  is **not dropped**. The turn still runs at the debounce alarm, sees the pause, and returns
+  the pause expiry (`resumeAt`) instead of just bailing; `ConversationDO` stores the turn
+  back and re-arms its alarm for expiry + 5 s, flagged `resumed`. Before this, a suppressed
+  turn was gone for good — the reconciliation cron deleted in 0030 had been catching this
+  class by accident, and the 30-minute pause made the hole six times wider (MADI 2026-08-05:
+  19 h of silence on an active lead). A resumed turn passes the **resume gate**
+  (`worker/resume-gate.ts`) before anything else:
+  1. `hasReplyAfter` — any outbound (human or bot) after the pending inbound → skip, event
+     `resume_skipped {reason:'answered'}`. The normal superseded check only sees newer
+     *inbounds*; a turn that wakes 30 minutes later needs this one.
+  2. A cheap classifier (`classifyNeedsReply`, aux call `resume-gate`, last 8 messages):
+     does the lead's last message still ask for something, or is it a courtesy close
+     ("Gracias", "ok perfecto", 👍) after the team resolved it? `false` → skip, event
+     `resume_skipped {reason:'no_reply_needed'}`. **Biased to reply**: a failed or
+     unparseable call replies — an extra "¡Con gusto!" costs less than a lost lead.
+  3. Otherwise the ordinary turn runs (all its gates included). If the pause was extended
+     meanwhile, the run is suppressed again and re-armed to the new expiry.
+  A newer inbound during the pause simply overwrites the pending turn (its own 15 s alarm
+  wins) — the DO checks for that before putting the resumed turn back. Permanent mutes
+  (`handed_off`, `opted_out`) have no expiry, so they still drop. The legacy `waitUntil`
+  path cannot re-arm; it keeps the old drop-on-suppress behaviour.
 - **`status='handed_off'`** is a **permanent** pause.
 - **`bot-off` tag** on a GHL contact = permanent handoff (contact-scoped, affects all their
   conversations); removing it resumes the bot. There is no `bot-on` tag — absence means on.

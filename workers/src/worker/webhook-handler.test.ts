@@ -21,7 +21,7 @@ import * as q from '../db/queries.js';
 import { findUpcomingAppointment } from '../db/upcoming-appointment.js';
 import { getAiApiKey, resolveAiApiKey } from '../core/env.js';
 import { queueCapiEvent, queueCapiStatusEvent } from '../meta/capi.js';
-import { handleInboundWebhook, splitIntoMessages } from './webhook-handler.js';
+import { handleInboundWebhook, runAgentTurn, splitIntoMessages } from './webhook-handler.js';
 
 function tenant(overrides: Partial<TenantContext> = {}): TenantContext {
   return {
@@ -1404,5 +1404,139 @@ describe('handleInboundWebhook — voice notes and images (0046)', () => {
     await handleInboundWebhook(inbound, agentReplying());
     expect(fetchMock).not.toHaveBeenCalled();
     expect(q.logMessage).toHaveBeenCalledWith(expect.objectContaining({ p_attachments: null }));
+  });
+});
+
+describe('runAgentTurn — resume after the human pause (0053)', () => {
+  // A lead message that lands while a human has the thread paused used to be dropped for
+  // good once the debounce alarm saw the pause (MADI 2026-08-05: 19h of silence on an
+  // active lead). The suppressed run now hands the pause expiry back so the DO re-runs the
+  // turn then, flagged `resumed` — and a resumed turn must not answer a message someone
+  // already answered, nor one that asks for nothing.
+  const PAUSE_ENDS = '2026-08-25T10:30:00.000Z';
+  const parsedInbound = () => ({
+    locationId: 'loc1', contactId: 'c1', conversationId: 'conv1', channel: 'whatsapp' as const,
+    text: 'Gracias', phone: '+521', attachments: [],
+  });
+  const run = (agent: Agent, resumed: boolean) =>
+    runAgentTurn({ agent, conversationId: 'cv-uuid', messageId: 'msg-uuid', tenant: tenant(), parsed: parsedInbound(), phone: '+521', debounced: false, resumed });
+
+  const tail = [
+    { direction: 'inbound', senderType: 'lead', content: '¿Cuánto cuesta?', sentAt: '' },
+    { direction: 'outbound', senderType: 'human_agent', content: '$500', sentAt: '' },
+    { direction: 'inbound', senderType: 'lead', content: 'Gracias', sentAt: '' },
+  ] as Awaited<ReturnType<typeof q.loadRecentMessages>>;
+
+  const stubResumeGate = (needsReply: boolean | 'error') => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      needsReply === 'error'
+        ? { ok: false, status: 500, json: async () => ({}) }
+        : { ok: true, json: async () => ({ choices: [{ message: { content: JSON.stringify({ needs_reply: needsReply }) } }] }) },
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    return fetchMock;
+  };
+
+  beforeEach(() => {
+    vi.mocked(q.getHumanActiveUntil).mockResolvedValue(null);
+    vi.mocked(q.hasReplyAfter).mockResolvedValue(false);
+    vi.mocked(q.loadRecentMessages).mockResolvedValue(tail);
+  });
+
+  it('suppressed by the sliding pause → returns the expiry so the DO can retry then', async () => {
+    vi.mocked(q.isBotSuppressed).mockResolvedValue(true);
+    vi.mocked(q.getHumanActiveUntil).mockResolvedValue(PAUSE_ENDS);
+    const agent = agentReplying();
+
+    const res = await run(agent, false);
+
+    expect(agent.generate).not.toHaveBeenCalled();
+    expect(res.body).toMatchObject({ resumeAt: PAUSE_ENDS });
+    expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'run_suppressed',
+      expect.objectContaining({ stage: 'pre_generate', resumeAt: PAUSE_ENDS }));
+  });
+
+  it('suppressed by a permanent mute (handed_off / opted_out) → no expiry, nothing to retry', async () => {
+    vi.mocked(q.isBotSuppressed).mockResolvedValue(true);
+    const res = await run(agentReplying(), false);
+    expect(res.body).not.toHaveProperty('resumeAt');
+  });
+
+  it('a failing expiry read still suppresses — it just cannot promise a retry', async () => {
+    vi.mocked(q.isBotSuppressed).mockResolvedValue(true);
+    vi.mocked(q.getHumanActiveUntil).mockRejectedValue(new Error('db down'));
+    const res = await run(agentReplying(), false);
+    expect(res.body).toMatchObject({ ignored: expect.stringContaining('suppressed') });
+    expect(res.body).not.toHaveProperty('resumeAt');
+  });
+
+  it('resumed + someone already answered → silent, no model call at all', async () => {
+    vi.mocked(q.hasReplyAfter).mockResolvedValue(true);
+    const fetchMock = stubResumeGate(true);
+    const agent = agentReplying();
+
+    const res = await run(agent, true);
+
+    expect(agent.generate).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(ghl.sendMessage).not.toHaveBeenCalled();
+    expect(res.body).toMatchObject({ skipped: 'answered' });
+    expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'resume_skipped', { reason: 'answered' });
+  });
+
+  it('resumed + the last message needs no reply ("Gracias") → silent, with the reason on record', async () => {
+    stubResumeGate(false);
+    const agent = agentReplying();
+
+    const res = await run(agent, true);
+
+    expect(agent.generate).not.toHaveBeenCalled();
+    expect(ghl.sendMessage).not.toHaveBeenCalled();
+    expect(res.body).toMatchObject({ skipped: 'no_reply_needed' });
+    expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'resume_skipped', { reason: 'no_reply_needed' });
+  });
+
+  it('resumed + the last message still asks for something → the normal turn runs and replies', async () => {
+    stubResumeGate(true);
+    const agent = agentReplying();
+
+    const res = await run(agent, true);
+
+    expect(agent.generate).toHaveBeenCalledOnce();
+    expect(ghl.sendMessage).toHaveBeenCalled();
+    expect(res.body).toMatchObject({ replied: true });
+    expect(q.logBotEvent).not.toHaveBeenCalledWith('client1', 'conv1', 'resume_skipped', expect.anything());
+  });
+
+  it('resumed + the classifier fails → replies (silence on a real question is the costlier mistake)', async () => {
+    stubResumeGate('error');
+    const agent = agentReplying();
+
+    await run(agent, true);
+
+    expect(agent.generate).toHaveBeenCalledOnce();
+    expect(ghl.sendMessage).toHaveBeenCalled();
+  });
+
+  it('resumed but the pause was extended meanwhile → suppressed again with the new expiry', async () => {
+    vi.mocked(q.isBotSuppressed).mockResolvedValue(true);
+    vi.mocked(q.getHumanActiveUntil).mockResolvedValue(PAUSE_ENDS);
+    const fetchMock = stubResumeGate(true);
+
+    const res = await run(agentReplying(), true);
+
+    expect(res.body).toMatchObject({ resumeAt: PAUSE_ENDS });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('an ordinary (non-resumed) turn never runs the resume gate', async () => {
+    const fetchMock = stubResumeGate(false);
+    const agent = agentReplying();
+
+    await run(agent, false);
+
+    expect(q.hasReplyAfter).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(agent.generate).toHaveBeenCalledOnce();
   });
 });

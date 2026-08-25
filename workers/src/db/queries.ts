@@ -47,7 +47,7 @@ export async function loadTenantConfig(ghlLocationId: string): Promise<TenantCon
   const { data, error } = await supabase
     .from('tenant_config')
     .select(
-      'business_name, timezone, tone, services, hours, calendars, faq, enabled_roles, prompt_overrides, ai_provider, ai_model, ai_key_ref, awaiting_human_tag, pending_info_tag, follow_up_tiers, follow_up_cadence, follow_up_angles, follow_up_rounds, quiet_hours, booking_horizon_days, enabled_channels, test_contact_ids, trigger_keywords, demo_on_keywords, demo_off_keywords, demo_prompt_overrides, keyword_variants, prompt_variants, demo_sessions_enabled, meta_capi,' +
+      'business_name, timezone, tone, services, hours, calendars, faq, enabled_roles, prompt_overrides, ai_provider, ai_model, ai_key_ref, awaiting_human_tag, pending_info_tag, follow_up_tiers, follow_up_cadence, follow_up_angles, follow_up_rounds, quiet_hours, booking_horizon_days, human_pause_minutes, enabled_channels, test_contact_ids, trigger_keywords, demo_on_keywords, demo_off_keywords, demo_prompt_overrides, keyword_variants, prompt_variants, demo_sessions_enabled, meta_capi,' +
         'tenants!inner(id, client_id, ghl_location_id, is_active)',
     )
     .eq('tenants.ghl_location_id', ghlLocationId)
@@ -101,6 +101,10 @@ export async function loadTenantConfig(ghlLocationId: string): Promise<TenantCon
       bookingHorizonDays:
         typeof row.booking_horizon_days === 'number' && row.booking_horizon_days > 0
           ? row.booking_horizon_days
+          : null,
+      humanPauseMinutes:
+        typeof row.human_pause_minutes === 'number' && row.human_pause_minutes > 0
+          ? row.human_pause_minutes
           : null,
       aiKeyRef: row.ai_key_ref?.trim() ? row.ai_key_ref.trim() : null,
     },
@@ -1324,15 +1328,51 @@ export async function conversationMessageCount(ghlConversationId: string): Promi
 }
 
 export async function isHumanActive(ghlConversationId: string): Promise<boolean> {
+  return (await getHumanActiveUntil(ghlConversationId)) !== null;
+}
+
+/**
+ * When the sliding human pause expires (ISO), or null when no pause is running. The
+ * timestamp is what the DO re-arms its alarm to after a pause-suppressed turn; a
+ * permanent mute (`handed_off`, `opted_out`) has no expiry and yields null.
+ */
+export async function getHumanActiveUntil(ghlConversationId: string): Promise<string | null> {
   const supabase = getSupabase();
   const { data, error } = await supabase
     .from('conversations')
     .select('human_active_until')
     .eq('ghl_conversation_id', ghlConversationId)
     .maybeSingle();
-  fail('isHumanActive', error);
+  fail('getHumanActiveUntil', error);
   const until = (data as { human_active_until: string | null } | null)?.human_active_until;
-  return until != null && new Date(until).getTime() > Date.now();
+  return until != null && new Date(until).getTime() > Date.now() ? until : null;
+}
+
+/**
+ * True when any outbound (human or bot) was sent after the given inbound message.
+ * The resume gate's first check: a turn that wakes up after a human pause must not
+ * answer a message somebody already answered. A NEWER inbound is a different case,
+ * caught by `isLatestInboundMessage`.
+ */
+export async function hasReplyAfter(conversationId: string, messageId: string): Promise<boolean> {
+  const supabase = getSupabase();
+  const { data: msg, error: msgErr } = await supabase
+    .from('messages')
+    .select('sent_at')
+    .eq('id', messageId)
+    .maybeSingle();
+  fail('hasReplyAfter:message', msgErr);
+  const sentAt = (msg as { sent_at?: string } | null)?.sent_at;
+  if (!sentAt) return false;
+
+  const { count, error } = await supabase
+    .from('messages')
+    .select('id', { count: 'exact', head: true })
+    .eq('conversation_id', conversationId)
+    .eq('direction', 'outbound')
+    .gt('sent_at', sentAt);
+  fail('hasReplyAfter:outbound', error);
+  return (count ?? 0) > 0;
 }
 
 /**

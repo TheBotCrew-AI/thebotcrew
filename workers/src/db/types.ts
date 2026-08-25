@@ -32,6 +32,8 @@ export interface TenantConfigRow {
   quiet_hours: unknown;
   /** Max days ahead the bot may offer appointment slots. NULL = no cap. */
   booking_horizon_days: number | null;
+  /** Sliding human-takeover pause in minutes. NULL = platform default (5). */
+  human_pause_minutes: number | null;
   /** Channels the bot may reply on. NULL = none (installed but silent). */
   enabled_channels: string[] | null;
   /** Pre-live test allowlist: when non-empty, reply only to these GHL contact ids. */
@@ -202,7 +204,8 @@ export type BotEventType =
   | 'db_error'         // DB write failed
   // Run-outcome / handoff observability — why a turn did (not) produce a reply
   | 'run_superseded'   // debounced run skipped: a newer inbound message arrived
-  | 'run_suppressed'   // run skipped: human active or handed_off (see metadata.stage)
+  | 'run_suppressed'   // run skipped: human active or handed_off (see metadata.stage; metadata.resumeAt when the DO will retry at pause expiry)
+  | 'resume_skipped'   // a turn re-run after the human pause chose silence (metadata.reason: answered | no_reply_needed)
   | 'handoff_tag_on'   // `bot-off` tag added → conversation(s) handed off
   | 'handoff_tag_off'  // `bot-off` tag removed → conversation(s) reactivated
   // Per-tenant gating

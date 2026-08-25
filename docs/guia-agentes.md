@@ -38,8 +38,9 @@ respuesta y el bot se queda quieto.
 
 **Cómo funciona el temporizador:**
 
-- Cada mensaje que tú mandas activa una pausa de **5 minutos**.
-- Si mandas otro mensaje dentro de esos 5 minutos, el temporizador se reinicia.
+- Cada mensaje que tú mandas activa una pausa. La duración se configura por negocio
+  (estándar: **5 minutos**; en MADI: **30 minutos**).
+- Si mandas otro mensaje dentro de la pausa, el temporizador se reinicia.
 - Mientras el temporizador esté activo, el bot no responde aunque el lead escriba.
 
 Esto te da espacio para tomar el control de la conversación sin que el bot te interrumpa.
@@ -59,8 +60,8 @@ Esto te da espacio para tomar el control de la conversación sin que el bot te i
 
 ## ¿Cuándo se reactiva el bot?
 
-El bot se reactiva **automáticamente** cuando el temporizador de 5 minutos vence sin que
-hayas mandado otro mensaje. No necesitas activarlo manualmente.
+El bot se reactiva **automáticamente** cuando el temporizador vence sin que hayas
+mandado otro mensaje. No necesitas activarlo manualmente.
 
 Esto significa que si atiendes una conversación, la resuelves, y el lead vuelve a
 escribir más tarde (cuando tú ya no estás disponible), el bot retoma sin problema.
@@ -114,9 +115,9 @@ pase el tiempo. Para reactivarlo tendrías que quitar ese estado manualmente.
 | Situación | ¿Qué hace el bot? |
 |---|---|
 | Lead manda un mensaje | Responde (si no está pausado) |
-| Tú mandas un mensaje | Se pausa 5 minutos |
-| Mandas otro mensaje antes de que venzan los 5 min | Se reinician los 5 minutos |
-| Pasan 5 min sin que tú escribas | Se reactiva solo |
+| Tú mandas un mensaje | Se pausa (5 min estándar; 30 min en MADI) |
+| Mandas otro mensaje antes de que venza la pausa | Se reinicia el temporizador |
+| Vence la pausa sin que tú escribas | Se reactiva solo |
 | Lead no responde al bot | Manda recordatorios en 15 min, 3h, 6h, 12h |
 | Lead responde un recordatorio | Cancela los recordatorios pendientes y retoma |
 | Conversación marcada como "handoff" | Bot no responde hasta que se desactive manualmente |
@@ -126,11 +127,14 @@ pase el tiempo. Para reactivarlo tendrías que quitar ese estado manualmente.
 ## Preguntas frecuentes
 
 **¿Puedo escribir en medio de una conversación sin que el bot me interrumpa?**
-Sí. En cuanto mandas tu primer mensaje, el bot se queda quieto por 5 minutos.
+Sí. En cuanto mandas tu primer mensaje, el bot se queda quieto mientras dure la pausa.
 
 **¿Qué pasa si el lead escribe mientras estoy atendiendo?**
 El mensaje queda registrado y tú lo ves en GHL. El bot no lo contesta mientras el
-temporizador esté activo.
+temporizador esté activo. **Cuando la pausa vence, el bot revisa ese mensaje:** si tú ya
+le contestaste, no hace nada; si el lead solo cerró con un "gracias" o un "ok", tampoco;
+si dejó una pregunta sin responder, el bot la contesta. Así nadie se queda colgado si
+te tuviste que ir a media conversación.
 
 **¿El bot puede equivocarse?**
 Sí. El bot responde basándose en la información del negocio que tiene configurada, pero

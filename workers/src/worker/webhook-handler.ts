@@ -14,11 +14,7 @@
 
 import type { Agent } from '@mastra/core/agent';
 import { resolveAiApiKey } from '../core/env.js';
-import {
-  usageFromAgentResult,
-  usageFromAnthropicResponse,
-  usageFromOpenAiResponse,
-} from '../core/llm-usage.js';
+import { usageFromAgentResult } from '../core/llm-usage.js';
 import { channelEnabled, hasTriggerKeywords, inTestMode, matchesDemoOff, matchesDemoOn, matchVariantKeyword, messageMatchesTrigger, resolveTenant, roleEnabled } from '../core/tenant.js';
 import { buildAgentRequestContext } from '../core/runtime-context.js';
 import { cadenceForRound, totalRounds } from '../core/reactivation-rounds.js';
@@ -37,6 +33,8 @@ import {
   type SimulatedBooking,
   getConversationPersona,
   setActiveRole,
+  getHumanActiveUntil,
+  hasReplyAfter,
   isBotSuppressed,
   isHumanActive,
   isLatestInboundMessage,
@@ -68,6 +66,8 @@ import { demoEndTag, STATUS_TAGS } from '../ghl/tags.js';
 import type { GhlInboundWebhook, InboundAttachment, ParsedInbound } from '../ghl/types.js';
 import { DEFAULT_MODEL, DEFAULT_PROVIDER, FRONT_DESK_ROLE } from '../roles/front-desk/index.js';
 import { buildDemoEndAnnouncement, buildDemoStartAnnouncement } from '../roles/front-desk/prompt.js';
+import { AUX_MAX_COMPLETION_TOKENS, recordAuxUsage, type AuxLlmCall } from './aux-llm.js';
+import { classifyNeedsReply, RESUME_TAIL_SIZE } from './resume-gate.js';
 
 /**
  * Milliseconds to wait after the last inbound message before running the agent.
@@ -75,28 +75,6 @@ import { buildDemoEndAnnouncement, buildDemoStartAnnouncement } from '../roles/f
  * typing pauses (8s split multi-message turns into separate replies).
  */
 const DEBOUNCE_MS = 15_000;
-
-/**
- * Output budget for the two auxiliary OpenAI calls (status classifier, name extractor).
- * Both return a one-line JSON object, so the value looks absurdly generous — it isn't:
- *
- *  · `max_tokens` is REJECTED outright by the gpt-5 family ("Unsupported parameter …
- *    use max_completion_tokens"). That 400 silently killed BOTH calls from the day the
- *    platform default moved to gpt-5-mini: they are fire-and-forget, so nothing surfaced
- *    beyond a log line. `llm_usage` proves it — not one `classify` or `extract-name` row
- *    had ever been written. The classifier never ran (conversations stayed `active`, so
- *    follow-ups kept chasing leads who were done) and the contact-name backstop never ran
- *    (page-form leads kept their business name).
- *  · `max_completion_tokens` counts REASONING tokens too, so the old value of 32 returns
- *    HTTP 200 with an empty string (`finish_reason: "length"`) — a silent failure that
- *    looks healthier than the 400 it replaced. 300 leaves room for the reasoning pass.
- *
- * The budget stays at 300 because it is the fallback: `reasoning_effort: 'none'` is sent
- * only where the model accepts it (`auxReasoningEffort`), and any model that doesn't
- * still spends the budget on hidden reasoning. Anthropic keeps `max_tokens: 32` — that
- * API's required parameter, and it does not spend it on reasoning.
- */
-const AUX_MAX_COMPLETION_TOKENS = 300;
 
 export interface WebhookResult {
   status: 200 | 400 | 401 | 500;
@@ -116,6 +94,9 @@ export interface AgentRunParams {
   phone: string | null | undefined;
   /** When true, check the debounce gate before proceeding. */
   debounced: boolean;
+  /** The DO re-ran this turn after the human pause that suppressed it expired. The
+   *  thread lived a while without the bot, so the resume gate runs (see resume-gate.ts). */
+  resumed?: boolean;
 }
 
 /** The turn payload handed to the DO — everything runAgentTurn needs except the agent
@@ -211,36 +192,24 @@ Responde SOLO con JSON: {"status":"active"} o {"status":"standby"} o {"status":"
 const VALID_STATUSES = new Set(['active', 'standby', 'opted_out', 'completed']);
 
 /**
- * Everything an auxiliary (non-agent) model call needs: which key to use, and
- * where to bill the tokens. These helpers hit the provider REST APIs directly
- * rather than going through Mastra, so they'd otherwise be invisible spend —
- * they run on every turn and add up.
+ * Provider, model and key for this tenant's model calls. The tenant's own key when it
+ * has one, so provider-side spend lands on that client's key/project; falls back to
+ * the platform key rather than going silent (see resolveAiApiKey). The caller logs
+ * `fellBack` — once per turn, in the main path.
  */
-interface AuxLlmCall {
-  clientId: string;
-  ghlConversationId: string;
-  provider: AiProvider;
-  apiKey: string;
-  model: string;
-  /** 'platform' or the tenant's ai_key_ref — recorded on the usage row. */
-  keySource: string;
-}
-
-/** Record an auxiliary call's tokens. Never throws; usage must not break a turn. */
-function recordAuxUsage(llm: AuxLlmCall, callKind: string, body: unknown): void {
-  const usage = llm.provider === 'anthropic'
-    ? usageFromAnthropicResponse(body)
-    : usageFromOpenAiResponse(body);
-  if (!usage) return;
-  void logLlmUsage({
-    clientId: llm.clientId,
-    ghlConversationId: llm.ghlConversationId,
-    callKind,
-    provider: llm.provider,
-    model: llm.model,
-    usage,
-    keySource: llm.keySource,
-  });
+function resolveTurnLlm(tenant: TenantContext, parsed: ParsedInbound) {
+  const provider = (tenant.config.provider ?? DEFAULT_PROVIDER) as AiProvider;
+  const model = tenant.config.model ?? DEFAULT_MODEL;
+  const aiKey = resolveAiApiKey(provider, tenant.config.aiKeyRef);
+  const aux: AuxLlmCall = {
+    clientId: tenant.clientId,
+    ghlConversationId: parsed.conversationId,
+    provider,
+    apiKey: aiKey.apiKey,
+    model,
+    keySource: aiKey.source,
+  };
+  return { provider, model, aiKey, aux };
 }
 
 /**
@@ -493,6 +462,7 @@ export async function runAgentTurn({
   parsed,
   phone,
   debounced,
+  resumed,
 }: AgentRunParams): Promise<WebhookResult> {
   if (debounced) {
     const isLatest = await isLatestInboundMessage(conversationId, messageId);
@@ -508,9 +478,41 @@ export async function runAgentTurn({
     return { status: 200, body: { ignored: 'front-desk role disabled for tenant', conversationId } };
   }
   if (await isBotSuppressed(parsed.conversationId)) {
-    // A human is handling this thread (handed_off or 5-min sliding window) — stay silent.
-    await logBotEvent(tenant.clientId, parsed.conversationId, 'run_suppressed', { stage: 'pre_generate' });
-    return { status: 200, body: { ignored: 'bot suppressed (handoff or human active)', conversationId } };
+    // A human is handling this thread — stay silent. When it's the sliding pause (not a
+    // permanent handed_off/opted_out mute) hand the expiry back so the DO can re-run
+    // this turn then: the lead's message must not die just because a human was around.
+    let resumeAt: string | null = null;
+    try {
+      resumeAt = (await getHumanActiveUntil(parsed.conversationId)) ?? null;
+    } catch (e) {
+      console.error('[resume] pause expiry read failed:', e instanceof Error ? e.message : String(e));
+    }
+    await logBotEvent(tenant.clientId, parsed.conversationId, 'run_suppressed', {
+      stage: 'pre_generate',
+      ...(resumeAt && { resumeAt }),
+    });
+    return {
+      status: 200,
+      body: { ignored: 'bot suppressed (handoff or human active)', conversationId, ...(resumeAt && { resumeAt }) },
+    };
+  }
+
+  // Resume gate: this turn woke up after the human pause that suppressed it. The bot
+  // must not answer a message somebody already answered, nor one that asks for nothing
+  // ("Gracias" after the human resolved it). Each silence is an explicit event.
+  if (resumed) {
+    if (await hasReplyAfter(conversationId, messageId)) {
+      console.log(`[resume] skip conv=${parsed.conversationId} — already answered during the pause`);
+      await logBotEvent(tenant.clientId, parsed.conversationId, 'resume_skipped', { reason: 'answered' });
+      return { status: 200, body: { skipped: 'answered', conversationId } };
+    }
+    const tail = await loadRecentMessages(conversationId, RESUME_TAIL_SIZE);
+    if (!(await classifyNeedsReply(tail, resolveTurnLlm(tenant, parsed).aux))) {
+      console.log(`[resume] skip conv=${parsed.conversationId} — last message needs no reply`);
+      await logBotEvent(tenant.clientId, parsed.conversationId, 'resume_skipped', { reason: 'no_reply_needed' });
+      return { status: 200, body: { skipped: 'no_reply_needed', conversationId } };
+    }
+    console.log(`[resume] proceeding conv=${parsed.conversationId}`);
   }
 
   // Read the persona fresh at turn time (a demo keyword may have flipped it since
@@ -731,13 +733,9 @@ export async function runAgentTurn({
     activeAppointment,
     demoHandoff,
   };
-  const provider = (tenant.config.provider ?? DEFAULT_PROVIDER) as AiProvider;
-  const model = tenant.config.model ?? DEFAULT_MODEL;
-  // Per-tenant key when the tenant has one, so provider-side spend lands on that
-  // client's own key/project. Falls back to the platform key rather than going
-  // silent (see resolveAiApiKey) — but a fallback is logged, never swallowed,
-  // because from here on every usage row would be misattributed.
-  const aiKey = resolveAiApiKey(provider, tenant.config.aiKeyRef);
+  // A key fallback is logged, never swallowed, because from here on every usage row
+  // would be misattributed.
+  const { provider, model, aiKey, aux } = resolveTurnLlm(tenant, parsed);
   if (aiKey.fellBack) {
     console.error(
       `[ai-key] tenant=${tenant.tenantId} ai_key_ref="${tenant.config.aiKeyRef}" has no Worker secret — using the platform key`,
@@ -747,14 +745,6 @@ export async function runAgentTurn({
       provider,
     });
   }
-  const aux: AuxLlmCall = {
-    clientId: tenant.clientId,
-    ghlConversationId: parsed.conversationId,
-    provider,
-    apiKey: aiKey.apiKey,
-    model,
-    keySource: aiKey.source,
-  };
   const requestContext = buildAgentRequestContext({
     tenant,
     turn,
