@@ -488,9 +488,19 @@ export const madiTenant: TenantContext = {
     tone: 'cálida, cercana y segura; entusiasta sin exagerar',
     services: [
       { name: 'Facial Glow MADI', description: 'Limpieza profunda, hidratación intensiva y fototerapia LED. $999.' },
-      { name: 'Depilación Láser Diodo', description: 'Paquetes de 6 sesiones.' },
+      { name: 'Depilación láser', description: 'Láser Triodo Diamond. Paquetes de 6 sesiones.' },
     ],
-    hours: { mon: [{ open: '10:00', close: '19:00' }], fri: [{ open: '10:00', close: '19:00' }] },
+    // The clinic's real schedule (2026-08-25). Before this the fixture listed Mon and Fri
+    // only, and the bot filled the gap: "abrimos los sábados de 10:00 a.m." — invented.
+    hours: {
+      mon: [{ open: '08:00', close: '19:00' }],
+      tue: [{ open: '08:00', close: '19:00' }],
+      wed: [{ open: '08:00', close: '19:00' }],
+      thu: [{ open: '08:00', close: '19:00' }],
+      fri: [{ open: '08:00', close: '19:00' }],
+      sat: [{ open: '08:00', close: '16:00' }],
+      sun: [{ open: '08:00', close: '16:00' }],
+    },
     calendars: {},
     // The promo answer carries a PRICE, and `lookupFaq` reads this list straight from
     // config — that is the real leak path the houseRules line about lookupFaq closes.
@@ -499,11 +509,44 @@ export const madiTenant: TenantContext = {
         q: '¿Dónde están ubicados? ¿Cuál es la dirección? ¿Cómo llego? ¿Me pasas la ubicación o el mapa?',
         a:
           'En Plaza Financiera, Blvd. Sánchez Taboada 10110, Zona Urbana Río, Tijuana, Baja California. ' +
+          'Dentro de la plaza es el edificio de la Notaría 5, último piso, puerta blanca con listón rojo. ' +
           'Aquí está el mapa: https://madiskincare.com/mapa',
       },
       {
         q: '¿Qué promociones tienen?',
         a: 'Facial Glow MADI a $999 como precio de apertura por tiempo limitado, y masaje relajante de 20 min sin costo para las primeras 10 personas que reserven.',
+      },
+      // The three FAQ entries added for the info gaps (docs/madi-info-gaps.md #5, #6, #8).
+      // They live in the FAQ, not the offering, on purpose: closed answers the lead has
+      // to ask for, phrased many ways — and lookupFaq matches on token overlap, so the
+      // `q` carries the words leads actually typed.
+      {
+        q: '¿Tienen garantía si no veo resultados? ¿Cuántas sesiones necesito? ¿Con cuántas sesiones desaparece el vello? ¿Incluyen retoques? Ya me hice láser antes y no me funcionó, ¿qué pasa si después de las sesiones aún tengo vello?',
+        a:
+          'Ninguna depilación láser ofrece garantía, porque ningún equipo elimina el 100% del vello: lo normal es una ' +
+          'reducción del 75 al 80%. El promedio son de 6 a 12 sesiones y varía por cuestión hormonal, si el vello es muy ' +
+          'abundante o muy claro, o si se toma algún tratamiento. Normalmente se requiere un retoque al año, que se paga ' +
+          'como sesión suelta; hay personas que no lo necesitan. Lo que sí garantizamos es el acompañamiento entre sesiones ' +
+          'y que siempre te atiende la misma técnico.',
+      },
+      {
+        q: '¿La depilación láser aclara o blanquea las axilas o el bikini? Tengo el área oscura o manchada, ¿es otro tratamiento? ¿Es aclaramiento y eliminación de vello?',
+        a:
+          'Al hacer la depilación láser es muy probable que el área se aclare un poco, en parte por el láser y en parte por ' +
+          'dejar de usar rastrillo, cera o cremas que irritan la piel. No es un tratamiento específico de aclaramiento, pero ' +
+          'normalmente se empieza por ahí; si hiciera falta, la técnico te recomienda otro tratamiento en tu sesión.',
+      },
+      {
+        q: '¿Tienen otras sucursales? ¿Tienen sucursal en otro estado o en otra ciudad? ¿Dónde más están?',
+        a: 'Solo tenemos una ubicación: Plaza Financiera, Zona Río, Tijuana. No hay sucursales en otras ciudades ni estados.',
+      },
+      {
+        q: '¿Tienen vacantes? ¿Están contratando? ¿Puedo mandar mi CV? Busco trabajo en recepción',
+        a: 'Por el momento no tenemos vacantes abiertas. Gracias por el interés.',
+      },
+      {
+        q: '¿Quién realiza las sesiones de depilación láser? ¿Es médico, enfermera o técnico? ¿Tiene experiencia?',
+        a: 'Las sesiones las realiza Marina, técnico en depilación láser con más de 15 años de experiencia, y siempre es ella quien te atiende.',
       },
     ],
     promptOverrides: {
@@ -522,40 +565,74 @@ export const madiTenant: TenantContext = {
         '- Facial Glow MADI: $999 (precio de apertura).\n' +
         '- El siguiente paso de un facial es agendar esa sesión. Si no sabe cuál elegir, recomiéndale UNO ' +
         'según lo que te contó y ofrécele agendar esa sesión.\n\n' +
+        'Depilación láser — qué decir si preguntan por la tecnología o el equipo:\n' +
+        '- Usamos un láser Triodo Diamond: es muy cómodo, rápido e indoloro, está indicado para todo tipo de piel y ' +
+        'los parámetros se ajustan al color de la piel y al grosor del vello. Los equipos están certificados y ' +
+        'calibrados. Contéstalo con seguridad y en corto, sin tecnicismos, y sigue con la duda que traía la persona.\n\n' +
         'Depilación láser — cómo cotizarla:\n' +
         '- Se vende por PAQUETE DE 6 SESIONES; di siempre "6 sesiones" junto al precio.\n' +
         '- Las sesiones van UNA CADA MES, así que el paquete de 6 se completa en unos 6 meses. Dilo si preguntan ' +
         'cada cuánto son, cada cuánto tienen que ir o cuánto dura el tratamiento completo.\n' +
-        // MADI sells ONE bikini; leads ask for it by at least four names. Without this the
-        // catch-all below ("cualquier zona que no esté escrita arriba") eats "bikini completo".
-        '- Cómo la nombra la gente: "bikini brasileño", "bikini completo", "brasileño", "brasilero" y "bikini" ' +
-        'a secas son la MISMA zona y el MISMO precio — en MADI el bikini es uno solo. Cotízalo de inmediato con ' +
-        'cualquiera de esos nombres: no preguntes cuál de todos quiere y no digas que no lo tienes. ' +
-        'Donde los paquetes combinados dicen "Bikini", es esa misma zona.\n\n' +
+        // Two bikini versions with ONE package price, so the package is quoted without asking
+        // which; the difference only matters per session. Leads use at least four names for
+        // it, and without this bullet the catch-all below ("cualquier zona que no esté escrita
+        // arriba") eats "bikini completo".
+        '- Bikini y brasileño: el bikini normal cubre las ingles y un poco arriba del pubis; el brasileño retira el ' +
+        'vello de toda la zona (integral). La gente lo llama "bikini", "bikini completo", "brasileño" o "brasilero"; ' +
+        'en PAQUETE de 6 sesiones ambos cuestan lo mismo ($2,400), así que cotiza el paquete de inmediato con ' +
+        'cualquiera de esos nombres, sin preguntar cuál quiere y sin decir que no lo tienes. Explica la diferencia ' +
+        'solo si te la preguntan o si va a pagar por sesión (ahí sí cambia el precio). Donde los paquetes combinados ' +
+        'dicen "Bikini", aplica cualquiera de los dos.\n' +
+        // "Cuerpo completo" used to fall into "lo que NO tienes" and came out as "$1,900
+        // por sesión" — the team defines it as the $3,800 combo (docs/madi-info-gaps.md #9).
+        '- "Cuerpo completo" en MADI es Axilas + Bikini + Piernas completas: cotízalo con ese paquete combinado ' +
+        '($3,800 las 6 sesiones). El precio por sesión de cuerpo completo ($1,900) es SOLO si pregunta por una sesión suelta.\n\n' +
         'Depilación láser — zonas individuales (paquete de 6 sesiones):\n' +
-        '- Axilas: $2,300\n- Medias piernas: $2,300\n- Bikini brasileño (= bikini completo): $2,400\n\n' +
+        '- Axilas: $2,300\n- Medias piernas: $2,300\n- Bikini (normal o brasileño): $2,400\n\n' +
         'Depilación láser — paquetes combinados (6 sesiones):\n' +
-        '- Axilas + Bikini: $2,700\n- Axilas + Medias piernas: $2,800\n- Piernas completas + Bikini: $3,500\n\n' +
+        // The six combos below the first three were priced by hand in chat for weeks before
+        // they were loaded (docs/madi-info-gaps.md #2). Piernas completas + Bikini moved
+        // $3,500 → $3,800: the number the team actually charges.
+        '- Axilas + Bikini: $2,700\n- Axilas + Medias piernas: $2,800\n- Piernas completas + Bikini: $3,800\n' +
+        '- Axilas + Bikini + Piernas completas: $3,800\n- Axilas + Piernas completas: $3,400\n' +
+        '- Brazos completos + Piernas completas: $3,900\n- Piernas completas + Axilas + Bigote: $3,500\n' +
+        '- Piernas completas + Brazos completos + Cara + Axilas: $4,200\n- Cara + Glúteos: $3,200\n' +
+        '- Axilas + Bigote + Patillas: $3,200\n\n' +
+        'Depilación láser — precio por sesión suelta (uso restringido):\n' +
+        '- Menciónalo SOLO si la persona pregunta explícitamente por una sola sesión, por "cuánto cuesta la sesión" ' +
+        'o por pagar por sesión. Cuando lo des, di siempre "por sesión" en la misma frase.\n' +
+        '- Bikini normal $500 · Bikini brasileño (integral) $600 · Axilas $500 · Medias piernas $600 · Piernas completas $1,000 · Cuerpo completo $1,900\n\n' +
         'Depilación láser — cómo llegar a la sesión (indicaciones previas):\n' +
-        '- Llega con el área a tratar rasurada.\n' +
+        '- Llega con el área a tratar rasurada (rasúrate un día antes).\n' +
         '- Sin cremas ni desodorante en la zona.\n' +
+        '- No requiere recuperación: puede seguir con su día normal después de la sesión.\n' +
         'Dalas cuando pregunten cómo prepararse, qué llevar o qué hacer antes de su sesión. Son las ÚNICAS ' +
         'indicaciones previas que tienes: los cuidados DESPUÉS de la sesión siguen sin confirmar (ésos los ' +
         'confirmas con el equipo, flagPendingInfo), y las contraindicaciones van con una compañera (handoff).\n\n' +
+        // The team answered this by hand in 10 of the 30 human-touched threads while the
+        // bot queued it as unknown (docs/madi-info-gaps.md #1). Consistent every time.
+        'Formas de pago (dilas cuando pregunten cómo se paga, si es por sesión o todo junto, o si aceptan tarjeta o transferencia):\n' +
+        '- El precio de paquete es promocional y se paga COMPLETO en la primera sesión.\n' +
+        '- Si prefiere pagar por sesión, sí se puede: se cobra el precio por sesión suelta de su zona (la lista de arriba), ' +
+        'que sale un poco más caro que el paquete. Dale ese precio en la misma respuesta.\n' +
+        '- Aceptan efectivo, tarjeta de crédito o débito y transferencia.\n' +
+        '- No hay mensualidades ni planes de pago.\n\n' +
         'Depilación láser — lo que NO tienes (no lo inventes):\n' +
         '- Piernas completas POR SEPARADO no tiene precio de paquete de 6 sesiones; de ésa solo tienes el precio ' +
         'por sesión ($1,000). OJO: piernas completas SÍ está en los paquetes combinados de arriba (con bikini son ' +
-        '$3,500) — ése lo das tal cual, sin dudar. Lo único que no existe es el paquete de piernas completas sola: ' +
+        '$3,800) — ése lo das tal cual, sin dudar. Lo único que no existe es el paquete de piernas completas sola: ' +
         'si lo piden así, no lo calcules ni lo estimes; dile en corto que lo confirmas con el equipo y le avisas, ' +
         'y llama flagPendingInfo con su duda tal cual.\n' +
         '- Cualquier zona o combinación que no esté escrita arriba: no la cotices ni la estimes: dile que lo ' +
         'confirmas con el equipo y le avisas, y llama flagPendingInfo con su duda tal cual. ' +
-        'OJO con los nombres: "bikini completo" SÍ está escrito arriba —es el bikini brasileño— y no tiene nada que ' +
+        'OJO con los nombres: "bikini completo" SÍ está escrito arriba —es el bikini— y no tiene nada que ' +
         'ver con "piernas completas"; ése cotízalo normal.\n\n' +
         // Mirrors the live tenant's "Datos del centro" block. The map link is the one
         // fact in this prompt that only survives if it is copied character-for-character.
         'Datos del centro:\n' +
         '- Ubicación: Plaza Financiera, Blvd. Sánchez Taboada 10110, Zona Urbana Río, Tijuana, Baja California.\n' +
+        '- Dentro de la plaza: es el edificio de la Notaría 5, último piso, puerta blanca con listón rojo. ' +
+        'Dilo cuando pregunten cómo llegar o ya tengan su cita.\n' +
         '- Mapa / cómo llegar: https://madiskincare.com/mapa (es nuestro enlace, abre la ubicación en Google Maps)\n' +
         '- Cuando pregunten dónde están, cómo llegar, la dirección o el mapa: da la ubicación Y pega ese enlace ' +
         'TAL CUAL, carácter por carácter, en su propio renglón. No lo acortes, no lo cambies, no lo describas en ' +
@@ -573,8 +650,8 @@ export const madiTenant: TenantContext = {
           'NO la uses para cerrar una solicitud de cita: para eso es flagAwaitingHuman. handed_off deja al bot MUDO ' +
           'de forma permanente; resérvalo para derivación real (queja, tema médico delicado, o piden una persona).',
         flagPendingInfo:
-          'Úsala cuando el lead pregunte un dato CONCRETO de MADI que no tienes (formas de pago, mensualidades, ' +
-          'duración exacta, políticas de cancelación, un precio que no está escrito en tu información) y que tampoco ' +
+          'Úsala cuando el lead pregunte un dato CONCRETO de MADI que no tienes (duración exacta, cuidados ' +
+          'posteriores, políticas de cancelación, un precio que no está escrito en tu información) y que tampoco ' +
           'venga en lookupFaq. Llámala en el MISMO turno en que le dices que lo confirmas con el equipo, con su ' +
           'pregunta tal cual la escribió. No te deja muda ni cierra el tema: sigue atendiéndola con normalidad. ' +
           'NO la uses para: pedir cita (eso es flagAwaitingHuman), temas clínicos o molestia real (eso es handoff ' +

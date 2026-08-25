@@ -54,11 +54,16 @@ const reply = (res: { text: string }) => res.text.trim().toLowerCase();
 /** The exact shape the client objected to: asking permission to go find out. */
 const ASKS_PERMISSION = /(quieres|gustas|te parece|deseas|puedo|quiere)[^.?!]{0,40}(pregunt|averigu|consult|confirm|checar|revis)/;
 
-/** An answer that is genuinely NOT in MADI's config. */
+/**
+ * An answer that is genuinely NOT in MADI's config. This used to be "¿puedo pagar con
+ * tarjeta o en mensualidades?" — payment became a known fact on 2026-08-25 (the team had
+ * answered it by hand in ten threads; see madi-info-gaps.eval.ts), so the case moved to
+ * the cancellation policy, which the clinic still has not given us.
+ */
 const UNKNOWN_ASK = [
   { role: 'user' as const, content: 'Hola, me interesa el facial glow' },
   { role: 'assistant' as const, content: '¡Hola! Soy Majo 😊 ¿Qué te gustaría mejorar de tu piel?' },
-  { role: 'user' as const, content: 'Manchas sobre todo. Oye, ¿puedo pagar con tarjeta o en mensualidades?' },
+  { role: 'user' as const, content: 'Manchas sobre todo. Oye, si me surge algo, ¿cobran por cancelar la cita? ¿Con cuánto tiempo aviso?' },
 ];
 
 beforeEach(() => vi.clearAllMocks());
@@ -77,10 +82,10 @@ describe.skipIf(!evalApiKey)('MADI — a fact the config does not have', () => {
 
     expect(toolIds(res)).toContain('flagPendingInfo');
     // The question travels with it, or the review queue is a list of unlabeled tags.
-    expect(String(toolArgs(res, 'flagPendingInfo')?.question ?? '')).toMatch(/tarjeta|mensualidad|pag/i);
+    expect(String(toolArgs(res, 'flagPendingInfo')?.question ?? '')).toMatch(/cancel|aviso|tiempo/i);
   });
 
-  it('does not hand off — handed_off would mute the bot over a payment question', async () => {
+  it('does not hand off — handed_off would mute the bot over a policy question', async () => {
     const res = await buildFrontDeskAgent().generate(UNKNOWN_ASK, { requestContext: rc() });
 
     expect(toolArgs(res, 'updateConversationStatus')?.status).not.toBe('handed_off');

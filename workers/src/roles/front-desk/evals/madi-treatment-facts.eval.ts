@@ -53,7 +53,7 @@ describe.skipIf(!evalApiKey)('MADI — pre-session instructions for laser', () =
       { requestContext: rc() },
     );
 
-    expect(reply(res)).toMatch(/rasur|afeit/);
+    expect(reply(res)).toMatch(/ras[uú]r|afeit/);
     expect(reply(res)).toMatch(/crema/);
     expect(reply(res)).toMatch(/desodorante/);
   });
@@ -68,7 +68,7 @@ describe.skipIf(!evalApiKey)('MADI — pre-session instructions for laser', () =
       { requestContext: rc() },
     );
 
-    expect(reply(res)).toMatch(/rasur|afeit/);
+    expect(reply(res)).toMatch(/ras[uú]r|afeit/);
   });
 
   it('still refuses to invent AFTERcare, which the clinic never gave us', async () => {
@@ -119,7 +119,8 @@ describe.skipIf(!evalApiKey)('MADI — the new combined package', () => {
       { requestContext: rc() },
     );
 
-    expect(reply(res)).toMatch(/3[.,]?500/);
+    // $3,800 since 2026-08-25 — the price the team actually charges (it was $3,500 in the list).
+    expect(reply(res)).toMatch(/3[.,]?800/);
   });
 });
 
@@ -146,7 +147,7 @@ describe.skipIf(!evalApiKey)('MADI — the bikini goes by more than one name', (
     });
   }
 
-  it('does not ask which bikini she means — there is only one', async () => {
+  it('does not ask which bikini she means — normal and brasileño share the package price', async () => {
     const agent = buildFrontDeskAgent();
     const res = await agent.generate(
       [

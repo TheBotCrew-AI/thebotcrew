@@ -12,7 +12,8 @@
  *    in MADI's work queue. This is the same dead end recorded on 2026-07-29.
  *
  * 2. "Piernas completas no tiene precio de paquete" sat above four packages that
- *    contain piernas completas — including the $3,500 one added the day before.
+ *    contain piernas completas — including the piernas + bikini one added the day before
+ *    (listed at $3,500 then; $3,800 since 2026-08-25, the price the team actually charges).
  *
  * 3. `lookupFaq` is instructed to run before answering any general question
  *    "(precios, tiempos...)", and MADI's promo answer contains "$999". That is a
@@ -89,7 +90,7 @@ describe.skipIf(!evalApiKey)('MADI — piernas completas: the package exists com
       { requestContext: rc() },
     );
 
-    expect(reply(res)).toMatch(/3[.,]?500/);
+    expect(reply(res)).toMatch(/3[.,]?800/);
   });
 
   it('still refuses to invent a package price for piernas completas alone', async () => {
@@ -102,10 +103,11 @@ describe.skipIf(!evalApiKey)('MADI — piernas completas: the package exists com
       { requestContext: rc() },
     );
 
-    // The invented number would be a plausible-looking package price. The two real
-    // figures it MAY say are the per-session $1,000 and the $3,500 combined package.
+    // The invented number would be a plausible-looking package price. The real figures
+    // it MAY say are the per-session $1,000 and the combined packages that contain
+    // piernas completas ($3,400 / $3,500 / $3,800 / $3,900 / $4,200 / $5,900).
     const invented = reply(res).match(/\$\s?\d[\d.,]{2,}/g)?.filter(
-      (m) => !/1[.,]?000|3[.,]?500/.test(m),
+      (m) => !/1[.,]?000|3[.,]?[4589]00|4[.,]?200|5[.,]?900/.test(m),
     );
     expect(invented ?? [], `inventó un precio de paquete: ${invented?.join(', ')}`).toHaveLength(0);
   });
