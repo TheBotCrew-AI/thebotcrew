@@ -25,6 +25,7 @@ const base = {
   extracted: 33,
   failed: 1,
   unanswered: [],
+  configChangedAt: null,
 };
 
 describe('buildReport', () => {
@@ -44,6 +45,7 @@ describe('buildReport', () => {
       askClient: 1,
       promptBugs: 2,
       stillAskedAfterClose: 1,
+      closedAfterAsked: 0,
       unanswered: 1,
       candidates: 34,
       extracted: 33,
@@ -80,5 +82,35 @@ describe('buildReport', () => {
     ];
     const { markdown } = buildReport({ ...base, gaps, touched: new Set(['a', 'b']) });
     expect(markdown.indexOf('### mucho')).toBeLessThan(markdown.indexOf('### poco'));
+  });
+});
+
+describe('buildReport — a fact loaded AFTER the lead asked is not a prompt bug', () => {
+  // The first MADI run compared July conversations against the config as it stood on
+  // 2026-08-25, after 14 gaps had been loaded that afternoon: 47 topics came out as
+  // "the bot had it and did not use it". The config change time splits them.
+  const gaps: ReportGap[] = [
+    g({ topicKey: 'formas_pago:pago-sesion', topicLabel: 'pago por sesión', target: 'prompt_bug', occurrences: 8, lastSeen: '2026-08-24T00:00:00Z' }),
+    g({ topicKey: 'ubicacion:mapa', topic: 'ubicacion', topicLabel: 'mapa', target: 'prompt_bug', occurrences: 2, lastSeen: '2026-08-26T10:00:00Z' }),
+  ];
+  const touched = new Set(['formas_pago:pago-sesion', 'ubicacion:mapa']);
+
+  it('files pre-change topics under 3b and keeps only post-change ones as bugs', () => {
+    const { markdown, summary } = buildReport({ ...base, gaps, touched, configChangedAt: '2026-08-25T18:00:00Z' });
+    expect(summary).toMatchObject({ promptBugs: 1, closedAfterAsked: 1 });
+    const s3 = markdown.indexOf('## 3.');
+    const s3b = markdown.indexOf('## 3b.');
+    const s4 = markdown.indexOf('## 4.');
+    expect(s3b).toBeGreaterThan(s3);
+    expect(markdown.slice(s3, s3b)).toContain('### mapa');
+    expect(markdown.slice(s3, s3b)).not.toContain('pago por sesión');
+    expect(markdown.slice(s3b, s4)).toContain('pago por sesión · 8×');
+    expect(markdown.slice(s3b, s4)).toContain('2026-08-25');
+  });
+
+  it('with no history, every already_in_config gap counts as a bug and 3b is absent', () => {
+    const { markdown, summary } = buildReport({ ...base, gaps, touched, configChangedAt: null });
+    expect(summary).toMatchObject({ promptBugs: 2, closedAfterAsked: 0 });
+    expect(markdown).not.toContain('## 3b.');
   });
 });

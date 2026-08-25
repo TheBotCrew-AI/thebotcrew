@@ -1686,3 +1686,21 @@ export async function loadUnansweredPendingInfo(): Promise<UnansweredPendingInfo
     flaggedAt: r.flagged_at,
   }));
 }
+
+/**
+ * When the tenant's config last changed (tenant_config_history, 0039). The report uses
+ * it to tell "the fact was loaded after the lead asked" from a real prompt bug. null when
+ * the tenant has no history rows.
+ */
+export async function loadTenantConfigLastChange(tenantId: string): Promise<string | null> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from('tenant_config_history')
+    .select('changed_at')
+    .eq('tenant_id', tenantId)
+    .order('changed_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  fail('loadTenantConfigLastChange', error);
+  return (data as { changed_at: string } | null)?.changed_at ?? null;
+}

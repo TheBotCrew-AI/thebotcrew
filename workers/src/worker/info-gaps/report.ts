@@ -5,6 +5,7 @@
  *   1. Listo para cargar — a human already answered it (N times); the text is drafted.
  *   2. Preguntar al cliente — nobody has answered it yet.
  *   3. El bot lo tenía y no lo usó — the config has the fact; that is a prompt bug.
+ *   3b. Ya está en la config — the fact was loaded AFTER the lead asked (not a bug).
  *   4. Sin respuesta de nadie — pending questions no human picked up (lost leads).
  * Only gaps touched by THIS run appear in 1–3; the accumulated table is the DB.
  */
@@ -42,6 +43,13 @@ export interface ReportInput {
   /** topicKeys upserted by this run. */
   touched: Set<string>;
   unanswered: UnansweredItem[];
+  /**
+   * When the tenant's config last changed (tenant_config_history). A gap the model
+   * judged `already_in_config` but whose conversations all predate this moment is not
+   * a prompt bug: the fact was loaded AFTER the lead asked. Only gaps still asked after
+   * the change are the real "had it and didn't use it". null = unknown → all count.
+   */
+  configChangedAt: string | null;
 }
 
 export interface ReportSummary {
@@ -49,6 +57,8 @@ export interface ReportSummary {
   askClient: number;
   promptBugs: number;
   stillAskedAfterClose: number;
+  /** already_in_config gaps whose last question predates the config change — closed, not broken. */
+  closedAfterAsked: number;
   unanswered: number;
   candidates: number;
   extracted: number;
@@ -81,13 +91,17 @@ export function buildReport(input: ReportInput): { markdown: string; summary: Re
   const open = touched.filter((g) => g.status === 'open');
   const ready = open.filter((g) => g.target !== 'prompt_bug' && g.target !== 'none' && g.humanAnswers.length > 0);
   const ask = open.filter((g) => g.target !== 'prompt_bug' && g.target !== 'none' && g.humanAnswers.length === 0);
-  const bugs = open.filter((g) => g.target === 'prompt_bug');
+  const changedAt = input.configChangedAt ? new Date(input.configChangedAt).getTime() : null;
+  const predatesConfig = (g: ReportGap) => changedAt !== null && new Date(g.lastSeen).getTime() < changedAt;
+  const bugs = open.filter((g) => g.target === 'prompt_bug' && !predatesConfig(g));
+  const closedAfterAsked = open.filter((g) => g.target === 'prompt_bug' && predatesConfig(g));
   const stillAsked = touched.filter((g) => g.status === 'closed');
 
   const byCount = (a: ReportGap, b: ReportGap) => b.occurrences - a.occurrences;
   ready.sort(byCount);
   ask.sort(byCount);
   bugs.sort(byCount);
+  closedAfterAsked.sort(byCount);
   stillAsked.sort(byCount);
 
   const summary: ReportSummary = {
@@ -95,6 +109,7 @@ export function buildReport(input: ReportInput): { markdown: string; summary: Re
     askClient: ask.length,
     promptBugs: bugs.length + stillAsked.length,
     stillAskedAfterClose: stillAsked.length,
+    closedAfterAsked: closedAfterAsked.length,
     unanswered: input.unanswered.length,
     candidates: input.candidates,
     extracted: input.extracted,
@@ -129,6 +144,16 @@ export function buildReport(input: ReportInput): { markdown: string; summary: Re
         ].join('\n\n')
       : `_Ninguno._`,
     ``,
+    ...(closedAfterAsked.length > 0
+      ? [
+          `## 3b. Ya está en la config — se cargó después de estas conversaciones`,
+          ``,
+          `_${closedAfterAsked.length} tema(s) que el modelo encontró en la config de hoy pero que se preguntaron antes del último cambio (${day(input.configChangedAt!)}). No son bugs; si vuelven a aparecer en la siguiente corrida, sí._`,
+          ``,
+          closedAfterAsked.map((g) => `- ${g.topicLabel} · ${g.occurrences}× · \`${g.topic}\``).join('\n'),
+          ``,
+        ]
+      : []),
     `## 4. Sin respuesta de nadie`,
     ``,
     input.unanswered.length > 0

@@ -29,6 +29,7 @@ import {
   loadInfoGaps,
   loadRecentMessages,
   loadTenantConfig,
+  loadTenantConfigLastChange,
   loadUnansweredPendingInfo,
   logBotEvent,
   openInfoGapRun,
@@ -234,6 +235,7 @@ async function finalizeRun(
 
   const tenant = await tenantFor(run.tenantId);
   const gaps = await loadInfoGaps(run.tenantId);
+  const configChangedAt = await loadTenantConfigLastChange(run.tenantId);
   const { markdown, summary } = buildReport({
     businessName: tenant?.config.businessName ?? run.tenantId,
     runId: run.id,
@@ -245,6 +247,7 @@ async function finalizeRun(
     gaps,
     touched,
     unanswered,
+    configChangedAt,
   });
   await saveInfoGapReport(run.id, run.tenantId, markdown, { ...summary });
   await finishInfoGapRun(run.id, 'done', done.length, touched.size);

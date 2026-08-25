@@ -80,6 +80,7 @@ beforeEach(() => {
   vi.mocked(q.saveInfoGapReport).mockResolvedValue(undefined);
   vi.mocked(q.finishInfoGapRun).mockResolvedValue(undefined);
   vi.mocked(q.loadUnansweredPendingInfo).mockResolvedValue([]);
+  vi.mocked(q.loadTenantConfigLastChange).mockResolvedValue(null);
 });
 
 describe('runInfoGapExtractions — opening runs', () => {
@@ -229,6 +230,7 @@ describe('runInfoGapExtractions — finalizing', () => {
     expect(markdown).toMatch(/2026-08-19 · `b`/);
     expect(markdown).toMatch(/— · `c`/);
     expect(summary).toMatchObject({ readyToLoad: 1, unanswered: 2, extracted: 2, failed: 1, candidates: 3 });
+    expect(q.loadTenantConfigLastChange).toHaveBeenCalledWith('t1');
     expect(q.finishInfoGapRun).toHaveBeenCalledWith('run-1', 'done', 2, 1);
   });
 

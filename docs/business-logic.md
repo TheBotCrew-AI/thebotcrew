@@ -1124,6 +1124,12 @@ topics still being asked), *sin respuesta de nadie* (queued questions in threads
 human ever replied in). Only topics touched by THIS run appear; the accumulated table is
 the DB.
 
+`already_in_config` is judged against TODAY's config, so a fact loaded AFTER the lead
+asked looks like a prompt bug. The report reads the tenant's last config change
+(`tenant_config_history`) and files those under **3b — se cargó después** instead: the
+first MADI run (window 26 jul → 25 aug, config rewritten that afternoon) had 47 of them
+and 0 real bugs. A topic that shows up in 3b again on the NEXT run is the real thing.
+
 **Nothing here writes `tenant_config`.** Loading a fact is a prompt change, and prompt
 changes ship with evals (§6c) — the report drafts the text, a person decides. The first
 MADI report's acceptance test was the manual tracker it replaced
