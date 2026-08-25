@@ -20,6 +20,7 @@ import { retryPendingDeliveries } from '../worker/delivery-retry.js';
 import { runPendingFollowUps } from '../worker/followup-runner.js';
 import { runPendingCapiEvents } from '../worker/capi-runner.js';
 import { runInfoGapExtractions, runPendingInfoAlerts } from '../worker/info-gap-runner.js';
+import { renderReportPage } from '../worker/info-gaps/report-html.js';
 import { exchangeCode, getInstallUrl } from '../ghl/oauth.js';
 import { loadLatestInfoGapReport, upsertOAuthToken } from '../db/queries.js';
 import { resolveTenant } from '../core/tenant.js';
@@ -245,24 +246,34 @@ export const mastra = new Mastra({
         },
       }),
 
-      // The latest info-gap report for a tenant, as markdown. Read-only; its own secret
-      // (REPORTS_SECRET) so sharing the report URL never shares the cron secret.
+      // The latest info-gap report for a tenant. Read-only; its own secret (REPORTS_SECRET)
+      // so sharing a report URL never shares the cron secret. The secret rides as `?key=`
+      // so the page opens in a browser (Leo's call, 2026-08-25 — a query-string secret
+      // lands in browser history and access logs; rotate it if a URL leaks); a bearer
+      // header still works for curl. Default is an HTML page; `?format=md` is the raw
+      // markdown.
       registerApiRoute('/reports/info-gaps/:tenantId', {
         method: 'GET',
         handler: async (c) => {
           const expected = (c.env as Record<string, string | undefined>).REPORTS_SECRET;
           const auth = c.req.header('authorization') ?? '';
-          if (!expected || auth !== `Bearer ${expected}`) {
+          const key = c.req.query('key') ?? '';
+          if (!expected || (key !== expected && auth !== `Bearer ${expected}`)) {
             return c.json({ error: 'unauthorized' }, 401);
           }
           const tenantId = c.req.param('tenantId');
           if (!/^[0-9a-f-]{36}$/i.test(tenantId)) return c.json({ error: 'bad tenant id' }, 400);
           const report = await loadLatestInfoGapReport(tenantId);
           if (!report) return c.json({ error: 'no report yet' }, 404);
-          return c.body(report.markdown, 200, {
-            'content-type': 'text/markdown; charset=utf-8',
-            'x-report-run': report.runId,
-            'x-report-created-at': report.createdAt,
+          const headers = { 'x-report-run': report.runId, 'x-report-created-at': report.createdAt };
+          if (c.req.query('format') === 'md') {
+            return c.body(report.markdown, 200, { ...headers, 'content-type': 'text/markdown; charset=utf-8' });
+          }
+          const mdUrl = `?format=md${key ? `&key=${encodeURIComponent(key)}` : ''}`;
+          return c.body(renderReportPage(report.markdown, { runId: report.runId, createdAt: report.createdAt, mdUrl }), 200, {
+            ...headers,
+            'content-type': 'text/html; charset=utf-8',
+            'cache-control': 'no-store',
           });
         },
       }),

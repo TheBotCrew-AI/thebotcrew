@@ -354,7 +354,8 @@ for the retry cron.
 - `pnpm typecheck` + `pnpm test:unit` (the gate) then `pnpm build` (mastra build via
   CloudflareDeployer) → `pnpm --filter @thebotcrew/workers exec wrangler deploy`. Set Worker
   secrets with `wrangler secret put <NAME>` (see `.env.example`). Staging step TBD.
-  `REPORTS_SECRET` (0054) gates `GET /reports/info-gaps/:tenantId` and fails closed while unset.
+  `REPORTS_SECRET` (0054) gates `GET /reports/info-gaps/:tenantId?key=…` (HTML; `&format=md` for
+  markdown; bearer header also accepted) and fails closed while unset.
 - **Gradual rollout (preferred now that a client is live):** `wrangler versions upload` →
   `wrangler versions deploy` at a percentage → ramp → `wrangler rollback` if needed. Caveat:
   a deploy that includes new **Durable Object migrations** cannot roll out gradually.

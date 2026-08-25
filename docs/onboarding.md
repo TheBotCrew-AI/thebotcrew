@@ -283,9 +283,12 @@ where tenant_id = '<tenant uuid>';
 - The report runs by itself (5-minute cron drains the queue, a run opens when the
   cadence says so). To force a tenant's FIRST report right after enabling it:
   `POST /internal/run-info-gaps` with the cron bearer, every 5 minutes until
-  `runsFinished` is 1 — or just wait. Read it at `GET /reports/info-gaps/<tenant uuid>`
-  with `Authorization: Bearer $REPORTS_SECRET` (`wrangler secret put REPORTS_SECRET`
-  once per deploy target).
+  `runsFinished` is 1 — or just wait. Read it in a browser at
+  `https://thebotcrew-agents.floral-credit-be7e.workers.dev/reports/info-gaps/<tenant uuid>?key=$REPORTS_SECRET`
+  (HTML; add `&format=md` for the markdown; a `Authorization: Bearer` header also works for
+  curl). `wrangler secret put REPORTS_SECRET` once per deploy target — generate it with
+  `openssl rand -hex 32`. The key travels in the URL so the page opens without tooling;
+  that means it lands in browser history — rotate it if a URL leaks.
 - Loading what the report proposes is a prompt change: edit the tenant row, mirror the
   fixture, add the golden case, run it red then green — same as any other prompt edit.
   Then mark the `info_gaps` row `closed` (or `dismissed` for noise) so the next report
