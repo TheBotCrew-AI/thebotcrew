@@ -212,10 +212,12 @@ supabase/
                                # 0054 info_gaps (lo que el bot no supo contestar, por tenant: cola de extracción
                                #      `info_gap_extractions` drenada 5/tick por el cron de 5 min, acumulado por tema en
                                #      `info_gaps`, reporte markdown en `info_gap_reports` servido por
-                               #      GET /reports/info-gaps/:tenantId con `REPORTS_SECRET`; cadencia en
+                               #      GET /reports/info-gaps/:tenantId?key=<tenant_config.report_key>; cadencia en
                                #      tenant_config.info_gaps. Aparte, la escalación diaria (cron `0 13 * * *`): un
                                #      pending_info sin respuesta humana en N horas recibe un TERCER tag
-                               #      (`pending_info_escalation_tag`). Nada escribe tenant_config — ver business-logic §8)
+                               #      (`pending_info_escalation_tag`). Nada escribe tenant_config — ver business-logic §8),
+                               # 0055 report_key (llave del reporte POR TENANT en tenant_config.report_key, generada por la
+                               #      DB: sin secret de Worker, una URL por cliente, rotar = UPDATE)
   clients.sql, seed-tenants.sql# seeds (run by `supabase db reset` per config.toml)
 sites/                         # client marketing sites: static HTML, no build step, no deps
   _template/                   # starting point for a new client
@@ -354,8 +356,8 @@ for the retry cron.
 - `pnpm typecheck` + `pnpm test:unit` (the gate) then `pnpm build` (mastra build via
   CloudflareDeployer) → `pnpm --filter @thebotcrew/workers exec wrangler deploy`. Set Worker
   secrets with `wrangler secret put <NAME>` (see `.env.example`). Staging step TBD.
-  `REPORTS_SECRET` (0054) gates `GET /reports/info-gaps/:tenantId?key=…` (HTML; `&format=md` for
-  markdown; bearer header also accepted) and fails closed while unset.
+  `GET /reports/info-gaps/:tenantId?key=…` (HTML; `&format=md` for markdown) is gated by the
+  tenant's own `tenant_config.report_key` (0055, DB-generated) — no Worker secret involved.
 - **Gradual rollout (preferred now that a client is live):** `wrangler versions upload` →
   `wrangler versions deploy` at a percentage → ramp → `wrangler rollback` if needed. Caveat:
   a deploy that includes new **Durable Object migrations** cannot roll out gradually.

@@ -1648,6 +1648,18 @@ export async function finishInfoGapRun(
   fail('finishInfoGapRun', error);
 }
 
+/** The tenant's per-tenant report key (0055). null when the tenant does not exist. */
+export async function loadTenantReportKey(tenantId: string): Promise<string | null> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from('tenant_config')
+    .select('report_key')
+    .eq('tenant_id', tenantId)
+    .maybeSingle();
+  fail('loadTenantReportKey', error);
+  return (data as { report_key: string } | null)?.report_key ?? null;
+}
+
 /** The newest report for a tenant, or null if none was produced yet. */
 export async function loadLatestInfoGapReport(
   tenantId: string,

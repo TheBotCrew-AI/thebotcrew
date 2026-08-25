@@ -1116,9 +1116,10 @@ counting but is NOT reopened (the report shows it as "still asked after we loade
 a prompt bug); a `dismissed` row is ignored.
 
 **The report** (`report.ts`), markdown per run in `info_gap_reports`, served by
-`GET /reports/info-gaps/:tenantId?key=REPORTS_SECRET` (HTML page; `&format=md` for the raw
-markdown; a bearer header also works). Its own secret, so a report URL never carries the
-cron secret; it rides in the query string so the page opens in a browser without tooling. Sections in the reader's priority order: *listo para
+`GET /reports/info-gaps/:tenantId?key=<report_key>` (HTML page; `&format=md` for the raw
+markdown; a bearer header also works). The key is per tenant, in `tenant_config.report_key`
+(0055) — DB-generated, so there is no Worker secret to set and a client can be handed its
+own URL; it rides in the query string so the page opens in a browser without tooling. Sections in the reader's priority order: *listo para
 cargar* (a human already answered it N times — the drafted text is there), *preguntar al
 cliente* (nobody has answered), *el bot lo tenía y no lo usó* (prompt bugs + closed
 topics still being asked), *sin respuesta de nadie* (queued questions in threads no

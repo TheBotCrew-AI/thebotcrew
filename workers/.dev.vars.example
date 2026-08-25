@@ -40,9 +40,6 @@ GHL_API_TOKEN="<ghl-api-token>"
 # INTERNAL_CRON_SECRET is any strong random secret; generate with: openssl rand -hex 32
 WORKER_URL="http://localhost:4111"
 INTERNAL_CRON_SECRET="<random-secret>"
-# REPORTS_SECRET gates GET /reports/info-gaps/:tenantId (0054). Own secret on purpose: a
-# report URL can be shared without sharing the cron secret. Same recipe: openssl rand -hex 32
-REPORTS_SECRET="<random-secret>"
 
 # Auth for /webhooks/ghl/appointments — the tenant-configured GHL WORKFLOW webhook
 # (staff bookings → stats). Workflow Custom Webhooks are unsigned, so this shared
