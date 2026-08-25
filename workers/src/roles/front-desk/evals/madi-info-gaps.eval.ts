@@ -276,3 +276,25 @@ describe.skipIf(!evalApiKey)('MADI — the combos the team kept quoting by hand 
     expect(toolIds(res)).not.toContain('flagPendingInfo');
   });
 });
+
+// A lead asked "¿con cuánto aparto el paquete?" (first automated report, gap 'apartado
+// paquete'). Leo: there is no deposit — paying in full IS how the price is secured. The
+// payment rule already implied it: this case was green 3/3 BEFORE the explicit
+// "tampoco hay anticipos" line was added; it goes red only with the payment section
+// removed, same as the gap #1 cases. Kept as the regression guard for that section.
+describe.skipIf(!evalApiKey)('MADI — no deposit: the package price is secured by paying it in full (Leo, 2026-08-25)', () => {
+  it('answers "¿con cuánto aparto?" with the full-payment rule instead of queuing it', async () => {
+    const agent = buildFrontDeskAgent();
+    const res = await agent.generate(
+      [
+        ...AFTER_AXILAS_QUOTE,
+        { role: 'user', content: 'Sería para la otra semana. ¿Con cuánto aparto el paquete para que me respeten el precio?' },
+      ],
+      { requestContext: rc() },
+    );
+
+    expect(reply(res)).toMatch(/completo|primera sesión|no (hay|manejamos|se requiere) (anticipo|apartado)/);
+    expect(toolIds(res)).not.toContain('flagPendingInfo');
+    expect(reply(res)).not.toMatch(PUNTS_TO_TEAM);
+  });
+});

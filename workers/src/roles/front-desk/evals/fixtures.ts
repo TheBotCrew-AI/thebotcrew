@@ -616,7 +616,8 @@ export const madiTenant: TenantContext = {
         '- Si prefiere pagar por sesión, sí se puede: se cobra el precio por sesión suelta de su zona (la lista de arriba), ' +
         'que sale un poco más caro que el paquete. Dale ese precio en la misma respuesta.\n' +
         '- Aceptan efectivo, tarjeta de crédito o débito y transferencia.\n' +
-        '- No hay mensualidades ni planes de pago.\n\n' +
+        '- No hay mensualidades ni planes de pago.\n' +
+        '- Tampoco hay anticipos ni apartados: el precio de paquete se asegura pagándolo completo en la primera sesión.\n\n' +
         'Depilación láser — lo que NO tienes (no lo inventes):\n' +
         '- Piernas completas POR SEPARADO no tiene precio de paquete de 6 sesiones; de ésa solo tienes el precio ' +
         'por sesión ($1,000). OJO: piernas completas SÍ está en los paquetes combinados de arriba (con bikini son ' +

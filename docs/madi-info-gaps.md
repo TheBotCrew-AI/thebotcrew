@@ -212,6 +212,19 @@ Nadie lo preguntó aún; el equipo lo dice al agendar (#8: "las sesiones son sol
 
 ---
 
+## Después de la primera corrida automática (2026-08-25)
+
+El reporte del runner encontró un tema nuevo y confirmó cuatro abiertos. Respuestas de Leo el mismo día:
+
+| Tema | Estado |
+|---|---|
+| Anticipo para apartar un paquete (nuevo) | ☑ No hay anticipos: el precio se asegura pagando completo en la primera sesión. Cargado en `offering`. |
+| Blanqueamiento de bikini como servicio | ☑ Cubierto por la FAQ de aclaramiento (axilas o bikini). |
+| Edad mínima (#7) | ☐ Leo lo investiga con MADI. |
+| Duración de sesión de combos / cuerpo completo (#17) | ☐ Leo lo investiga con MADI. |
+
+Tres temas se cerraron como ruido de la primera corrida (piernas + bikini a $3,500 — anterior al cambio a $3,800; precio de la valoración; lista de zonas): ya estaban en config.
+
 ## Hilos sin respuesta (pending_info que nadie atendió)
 
 | Hilo | Fecha | Duda | Estado hoy |
