@@ -12,6 +12,10 @@
 > assembly order, and the gates — is diagrammed in [`docs/config-model.md`](docs/config-model.md).
 > Read that before adding a config field, a campaign variant, or a persona.
 >
+> **Meta CAPI for a client** — follow [`docs/capi-setup-sop.md`](docs/capi-setup-sop.md)
+> step by step; it carries every Meta-side rejection we've hit and its fix. Don't re-derive
+> the setup from `onboarding.md` §7 (config reference only).
+>
 > ✅ **Durable Objects migration — turn durability: DONE.** Turns run through the
 > per-conversation `ConversationDO` (serialized + durable 15s Alarm) for all tenants
 > (`DO_TURNS=*`). **Phase 3 cleanup shipped (2026-07-03):** the redundant reconciliation cron,

@@ -1047,7 +1047,8 @@ call from `ai_key_fallback`, and for the opposite reason: a wrong-key AI turn is
 misattributed spend, a wrong-token CAPI event corrupts another advertiser's dataset).
 Rows unsent after 48h expire: the click id's attribution value decays in days.
 
-Setup per tenant: [`docs/onboarding.md` §7](onboarding.md).
+Setup per tenant: the SOP [`capi-setup-sop.md`](capi-setup-sop.md) (config reference in
+[`onboarding.md` §7](onboarding.md)).
 
 ## 7. Known incidents & rationale
 
