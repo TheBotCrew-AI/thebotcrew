@@ -29,7 +29,7 @@ Turning a tenant on is config-only (one Worker secret + one DB row — no redepl
 | The Bot Crew — Instagram ACCEPTED | ✅ 2026-08-27 03:16 UTC | organic IG DM → `LeadSubmitted` on `instagram` (`ig_sid` + `ig_account_id`). First attempt was rejected `2804079` because the wire key is `ig_account_id`, not the doc's `instagram_business_account_id` — fixed in `fcf4395`, Worker `48894b1c` |
 | The Bot Crew — WhatsApp ACCEPTED | ✅ 2026-08-27 14:34 UTC | real CTWA click → `LeadSubmitted` on `whatsapp` (`ctwa_clid` + `whatsapp_business_account_id`, no `page_id`) to the WABA's OWN dataset `4439936336229922`, `events_received: 1`, `TEST43188`. Three rejections first (gotchas 6–8) |
 | Cron overlap fixed | ✅ `07c47a6`, Worker `fd65dcec` | the minute jobs ran on EVERY cron schedule; at :00/:05 two invocations drained the same rows → one CAPI event posted twice. Follow-ups were safe (0043 commit gate) |
-| The Bot Crew `test_event_code` removed | 🟡 pending (Leo: hold it) | remove once all three channels are seen in Test events (`TEST96971` — the MESSAGING code; the dataset's web code `TEST47597` labels differently) |
+| **The Bot Crew LIVE** | ✅ 2026-08-27 | both test codes removed; every FB/IG/WA lead now sends `LeadSubmitted` on first contact and `QualifiedLead` on a real booking. Ads-side switch (Messaging apps → Maximize conversions on `LeadSubmitted`) due ~**2026-09-10** once volume exists |
 | MADI configured | ❌ | needs Meta-side assets from MADI's ad account (below) |
 
 ## Why this exists
