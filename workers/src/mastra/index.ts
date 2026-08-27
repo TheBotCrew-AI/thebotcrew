@@ -379,18 +379,25 @@ export const mastra = new Mastra({
           ctx.waitUntil((async () => {
             const { mastra, runPendingFollowUps, retryPendingDeliveries, runPendingCapiEvents, runInfoGapExtractions, runPendingInfoAlerts } = await import('#mastra');
             const _mastra = mastra();
-            try {
-              const reactivationAgent = _mastra.getAgent('reactivation');
-              const result = await runPendingFollowUps(reactivationAgent);
-              console.log('[cron] run-followups:', JSON.stringify(result));
-            } catch (err) {
-              console.error('[cron] run-followups error:', err instanceof Error ? err.message : String(err));
-            }
-            try {
-              const result = await runPendingCapiEvents();
-              console.log('[cron] run-capi:', JSON.stringify(result));
-            } catch (err) {
-              console.error('[cron] run-capi error:', err instanceof Error ? err.message : String(err));
+            // Each schedule is its own invocation, and at :00/:05/… the 1-minute and
+            // 5-minute crons fire in the SAME second. The minute jobs must run on the
+            // minute cron only — otherwise two concurrent drains load the same pending
+            // rows and both send (seen live 2026-08-27: one CAPI event posted twice,
+            // attempts consumed twice).
+            if (event.cron === '* * * * *') {
+              try {
+                const reactivationAgent = _mastra.getAgent('reactivation');
+                const result = await runPendingFollowUps(reactivationAgent);
+                console.log('[cron] run-followups:', JSON.stringify(result));
+              } catch (err) {
+                console.error('[cron] run-followups error:', err instanceof Error ? err.message : String(err));
+              }
+              try {
+                const result = await runPendingCapiEvents();
+                console.log('[cron] run-capi:', JSON.stringify(result));
+              } catch (err) {
+                console.error('[cron] run-capi error:', err instanceof Error ? err.message : String(err));
+              }
             }
             if (event.cron === '*/5 * * * *') {
               try {
