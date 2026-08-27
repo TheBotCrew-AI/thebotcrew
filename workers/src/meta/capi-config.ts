@@ -263,8 +263,10 @@ export interface CapiPayload {
  * hashed; the phone MUST be SHA-256 hashed. Per channel:
  *   whatsapp  → ctwa_clid + page_id (+ whatsapp_business_account_id when configured)
  *   messenger → page_scoped_user_id + page_id
- *   instagram → ig_sid + instagram_business_account_id — null (skip) when the
- *               tenant hasn't configured that id: Meta can't match without it.
+ *   instagram → ig_sid + ig_account_id — null (skip) when the tenant hasn't
+ *               configured that id: Meta can't match without it. The wire name is
+ *               `ig_account_id` (Meta's 2804079 rejection names it), not the
+ *               `instagram_business_account_id` their onboarding example shows.
  */
 export async function buildCapiPayload(args: {
   config: MetaCapiConfig;
@@ -281,7 +283,7 @@ export async function buildCapiPayload(args: {
     user_data = { page_scoped_user_id: identity.key, page_id: config.pageId };
   } else {
     if (!config.instagramBusinessAccountId) return null;
-    user_data = { ig_sid: identity.key, instagram_business_account_id: config.instagramBusinessAccountId };
+    user_data = { ig_sid: identity.key, ig_account_id: config.instagramBusinessAccountId };
   }
   if (args.phone) {
     const normalized = normalizePhoneForCapi(args.phone);

@@ -116,7 +116,7 @@ describe('queueCapiEvent — enqueue', () => {
     });
     expect(q.enqueueCapiEvent).toHaveBeenCalledWith(
       expect.objectContaining({
-        p_payload: { messaging_channel: 'instagram', user_data: { ig_sid: '1383000000000020', instagram_business_account_id: '1784' } },
+        p_payload: { messaging_channel: 'instagram', user_data: { ig_sid: '1383000000000020', ig_account_id: '1784' } },
       }),
     );
   });

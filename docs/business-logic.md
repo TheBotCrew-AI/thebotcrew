@@ -1023,7 +1023,8 @@ frozen payload carries the `messaging_channel` and exactly that channel's `user_
 (Meta's own ids are never hashed; a phone, when there is one, is SHA-256 `ph`):
 `whatsapp` → `ctwa_clid` + `page_id` (+ `whatsapp_business_account_id` when configured);
 `messenger` → `page_scoped_user_id` + `page_id`; `instagram` → `ig_sid` +
-`instagram_business_account_id` — **required**: an Instagram lead on a tenant without
+`ig_account_id` (the wire name Meta enforces; the config key is still
+`instagram_business_account_id`) — **required**: an Instagram lead on a tenant without
 that id is skipped with a loud `[capi]` warn, never sent half-keyed. The 1-minute cron
 (`runPendingCapiEvents`, also `POST /internal/run-capi`) drains the `capi_events` table
 to `graph.facebook.com/v23.0/{dataset_id}/events` with `action_source=business_messaging`.

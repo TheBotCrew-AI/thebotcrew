@@ -286,7 +286,7 @@ describe('buildCapiPayload', () => {
     });
   });
 
-  it('instagram: ig_sid + instagram_business_account_id; WITHOUT that id → null (skip, not garbage)', async () => {
+  it('instagram: ig_sid + ig_account_id (the wire name Meta enforces); WITHOUT the id → null (skip, not garbage)', async () => {
     const identity = { channel: 'instagram' as const, key: '1383000000000020' };
     expect(await buildCapiPayload({ config: config(), spec: { name: 'LeadSubmitted' }, identity })).toBeNull();
     const payload = await buildCapiPayload({
@@ -296,7 +296,7 @@ describe('buildCapiPayload', () => {
     });
     expect(payload).toEqual({
       messaging_channel: 'instagram',
-      user_data: { ig_sid: '1383000000000020', instagram_business_account_id: '17841475598106121' },
+      user_data: { ig_sid: '1383000000000020', ig_account_id: '17841475598106121' },
     });
   });
 
