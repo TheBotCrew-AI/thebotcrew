@@ -23,7 +23,8 @@ Turning a tenant on is config-only (one Worker secret + one DB row — no redepl
 | Code on `main` | ✅ commit `a69b740` | CI green (typecheck + `test:unit`), 580 unit tests + `supabase/tests/0048_meta_capi.test.sql` (10 cases) |
 | Worker deployed | ✅ version `0e66459c` | direct deploy (feature dormant + no DO migration ⇒ gradual not needed) |
 | Cron drain running in prod | ✅ | tailed live: `[cron] run-capi: {"tried":0,"sent":0,"failed":0,"skipped":0}` every minute |
-| The Bot Crew configured | 🟡 2026-08-26, test code ON | `token_ref: BOTCREW`, secret present; awaiting the live-ad click → Test events check, then drop `test_event_code` |
+| 0056 (Messenger/Instagram) on prod + Worker | ✅ 2026-08-26 | migration applied via Supabase MCP (column + comments verified), commit `3412d92`, Worker version `8aec238d`; 778 unit tests + `0056` DB test green |
+| The Bot Crew configured | 🟡 2026-08-26, test code ON | `token_ref: BOTCREW`, secret present, WABA + IG account ids set; awaiting the live-ad click → Test events check, then drop `test_event_code` |
 | MADI configured | ❌ | needs Meta-side assets from MADI's ad account (below) |
 
 ## Why this exists
