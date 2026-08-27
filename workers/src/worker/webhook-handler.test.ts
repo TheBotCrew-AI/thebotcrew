@@ -251,19 +251,19 @@ describe('handleInboundWebhook — Meta CAPI attribution capture (0048)', () => 
     },
   };
 
-  it('CAPI tenant + CTWA contact → persists the click id (sticky) and queues lead_started', async () => {
+  it('CAPI tenant + CTWA contact → persists the identity (sticky) and queues lead_started', async () => {
     vi.mocked(q.loadTenantConfig).mockResolvedValue(tenant({ metaCapi } as Partial<TenantContext>));
     ghl.getContact.mockResolvedValue(ctwaContact);
     await handleInboundWebhook(inbound, agentReplying());
     expect(q.setConversationAttribution).toHaveBeenCalledWith('conv1', {
-      ctwaClid: 'AfjMi93Y-clid',
+      identity: { channel: 'whatsapp', key: 'AfjMi93Y-clid' },
       attribution: ctwaContact.attributionSource,
     });
     expect(queueCapiEvent).toHaveBeenCalledWith({
       tenant: expect.objectContaining({ tenantId: 't1' }),
       ghlConversationId: 'conv1',
       kind: 'lead_started',
-      ctwaClid: 'AfjMi93Y-clid',
+      identity: { channel: 'whatsapp', key: 'AfjMi93Y-clid' },
       phone: '+521',
     });
   });
@@ -276,7 +276,49 @@ describe('handleInboundWebhook — Meta CAPI attribution capture (0048)', () => 
       lastAttributionSource: { sessionSource: 'Paid Social', ctwaClid: 'Afj-last' },
     });
     await handleInboundWebhook(inbound, agentReplying());
-    expect(queueCapiEvent).toHaveBeenCalledWith(expect.objectContaining({ ctwaClid: 'Afj-last' }));
+    expect(queueCapiEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ identity: { channel: 'whatsapp', key: 'Afj-last' } }),
+    );
+  });
+
+  it('a Facebook inbound (0056) captures the PSID as a messenger identity', async () => {
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(tenant({ metaCapi, enabledChannels: ['facebook'] } as Partial<TenantContext>));
+    // Real shape (verified live 2026-08-26): the ad ids ride along, the PSID is `pSid`.
+    ghl.getContact.mockResolvedValue({
+      name: 'Rosa',
+      attributionSource: { sessionSource: 'Paid Social', medium: 'facebook', pSid: '36250000000000034', adId: '5251' },
+    });
+    await handleInboundWebhook({ ...inbound, messageType: 'FB', phone: undefined }, agentReplying());
+    expect(q.setConversationAttribution).toHaveBeenCalledWith('conv1', {
+      identity: { channel: 'messenger', key: '36250000000000034' },
+      attribution: expect.objectContaining({ pSid: '36250000000000034' }),
+    });
+    expect(queueCapiEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'lead_started', identity: { channel: 'messenger', key: '36250000000000034' } }),
+    );
+  });
+
+  it('an Instagram inbound (0056) captures the IGSID even when organic — Meta decides attribution', async () => {
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(tenant({ metaCapi, enabledChannels: ['instagram'] } as Partial<TenantContext>));
+    ghl.getContact.mockResolvedValue({
+      name: 'Lu',
+      attributionSource: { sessionSource: 'Social media', medium: 'instagram', igSid: '1383000000000020', adId: null },
+    });
+    await handleInboundWebhook({ ...inbound, messageType: 'IG', phone: undefined }, agentReplying());
+    expect(queueCapiEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ identity: { channel: 'instagram', key: '1383000000000020' } }),
+    );
+  });
+
+  it('a WhatsApp inbound never matches on a PSID the contact may carry from Facebook', async () => {
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(tenant({ metaCapi } as Partial<TenantContext>));
+    ghl.getContact.mockResolvedValue({
+      name: 'Ana',
+      attributionSource: { sessionSource: 'Paid Social', medium: 'facebook', pSid: '36250000000000034' },
+    });
+    await handleInboundWebhook(inbound, agentReplying());
+    expect(q.setConversationAttribution).not.toHaveBeenCalled();
+    expect(queueCapiEvent).not.toHaveBeenCalled();
   });
 
   it('tenant without meta_capi → no capture, even when the contact carries attribution', async () => {

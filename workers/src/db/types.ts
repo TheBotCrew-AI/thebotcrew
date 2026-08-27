@@ -126,8 +126,8 @@ export interface EnqueueCapiEventParams {
   p_event_name: string;
   /** `${ghl_conversation_id}:${kind}` — the queue's UNIQUE key and Meta's dedup id. */
   p_event_id: string;
-  /** Frozen {user_data, custom_data?} snapshot built at enqueue. */
-  p_payload: Record<string, unknown>;
+  /** Frozen {messaging_channel, user_data, custom_data?} snapshot built at enqueue. */
+  p_payload: import('../meta/capi-config.js').CapiPayload;
 }
 
 /** One row returned by app_load_pending_capi_events (0048). */
@@ -140,7 +140,12 @@ export interface PendingCapiEvent {
   eventId: string;
   /** ISO timestamp the event happened (sent to Meta as event_time). */
   eventTime: string;
-  payload: { user_data: Record<string, unknown>; custom_data?: Record<string, unknown> };
+  /** Frozen at enqueue. `messaging_channel` is absent on pre-0056 rows (= whatsapp). */
+  payload: {
+    messaging_channel?: import('../meta/capi-config.js').CapiMessagingChannel;
+    user_data: Record<string, unknown>;
+    custom_data?: Record<string, unknown>;
+  };
   attempts: number;
   lastError: string | null;
   createdAt: string;

@@ -58,7 +58,7 @@ import {
 } from '../db/queries.js';
 import { findUpcomingAppointment } from '../db/upcoming-appointment.js';
 import { queueCapiEvent, queueCapiStatusEvent } from '../meta/capi.js';
-import { extractCtwaClid } from '../meta/capi-config.js';
+import { extractCapiIdentity } from '../meta/capi-config.js';
 import { GhlClient } from '../ghl/client.js';
 import { parseInboundWebhook } from '../ghl/webhook.js';
 import { transcribeAudio } from '../core/transcribe.js';
@@ -654,16 +654,18 @@ export async function runAgentTurn({
             (e: unknown) => console.error('[merge-keys] persist failed (non-blocking):', e instanceof Error ? e.message : String(e)),
           );
         }
-        // Meta CAPI capture (0048): GHL only exposes the CTWA click id on the contact
-        // record — this fetch is the one place we see it. First-touch sticky in the DB,
-        // and the queue's unique event_id makes the lead_started enqueue idempotent, so
+        // Meta CAPI capture (0048/0056): GHL only exposes Meta's matching key on the
+        // contact record (ctwa_clid on WhatsApp, PSID on Facebook, IGSID on Instagram) —
+        // this fetch is the one place we see it. First-touch sticky in the DB, and the
+        // queue's unique event_id makes the lead_started enqueue idempotent, so
         // re-running on turn 2 (bot still hasn't spoken) is a no-op.
         if (tenant.metaCapi) {
-          const ctwaClid =
-            extractCtwaClid(contact.attributionSource) ?? extractCtwaClid(contact.lastAttributionSource);
-          if (ctwaClid) {
+          const identity =
+            extractCapiIdentity(parsed.channel, contact.attributionSource) ??
+            extractCapiIdentity(parsed.channel, contact.lastAttributionSource);
+          if (identity) {
             await setConversationAttribution(parsed.conversationId, {
-              ctwaClid,
+              identity,
               attribution: contact.attributionSource ?? contact.lastAttributionSource,
             }).catch((e: unknown) =>
               console.error('[capi] attribution persist failed (non-blocking):', e instanceof Error ? e.message : String(e)),
@@ -672,7 +674,7 @@ export async function runAgentTurn({
               tenant,
               ghlConversationId: parsed.conversationId,
               kind: 'lead_started',
-              ctwaClid,
+              identity,
               phone: contactPhone ?? null,
             });
           }

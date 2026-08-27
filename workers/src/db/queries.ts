@@ -12,7 +12,7 @@ import { DEMO_REMINDER_ROLE } from '../core/types.js';
 import { clampToActiveHours, DEFAULT_QUIET_HOURS } from '../core/active-hours.js';
 import type { TokenUsage } from '../core/llm-usage.js';
 import type { AppointmentLogRow } from './appointment-active.js';
-import { parseMetaCapi } from '../meta/capi-config.js';
+import { capiChannelFor, parseMetaCapi, type CapiIdentity } from '../meta/capi-config.js';
 import type { GhlTokenResponse } from '../ghl/oauth.js';
 import type {
   BotEventType,
@@ -533,34 +533,45 @@ export async function getConversationContactKeys(
 }
 
 /**
- * Persist the Meta ad attribution captured from the GHL contact (0048).
- * First-touch sticky: only writes while ctwa_clid is still NULL, so a
- * re-capture on turn 2 (or a later ad click) never rewrites which click
- * gets credited. Fire-and-forget safe.
+ * Persist the Meta attribution captured from the GHL contact (0048/0056): the
+ * channel's matching key in `capi_match_key` and the raw snapshot. First-touch
+ * sticky: only writes while the key is still NULL, so a re-capture on turn 2 (or
+ * a later ad click) never rewrites which click gets credited. WhatsApp is
+ * dual-written into `ctwa_clid` for the 0056 contract window. Fire-and-forget safe.
  */
 export async function setConversationAttribution(
   ghlConversationId: string,
-  args: { ctwaClid: string; attribution: unknown },
+  args: { identity: CapiIdentity; attribution: unknown },
 ): Promise<void> {
   const supabase = getSupabase();
+  const patch: Record<string, unknown> = { capi_match_key: args.identity.key, attribution: args.attribution ?? null };
+  if (args.identity.channel === 'whatsapp') patch.ctwa_clid = args.identity.key;
   const { error } = await supabase
     .from('conversations')
-    .update({ ctwa_clid: args.ctwaClid, attribution: args.attribution ?? null })
+    .update(patch)
     .eq('ghl_conversation_id', ghlConversationId)
-    .is('ctwa_clid', null);
+    .is('capi_match_key', null);
   fail('setConversationAttribution', error);
 }
 
-/** The conversation's stored CTWA click id; null when the lead didn't come from a CTWA ad. */
-export async function getConversationCtwaClid(ghlConversationId: string): Promise<string | null> {
+/**
+ * The conversation's stored CAPI identity (channel + matching key); null when there
+ * is none (a WhatsApp lead that didn't come from a CTWA ad). Rows captured before
+ * 0056 only have `ctwa_clid` — read as WhatsApp.
+ */
+export async function getConversationCapiIdentity(ghlConversationId: string): Promise<CapiIdentity | null> {
   const supabase = getSupabase();
   const { data, error } = await supabase
     .from('conversations')
-    .select('ctwa_clid')
+    .select('channel, capi_match_key, ctwa_clid')
     .eq('ghl_conversation_id', ghlConversationId)
     .maybeSingle();
-  fail('getConversationCtwaClid', error);
-  return (data as { ctwa_clid: string | null } | null)?.ctwa_clid ?? null;
+  fail('getConversationCapiIdentity', error);
+  const row = data as { channel: Channel; capi_match_key: string | null; ctwa_clid: string | null } | null;
+  if (!row) return null;
+  if (row.capi_match_key) return { channel: capiChannelFor(row.channel), key: row.capi_match_key };
+  if (row.ctwa_clid) return { channel: 'whatsapp', key: row.ctwa_clid };
+  return null;
 }
 
 /** Switch a conversation's persona. Pass null to return it to the normal front-desk agent. */

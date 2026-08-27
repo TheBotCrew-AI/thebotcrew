@@ -90,7 +90,8 @@ export async function runPendingCapiEvents(): Promise<CapiRunResult> {
         event_time: Math.floor(new Date(row.eventTime).getTime() / 1000),
         event_id: row.eventId,
         action_source: 'business_messaging',
-        messaging_channel: 'whatsapp',
+        // Frozen at enqueue since 0056; rows queued before it are all WhatsApp.
+        messaging_channel: row.payload.messaging_channel ?? 'whatsapp',
         user_data: row.payload.user_data,
         ...(row.payload.custom_data ? { custom_data: row.payload.custom_data } : {}),
       },

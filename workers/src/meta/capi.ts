@@ -10,37 +10,47 @@
  */
 
 import type { ConversationStatus, TenantContext } from '../core/types.js';
-import { enqueueCapiEvent, getConversationCtwaClid } from '../db/queries.js';
+import { enqueueCapiEvent, getConversationCapiIdentity } from '../db/queries.js';
 import {
   buildCapiEventId,
   buildCapiPayload,
   CAPI_GRAPH_VERSION,
   resolveEventSpec,
   type CapiEventKind,
+  type CapiIdentity,
+  type CapiMessagingChannel,
 } from './capi-config.js';
 
 /**
  * Enqueue one conversion signal for a conversation. Never throws. Pass
- * `ctwaClid` when the caller just captured it (turn 1); otherwise the stored
- * conversation value is read — a conversation that never came from a CTWA ad
- * has none and produces no event.
+ * `identity` when the caller just captured it (turn 1); otherwise the stored
+ * conversation value is read — a conversation with no matching key (a WhatsApp
+ * lead that didn't come from a CTWA ad) produces no event.
  */
 export async function queueCapiEvent(args: {
   tenant: TenantContext;
   ghlConversationId: string;
   kind: CapiEventKind;
   phone?: string | null;
-  ctwaClid?: string;
+  identity?: CapiIdentity;
 }): Promise<void> {
   try {
     const config = args.tenant.metaCapi;
     if (!config) return;
     const spec = resolveEventSpec(config, args.kind);
     if (!spec) return;
-    const ctwaClid = args.ctwaClid ?? (await getConversationCtwaClid(args.ghlConversationId));
-    if (!ctwaClid) return;
+    const identity = args.identity ?? (await getConversationCapiIdentity(args.ghlConversationId));
+    if (!identity) return;
 
-    const payload = await buildCapiPayload({ config, spec, ctwaClid, phone: args.phone });
+    const payload = await buildCapiPayload({ config, spec, identity, phone: args.phone });
+    if (!payload) {
+      // Only Instagram gets here (its account id is a config field). Loud: the lead is
+      // real and the signal is lost until the operator fills instagram_business_account_id.
+      console.warn(
+        `[capi] ${identity.channel} lead but meta_capi lacks the account id for that channel — skipped conv=${args.ghlConversationId}`,
+      );
+      return;
+    }
     const inserted = await enqueueCapiEvent({
       p_client_id: args.tenant.clientId,
       p_ghl_conversation_id: args.ghlConversationId,
@@ -50,7 +60,7 @@ export async function queueCapiEvent(args: {
       p_payload: payload,
     });
     if (inserted) {
-      console.log(`[capi] queued ${args.kind}→${spec.name} conv=${args.ghlConversationId}`);
+      console.log(`[capi] queued ${args.kind}→${spec.name} (${identity.channel}) conv=${args.ghlConversationId}`);
     }
   } catch (err) {
     console.error('[capi] enqueue failed (non-blocking):', err instanceof Error ? err.message : String(err));
@@ -87,7 +97,7 @@ export async function sendCapiEvent(args: {
     event_time: number;
     event_id: string;
     action_source: 'business_messaging';
-    messaging_channel: 'whatsapp';
+    messaging_channel: CapiMessagingChannel;
     user_data: Record<string, unknown>;
     custom_data?: Record<string, unknown>;
   };

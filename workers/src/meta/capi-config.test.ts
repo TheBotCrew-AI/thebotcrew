@@ -2,7 +2,9 @@ import { describe, it, expect, afterEach } from 'vitest';
 import {
   buildCapiEventId,
   buildCapiPayload,
+  capiChannelFor,
   capiTokenSecretName,
+  extractCapiIdentity,
   extractCtwaClid,
   normalizePhoneForCapi,
   parseMetaCapi,
@@ -43,6 +45,19 @@ describe('parseMetaCapi', () => {
   it('carries test_event_code through, trimmed; blank is dropped', () => {
     expect(parseMetaCapi({ ...validRaw, test_event_code: ' TEST123 ' })?.testEventCode).toBe('TEST123');
     expect(parseMetaCapi({ ...validRaw, test_event_code: '  ' })?.testEventCode).toBeUndefined();
+  });
+
+  it('carries the optional WhatsApp / Instagram account ids (0056); blank is dropped', () => {
+    const parsed = parseMetaCapi({
+      ...validRaw,
+      whatsapp_business_account_id: ' 1629186164979352 ',
+      instagram_business_account_id: '17841475598106121',
+    });
+    expect(parsed?.whatsappBusinessAccountId).toBe('1629186164979352');
+    expect(parsed?.instagramBusinessAccountId).toBe('17841475598106121');
+    const blank = parseMetaCapi({ ...validRaw, whatsapp_business_account_id: '', instagram_business_account_id: '  ' });
+    expect(blank?.whatsappBusinessAccountId).toBeUndefined();
+    expect(blank?.instagramBusinessAccountId).toBeUndefined();
   });
 
   it('parses event overrides: rename, value+currency, and false to disable', () => {
@@ -151,6 +166,60 @@ describe('extractCtwaClid', () => {
   });
 });
 
+describe('capiChannelFor', () => {
+  it("maps our channel enum to Meta's: facebook is 'messenger', the rest are themselves", () => {
+    expect(capiChannelFor('facebook')).toBe('messenger');
+    expect(capiChannelFor('whatsapp')).toBe('whatsapp');
+    expect(capiChannelFor('instagram')).toBe('instagram');
+  });
+});
+
+describe('extractCapiIdentity — the matching key per channel (0056)', () => {
+  // Real GHL contact shapes, verified live 2026-08-26 on The Bot Crew's own leads.
+  const fbPaid = {
+    sessionSource: 'Paid Social',
+    medium: 'facebook',
+    mediumId: '36250000000000034',
+    adId: '52510000000354',
+    adSetId: '52510000000754',
+    campaignId: '52510000000154',
+    utmMedium: 'ACQ',
+    pSid: '36250000000000034',
+  };
+  const igOrganic = { sessionSource: 'Social media', medium: 'instagram', mediumId: '1383000000000020', adId: null, igSid: '1383000000000020' };
+  const waPaid = { sessionSource: 'Paid Social', medium: 'whatsapp', ctwaClid: 'AfjMi93Y-example', adId: '120250989588970351' };
+
+  it('facebook → messenger + PSID', () => {
+    expect(extractCapiIdentity('facebook', fbPaid)).toEqual({ channel: 'messenger', key: '36250000000000034' });
+  });
+
+  it('instagram → IGSID, even for an organic contact (adId null) — Meta does the attribution', () => {
+    expect(extractCapiIdentity('instagram', igOrganic)).toEqual({ channel: 'instagram', key: '1383000000000020' });
+  });
+
+  it('whatsapp → the click id, exactly like extractCtwaClid', () => {
+    expect(extractCapiIdentity('whatsapp', waPaid)).toEqual({ channel: 'whatsapp', key: 'AfjMi93Y-example' });
+  });
+
+  it("looks up the key for OUR channel, never for whatever the object carries", () => {
+    // A WhatsApp conversation whose contact was first created from Facebook: no click id → nothing.
+    expect(extractCapiIdentity('whatsapp', fbPaid)).toBeNull();
+    // And a Facebook conversation never matches on a ctwa_clid.
+    expect(extractCapiIdentity('facebook', waPaid)).toBeNull();
+  });
+
+  it('tolerates snake_case spellings', () => {
+    expect(extractCapiIdentity('facebook', { page_scoped_user_id: '99' })).toEqual({ channel: 'messenger', key: '99' });
+    expect(extractCapiIdentity('instagram', { ig_sid: '77' })).toEqual({ channel: 'instagram', key: '77' });
+  });
+
+  it('null/absent/empty → null', () => {
+    expect(extractCapiIdentity('facebook', null)).toBeNull();
+    expect(extractCapiIdentity('instagram', { sessionSource: 'Organic' })).toBeNull();
+    expect(extractCapiIdentity('facebook', { pSid: '   ' })).toBeNull();
+  });
+});
+
 describe('buildCapiEventId', () => {
   it('is one per conversation per kind', () => {
     expect(buildCapiEventId('conv1', 'lead_started')).toBe('conv1:lead_started');
@@ -175,30 +244,73 @@ describe('sha256Hex', () => {
 });
 
 describe('buildCapiPayload', () => {
-  it('ctwa_clid UNHASHED + page_id in user_data; phone hashed into ph[]', async () => {
+  const wa = { channel: 'whatsapp' as const, key: 'AfjMi93Y-example' };
+
+  it('whatsapp: ctwa_clid UNHASHED + page_id in user_data; phone hashed into ph[]; channel frozen', async () => {
     const payload = await buildCapiPayload({
       config: config(),
       spec: { name: 'LeadSubmitted' },
-      ctwaClid: 'AfjMi93Y-example',
+      identity: wa,
       phone: '+5216644045316',
     });
-    expect(payload.user_data.ctwa_clid).toBe('AfjMi93Y-example'); // Meta requirement: never hash
-    expect(payload.user_data.page_id).toBe('789');
-    expect(payload.user_data.ph).toEqual([await sha256Hex('5216644045316')]);
-    expect(payload.custom_data).toBeUndefined();
+    expect(payload?.messaging_channel).toBe('whatsapp');
+    expect(payload?.user_data.ctwa_clid).toBe('AfjMi93Y-example'); // Meta requirement: never hash
+    expect(payload?.user_data.page_id).toBe('789');
+    expect(payload?.user_data.whatsapp_business_account_id).toBeUndefined(); // not configured
+    expect(payload?.user_data.ph).toEqual([await sha256Hex('5216644045316')]);
+    expect(payload?.custom_data).toBeUndefined();
+  });
+
+  it('whatsapp: the WABA id rides along when configured (what Meta’s own example sends)', async () => {
+    const payload = await buildCapiPayload({
+      config: config({ whatsappBusinessAccountId: '1629186164979352' }),
+      spec: { name: 'LeadSubmitted' },
+      identity: wa,
+    });
+    expect(payload?.user_data).toEqual({
+      ctwa_clid: 'AfjMi93Y-example',
+      page_id: '789',
+      whatsapp_business_account_id: '1629186164979352',
+    });
+  });
+
+  it('messenger: page_scoped_user_id + page_id, nothing WhatsApp-shaped', async () => {
+    const payload = await buildCapiPayload({
+      config: config(),
+      spec: { name: 'LeadSubmitted' },
+      identity: { channel: 'messenger', key: '36250000000000034' },
+    });
+    expect(payload).toEqual({
+      messaging_channel: 'messenger',
+      user_data: { page_scoped_user_id: '36250000000000034', page_id: '789' },
+    });
+  });
+
+  it('instagram: ig_sid + instagram_business_account_id; WITHOUT that id → null (skip, not garbage)', async () => {
+    const identity = { channel: 'instagram' as const, key: '1383000000000020' };
+    expect(await buildCapiPayload({ config: config(), spec: { name: 'LeadSubmitted' }, identity })).toBeNull();
+    const payload = await buildCapiPayload({
+      config: config({ instagramBusinessAccountId: '17841475598106121' }),
+      spec: { name: 'LeadSubmitted' },
+      identity,
+    });
+    expect(payload).toEqual({
+      messaging_channel: 'instagram',
+      user_data: { ig_sid: '1383000000000020', instagram_business_account_id: '17841475598106121' },
+    });
   });
 
   it('no phone → no ph key', async () => {
-    const payload = await buildCapiPayload({ config: config(), spec: { name: 'LeadSubmitted' }, ctwaClid: 'x' });
-    expect(payload.user_data.ph).toBeUndefined();
+    const payload = await buildCapiPayload({ config: config(), spec: { name: 'LeadSubmitted' }, identity: wa });
+    expect(payload?.user_data.ph).toBeUndefined();
   });
 
   it('a spec with value adds custom_data (currency defaults to MXN)', async () => {
     const payload = await buildCapiPayload({
       config: config(),
       spec: { name: 'Purchase', value: 350 },
-      ctwaClid: 'x',
+      identity: wa,
     });
-    expect(payload.custom_data).toEqual({ value: 350, currency: 'MXN' });
+    expect(payload?.custom_data).toEqual({ value: 350, currency: 'MXN' });
   });
 });

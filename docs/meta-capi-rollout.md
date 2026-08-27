@@ -8,10 +8,13 @@
 > procedure: [`onboarding.md` §7](onboarding.md). This file is the rollout log — the
 > analogue of `durable-objects-migration.md` for this feature.
 
-## Status (2026-08-02)
+## Status (2026-08-26)
 
-**Live in prod, deliberately dormant.** Code, migration, deploy and monitoring are all
-done and verified; not one tenant has `meta_capi` configured yet, so zero events flow.
+**Live in prod; first tenant armed.** Code, migration, deploy and monitoring were done and
+verified 2026-08-02; the feature sat dormant (every `meta_capi` NULL, zero events) until
+2026-08-26, when **The Bot Crew** (Leo's own CTWA ads) became the first configured tenant:
+secret `META_CAPI_TOKEN__BOTCREW` + `meta_capi` row set **with `test_event_code` still on**.
+Pending: the live-ad click test, then removing the test code. MADI is still NULL.
 Turning a tenant on is config-only (one Worker secret + one DB row — no redeploy).
 
 | Step | State | Evidence |
@@ -20,7 +23,8 @@ Turning a tenant on is config-only (one Worker secret + one DB row — no redepl
 | Code on `main` | ✅ commit `a69b740` | CI green (typecheck + `test:unit`), 580 unit tests + `supabase/tests/0048_meta_capi.test.sql` (10 cases) |
 | Worker deployed | ✅ version `0e66459c` | direct deploy (feature dormant + no DO migration ⇒ gradual not needed) |
 | Cron drain running in prod | ✅ | tailed live: `[cron] run-capi: {"tried":0,"sent":0,"failed":0,"skipped":0}` every minute |
-| Any tenant configured | ❌ **← the remaining work** | needs Meta-side assets per tenant (below) |
+| The Bot Crew configured | 🟡 2026-08-26, test code ON | `token_ref: BOTCREW`, secret present; awaiting the live-ad click → Test events check, then drop `test_event_code` |
+| MADI configured | ❌ | needs Meta-side assets from MADI's ad account (below) |
 
 ## Why this exists
 
@@ -71,11 +75,11 @@ on every drain, so a rotation needs no re-enqueue.
 | Pure config/payload (parse, secret-name, defaults, hashing) | `workers/src/meta/capi-config.ts` |
 | Enqueue helpers + the Graph POST | `workers/src/meta/capi.ts` |
 | Cron drain | `workers/src/worker/capi-runner.ts` |
-| Capture hook | `webhook-handler.ts` — inside the turn-start `if (contact)` block |
+| Capture hook | `webhook-handler.ts` — inside the turn-start `if (contact)` block (`extractCapiIdentity(parsed.channel, …)`) |
 | Booking hook | `book-appointment.ts` — after the `lead_qualified` logEvent, real path only |
 | Status hooks (`completed`) | `update-conversation-status.ts` (post-`applied` check) + the classifier branch in `webhook-handler.ts` |
-| Queue + RPCs + columns | `supabase/migrations/0048_meta_capi.sql` |
-| DB tests | `supabase/tests/0048_meta_capi.test.sql` |
+| Queue + RPCs + columns | `supabase/migrations/0048_meta_capi.sql`; per-channel key `0056_capi_messaging_channels.sql` |
+| DB tests | `supabase/tests/0048_meta_capi.test.sql`, `0056_capi_messaging_channels.test.sql` |
 
 ### Event kinds → Meta events (per-tenant overridable via `meta_capi.events`)
 
@@ -100,8 +104,13 @@ on every drain, so a rotation needs no re-enqueue.
 - **48h expiry** on unsent rows — the click id's attribution value decays in days.
 - **4xx = terminal, 5xx/network = retry ×3** (mirrors delivery-retry's cap).
 - **Demo/roleplay never signals** (same family as the other demo no-side-effects guards).
-- **WhatsApp only in v1** — `messaging_channel` hardcoded; click-to-Messenger/IG use
-  different matching keys. Future work.
+- **Messenger + Instagram since 0056 (2026-08-26).** v1 was WhatsApp-only because the
+  click id was the one key GHL was known to expose; the same probe on The Bot Crew's own
+  contacts found `attributionSource.pSid` (Facebook) and `attributionSource.igSid`
+  (Instagram), so the capture became per-channel (`conversations.capi_match_key`), the
+  `messaging_channel` is frozen in the queue payload, and `meta_capi` gained
+  `whatsapp_business_account_id` / `instagram_business_account_id`. FB/IG leads all
+  carry a key → those channels signal every lead and Meta attributes (pixel semantics).
 
 ## What remains — per-tenant activation (the only human-in-the-loop part)
 

@@ -43,7 +43,25 @@ afterEach(() => {
 });
 
 describe('runPendingCapiEvents — happy path', () => {
-  it('sends with the fresh config, marks sent, logs capi_event_sent', async () => {
+  it('a row frozen with a channel (0056) is sent on that channel, user_data untouched', async () => {
+    vi.mocked(q.loadPendingCapiEvents).mockResolvedValue([
+      row({
+        eventId: 'conv-fb:lead_started',
+        payload: { messaging_channel: 'messenger', user_data: { page_scoped_user_id: '3625', page_id: 'pg1' } },
+      }),
+    ]);
+    await runPendingCapiEvents();
+    expect(sendCapiEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: expect.objectContaining({
+          messaging_channel: 'messenger',
+          user_data: { page_scoped_user_id: '3625', page_id: 'pg1' },
+        }),
+      }),
+    );
+  });
+
+  it('sends with the fresh config, marks sent, logs capi_event_sent (a pre-0056 row = whatsapp)', async () => {
     const res = await runPendingCapiEvents();
     expect(q.incrementCapiAttempts).toHaveBeenCalledWith('row1');
     expect(sendCapiEvent).toHaveBeenCalledWith({

@@ -134,7 +134,7 @@ workers/                       # Mastra + Cloudflare Worker package (@thebotcrew
       front-desk/              # config (zod), prompt (es template), agent, tools/, evals/
       reactivation/            # text-only follow-up/reactivation agent (no tools)
     ghl/                       # webhook parse/verify, OAuth, tags + transport-only API client (live)
-    meta/                      # Meta Conversions API (0048): capi-config (pure parse/payload) + capi (enqueue + Graph send)
+    meta/                      # Meta Conversions API (0048/0056): capi-config (pure parse/payload, per-channel identity) + capi (enqueue + Graph send)
     db/                        # service-role Supabase client, queries (config read + RPC writes)
     worker/                    # webhook-handler (inbound) + conversation-do (per-conversation Durable Object: durable-alarm debounce + serialized turn) + outbound-handler (human takeover) + tag-handler (bot-off) + delivery-retry + followup-runner + capi-runner (Meta CAPI queue drain) + info-gap-runner + info-gaps/ (0054: what the bot couldn't answer — extraction queue, aggregate, report; pending_info escalation)
   scripts/simulate-webhook.mjs # local dev: fire a fake GHL webhook
@@ -217,7 +217,13 @@ supabase/
                                #      pending_info sin respuesta humana en N horas recibe un TERCER tag
                                #      (`pending_info_escalation_tag`). Nada escribe tenant_config — ver business-logic §8),
                                # 0055 report_key (llave del reporte POR TENANT en tenant_config.report_key, generada por la
-                               #      DB: sin secret de Worker, una URL por cliente, rotar = UPDATE)
+                               #      DB: sin secret de Worker, una URL por cliente, rotar = UPDATE),
+                               # 0056 capi_messaging_channels (CAPI en Messenger e Instagram: conversations.capi_match_key =
+                               #      la llave de matching del canal — ctwa_clid en WhatsApp, PSID en Facebook, IGSID en
+                               #      Instagram — todas expuestas por GHL en contact.attributionSource; ctwa_clid sigue
+                               #      dual-write hasta el contract. El messaging_channel viaja congelado en el payload de la
+                               #      cola, sin cambio de RPC. meta_capi gana whatsapp_business_account_id /
+                               #      instagram_business_account_id (IG lo REQUIERE) — ver business-logic §6a)
   clients.sql, seed-tenants.sql# seeds (run by `supabase db reset` per config.toml)
 sites/                         # client marketing sites: static HTML, no build step, no deps
   _template/                   # starting point for a new client

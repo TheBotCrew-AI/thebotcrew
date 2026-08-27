@@ -9,6 +9,8 @@
  * this file stays importable from `db/queries.ts` without a cycle.
  */
 
+import type { Channel } from '../core/types.js';
+
 export const CAPI_GRAPH_VERSION = 'v23.0';
 
 /** Event names Meta accepts for business-messaging (action_source=business_messaging). */
@@ -38,6 +40,24 @@ export type MetaEventName = (typeof META_BUSINESS_MESSAGING_EVENTS)[number];
  */
 export type CapiEventKind = 'lead_started' | 'appointment_booked' | 'conversation_completed';
 
+/** Meta's `messaging_channel` values. Our `facebook` channel is Meta's `messenger`. */
+export type CapiMessagingChannel = 'whatsapp' | 'messenger' | 'instagram';
+
+/**
+ * The one key Meta matches a business-messaging event on, per channel:
+ * WhatsApp → the ad click id (`ctwa_clid`, only CTWA-ad leads have one);
+ * Messenger → the page-scoped user id (PSID, every Messenger contact has one);
+ * Instagram → the Instagram-scoped id (IGSID, every IG contact has one).
+ */
+export interface CapiIdentity {
+  channel: CapiMessagingChannel;
+  key: string;
+}
+
+export function capiChannelFor(channel: Channel): CapiMessagingChannel {
+  return channel === 'facebook' ? 'messenger' : channel;
+}
+
 /** How one internal kind maps to Meta: the event name + optional monetary value. */
 export interface CapiEventSpec {
   name: MetaEventName;
@@ -57,6 +77,10 @@ export interface MetaCapiConfig {
   tokenRef: string;
   /** Events Manager Test Events code — set only while verifying, then remove. */
   testEventCode?: string;
+  /** WhatsApp Business Account id — sent next to ctwa_clid on WhatsApp events when set. */
+  whatsappBusinessAccountId?: string;
+  /** Instagram business account id — REQUIRED for Instagram events; without it they are skipped. */
+  instagramBusinessAccountId?: string;
   events?: Partial<Record<CapiEventKind, CapiEventSpec | false>>;
 }
 
@@ -109,6 +133,12 @@ export function parseMetaCapi(raw: unknown): MetaCapiConfig | null {
   const config: MetaCapiConfig = { datasetId, pageId, tokenRef };
   if (typeof o.test_event_code === 'string' && o.test_event_code.trim()) {
     config.testEventCode = o.test_event_code.trim();
+  }
+  if (typeof o.whatsapp_business_account_id === 'string' && o.whatsapp_business_account_id.trim()) {
+    config.whatsappBusinessAccountId = o.whatsapp_business_account_id.trim();
+  }
+  if (typeof o.instagram_business_account_id === 'string' && o.instagram_business_account_id.trim()) {
+    config.instagramBusinessAccountId = o.instagram_business_account_id.trim();
   }
   if (o.events && typeof o.events === 'object' && !Array.isArray(o.events)) {
     const events: MetaCapiConfig['events'] = {};
@@ -172,10 +202,36 @@ export function buildCapiEventId(ghlConversationId: string, kind: CapiEventKind)
  * field naming is not a contract, so tolerate snake_case too.
  */
 export function extractCtwaClid(attribution: unknown): string | null {
-  if (!attribution || typeof attribution !== 'object') return null;
-  const o = attribution as Record<string, unknown>;
-  const candidate = o.ctwaClid ?? o.ctwa_clid;
-  return typeof candidate === 'string' && candidate.trim() ? candidate.trim() : null;
+  return firstString(attribution, ['ctwaClid', 'ctwa_clid']);
+}
+
+function firstString(obj: unknown, keys: string[]): string | null {
+  if (!obj || typeof obj !== 'object') return null;
+  const o = obj as Record<string, unknown>;
+  for (const k of keys) {
+    const v = o[k];
+    if (typeof v === 'string' && v.trim()) return v.trim();
+  }
+  return null;
+}
+
+/**
+ * The channel's matching key out of a GHL attribution object. Verified live shapes
+ * (2026-08-26, The Bot Crew contacts): a Facebook lead carries
+ * `{ sessionSource: 'Paid Social', medium: 'facebook', pSid: '3625…034', adId, … }`, an
+ * Instagram one `{ sessionSource: 'Social media', medium: 'instagram', igSid: '1383…020' }`
+ * (organic — adId null — still has the id). Keys are looked up per OUR channel, not by
+ * whatever the object claims: a WhatsApp conversation never matches on a PSID.
+ */
+export function extractCapiIdentity(channel: Channel, attribution: unknown): CapiIdentity | null {
+  const capiChannel = capiChannelFor(channel);
+  const key =
+    capiChannel === 'whatsapp'
+      ? extractCtwaClid(attribution)
+      : capiChannel === 'messenger'
+        ? firstString(attribution, ['pSid', 'psid', 'page_scoped_user_id', 'pageScopedUserId'])
+        : firstString(attribution, ['igSid', 'ig_sid', 'igsid']);
+  return key ? { channel: capiChannel, key } : null;
 }
 
 /** E.164 digits only (Meta's `ph` format pre-hash: country code + number, no '+'). */
@@ -193,30 +249,47 @@ export async function sha256Hex(input: string): Promise<string> {
     .join('');
 }
 
+/** The frozen event snapshot stored on the queue row (the drain adds name/time/id). */
+export interface CapiPayload {
+  messaging_channel: CapiMessagingChannel;
+  user_data: Record<string, unknown>;
+  custom_data?: Record<string, unknown>;
+}
+
 /**
- * Build the frozen payload snapshot stored on the queue row: exactly Meta's
- * `user_data` (+ optional `custom_data`). `ctwa_clid` must NOT be hashed (Meta
- * requirement — it is their own identifier); the phone MUST be SHA-256 hashed.
+ * Build the frozen payload snapshot stored on the queue row: Meta's
+ * `messaging_channel` + exactly its `user_data` for that channel (+ optional
+ * `custom_data`). Meta's own identifiers (`ctwa_clid`, PSID, IGSID) must NOT be
+ * hashed; the phone MUST be SHA-256 hashed. Per channel:
+ *   whatsapp  → ctwa_clid + page_id (+ whatsapp_business_account_id when configured)
+ *   messenger → page_scoped_user_id + page_id
+ *   instagram → ig_sid + instagram_business_account_id — null (skip) when the
+ *               tenant hasn't configured that id: Meta can't match without it.
  */
 export async function buildCapiPayload(args: {
   config: MetaCapiConfig;
   spec: CapiEventSpec;
-  ctwaClid: string;
+  identity: CapiIdentity;
   phone?: string | null;
-}): Promise<{ user_data: Record<string, unknown>; custom_data?: Record<string, unknown> }> {
-  const user_data: Record<string, unknown> = {
-    ctwa_clid: args.ctwaClid,
-    page_id: args.config.pageId,
-  };
+}): Promise<CapiPayload | null> {
+  const { config, identity } = args;
+  let user_data: Record<string, unknown>;
+  if (identity.channel === 'whatsapp') {
+    user_data = { ctwa_clid: identity.key, page_id: config.pageId };
+    if (config.whatsappBusinessAccountId) user_data.whatsapp_business_account_id = config.whatsappBusinessAccountId;
+  } else if (identity.channel === 'messenger') {
+    user_data = { page_scoped_user_id: identity.key, page_id: config.pageId };
+  } else {
+    if (!config.instagramBusinessAccountId) return null;
+    user_data = { ig_sid: identity.key, instagram_business_account_id: config.instagramBusinessAccountId };
+  }
   if (args.phone) {
     const normalized = normalizePhoneForCapi(args.phone);
     if (normalized) user_data.ph = [await sha256Hex(normalized)];
   }
+  const payload: CapiPayload = { messaging_channel: identity.channel, user_data };
   if (args.spec.value != null) {
-    return {
-      user_data,
-      custom_data: { value: args.spec.value, currency: args.spec.currency ?? 'MXN' },
-    };
+    payload.custom_data = { value: args.spec.value, currency: args.spec.currency ?? 'MXN' };
   }
-  return { user_data };
+  return payload;
 }

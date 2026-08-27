@@ -962,14 +962,29 @@ conversations qualified. Per-tenant, the platform sends Conversions API events t
 tenant's own dataset so campaigns can train on lead *quality*. Off by default
 (`tenant_config.meta_capi` NULL = not a single extra call).
 
-**Attribution.** Meta only credits an event to a CTWA ad when it carries the click id
-(`ctwa_clid`). GHL drops it from webhooks but stores it on the contact
-(`attributionSource.ctwaClid` — verified live 2026-08-01 on a MADI ad lead). The Worker
-captures it during the turn-start contact fetch (the same one that grabs merge keys, so
-it exists only until the bot first speaks), persists it **first-touch sticky** on the
-conversation (`ctwa_clid` + the raw `attribution` snapshot with adId/adName for per-ad
-quality reporting). A lead with no click id produces no events, ever — organic traffic
-is silent.
+**Attribution — one matching key per channel (0048 WhatsApp, 0056 Messenger/Instagram).**
+Meta matches a business-messaging event on a channel-specific key, and GHL drops all of
+them from webhooks but stores them on the contact record (`GET /contacts/{id}` →
+`attributionSource`, verified live: WhatsApp 2026-08-01 on a MADI ad lead, Facebook and
+Instagram 2026-08-26 on The Bot Crew's own leads):
+
+| our channel | Meta `messaging_channel` | key | on the GHL contact | who has one |
+|---|---|---|---|---|
+| whatsapp | `whatsapp` | `ctwa_clid` (ad click id) | `attributionSource.ctwaClid` | **only** click-to-WhatsApp ad leads |
+| facebook | `messenger` | `page_scoped_user_id` (PSID) | `attributionSource.pSid` | every Messenger contact |
+| instagram | `instagram` | `ig_sid` (IGSID) | `attributionSource.igSid` | every Instagram contact, organic included |
+
+The Worker captures the key for **the conversation's own channel** during the turn-start
+contact fetch (the same one that grabs merge keys, so it exists only until the bot first
+speaks) and persists it **first-touch sticky** on the conversation
+(`capi_match_key`, plus `ctwa_clid` dual-written on WhatsApp for the 0056 contract
+window, plus the raw `attribution` snapshot with adId/adSetId/campaignId for per-ad
+quality reporting). Consequence per channel: a WhatsApp lead with no click id produces
+no events, ever — organic WhatsApp is silent by necessity. Facebook and Instagram leads
+**all** carry a key, so those channels signal every lead and **Meta** decides which ones
+its ad-click window attributes — the same semantics as a website pixel, and the reason
+no "was this paid?" gate exists on our side (the ad ids on the snapshot are reporting,
+not a filter).
 
 **What fires when** (internal kind → Meta event; per-tenant overridable via
 `meta_capi.events`, `false` disables):
@@ -992,11 +1007,17 @@ Deliberate choices:
 
 **Delivery is durable, not inline.** Hooks only *enqueue* (idempotent: one event per
 conversation per kind, `event_id = <conv>:<kind>`, which is also Meta's dedup id). The
-1-minute cron (`runPendingCapiEvents`, also `POST /internal/run-capi`) drains the
-`capi_events` table to `graph.facebook.com/v23.0/{dataset_id}/events` with
-`action_source=business_messaging`, `messaging_channel=whatsapp`,
-`user_data={ctwa_clid (never hashed), page_id, ph (SHA-256)}`. Token/test_event_code
-are read fresh from `tenant_config` each drain — a rotation needs no re-enqueue.
+frozen payload carries the `messaging_channel` and exactly that channel's `user_data`
+(Meta's own ids are never hashed; a phone, when there is one, is SHA-256 `ph`):
+`whatsapp` → `ctwa_clid` + `page_id` (+ `whatsapp_business_account_id` when configured);
+`messenger` → `page_scoped_user_id` + `page_id`; `instagram` → `ig_sid` +
+`instagram_business_account_id` — **required**: an Instagram lead on a tenant without
+that id is skipped with a loud `[capi]` warn, never sent half-keyed. The 1-minute cron
+(`runPendingCapiEvents`, also `POST /internal/run-capi`) drains the `capi_events` table
+to `graph.facebook.com/v23.0/{dataset_id}/events` with `action_source=business_messaging`.
+Token/test_event_code are read fresh from `tenant_config` each drain — a rotation needs
+no re-enqueue; a row queued before 0056 has no channel in its payload and is sent as
+WhatsApp.
 
 **Failure semantics:** 4xx = terminal (`failed` immediately, `capi_error` stage
 `rejected`); 5xx/network = retry up to 3 attempts. A **missing token secret does not

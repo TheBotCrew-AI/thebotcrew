@@ -362,21 +362,27 @@ With it, the platform reports back which conversations became real leads
 (`LeadSubmitted` on first contact, `QualifiedLead` on booking by default), and the
 campaigns can train on that. Full behavior: `docs/business-logic.md` § Meta CAPI.
 
-Attribution is automatic: GHL stores the ad click id on the contact
-(`attributionSource.ctwaClid`) and the Worker captures it on the first turn. Leads that
-didn't come from a CTWA ad simply produce no events. **Events only flow for leads whose
-first turn ran after `meta_capi` was configured** — the capture happens at turn time, so
-there is no backfill for older conversations.
+Attribution is automatic and per channel: GHL stores Meta's matching key on the contact
+(`attributionSource.ctwaClid` for click-to-WhatsApp, `.pSid` for Facebook/Messenger,
+`.igSid` for Instagram) and the Worker captures it on the first turn. A WhatsApp lead
+that didn't come from a CTWA ad has no key and produces no events; every Facebook and
+Instagram lead has one, so those channels signal all leads and Meta attributes.
+**Events only flow for leads whose first turn ran after `meta_capi` was configured** —
+the capture happens at turn time, so there is no backfill for older conversations.
 
-Needs three Meta assets from the account that runs the ads (theirs or ours — for a
-client-owned Business Manager, ask for admin access to Events Manager or have them do
-step 1 and send you the three values):
+Needs three Meta assets from the account that runs the ads, plus one or two account ids
+depending on the channels (theirs or ours — for a client-owned Business Manager, ask for
+admin access to Events Manager or have them do step 1 and send you the values):
 
 1. **Dataset + access token** — Events Manager → the ad account's dataset (create one
    if none) → Settings → Conversions API → **Generate access token**. Note the
    **dataset id** (the pixel id) and grab a **test event code** from the *Test events*
    tab while you're there.
-2. **Page id** — the Facebook page the CTWA ads run from.
+2. **Page id** — the Facebook page the ads run from (used by WhatsApp and Messenger events).
+   - **WhatsApp Business Account id** (WhatsApp Manager → Account tools → Business
+     settings) — optional; sent next to the click id, which is what Meta's own example does.
+   - **Instagram business account id** (Business Settings → Instagram accounts) —
+     **required for Instagram events**; without it IG leads are skipped, with a warn.
 3. Store the token as a Worker secret (slug rules same as AI keys — this is the second
    onboarding step that is not just a DB row):
 
@@ -391,13 +397,18 @@ step 1 and send you the three values):
      "dataset_id": "<dataset id>",
      "page_id":    "<page id>",
      "token_ref":  "MADI",
+     "whatsapp_business_account_id":  "<WABA id>",
+     "instagram_business_account_id": "<IG account id>",
      "test_event_code": "<TESTxxxx>"
    }' where tenant_id = '<tenant uuid>';
    ```
 
-5. **Verify end-to-end**: click one of the live CTWA ads from a personal phone, send a
-   message, let the bot answer. Within ~2 minutes a `LeadSubmitted` should appear in
-   Events Manager → Test events, attributed to the ad. Check our side too:
+5. **Verify end-to-end**: click one of the live ads from a personal phone (a
+   click-to-WhatsApp ad for the WhatsApp path; a Messenger/Instagram one for those), send
+   a message, let the bot answer. The conversation must be NEW — the key is captured on
+   the first turn only, so a test thread the bot already answered captures nothing
+   (delete the test contact in GHL first). Within ~2 minutes a `LeadSubmitted` should
+   appear in Events Manager → Test events, attributed to the ad. Check our side too:
 
    ```sql
    select kind, event_name, status, attempts, last_error from capi_events
