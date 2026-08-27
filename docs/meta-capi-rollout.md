@@ -24,7 +24,8 @@ Turning a tenant on is config-only (one Worker secret + one DB row — no redepl
 | Worker deployed | ✅ version `0e66459c` | direct deploy (feature dormant + no DO migration ⇒ gradual not needed) |
 | Cron drain running in prod | ✅ | tailed live: `[cron] run-capi: {"tried":0,"sent":0,"failed":0,"skipped":0}` every minute |
 | 0056 (Messenger/Instagram) on prod + Worker | ✅ 2026-08-26 | migration applied via Supabase MCP (column + comments verified), commit `3412d92`, Worker version `8aec238d`; 778 unit tests + `0056` DB test green |
-| The Bot Crew configured | 🟡 2026-08-26, test code ON | `token_ref: BOTCREW`, secret present, WABA + IG account ids set; awaiting the live-ad click → Test events check, then drop `test_event_code` |
+| The Bot Crew — first event ACCEPTED by Meta | ✅ 2026-08-27 02:55 UTC | a real FB ad click → Messenger lead → `LeadSubmitted` on `messenger` (`page_id` 780376008489108 + PSID) → `capi_event_sent` with `TEST47597`. Took four Meta-side rejections to get there (below) |
+| The Bot Crew `test_event_code` removed | 🟡 pending | remove once the event is seen in Events Manager → Test events |
 | MADI configured | ❌ | needs Meta-side assets from MADI's ad account (below) |
 
 ## Why this exists
@@ -112,6 +113,35 @@ on every drain, so a rotation needs no re-enqueue.
   `messaging_channel` is frozen in the queue payload, and `meta_capi` gained
   `whatsapp_business_account_id` / `instagram_business_account_id`. FB/IG leads all
   carry a key → those channels signal every lead and Meta attributes (pixel semantics).
+
+## Meta-side gotchas — learned the hard way on The Bot Crew (2026-08-27)
+
+Every one of these came back as a Graph 400 with a `2804xxx` subcode, visible in
+`bot_events.capi_error` (`stage: rejected`). In the order we hit them:
+
+1. **`2804131` "No Page Associated To Dataset".** A dataset created in Events Manager is a
+   website dataset until an asset is attached. For business messaging the dataset must be
+   linked to the Page / WABA / IG account: Events Manager → dataset → *Connect data →
+   Messaging* → pick the channel → pick the asset. (The API route, `POST /{page_id}/dataset`,
+   needs a token with `page_events`, which the Events Manager-minted CAPI token does not
+   carry and cannot be given — scopes are frozen at mint; page scopes need a Meta *app*.
+   Not worth it: the wizard does the same thing.)
+2. **`2804065` "Mismatching Page and Dataset"** after the wizard: the wrong asset was
+   attached. In the Messaging wizard the Instagram account shows up looking like a page
+   (ours: "yourbotcrew", id `752042537985371` — `facebook.com/<id>` 301s to Instagram).
+   Choose the channel **Messenger** explicitly and attach the actual Facebook Page.
+3. **`2804073` "Mismatching Page Id And Page Scoped User Id"**: the PSID GHL gives us is
+   scoped to the Page GHL is connected to. If `meta_capi.page_id` names anything else the
+   pair is refused. Resolve the page id from `facebook.com/<id>` (a Page renders; an IG id
+   redirects; a business-portfolio id 404s) — not from a Business Settings screenshot.
+4. **`2804066` "Invalid Event Type"** for `Schedule`: website standard events (Lead,
+   Schedule, Contact, …) are NOT valid with `action_source=business_messaging` — Meta's
+   own message says "such as 'Purchase' or 'LeadSubmitted'". Our allow-list is right;
+   don't rename events to match the Ads Manager picker, which only lists events the
+   dataset has already *received* (a pixel-fed dataset shows pixel events).
+
+Wizard picks that matched what we send: events **LeadSubmitted** (+ Purchase if the tenant
+maps booking to it); parameters **Event ID** and **Phone** only.
 
 ## What remains — per-tenant activation (the only human-in-the-loop part)
 
