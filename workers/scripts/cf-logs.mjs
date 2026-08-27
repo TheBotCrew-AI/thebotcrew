@@ -1,16 +1,16 @@
 /**
  * Read Cloudflare Workers Logs for thebotcrew-agents over a UTC window.
  *   node scripts/cf-logs.mjs 2026-08-27T15:18:25Z 2026-08-27T15:19:40Z [path-filter]
- * Auth: CLOUDFLARE_API_TOKEN (env or workers/.env) — an API token with
+ * Auth: CF_OBSERVABILITY_TOKEN (env or workers/.env) — an API token with
  * "Workers Observability: Read". wrangler's OAuth login does NOT carry that scope (403).
  */
 import fs from 'node:fs';
 
 const envFile = new URL('../.env', import.meta.url);
 const env = fs.existsSync(envFile) ? fs.readFileSync(envFile, 'utf8') : '';
-const token = process.env.CLOUDFLARE_API_TOKEN ?? env.match(/^CLOUDFLARE_API_TOKEN="?([^"\r\n]+)"?/m)?.[1];
+const token = process.env.CF_OBSERVABILITY_TOKEN ?? env.match(/^CF_OBSERVABILITY_TOKEN="?([^"\r\n]+)"?/m)?.[1];
 if (!token) {
-  console.error('CLOUDFLARE_API_TOKEN missing (env or workers/.env)');
+  console.error('CF_OBSERVABILITY_TOKEN missing (env or workers/.env)');
   process.exit(1);
 }
 const ACCOUNT = 'cc283929a3469ed5084692cc58bc0c16';
