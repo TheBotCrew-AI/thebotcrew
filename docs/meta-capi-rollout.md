@@ -26,7 +26,8 @@ Turning a tenant on is config-only (one Worker secret + one DB row — no redepl
 | 0056 (Messenger/Instagram) on prod + Worker | ✅ 2026-08-26 | migration applied via Supabase MCP (column + comments verified), commit `3412d92`, Worker version `8aec238d`; 778 unit tests + `0056` DB test green |
 | The Bot Crew — first event ACCEPTED by Meta | ✅ 2026-08-27 02:55 UTC | a real FB ad click → Messenger lead → `LeadSubmitted` on `messenger` (`page_id` 780376008489108 + PSID) → `capi_event_sent` with `TEST47597`. Took four Meta-side rejections to get there (below) |
 | The Bot Crew — Instagram ACCEPTED | ✅ 2026-08-27 03:16 UTC | organic IG DM → `LeadSubmitted` on `instagram` (`ig_sid` + `ig_account_id`). First attempt was rejected `2804079` because the wire key is `ig_account_id`, not the doc's `instagram_business_account_id` — fixed in `fcf4395`, Worker `48894b1c` |
-| The Bot Crew — WhatsApp | 🟡 awaiting a CTWA ad | needs a real click-to-WhatsApp click (the key is the click id); WABA attached in the wizard; the `whatsapp_business_account_id` wire name is as unverified as the IG one was |
+| The Bot Crew — WhatsApp ACCEPTED | ✅ 2026-08-27 14:34 UTC | real CTWA click → `LeadSubmitted` on `whatsapp` (`ctwa_clid` + `whatsapp_business_account_id`, no `page_id`) to the WABA's OWN dataset `4439936336229922`, `events_received: 1`, `TEST43188`. Three rejections first (gotchas 6–8) |
+| Cron overlap fixed | ✅ `07c47a6`, Worker `fd65dcec` | the minute jobs ran on EVERY cron schedule; at :00/:05 two invocations drained the same rows → one CAPI event posted twice. Follow-ups were safe (0043 commit gate) |
 | The Bot Crew `test_event_code` removed | 🟡 pending (Leo: hold it) | remove once all three channels are seen in Test events (`TEST96971` — the MESSAGING code; the dataset's web code `TEST47597` labels differently) |
 | MADI configured | ❌ | needs Meta-side assets from MADI's ad account (below) |
 
@@ -147,10 +148,21 @@ Every one of these came back as a Graph 400 with a `2804xxx` subcode, visible in
    shows. Expect the WhatsApp one to be similarly mis-documented; the first CTWA send will
    name the real key.
 
+6. **`2804132` "No WhatsApp Business Account Linked to This Dataset"**: connecting the WABA
+   in the wizard gives it a dataset **of its own** (Meta: one dataset per asset —
+   Page `2871…`, WABA `4439…`). Route the channel with `meta_capi.datasets.whatsapp`.
+7. **Graph "Object with ID '<waba dataset>' does not exist… missing permissions"**: the new
+   dataset must be **assigned to the token's system user** (Business Settings → System users
+   → Assign assets → Datasets), exactly like the Page was.
+8. **`2804131` again, on the WABA dataset**: a WhatsApp event must NOT carry `page_id` — the
+   WABA dataset has no Page and the pair check fails. Payload is `ctwa_clid` +
+   `whatsapp_business_account_id` only (Meta's doc example was right on this one).
+
 Wizard picks that matched what we send: events **LeadSubmitted** (+ Purchase if the tenant
-maps booking to it); parameters **Event ID** and **Phone** only. Test events shows a
-**separate test code for messaging** (`TEST96971` for The Bot Crew) — the one on the web
-tab (`TEST47597`) files messaging events under a different label.
+maps booking to it); parameters **Event ID** and **Phone** only. Test codes are **per
+dataset**: `TEST96971` on the page dataset (Messenger + Instagram), `TEST43188` on the
+WABA dataset — `meta_capi.test_event_codes.<channel>` carries the second one. The web
+tab's `TEST47597` files messaging events under a different label.
 
 ## What remains — per-tenant activation (the only human-in-the-loop part)
 
