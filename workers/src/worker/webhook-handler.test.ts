@@ -23,6 +23,7 @@ import { findUpcomingAppointment } from '../db/upcoming-appointment.js';
 import { getAiApiKey, resolveAiApiKey } from '../core/env.js';
 import { queueCapiEvent, queueCapiStatusEvent } from '../meta/capi.js';
 import { handleInboundWebhook, runAgentTurn, splitIntoMessages } from './webhook-handler.js';
+import { parseInboundWebhook } from '../ghl/webhook.js';
 
 function tenant(overrides: Partial<TenantContext> = {}): TenantContext {
   return {
@@ -478,18 +479,62 @@ describe('handleInboundWebhook — Durable Object scheduling is off the request 
     await handleInboundWebhook(inbound, agentReplying(), ctx, namespaceWith(scheduleTurn));
     await Promise.all(pending);
     expect(scheduleTurn).toHaveBeenCalledWith(expect.objectContaining({ conversationId: 'cv-uuid', messageId: 'msg-uuid' }));
-    expect(eventsOfType('turn_scheduled')).toEqual([{ via: 'durable-object' }]);
+    expect(eventsOfType('turn_scheduled')).toEqual([{ via: 'durable-object', attempt: 1 }]);
   });
 
-  it('a DO failure degrades to the in-request turn after the debounce, with both events', async () => {
+  it('a failed RPC is retried once — if the DO answers, no in-request turn runs (no second scheduler)', async () => {
     vi.useFakeTimers();
     const { ctx, pending } = ctxWith();
     const agent = agentReplying();
-    await handleInboundWebhook(inbound, agent, ctx, namespaceWith(() => Promise.reject(new Error('DO storage stalled'))));
-    await vi.advanceTimersByTimeAsync(15_000);
+    const scheduleTurn = vi.fn().mockRejectedValueOnce(new Error('RPC canceled')).mockResolvedValueOnce(undefined);
+    await handleInboundWebhook(inbound, agent, ctx, namespaceWith(scheduleTurn));
+    await vi.advanceTimersByTimeAsync(20_000);
     await Promise.all(pending);
-    expect(eventsOfType('db_error')).toEqual([expect.objectContaining({ stage: 'do_schedule', error: 'DO storage stalled' })]);
+    expect(scheduleTurn).toHaveBeenCalledTimes(2);
+    expect(eventsOfType('turn_scheduled')).toEqual([{ via: 'durable-object', attempt: 2 }]);
+    expect(eventsOfType('db_error')).toEqual([]);
+    expect(agent.generate).not.toHaveBeenCalled();
+  });
+
+  it('a DO that fails twice degrades to the in-request turn after the debounce, with both events', async () => {
+    vi.useFakeTimers();
+    const { ctx, pending } = ctxWith();
+    const agent = agentReplying();
+    const scheduleTurn = vi.fn().mockRejectedValue(new Error('DO storage stalled'));
+    await handleInboundWebhook(inbound, agent, ctx, namespaceWith(scheduleTurn));
+    await vi.advanceTimersByTimeAsync(2_000 + 15_000);
+    await Promise.all(pending);
+    expect(scheduleTurn).toHaveBeenCalledTimes(2);
+    expect(eventsOfType('db_error')).toEqual([expect.objectContaining({ stage: 'do_schedule', error: 'DO storage stalled', attempts: 2 })]);
     expect(eventsOfType('turn_scheduled')).toEqual([{ via: 'wait-until' }]);
+    expect(agent.generate).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('runAgentTurn — double-run guard', () => {
+  // The DO alarm and the in-request fallback (or a GHL-retry recovery) can both reach the
+  // same message. Whichever runs second must see the first one's reply and stand down.
+  it('skips generation when an outbound already exists after this inbound', async () => {
+    vi.mocked(q.hasReplyAfter).mockResolvedValue(true);
+    const agent = agentReplying();
+    const res = await runAgentTurn({
+      agent, conversationId: 'cv-uuid', messageId: 'msg-uuid', tenant: tenant(),
+      parsed: parseInboundWebhook(inbound as never)!, phone: '+521', debounced: true,
+    });
+    expect(res.body).toMatchObject({ skipped: 'already_answered' });
+    expect(agent.generate).not.toHaveBeenCalled();
+    expect(ghl.sendMessage).not.toHaveBeenCalled();
+    expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'run_superseded', expect.objectContaining({ reason: 'already_answered' }));
+  });
+
+  it('runs normally when nothing replied after the inbound', async () => {
+    vi.mocked(q.hasReplyAfter).mockResolvedValue(false);
+    const agent = agentReplying();
+    const res = await runAgentTurn({
+      agent, conversationId: 'cv-uuid', messageId: 'msg-uuid', tenant: tenant(),
+      parsed: parseInboundWebhook(inbound as never)!, phone: '+521', debounced: true,
+    });
+    expect(res.body).toMatchObject({ replied: true });
     expect(agent.generate).toHaveBeenCalledTimes(1);
   });
 });

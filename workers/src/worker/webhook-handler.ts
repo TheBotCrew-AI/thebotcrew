@@ -76,6 +76,9 @@ import { classifyNeedsReply, RESUME_TAIL_SIZE } from './resume-gate.js';
  * typing pauses (8s split multi-message turns into separate replies).
  */
 const DEBOUNCE_MS = 15_000;
+/** DO scheduling: one retry after a short pause before the in-request fallback takes over. */
+const DO_SCHEDULE_ATTEMPTS = 2;
+const DO_SCHEDULE_RETRY_MS = 2_000;
 
 export interface WebhookResult {
   status: 200 | 400 | 401 | 500;
@@ -139,17 +142,31 @@ export async function scheduleOnDurableObject(
   runParams: AgentRunParams,
 ): Promise<void> {
   const { conversationId, messageId, tenant, parsed, phone } = runParams;
-  try {
-    const stub = doNamespace.get(doNamespace.idFromName(conversationId));
-    await stub.scheduleTurn({ conversationId, messageId, tenant, parsed, phone });
-    await logBotEvent(tenant.clientId, parsed.conversationId, 'turn_scheduled', { via: 'durable-object' });
-    console.log(`[DO] scheduled conv=${parsed.conversationId}`);
-    return;
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.error('[DO] scheduleTurn failed, falling back to in-request turn:', msg);
-    await logBotEvent(tenant.clientId, parsed.conversationId, 'db_error', { stage: 'do_schedule', error: msg });
+  // Two attempts, because a failed RPC does not mean a failed schedule: the DO may have
+  // committed the turn and lost only the reply. scheduleTurn is idempotent (it overwrites
+  // the one pending slot and re-arms the one alarm), so retrying is free — and if the DO
+  // answers the retry, the in-request fallback below never runs and there is no second
+  // scheduler racing the alarm. Only a DO that fails twice gets the fallback.
+  let lastError = '';
+  for (let attempt = 1; attempt <= DO_SCHEDULE_ATTEMPTS; attempt++) {
+    try {
+      const stub = doNamespace.get(doNamespace.idFromName(conversationId));
+      await stub.scheduleTurn({ conversationId, messageId, tenant, parsed, phone });
+      await logBotEvent(tenant.clientId, parsed.conversationId, 'turn_scheduled', { via: 'durable-object', attempt });
+      console.log(`[DO] scheduled conv=${parsed.conversationId} attempt=${attempt}`);
+      return;
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : String(err);
+      console.error(`[DO] scheduleTurn failed (attempt ${attempt}/${DO_SCHEDULE_ATTEMPTS}):`, lastError);
+      if (attempt < DO_SCHEDULE_ATTEMPTS) await new Promise<void>((r) => setTimeout(r, DO_SCHEDULE_RETRY_MS));
+    }
   }
+  console.error('[DO] giving up on the DO, falling back to in-request turn');
+  await logBotEvent(tenant.clientId, parsed.conversationId, 'db_error', {
+    stage: 'do_schedule',
+    error: lastError,
+    attempts: DO_SCHEDULE_ATTEMPTS,
+  });
   await logBotEvent(tenant.clientId, parsed.conversationId, 'turn_scheduled', { via: 'wait-until' });
   await new Promise<void>((resolve) => setTimeout(resolve, DEBOUNCE_MS));
   await runAgentTurn(runParams);
@@ -492,6 +509,17 @@ export async function runAgentTurn({
       console.log(`[debounce] skip conv=${parsed.conversationId} — superseded by newer message`);
       await logBotEvent(tenant.clientId, parsed.conversationId, 'run_superseded', { messageId });
       return { status: 200, body: { skipped: 'superseded', conversationId } };
+    }
+    // Double-run guard. Two schedulers can converge on one message — the DO alarm and the
+    // in-request fallback (when the DO RPC fails AFTER the DO committed), or the DO alarm
+    // and a GHL-retry recovery (when only the turn_scheduled write failed). Both pass the
+    // latest-message check above, since it IS the same message. Nothing legitimate replies
+    // after an inbound before its turn (follow-ups are cancelled on inbound; a human reply
+    // opens the pause), so an outbound after it means the other run already answered.
+    if (await hasReplyAfter(conversationId, messageId)) {
+      console.log(`[debounce] skip conv=${parsed.conversationId} — already answered by another run`);
+      await logBotEvent(tenant.clientId, parsed.conversationId, 'run_superseded', { messageId, reason: 'already_answered' });
+      return { status: 200, body: { skipped: 'already_answered', conversationId } };
     }
     console.log(`[debounce] proceeding conv=${parsed.conversationId}`);
   }

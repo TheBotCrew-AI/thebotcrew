@@ -67,7 +67,9 @@ Turn durability: **turns now run through a per-conversation Durable Object** (`C
 `doTurnsEnabled` in `webhook-handler.ts`). The inbound webhook does the gates + logs the inbound,
 then hands the turn to `ConversationDO.scheduleTurn()` **inside `ctx.waitUntil`, after answering GHL** (since
 2026-08-27: awaiting the DO in the request put its latency on GHL's ~10 s timeout — a stalled
-`scheduleTurn` got the request canceled and the turn lost). `scheduleTurn` stores the turn and arms a **durable 15s Alarm**
+`scheduleTurn` got the request canceled and the turn lost). A failed RPC is retried once before the in-request fallback, and `runAgentTurn` stands down
+if an outbound already exists after its inbound (`run_superseded {reason:'already_answered'}`) — the
+double-run guard for the one case two schedulers can reach the same message. `scheduleTurn` stores the turn and arms a **durable 15s Alarm**
 (each new inbound resets it → debounce/coalescing). On the alarm the DO runs `runAgentTurn`.
 Because a DO instance is single-threaded, all processing for a conversation is **serialized**
 (kills the double-run / self-block-on-booking class), and the Alarm is **durable** (kills the
