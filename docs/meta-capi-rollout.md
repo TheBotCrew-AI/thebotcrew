@@ -25,7 +25,9 @@ Turning a tenant on is config-only (one Worker secret + one DB row — no redepl
 | Cron drain running in prod | ✅ | tailed live: `[cron] run-capi: {"tried":0,"sent":0,"failed":0,"skipped":0}` every minute |
 | 0056 (Messenger/Instagram) on prod + Worker | ✅ 2026-08-26 | migration applied via Supabase MCP (column + comments verified), commit `3412d92`, Worker version `8aec238d`; 778 unit tests + `0056` DB test green |
 | The Bot Crew — first event ACCEPTED by Meta | ✅ 2026-08-27 02:55 UTC | a real FB ad click → Messenger lead → `LeadSubmitted` on `messenger` (`page_id` 780376008489108 + PSID) → `capi_event_sent` with `TEST47597`. Took four Meta-side rejections to get there (below) |
-| The Bot Crew `test_event_code` removed | 🟡 pending | remove once the event is seen in Events Manager → Test events |
+| The Bot Crew — Instagram ACCEPTED | ✅ 2026-08-27 03:16 UTC | organic IG DM → `LeadSubmitted` on `instagram` (`ig_sid` + `ig_account_id`). First attempt was rejected `2804079` because the wire key is `ig_account_id`, not the doc's `instagram_business_account_id` — fixed in `fcf4395`, Worker `48894b1c` |
+| The Bot Crew — WhatsApp | 🟡 awaiting a CTWA ad | needs a real click-to-WhatsApp click (the key is the click id); WABA attached in the wizard; the `whatsapp_business_account_id` wire name is as unverified as the IG one was |
+| The Bot Crew `test_event_code` removed | 🟡 pending (Leo: hold it) | remove once all three channels are seen in Test events (`TEST96971` — the MESSAGING code; the dataset's web code `TEST47597` labels differently) |
 | MADI configured | ❌ | needs Meta-side assets from MADI's ad account (below) |
 
 ## Why this exists
@@ -140,8 +142,15 @@ Every one of these came back as a Graph 400 with a `2804xxx` subcode, visible in
    don't rename events to match the Ads Manager picker, which only lists events the
    dataset has already *received* (a pixel-fed dataset shows pixel events).
 
+5. **`2804079` "Missing IG Account ID parameter"**: the Instagram account id travels as
+   **`ig_account_id`**, not `instagram_business_account_id` as Meta's onboarding example
+   shows. Expect the WhatsApp one to be similarly mis-documented; the first CTWA send will
+   name the real key.
+
 Wizard picks that matched what we send: events **LeadSubmitted** (+ Purchase if the tenant
-maps booking to it); parameters **Event ID** and **Phone** only.
+maps booking to it); parameters **Event ID** and **Phone** only. Test events shows a
+**separate test code for messaging** (`TEST96971` for The Bot Crew) — the one on the web
+tab (`TEST47597`) files messaging events under a different label.
 
 ## What remains — per-tenant activation (the only human-in-the-loop part)
 
