@@ -124,6 +124,37 @@ function doTurnsEnabled(tenant: TenantContext): boolean {
   return flag.split(',').map((s) => s.trim()).includes(tenant.tenantId);
 }
 
+/**
+ * Store the turn on the conversation's DO and record it; on failure, run the turn from
+ * this request after the debounce (the legacy path) so a DO outage degrades to "answered
+ * a bit later", never to silence. Runs inside `ctx.waitUntil`, after the webhook has
+ * already been answered — see the call site for why it is not awaited in the request.
+ *
+ * A GHL retry can land in the gap between the 200 and the `turn_scheduled` event; the dedup
+ * recovery would then schedule the same turn again, and the DO simply overwrites its pending
+ * turn and re-arms the alarm — one run either way.
+ */
+export async function scheduleOnDurableObject(
+  doNamespace: TurnDONamespace,
+  runParams: AgentRunParams,
+): Promise<void> {
+  const { conversationId, messageId, tenant, parsed, phone } = runParams;
+  try {
+    const stub = doNamespace.get(doNamespace.idFromName(conversationId));
+    await stub.scheduleTurn({ conversationId, messageId, tenant, parsed, phone });
+    await logBotEvent(tenant.clientId, parsed.conversationId, 'turn_scheduled', { via: 'durable-object' });
+    console.log(`[DO] scheduled conv=${parsed.conversationId}`);
+    return;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('[DO] scheduleTurn failed, falling back to in-request turn:', msg);
+    await logBotEvent(tenant.clientId, parsed.conversationId, 'db_error', { stage: 'do_schedule', error: msg });
+  }
+  await logBotEvent(tenant.clientId, parsed.conversationId, 'turn_scheduled', { via: 'wait-until' });
+  await new Promise<void>((resolve) => setTimeout(resolve, DEBOUNCE_MS));
+  await runAgentTurn(runParams);
+}
+
 
 /** Outcome of a send: whether GHL accepted it, its id if we could read one, and the
  *  GHL error (status + body) on failure so a dropped delivery is diagnosable. */
@@ -1296,21 +1327,20 @@ export async function handleInboundWebhook(
 
   // Durable-turn path (flagged rollout): hand the turn to the conversation's DO, which
   // debounces via a durable Alarm and runs it serialized — no waitUntil drop, no double-run.
+  //
+  // The DO call is NOT awaited inside the request. The inbound is already stored; nothing
+  // GHL needs is pending. Awaiting here put DO latency on GHL's ~10 s webhook timeout: on
+  // 2026-08-27 a `scheduleTurn` stalled for 10 s (Cloudflare-side — the DO was idle and the
+  // call is two storage ops), GHL hung up, the request and its RPC were CANCELED, and no
+  // turn was ever scheduled. `waitUntil` survives the client disconnecting, so the schedule
+  // completes even if GHL has already given up. The `turn_scheduled` event and the legacy
+  // fallback both live inside the same promise — a failure still degrades to an in-request
+  // turn instead of silence.
   if (doNamespace && ctx && doTurnsEnabled(tenant)) {
-    try {
-      const stub = doNamespace.get(doNamespace.idFromName(conversationId));
-      await stub.scheduleTurn({ conversationId, messageId, tenant, parsed, phone });
-      // Must be awaited: the request returns immediately after, and a fire-and-forget
-      // event promise gets killed before it writes (see db/queries.ts logBotEvent note).
-      await logBotEvent(tenant.clientId, parsed.conversationId, 'turn_scheduled', { via: 'durable-object' });
-      console.log(`[DO] scheduled conv=${parsed.conversationId}`);
-      return { status: 200, body: { scheduled: 'durable-object', conversationId } };
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.error('[DO] scheduleTurn failed, falling back to waitUntil:', msg);
-      logError(tenant.clientId, parsed.conversationId, 'db_error', { stage: 'do_schedule', error: msg });
-      // fall through to the legacy waitUntil path below
-    }
+    ctx.waitUntil(scheduleOnDurableObject(doNamespace, runParams).catch((err) => {
+      console.error('[DO] scheduling chain failed:', err instanceof Error ? err.message : String(err));
+    }));
+    return { status: 200, body: { scheduled: 'durable-object', conversationId } };
   }
 
   if (ctx) {

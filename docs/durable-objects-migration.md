@@ -118,7 +118,11 @@ without a new sweep.
 - **Phase 1 — Turn into the DO.** ✅ *DONE & rolled out to ALL tenants (2026-07-01,
   `DO_TURNS=*`, current version `a4fef714`).* `ConversationDO.scheduleTurn()` stores the turn +
   arms a durable 15s Alarm (each inbound resets it → debounce); `alarm()` rebuilds the agent and
-  runs the existing `runAgentTurn`. `handleInboundWebhook` routes to the DO when
+  runs the existing `runAgentTurn`. **Since 2026-08-27 the `scheduleTurn` call runs inside
+  `ctx.waitUntil`, after the webhook has answered GHL** — awaiting it in the request had put DO
+  latency on GHL's ~10 s timeout (a 10 s stall got the request and the RPC canceled, turn lost).
+  The `turn_scheduled` event and the legacy fallback ride in the same promise
+  (`scheduleOnDurableObject`). `handleInboundWebhook` routes to the DO when
   `doTurnsEnabled(tenant)` (env `DO_TURNS`: empty=off, `*`/`all`=every tenant, else comma list of
   tenant ids), with a **fall-through to the legacy `waitUntil` path** if the DO call throws. DO
   constructor mirrors string bindings into `process.env`. **Reconciliation cron stays as net.**

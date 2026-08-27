@@ -65,7 +65,9 @@ One Worker serves all clients. Request flow:
 Turn durability: **turns now run through a per-conversation Durable Object** (`ConversationDO`,
 `worker/conversation-do.ts`) — live for **all** tenants (`DO_TURNS=*`; see the flag
 `doTurnsEnabled` in `webhook-handler.ts`). The inbound webhook does the gates + logs the inbound,
-then calls `ConversationDO.scheduleTurn()`, which stores the turn and arms a **durable 15s Alarm**
+then hands the turn to `ConversationDO.scheduleTurn()` **inside `ctx.waitUntil`, after answering GHL** (since
+2026-08-27: awaiting the DO in the request put its latency on GHL's ~10 s timeout — a stalled
+`scheduleTurn` got the request canceled and the turn lost). `scheduleTurn` stores the turn and arms a **durable 15s Alarm**
 (each new inbound resets it → debounce/coalescing). On the alarm the DO runs `runAgentTurn`.
 Because a DO instance is single-threaded, all processing for a conversation is **serialized**
 (kills the double-run / self-block-on-booking class), and the Alarm is **durable** (kills the

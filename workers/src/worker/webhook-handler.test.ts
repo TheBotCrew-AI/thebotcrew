@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { Agent } from '@mastra/core/agent';
 import { HUMAN_REPLY_PREFIX } from '../core/model-messages.js';
 import type { TenantContext } from '../core/types.js';
@@ -436,6 +436,61 @@ describe('handleInboundWebhook — a human teammate answered in the thread', () 
     const [messages, opts] = generateCall(agent);
     expect(messages.every((m) => !m.content.includes(HUMAN_REPLY_PREFIX))).toBe(true);
     expect((opts.requestContext.get('turn') as { hasHumanReplies?: boolean }).hasHumanReplies).toBe(false);
+  });
+});
+
+describe('handleInboundWebhook — Durable Object scheduling is off the request path', () => {
+  // 2026-08-27: scheduleTurn stalled 10 s, GHL hung up, the request + RPC were canceled and
+  // no turn existed. The schedule now runs in waitUntil, after the 200 is already out.
+  const ctxWith = () => {
+    const pending: Promise<unknown>[] = [];
+    return { ctx: { waitUntil: (p: Promise<unknown>) => void pending.push(p) }, pending };
+  };
+  const namespaceWith = (scheduleTurn: () => Promise<void>) => ({
+    idFromName: (name: string) => ({ name }) as never,
+    get: () => ({ scheduleTurn }),
+  });
+  const eventsOfType = (type: string) =>
+    vi.mocked(q.logBotEvent).mock.calls.filter((c) => c[2] === type).map((c) => c[3]);
+
+  let doTurns: string | undefined;
+  beforeEach(() => {
+    doTurns = process.env.DO_TURNS;
+    process.env.DO_TURNS = '*';
+  });
+  afterEach(() => {
+    if (doTurns === undefined) delete process.env.DO_TURNS;
+    else process.env.DO_TURNS = doTurns;
+    vi.useRealTimers();
+  });
+
+  it('answers GHL immediately even when the DO never responds', async () => {
+    const { ctx, pending } = ctxWith();
+    const stalled = namespaceWith(() => new Promise<void>(() => {}));
+    const res = await handleInboundWebhook(inbound, agentReplying(), ctx, stalled);
+    expect(res.body).toMatchObject({ scheduled: 'durable-object' });
+    expect(pending).toHaveLength(1);
+  });
+
+  it('records turn_scheduled once the DO accepts the turn', async () => {
+    const { ctx, pending } = ctxWith();
+    const scheduleTurn = vi.fn().mockResolvedValue(undefined);
+    await handleInboundWebhook(inbound, agentReplying(), ctx, namespaceWith(scheduleTurn));
+    await Promise.all(pending);
+    expect(scheduleTurn).toHaveBeenCalledWith(expect.objectContaining({ conversationId: 'cv-uuid', messageId: 'msg-uuid' }));
+    expect(eventsOfType('turn_scheduled')).toEqual([{ via: 'durable-object' }]);
+  });
+
+  it('a DO failure degrades to the in-request turn after the debounce, with both events', async () => {
+    vi.useFakeTimers();
+    const { ctx, pending } = ctxWith();
+    const agent = agentReplying();
+    await handleInboundWebhook(inbound, agent, ctx, namespaceWith(() => Promise.reject(new Error('DO storage stalled'))));
+    await vi.advanceTimersByTimeAsync(15_000);
+    await Promise.all(pending);
+    expect(eventsOfType('db_error')).toEqual([expect.objectContaining({ stage: 'do_schedule', error: 'DO storage stalled' })]);
+    expect(eventsOfType('turn_scheduled')).toEqual([{ via: 'wait-until' }]);
+    expect(agent.generate).toHaveBeenCalledTimes(1);
   });
 });
 
