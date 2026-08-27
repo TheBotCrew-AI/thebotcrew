@@ -81,7 +81,11 @@ export async function queueCapiStatusEvent(
   await queueCapiEvent({ tenant, ghlConversationId, kind: 'conversation_completed' });
 }
 
-export type CapiSendResult = { ok: true } | { ok: false; retryable: boolean; error: string };
+export type CapiSendResult =
+  /** 2xx. `eventsReceived` / `messages` are Meta's own body — a 2xx with 0 received or a
+   *  warning is the difference between "sent" and "counted", so the runner logs them. */
+  | { ok: true; eventsReceived?: number; messages?: unknown[] }
+  | { ok: false; retryable: boolean; error: string };
 
 /**
  * One Graph API POST. The token travels in the JSON body, never the URL, so it
@@ -118,7 +122,13 @@ export async function sendCapiEvent(args: {
   } catch (err) {
     return { ok: false, retryable: true, error: err instanceof Error ? err.message : String(err) };
   }
-  if (res.ok) return { ok: true };
+  if (res.ok) {
+    const body = (await res.json().catch(() => null)) as { events_received?: unknown; messages?: unknown } | null;
+    const result: CapiSendResult = { ok: true };
+    if (typeof body?.events_received === 'number') result.eventsReceived = body.events_received;
+    if (Array.isArray(body?.messages) && body.messages.length > 0) result.messages = body.messages;
+    return result;
+  }
   const detail = await res.text().catch(() => '');
   return {
     ok: false,

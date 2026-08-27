@@ -173,11 +173,13 @@ describe('sendCapiEvent', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it('POSTs to the dataset with the token in the BODY (not the URL) and passes test_event_code', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(new Response('{}', { status: 200 }));
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response('{"events_received":1,"messages":[],"fbtrace_id":"x"}', { status: 200 }),
+    );
     vi.stubGlobal('fetch', fetchMock);
 
     const res = await sendCapiEvent({ datasetId: 'ds1', token: 'tok', testEventCode: 'TEST9', event });
-    expect(res).toEqual({ ok: true });
+    expect(res).toEqual({ ok: true, eventsReceived: 1 }); // empty messages[] is dropped
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe('https://graph.facebook.com/v23.0/ds1/events');
     expect(url).not.toContain('tok');

@@ -43,6 +43,18 @@ afterEach(() => {
 });
 
 describe('runPendingCapiEvents — happy path', () => {
+  it("logs Meta's events_received and warnings on a 2xx (sent ≠ counted)", async () => {
+    vi.mocked(sendCapiEvent).mockResolvedValue({ ok: true, eventsReceived: 0, messages: [{ message: 'unmatched' }] });
+    await runPendingCapiEvents();
+    expect(q.markCapiEvent).toHaveBeenCalledWith('row1', 'sent');
+    expect(q.logBotEvent).toHaveBeenCalledWith(
+      'client1',
+      'conv1',
+      'capi_event_sent',
+      expect.objectContaining({ eventsReceived: 0, messages: [{ message: 'unmatched' }] }),
+    );
+  });
+
   it('a row frozen with a channel (0056) is sent on that channel, user_data untouched', async () => {
     vi.mocked(q.loadPendingCapiEvents).mockResolvedValue([
       row({
@@ -82,6 +94,7 @@ describe('runPendingCapiEvents — happy path', () => {
       kind: 'lead_started',
       eventName: 'LeadSubmitted',
       eventId: 'conv1:lead_started',
+      channel: 'whatsapp',
     });
     expect(res).toEqual({ tried: 1, sent: 1, failed: 0, skipped: 0 });
   });

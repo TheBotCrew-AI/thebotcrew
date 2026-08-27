@@ -103,7 +103,10 @@ export async function runPendingCapiEvents(): Promise<CapiRunResult> {
         kind: row.kind,
         eventName: row.eventName,
         eventId: row.eventId,
+        channel: row.payload.messaging_channel ?? 'whatsapp',
         ...(config.testEventCode ? { testEventCode: config.testEventCode } : {}),
+        ...(result.eventsReceived !== undefined ? { eventsReceived: result.eventsReceived } : {}),
+        ...(result.messages ? { messages: result.messages } : {}),
       });
       sent++;
     } else if (!result.retryable || row.attempts + 1 >= MAX_ATTEMPTS) {
