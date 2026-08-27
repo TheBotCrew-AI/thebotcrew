@@ -29,7 +29,7 @@
 | 4 | Horario real: fines de semana y tardes | 5 | ☑ | cerrado 2026-08-25 (`hours`: L–V 8–19, sáb–dom 8–16) |
 | 5 | Resultados, nº de sesiones, garantía, retoques | 3 | ☑ | cerrado 2026-08-25 (`faq`) |
 | 6 | Aclaramiento/blanqueamiento de axilas o bikini | 5 | ☑/☐ | la línea segura ya está en `faq`; MADI confirma si hay tratamiento específico |
-| 7 | Edad mínima / menores de edad | 2 | ☐ | MADI |
+| 7 | Edad mínima / menores de edad | 2 | ☑ | cerrado 2026-08-26 (`faq`): sí se puede, acompañados de un adulto |
 | 8 | Equipo: marca, certificación, quién aplica | 2 | ☑ | cerrado 2026-08-25 con la descripción de Marina (Triodo Diamond) |
 | 9 | Qué incluye "cuerpo completo" | 3 | ☑ | cerrado 2026-08-25 (`offering`) |
 | 10 | Bikini vs brasileño (zona y precio por sesión) | 1 | ☑ | cerrado 2026-08-25 con la descripción de Marina ($500/$600 por sesión, mismo paquete) |
@@ -142,12 +142,12 @@ Lo que respondió MADI: la depilación láser **suele aclarar un poco el área**
 
 Pregunta para MADI: ¿existe un tratamiento de aclaramiento como tal (axilas, bikini)? Si sí, nombre y precio. Si no, la línea de arriba basta.
 
-## 7. Edad mínima / menores de edad  ☐
+## 7. Edad mínima / menores de edad  ☑
 
 - "Se puede realizar la depilación en una menor de edad" (#13) → handoff; Marina preguntó "¿Cuántos años tiene la menor? ¿Ya menstrúa regularmente?" y el hilo murió ahí.
 - "¿Desde qué edad se puede hacer?" (6612fc6d, 3 veces, **sin respuesta**; la lead siguió y pidió un paquete de $4,200).
 
-Pregunta para MADI: edad mínima, si requiere menstruación regular, si un tutor debe firmar/acompañar. Con eso el bot contesta en una línea y la valoración decide.
+Respuesta de MADI (Leo, 2026-08-26): **sí se puede en menores de edad; el único requisito es ir acompañados de un adulto.** Cargada en `faq` (entrada 10). No se cargó edad mínima ni el criterio de menstruación que Marina preguntó una vez — MADI no lo fijó como regla, así que el bot no lo menciona. El disparador fue el hilo c8b37f38 (hija de 17, 08-26), donde el equipo lo contestó a mano.
 
 ## 8. Equipo, certificación y quién aplica  ☑
 
@@ -220,7 +220,7 @@ El reporte del runner encontró un tema nuevo y confirmó cuatro abiertos. Respu
 |---|---|
 | Anticipo para apartar un paquete (nuevo) | ☑ No hay anticipos: el precio se asegura pagando completo en la primera sesión. Cargado en `offering`. |
 | Blanqueamiento de bikini como servicio | ☑ Cubierto por la FAQ de aclaramiento (axilas o bikini). |
-| Edad mínima (#7) | ☐ Leo lo investiga con MADI. |
+| Edad mínima (#7) | ☑ Cerrado 2026-08-26: menores sí, acompañados de un adulto. En `faq`. |
 | Duración de sesión de combos / cuerpo completo (#17) | ☐ Leo lo investiga con MADI. |
 
 Tres temas se cerraron como ruido de la primera corrida (piernas + bikini a $3,500 — anterior al cambio a $3,800; precio de la valoración; lista de zonas): ya estaban en config.

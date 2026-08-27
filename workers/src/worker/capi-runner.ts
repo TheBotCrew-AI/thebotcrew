@@ -14,7 +14,7 @@
  */
 
 import { incrementCapiAttempts, loadPendingCapiEvents, logBotEvent, markCapiEvent } from '../db/queries.js';
-import { parseMetaCapi, resolveCapiToken } from '../meta/capi-config.js';
+import { parseMetaCapi, resolveCapiDatasetId, resolveCapiToken } from '../meta/capi-config.js';
 import { sendCapiEvent } from '../meta/capi.js';
 
 const MAX_ATTEMPTS = 3;
@@ -80,9 +80,13 @@ export async function runPendingCapiEvents(): Promise<CapiRunResult> {
       continue;
     }
 
+    // Frozen at enqueue since 0056; rows queued before it are all WhatsApp.
+    const channel = row.payload.messaging_channel ?? 'whatsapp';
     await incrementCapiAttempts(row.id);
     const result = await sendCapiEvent({
-      datasetId: config.datasetId,
+      // Resolved fresh per drain, like the token: re-pointing a channel's dataset in
+      // tenant_config re-routes rows that are still pending.
+      datasetId: resolveCapiDatasetId(config, channel),
       token,
       testEventCode: config.testEventCode,
       event: {
@@ -90,8 +94,7 @@ export async function runPendingCapiEvents(): Promise<CapiRunResult> {
         event_time: Math.floor(new Date(row.eventTime).getTime() / 1000),
         event_id: row.eventId,
         action_source: 'business_messaging',
-        // Frozen at enqueue since 0056; rows queued before it are all WhatsApp.
-        messaging_channel: row.payload.messaging_channel ?? 'whatsapp',
+        messaging_channel: channel,
         user_data: row.payload.user_data,
         ...(row.payload.custom_data ? { custom_data: row.payload.custom_data } : {}),
       },
@@ -103,7 +106,8 @@ export async function runPendingCapiEvents(): Promise<CapiRunResult> {
         kind: row.kind,
         eventName: row.eventName,
         eventId: row.eventId,
-        channel: row.payload.messaging_channel ?? 'whatsapp',
+        channel,
+        datasetId: resolveCapiDatasetId(config, channel),
         ...(config.testEventCode ? { testEventCode: config.testEventCode } : {}),
         ...(result.eventsReceived !== undefined ? { eventsReceived: result.eventsReceived } : {}),
         ...(result.messages ? { messages: result.messages } : {}),

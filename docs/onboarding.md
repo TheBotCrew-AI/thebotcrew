@@ -399,9 +399,16 @@ admin access to Events Manager or have them do step 1 and send you the values):
      "token_ref":  "MADI",
      "whatsapp_business_account_id":  "<WABA id>",
      "instagram_business_account_id": "<IG account id>",
+     "datasets": { "whatsapp": "<the WABA's own dataset id, if Meta gave it one>" },
      "test_event_code": "<TESTxxxx>"
    }' where tenant_id = '<tenant uuid>';
    ```
+
+   Meta keeps **one dataset per asset**. Connecting the WhatsApp account in the wizard
+   usually creates a dataset of its own (The Bot Crew: page dataset `2871…`, WABA dataset
+   `4439…`); `datasets.<channel>` points that channel at it, everything else uses
+   `dataset_id`. Ads optimize per ad set, and a CTWA ad set reads the WABA's dataset, so
+   the split costs nothing.
 
 5. **Verify end-to-end**: click one of the live ads from a personal phone (a
    click-to-WhatsApp ad for the WhatsApp path; a Messenger/Instagram one for those), send

@@ -70,7 +70,11 @@ export interface CapiEventSpec {
  * per kind; `false` disables a kind entirely.
  */
 export interface MetaCapiConfig {
+  /** Default dataset. Meta binds one dataset PER ASSET (Page / WABA / IG account) and
+   *  refuses an event sent to a dataset the channel's asset isn't linked to, so a tenant
+   *  whose assets landed in different datasets overrides per channel in `datasets`. */
   datasetId: string;
+  datasets?: Partial<Record<CapiMessagingChannel, string>>;
   pageId: string;
   /** Slug of the Worker secret with this tenant's CAPI token
    *  (`'MADI'` → `META_CAPI_TOKEN__MADI`). Never the token itself. */
@@ -134,6 +138,14 @@ export function parseMetaCapi(raw: unknown): MetaCapiConfig | null {
   if (typeof o.test_event_code === 'string' && o.test_event_code.trim()) {
     config.testEventCode = o.test_event_code.trim();
   }
+  if (o.datasets && typeof o.datasets === 'object' && !Array.isArray(o.datasets)) {
+    const datasets: MetaCapiConfig['datasets'] = {};
+    for (const ch of ['whatsapp', 'messenger', 'instagram'] as const) {
+      const v = (o.datasets as Record<string, unknown>)[ch];
+      if (typeof v === 'string' && v.trim()) datasets[ch] = v.trim();
+    }
+    if (Object.keys(datasets).length > 0) config.datasets = datasets;
+  }
   if (typeof o.whatsapp_business_account_id === 'string' && o.whatsapp_business_account_id.trim()) {
     config.whatsappBusinessAccountId = o.whatsapp_business_account_id.trim();
   }
@@ -183,6 +195,11 @@ export function resolveCapiToken(tokenRef: string): string | null {
   const secretName = capiTokenSecretName(tokenRef);
   const token = secretName ? process.env[secretName] : undefined;
   return token?.trim() ? token : null;
+}
+
+/** The dataset an event on this channel must be posted to: per-channel override > default. */
+export function resolveCapiDatasetId(config: MetaCapiConfig, channel: CapiMessagingChannel): string {
+  return config.datasets?.[channel] ?? config.datasetId;
 }
 
 /** The effective Meta mapping for a kind: config override > platform default. null = kind off. */

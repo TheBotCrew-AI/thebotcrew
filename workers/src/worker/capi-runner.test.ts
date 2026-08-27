@@ -43,6 +43,22 @@ afterEach(() => {
 });
 
 describe('runPendingCapiEvents — happy path', () => {
+  it("posts to the channel's own dataset when the tenant maps one (Meta: one dataset per asset)", async () => {
+    const metaCapi = { dataset_id: 'ds-page', page_id: 'pg1', token_ref: 'MADI', datasets: { whatsapp: 'ds-waba' } };
+    vi.mocked(q.loadPendingCapiEvents).mockResolvedValue([
+      row({ metaCapi }),
+      row({
+        id: 'row2',
+        eventId: 'conv-fb:lead_started',
+        payload: { messaging_channel: 'messenger', user_data: { page_scoped_user_id: '3625', page_id: 'pg1' } },
+        metaCapi,
+      }),
+    ]);
+    await runPendingCapiEvents();
+    expect(sendCapiEvent).toHaveBeenNthCalledWith(1, expect.objectContaining({ datasetId: 'ds-waba' }));
+    expect(sendCapiEvent).toHaveBeenNthCalledWith(2, expect.objectContaining({ datasetId: 'ds-page' }));
+  });
+
   it("logs Meta's events_received and warnings on a 2xx (sent ≠ counted)", async () => {
     vi.mocked(sendCapiEvent).mockResolvedValue({ ok: true, eventsReceived: 0, messages: [{ message: 'unmatched' }] });
     await runPendingCapiEvents();
@@ -95,6 +111,7 @@ describe('runPendingCapiEvents — happy path', () => {
       eventName: 'LeadSubmitted',
       eventId: 'conv1:lead_started',
       channel: 'whatsapp',
+      datasetId: 'ds1',
     });
     expect(res).toEqual({ tried: 1, sent: 1, failed: 0, skipped: 0 });
   });

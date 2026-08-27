@@ -1030,7 +1030,11 @@ that id is skipped with a loud `[capi]` warn, never sent half-keyed. The 1-minut
 to `graph.facebook.com/v23.0/{dataset_id}/events` with `action_source=business_messaging`.
 Token/test_event_code are read fresh from `tenant_config` each drain — a rotation needs
 no re-enqueue; a row queued before 0056 has no channel in its payload and is sent as
-WhatsApp.
+WhatsApp. **One dataset per Meta asset**: Meta binds a dataset to a Page, a WABA or an
+IG account, and rejects an event posted to a dataset the channel's asset isn't linked to
+(`2804132` for WhatsApp). The wizard may therefore leave a tenant with several dataset
+ids; `meta_capi.datasets.{whatsapp,messenger,instagram}` routes each channel to its own,
+falling back to `dataset_id`. Resolved per drain, like the token.
 
 **Failure semantics:** 4xx = terminal (`failed` immediately, `capi_error` stage
 `rejected`); 5xx/network = retry up to 3 attempts. A **missing token secret does not

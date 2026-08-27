@@ -8,6 +8,7 @@ import {
   extractCtwaClid,
   normalizePhoneForCapi,
   parseMetaCapi,
+  resolveCapiDatasetId,
   resolveCapiToken,
   resolveEventSpec,
   sha256Hex,
@@ -163,6 +164,21 @@ describe('extractCtwaClid', () => {
     expect(extractCtwaClid({ sessionSource: 'Organic' })).toBeNull();
     expect(extractCtwaClid({ ctwaClid: '  ' })).toBeNull();
     expect(extractCtwaClid('AfjRaw')).toBeNull();
+  });
+});
+
+describe('datasets — one dataset per Meta asset', () => {
+  it('parses per-channel dataset ids; blanks dropped; absent → undefined', () => {
+    const parsed = parseMetaCapi({ ...validRaw, datasets: { whatsapp: ' 4439936336229922 ', instagram: '', bogus: '1' } });
+    expect(parsed?.datasets).toEqual({ whatsapp: '4439936336229922' });
+    expect(parseMetaCapi(validRaw)?.datasets).toBeUndefined();
+  });
+
+  it('resolveCapiDatasetId: the channel override wins, otherwise the default dataset', () => {
+    const c = config({ datasets: { whatsapp: '4439936336229922' } });
+    expect(resolveCapiDatasetId(c, 'whatsapp')).toBe('4439936336229922');
+    expect(resolveCapiDatasetId(c, 'messenger')).toBe('123456');
+    expect(resolveCapiDatasetId(config(), 'whatsapp')).toBe('123456');
   });
 });
 
