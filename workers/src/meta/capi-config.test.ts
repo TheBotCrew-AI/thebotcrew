@@ -9,6 +9,7 @@ import {
   normalizePhoneForCapi,
   parseMetaCapi,
   resolveCapiDatasetId,
+  resolveCapiTestEventCode,
   resolveCapiToken,
   resolveEventSpec,
   sha256Hex,
@@ -172,6 +173,16 @@ describe('datasets — one dataset per Meta asset', () => {
     const parsed = parseMetaCapi({ ...validRaw, datasets: { whatsapp: ' 4439936336229922 ', instagram: '', bogus: '1' } });
     expect(parsed?.datasets).toEqual({ whatsapp: '4439936336229922' });
     expect(parseMetaCapi(validRaw)?.datasets).toBeUndefined();
+  });
+
+  it('test codes are per dataset too: channel code > single code > none', () => {
+    const c = config({ testEventCode: 'TEST96971', testEventCodes: { whatsapp: 'TEST43188' } });
+    expect(resolveCapiTestEventCode(c, 'whatsapp')).toBe('TEST43188');
+    expect(resolveCapiTestEventCode(c, 'messenger')).toBe('TEST96971');
+    expect(resolveCapiTestEventCode(config(), 'instagram')).toBeUndefined();
+    expect(parseMetaCapi({ ...validRaw, test_event_codes: { whatsapp: ' TEST43188 ', messenger: '' } })?.testEventCodes).toEqual({
+      whatsapp: 'TEST43188',
+    });
   });
 
   it('resolveCapiDatasetId: the channel override wins, otherwise the default dataset', () => {

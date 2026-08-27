@@ -43,8 +43,15 @@ afterEach(() => {
 });
 
 describe('runPendingCapiEvents — happy path', () => {
-  it("posts to the channel's own dataset when the tenant maps one (Meta: one dataset per asset)", async () => {
-    const metaCapi = { dataset_id: 'ds-page', page_id: 'pg1', token_ref: 'MADI', datasets: { whatsapp: 'ds-waba' } };
+  it("posts to the channel's own dataset (and test code) when the tenant maps one (Meta: one dataset per asset)", async () => {
+    const metaCapi = {
+      dataset_id: 'ds-page',
+      page_id: 'pg1',
+      token_ref: 'MADI',
+      datasets: { whatsapp: 'ds-waba' },
+      test_event_code: 'TEST-PAGE',
+      test_event_codes: { whatsapp: 'TEST-WABA' },
+    };
     vi.mocked(q.loadPendingCapiEvents).mockResolvedValue([
       row({ metaCapi }),
       row({
@@ -55,8 +62,8 @@ describe('runPendingCapiEvents — happy path', () => {
       }),
     ]);
     await runPendingCapiEvents();
-    expect(sendCapiEvent).toHaveBeenNthCalledWith(1, expect.objectContaining({ datasetId: 'ds-waba' }));
-    expect(sendCapiEvent).toHaveBeenNthCalledWith(2, expect.objectContaining({ datasetId: 'ds-page' }));
+    expect(sendCapiEvent).toHaveBeenNthCalledWith(1, expect.objectContaining({ datasetId: 'ds-waba', testEventCode: 'TEST-WABA' }));
+    expect(sendCapiEvent).toHaveBeenNthCalledWith(2, expect.objectContaining({ datasetId: 'ds-page', testEventCode: 'TEST-PAGE' }));
   });
 
   it("logs Meta's events_received and warnings on a 2xx (sent ≠ counted)", async () => {

@@ -400,7 +400,8 @@ admin access to Events Manager or have them do step 1 and send you the values):
      "whatsapp_business_account_id":  "<WABA id>",
      "instagram_business_account_id": "<IG account id>",
      "datasets": { "whatsapp": "<the WABA's own dataset id, if Meta gave it one>" },
-     "test_event_code": "<TESTxxxx>"
+     "test_event_code": "<TESTxxxx>",
+     "test_event_codes": { "whatsapp": "<that dataset's own test code>" }
    }' where tenant_id = '<tenant uuid>';
    ```
 

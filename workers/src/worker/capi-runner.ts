@@ -14,7 +14,7 @@
  */
 
 import { incrementCapiAttempts, loadPendingCapiEvents, logBotEvent, markCapiEvent } from '../db/queries.js';
-import { parseMetaCapi, resolveCapiDatasetId, resolveCapiToken } from '../meta/capi-config.js';
+import { parseMetaCapi, resolveCapiDatasetId, resolveCapiTestEventCode, resolveCapiToken } from '../meta/capi-config.js';
 import { sendCapiEvent } from '../meta/capi.js';
 
 const MAX_ATTEMPTS = 3;
@@ -82,13 +82,14 @@ export async function runPendingCapiEvents(): Promise<CapiRunResult> {
 
     // Frozen at enqueue since 0056; rows queued before it are all WhatsApp.
     const channel = row.payload.messaging_channel ?? 'whatsapp';
+    const testEventCode = resolveCapiTestEventCode(config, channel);
     await incrementCapiAttempts(row.id);
     const result = await sendCapiEvent({
       // Resolved fresh per drain, like the token: re-pointing a channel's dataset in
       // tenant_config re-routes rows that are still pending.
       datasetId: resolveCapiDatasetId(config, channel),
       token,
-      testEventCode: config.testEventCode,
+      testEventCode,
       event: {
         event_name: row.eventName,
         event_time: Math.floor(new Date(row.eventTime).getTime() / 1000),
@@ -108,7 +109,7 @@ export async function runPendingCapiEvents(): Promise<CapiRunResult> {
         eventId: row.eventId,
         channel,
         datasetId: resolveCapiDatasetId(config, channel),
-        ...(config.testEventCode ? { testEventCode: config.testEventCode } : {}),
+        ...(testEventCode ? { testEventCode } : {}),
         ...(result.eventsReceived !== undefined ? { eventsReceived: result.eventsReceived } : {}),
         ...(result.messages ? { messages: result.messages } : {}),
       });

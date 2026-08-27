@@ -79,8 +79,10 @@ export interface MetaCapiConfig {
   /** Slug of the Worker secret with this tenant's CAPI token
    *  (`'MADI'` → `META_CAPI_TOKEN__MADI`). Never the token itself. */
   tokenRef: string;
-  /** Events Manager Test Events code — set only while verifying, then remove. */
+  /** Events Manager Test Events code — set only while verifying, then remove. Test codes
+   *  are per DATASET, so a tenant with per-channel datasets sets `test_event_codes`. */
   testEventCode?: string;
+  testEventCodes?: Partial<Record<CapiMessagingChannel, string>>;
   /** WhatsApp Business Account id — sent next to ctwa_clid on WhatsApp events when set. */
   whatsappBusinessAccountId?: string;
   /** Instagram business account id — REQUIRED for Instagram events; without it they are skipped. */
@@ -138,14 +140,10 @@ export function parseMetaCapi(raw: unknown): MetaCapiConfig | null {
   if (typeof o.test_event_code === 'string' && o.test_event_code.trim()) {
     config.testEventCode = o.test_event_code.trim();
   }
-  if (o.datasets && typeof o.datasets === 'object' && !Array.isArray(o.datasets)) {
-    const datasets: MetaCapiConfig['datasets'] = {};
-    for (const ch of ['whatsapp', 'messenger', 'instagram'] as const) {
-      const v = (o.datasets as Record<string, unknown>)[ch];
-      if (typeof v === 'string' && v.trim()) datasets[ch] = v.trim();
-    }
-    if (Object.keys(datasets).length > 0) config.datasets = datasets;
-  }
+  const datasets = parsePerChannel(o.datasets);
+  if (datasets) config.datasets = datasets;
+  const testEventCodes = parsePerChannel(o.test_event_codes);
+  if (testEventCodes) config.testEventCodes = testEventCodes;
   if (typeof o.whatsapp_business_account_id === 'string' && o.whatsapp_business_account_id.trim()) {
     config.whatsappBusinessAccountId = o.whatsapp_business_account_id.trim();
   }
@@ -197,9 +195,25 @@ export function resolveCapiToken(tokenRef: string): string | null {
   return token?.trim() ? token : null;
 }
 
+/** `{whatsapp?, messenger?, instagram?}` of non-blank strings; null when nothing usable. */
+function parsePerChannel(raw: unknown): Partial<Record<CapiMessagingChannel, string>> | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const out: Partial<Record<CapiMessagingChannel, string>> = {};
+  for (const ch of ['whatsapp', 'messenger', 'instagram'] as const) {
+    const v = (raw as Record<string, unknown>)[ch];
+    if (typeof v === 'string' && v.trim()) out[ch] = v.trim();
+  }
+  return Object.keys(out).length > 0 ? out : null;
+}
+
 /** The dataset an event on this channel must be posted to: per-channel override > default. */
 export function resolveCapiDatasetId(config: MetaCapiConfig, channel: CapiMessagingChannel): string {
   return config.datasets?.[channel] ?? config.datasetId;
+}
+
+/** The test code for this channel's dataset: per-channel override > the single code > none. */
+export function resolveCapiTestEventCode(config: MetaCapiConfig, channel: CapiMessagingChannel): string | undefined {
+  return config.testEventCodes?.[channel] ?? config.testEventCode;
 }
 
 /** The effective Meta mapping for a kind: config override > platform default. null = kind off. */
