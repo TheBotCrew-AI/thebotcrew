@@ -380,7 +380,8 @@ admin access to Events Manager or have them do step 1 and send you the values):
    tab while you're there.
 2. **Page id** — the Facebook page the ads run from (used by WhatsApp and Messenger events).
    - **WhatsApp Business Account id** (WhatsApp Manager → Account tools → Business
-     settings) — optional; sent next to the click id, which is what Meta's own example does.
+     settings) — **required for WhatsApp events in practice**: Meta gives the WABA its
+     own dataset, and events to it carry the WABA id instead of the page id.
    - **Instagram business account id** (Business Settings → Instagram accounts) —
      **required for Instagram events**; without it IG leads are skipped, with a warn.
 3. Store the token as a Worker secret (slug rules same as AI keys — this is the second

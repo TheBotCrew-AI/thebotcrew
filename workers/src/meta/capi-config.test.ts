@@ -273,7 +273,7 @@ describe('sha256Hex', () => {
 describe('buildCapiPayload', () => {
   const wa = { channel: 'whatsapp' as const, key: 'AfjMi93Y-example' };
 
-  it('whatsapp: ctwa_clid UNHASHED + page_id in user_data; phone hashed into ph[]; channel frozen', async () => {
+  it('whatsapp WITHOUT a WABA id (legacy): ctwa_clid UNHASHED + page_id; phone hashed into ph[]; channel frozen', async () => {
     const payload = await buildCapiPayload({
       config: config(),
       spec: { name: 'LeadSubmitted' },
@@ -288,7 +288,7 @@ describe('buildCapiPayload', () => {
     expect(payload?.custom_data).toBeUndefined();
   });
 
-  it('whatsapp: the WABA id rides along when configured (what Meta’s own example sends)', async () => {
+  it('whatsapp WITH a WABA id: ctwa_clid + whatsapp_business_account_id and NO page_id (Meta 2804131 otherwise)', async () => {
     const payload = await buildCapiPayload({
       config: config({ whatsappBusinessAccountId: '1629186164979352' }),
       spec: { name: 'LeadSubmitted' },
@@ -296,7 +296,6 @@ describe('buildCapiPayload', () => {
     });
     expect(payload?.user_data).toEqual({
       ctwa_clid: 'AfjMi93Y-example',
-      page_id: '789',
       whatsapp_business_account_id: '1629186164979352',
     });
   });

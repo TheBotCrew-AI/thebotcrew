@@ -1021,7 +1021,9 @@ Deliberate choices:
 conversation per kind, `event_id = <conv>:<kind>`, which is also Meta's dedup id). The
 frozen payload carries the `messaging_channel` and exactly that channel's `user_data`
 (Meta's own ids are never hashed; a phone, when there is one, is SHA-256 `ph`):
-`whatsapp` → `ctwa_clid` + `page_id` (+ `whatsapp_business_account_id` when configured);
+`whatsapp` → `ctwa_clid` + `whatsapp_business_account_id` (**no** `page_id` — a WABA
+dataset has no Page and Meta rejects the pair; `page_id` is the legacy shape only while
+the WABA id is unset);
 `messenger` → `page_scoped_user_id` + `page_id`; `instagram` → `ig_sid` +
 `ig_account_id` (the wire name Meta enforces; the config key is still
 `instagram_business_account_id`) — **required**: an Instagram lead on a tenant without

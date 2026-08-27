@@ -292,7 +292,10 @@ export interface CapiPayload {
  * `messaging_channel` + exactly its `user_data` for that channel (+ optional
  * `custom_data`). Meta's own identifiers (`ctwa_clid`, PSID, IGSID) must NOT be
  * hashed; the phone MUST be SHA-256 hashed. Per channel:
- *   whatsapp  → ctwa_clid + page_id (+ whatsapp_business_account_id when configured)
+ *   whatsapp  → ctwa_clid + whatsapp_business_account_id. NOT page_id: a WABA dataset has
+ *               no Page, and page_id makes Meta run the page↔dataset check and reject
+ *               (2804131, seen live 2026-08-27). page_id is the legacy fallback only for a
+ *               tenant that hasn't configured the WABA id yet.
  *   messenger → page_scoped_user_id + page_id
  *   instagram → ig_sid + ig_account_id — null (skip) when the tenant hasn't
  *               configured that id: Meta can't match without it. The wire name is
@@ -308,8 +311,9 @@ export async function buildCapiPayload(args: {
   const { config, identity } = args;
   let user_data: Record<string, unknown>;
   if (identity.channel === 'whatsapp') {
-    user_data = { ctwa_clid: identity.key, page_id: config.pageId };
-    if (config.whatsappBusinessAccountId) user_data.whatsapp_business_account_id = config.whatsappBusinessAccountId;
+    user_data = config.whatsappBusinessAccountId
+      ? { ctwa_clid: identity.key, whatsapp_business_account_id: config.whatsappBusinessAccountId }
+      : { ctwa_clid: identity.key, page_id: config.pageId };
   } else if (identity.channel === 'messenger') {
     user_data = { page_scoped_user_id: identity.key, page_id: config.pageId };
   } else {
