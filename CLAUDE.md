@@ -79,7 +79,11 @@ was proven: the per-minute **reconciliation cron**, the `reconcile_claimed_at` a
 (`claimTurnForProcessing` + its column/RPC). What remains is a **cheap rollback belt**:
 `handleInboundWebhook` still has a `waitUntil` **fall-through** used only if the DO call throws, and
 the `DO_TURNS` flag can be emptied to fall every tenant back to the legacy `waitUntil` path (no
-redeploy). The DO binding reaches the route via `workerEnvStorage` (AsyncLocalStorage) —
+redeploy). **GHL webhook retries are the last safety net**: a retry of a message we already
+stored hits the `ghl_message_id` dedup, and `findUnansweredInbound` decides whether to run the turn
+anyway — by whether a `turn_scheduled` event exists at/after the stored message (both paths log it),
+**not** by the message's age. The old 60-second minimum dropped the one retry that could have saved
+a message whose first request died before scheduling (The Bot Crew, 2026-08-27, retry at +18 s). The DO binding reaches the route via `workerEnvStorage` (AsyncLocalStorage) —
 `process.env` carries only string secrets, not binding objects.
 
 We own conversation history, including message content + who sent what (lead vs which AI

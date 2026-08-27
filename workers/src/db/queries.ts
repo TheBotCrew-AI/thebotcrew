@@ -410,17 +410,17 @@ export async function countBotMessagesSince(conversationId: string, sinceTs: str
 }
 
 /**
- * The conversation's last message when it is an UNANSWERED lead message older than
- * `minAgeSeconds` — i.e. we stored the inbound and never replied.
- *
- * Used to recover from GHL's webhook retry: if our first attempt died after persisting
- * the inbound, the retry would otherwise be swallowed by dedup and the lead would go
- * permanently silent. The age floor keeps a genuinely concurrent duplicate (retry while
- * the first turn is still generating) from producing a second reply.
+ * Dedup recovery: is the conversation's latest message a lead message that never got a
+ * turn scheduled? Called when GHL retries a webhook we already stored — normally a harmless
+ * duplicate, but also what a retry looks like after our first attempt persisted the inbound
+ * and died before `scheduleTurn`. The signal is the absence of a `turn_scheduled` event at or
+ * after the message, NOT the message's age: the old 60-second minimum threw away exactly the
+ * retry that could have saved the message (2026-08-27, The Bot Crew: GHL retried 18 s after
+ * the first request died, and the retry was dropped as "too fresh"). A turn that IS scheduled
+ * or already running has its event, so the retry still stays out of its way.
  */
 export async function findUnansweredInbound(
   ghlConversationId: string,
-  minAgeSeconds = 60,
 ): Promise<{ conversationId: string; messageId: string } | null> {
   const supabase = getSupabase();
   const { data: conv, error: convErr } = await supabase
@@ -442,7 +442,17 @@ export async function findUnansweredInbound(
   fail('findUnansweredInbound:message', error);
   const row = data as { id: string; sender_type: string; sent_at: string } | null;
   if (!row || row.sender_type !== 'lead') return null;
-  if (Date.now() - Date.parse(row.sent_at) < minAgeSeconds * 1000) return null;
+
+  const { data: scheduled, error: evErr } = await supabase
+    .from('bot_events')
+    .select('id')
+    .eq('conversation_id', conversationId)
+    .eq('event_type', 'turn_scheduled')
+    .gte('created_at', row.sent_at)
+    .limit(1)
+    .maybeSingle();
+  fail('findUnansweredInbound:turn_scheduled', evErr);
+  if (scheduled) return null;
   return { conversationId, messageId: row.id };
 }
 

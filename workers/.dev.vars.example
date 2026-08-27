@@ -47,3 +47,7 @@ INTERNAL_CRON_SECRET="<random-secret>"
 # Generate with: openssl rand -hex 32. The same value goes in each GHL workflow's
 # Custom Webhook "Authorization: Bearer <value>" header.
 GHL_WORKFLOW_SECRET="<random-secret>"
+
+# Optional, local only (never a Worker secret): read Workers Logs with scripts/cf-logs.mjs.
+# Cloudflare API token with the "Workers Observability: Read" permission.
+CLOUDFLARE_API_TOKEN=

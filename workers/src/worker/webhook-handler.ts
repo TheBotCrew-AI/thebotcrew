@@ -1321,6 +1321,10 @@ export async function handleInboundWebhook(
           console.error('[debounce] unhandled error:', err instanceof Error ? err.message : String(err));
         }),
     );
+    // Same event as the DO path, for the same reader: the dedup recovery decides whether a
+    // GHL retry may re-run the turn by whether this event exists — without it, a retry
+    // landing during the debounce would run the turn twice.
+    await logBotEvent(tenant.clientId, parsed.conversationId, 'turn_scheduled', { via: 'wait-until' });
     console.log(`[debounce] scheduled conv=${parsed.conversationId} delay=${DEBOUNCE_MS}ms`);
     return { status: 200, body: { debounced: true, conversationId } };
   }
