@@ -356,6 +356,11 @@ group by key_source;
 
 ## 7. Meta CAPI — send lead-quality signals back to Meta (0048)
 
+> **Follow the step-by-step SOP instead of this section:**
+> [`capi-setup-sop.md`](capi-setup-sop.md) — IDs to collect, the Meta wizard per channel,
+> system-user assignments, the config row, per-channel verification, and every error we've
+> hit with its fix. This section stays as the reference for the config shape and rationale.
+
 Optional, per tenant. For a client running **click-to-WhatsApp (CTWA) ads**: without
 this, Meta optimizes toward "anyone who messages" and the ads fill with bad leads.
 With it, the platform reports back which conversations became real leads

@@ -4,9 +4,10 @@
 > was verified, and exactly what remains to turn it on for a tenant. Read this to pick
 > the work up in a fresh session without re-deriving anything.
 >
-> Behavior spec: [`business-logic.md` §6a](business-logic.md). Per-tenant setup
-> procedure: [`onboarding.md` §7](onboarding.md). This file is the rollout log — the
-> analogue of `durable-objects-migration.md` for this feature.
+> Behavior spec: [`business-logic.md` §6a](business-logic.md). **Per-tenant setup:
+> [`capi-setup-sop.md`](capi-setup-sop.md)** (the step-by-step, with the troubleshooting
+> table distilled from this log). This file is the rollout log — the analogue of
+> `durable-objects-migration.md` for this feature.
 
 ## Status (2026-08-26)
 
