@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Agent } from '@mastra/core/agent';
+import { HUMAN_REPLY_PREFIX } from '../core/model-messages.js';
 import type { TenantContext } from '../core/types.js';
 
 // ── Mock the seams: DB, GHL transport, env. No DB, no network, no model. ──────
@@ -399,6 +400,42 @@ describe('handleInboundWebhook — active appointment guard', () => {
     await handleInboundWebhook(inbound, agent);
     expect(findUpcomingAppointment).not.toHaveBeenCalled();
     expect(turnFrom(agent).activeAppointment).toBeUndefined();
+  });
+});
+
+describe('handleInboundWebhook — a human teammate answered in the thread', () => {
+  // MADI 2026-08-26: a person answered "sí se puede con 17 años" and the bot kept saying
+  // "el equipo te confirma" — the human's message reached the model as the bot's own words.
+  const history = [
+    { direction: 'inbound', senderType: 'lead', content: 'Es para mi hija, tiene 17', sentAt: '' },
+    { direction: 'outbound', senderType: 'bot', content: 'Déjame confirmar con el equipo.', sentAt: '' },
+    { direction: 'outbound', senderType: 'human_agent', humanAgentId: 'h1', content: 'Sí se puede, acompañada de un adulto.', sentAt: '' },
+    { direction: 'inbound', senderType: 'lead', content: '12 30 estas ubicados en Zona Rio', sentAt: '' },
+  ] as Awaited<ReturnType<typeof q.loadRecentMessages>>;
+
+  const generateCall = (agent: Agent) =>
+    vi.mocked(agent.generate).mock.calls[0] as unknown as [
+      { role: string; content: string }[],
+      { requestContext: { get(k: string): unknown } },
+    ];
+
+  it("marks the human's message in the model view and flags the turn", async () => {
+    vi.mocked(q.loadRecentMessages).mockResolvedValue(history);
+    const agent = agentReplying();
+    await handleInboundWebhook(inbound, agent);
+    const [messages, opts] = generateCall(agent);
+    expect(messages[2]).toEqual({ role: 'assistant', content: `${HUMAN_REPLY_PREFIX} Sí se puede, acompañada de un adulto.` });
+    expect(messages[1]?.content).not.toContain(HUMAN_REPLY_PREFIX);
+    expect((opts.requestContext.get('turn') as { hasHumanReplies?: boolean }).hasHumanReplies).toBe(true);
+  });
+
+  it('no human in the window → nothing marked, flag off', async () => {
+    vi.mocked(q.loadRecentMessages).mockResolvedValue(history.filter((m) => m.senderType !== 'human_agent'));
+    const agent = agentReplying();
+    await handleInboundWebhook(inbound, agent);
+    const [messages, opts] = generateCall(agent);
+    expect(messages.every((m) => !m.content.includes(HUMAN_REPLY_PREFIX))).toBe(true);
+    expect((opts.requestContext.get('turn') as { hasHumanReplies?: boolean }).hasHumanReplies).toBe(false);
   });
 });
 

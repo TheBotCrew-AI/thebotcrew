@@ -40,6 +40,7 @@ import {
 } from '../db/queries.js';
 import { parseAngleSelection, resolveAnglePool } from '../roles/reactivation/angle-select.js';
 import { buildAgentRequestContext } from '../core/runtime-context.js';
+import { toModelMessages } from '../core/model-messages.js';
 import { cadenceForRound, isFinalRound, REENTRY_KEYWORD, totalRounds } from '../core/reactivation-rounds.js';
 import type { AiProvider, Channel, TenantContext } from '../core/types.js';
 import { DEMO_REMINDER_CADENCE, DEMO_REMINDER_ROLE } from '../core/types.js';
@@ -55,18 +56,6 @@ export interface FollowUpRunResult {
   processed: number;
   failed: number;
   skipped: number;
-}
-
-type ChatMessage = { role: 'user'; content: string } | { role: 'assistant'; content: string };
-
-function toModelMessages(
-  history: Awaited<ReturnType<typeof loadRecentMessages>>,
-): ChatMessage[] {
-  return history.map((m): ChatMessage =>
-    m.senderType === 'lead'
-      ? { role: 'user', content: m.content }
-      : { role: 'assistant', content: m.content },
-  );
 }
 
 /**

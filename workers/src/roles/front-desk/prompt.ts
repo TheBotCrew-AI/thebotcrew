@@ -7,6 +7,7 @@
  */
 
 import { CLOSED_QUESTION_RULE } from '../../core/prompt-rules.js';
+import { HUMAN_REPLY_PREFIX } from '../../core/model-messages.js';
 import type { DemoHandoff } from '../../core/types.js';
 import { resolveEffectiveOverrides, type FrontDeskConfig } from './config.js';
 
@@ -236,6 +237,7 @@ export function buildFrontDeskInstructions(
   activeAppointment?: { startTime: string; service?: string },
   promptVariant?: string,
   demoHandoff?: DemoHandoff,
+  hasHumanReplies?: boolean,
 ): string {
   // Override precedence: demo persona > pinned campaign variant (merged over base) > base.
   const { overrides, usingDemo } = resolveEffectiveOverrides(config, activeRole, promptVariant);
@@ -495,6 +497,25 @@ Tu papel con este contacto es de ASISTENCIA, no de venta: ya agendó.
 - Si pide MOVER o CANCELAR su cita, ahí sí usa flagAwaitingHuman y dile con naturalidad que una persona del equipo se lo confirma en breve.`;
   }
 
+  // A teammate answered inside the history window. Without this the model reads their
+  // words as its own — and its own rules forbid it from stating facts it doesn't have or
+  // naming a time, so it discards them and falls back to "el equipo te confirma" about the
+  // very thing the team just confirmed (MADI, 2026-08-26: the 17-year-old daughter). The
+  // messages are prefix-marked by `toModelMessages`; this section teaches the prefix.
+  // Suppressed in demo mode: nobody from the team speaks inside a roleplay.
+  const humanRepliesSection =
+    hasHumanReplies && !usingDemo
+      ? `\n\n# Una persona del equipo ya intervino en esta conversación — manda sobre todo lo anterior
+Los mensajes del historial que empiezan con "${HUMAN_REPLY_PREFIX}" NO los escribiste tú: los escribió una persona de ${config.businessName}. Son la respuesta oficial del negocio.
+- Lo que ahí se afirmó es un hecho confirmado. Si el lead vuelve al tema, repítelo o reafírmalo con naturalidad. NUNCA digas que lo vas a confirmar, que "el equipo te avisa" o que sigue pendiente: el equipo YA contestó.
+- Un dato que el equipo dio ya no es un dato pendiente: NO llames flagPendingInfo por él.
+- Si el equipo ofreció días u horas y el lead eligió una, ${bookingEnabled
+          ? 'agéndala con las herramientas de agenda como cualquier otra cita.'
+          : 'NO la confirmes tú como cita ni la descartes: dile que le pasas su elección al equipo para que te lo confirme, y llama flagAwaitingHuman con el horario que eligió. Que la persona no tenga que volver a preguntarle.'}
+- Lo que el equipo NO contestó sigue con las reglas normales.
+- Si el lead pregunta algo nuevo, contéstalo con normalidad. No te disculpes por la intervención ni la expliques.`
+      : '';
+
   return `${identityLine}
 
 # Fecha y hora actuales
@@ -529,7 +550,7 @@ En vez de eso AFIRMA que lo vas a confirmar, en UNA línea corta y natural — "
 - No prometas un tiempo concreto ("en 5 minutos", "hoy mismo") ni des el dato después por tu cuenta: si no lo tienes, no lo tienes.
 - No lo repitas en cada mensaje ni lo conviertas en el tema. Una vez que dijiste que lo confirmas, ya quedó: no lo vuelvas a anunciar ni a marcar por lo mismo.`}
 
-${offeringSection}${hoursSection}${flowSection}${faqSection}${houseRulesSection}${toolInstructionsSection}${reminderSection}${contactNameSection}${demoHandoffSection}${existingAppointmentSection}
+${offeringSection}${hoursSection}${flowSection}${faqSection}${houseRulesSection}${toolInstructionsSection}${reminderSection}${contactNameSection}${demoHandoffSection}${existingAppointmentSection}${humanRepliesSection}
 
 # Uso de herramientas
 Cuando necesites llamar una herramienta, NO generes texto antes de la llamada. Llama la herramienta en silencio y escribe tu respuesta al lead ÚNICAMENTE después de tener el resultado final. Un solo mensaje, sin intermedios.

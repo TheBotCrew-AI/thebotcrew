@@ -150,6 +150,18 @@ Hybrid human ↔ AI. Enforced by `isBotSuppressed`, re-checked again right befor
   wins) — the DO checks for that before putting the resumed turn back. Permanent mutes
   (`handed_off`, `opted_out`) have no expiry, so they still drop. The legacy `waitUntil`
   path cannot re-arm; it keeps the old drop-on-suppress behaviour.
+- **The team's answer is the answer.** A human message is stored as `sender_type='human_agent'`
+  and reaches the model **marked** — `toModelMessages` (`core/model-messages.ts`) prefixes it
+  with `[Respuesta de una persona del equipo]`, and the front-desk prompt renders a section
+  (only when the history window has one, `TurnContext.hasHumanReplies`) that reads those
+  messages as the business's official answer: restate it as fact, never "el equipo te
+  confirma" about something the team already confirmed, never `flagPendingInfo` for it; and if
+  the team offered times and the lead picked one, relay the pick (`flagAwaitingHuman` with the
+  slot on a no-booking tenant; the booking tools otherwise). Before this the human's words
+  reached the model as a bare `assistant` turn — its own — and its own rules (no times, no
+  facts it doesn't have) made it discard them: MADI 2026-08-26, a person answered "sí se puede
+  con 17 años, acompañada de un adulto" and the bot kept promising to confirm it. Golden case:
+  `evals/human-reply.eval.ts`, on the real thread.
 - **`status='handed_off'`** is a **permanent** pause.
 - **`bot-off` tag** on a GHL contact = permanent handoff (contact-scoped, affects all their
   conversations); removing it resumes the bot. There is no `bot-on` tag — absence means on.

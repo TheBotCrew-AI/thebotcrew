@@ -17,6 +17,7 @@ import { resolveAiApiKey } from '../core/env.js';
 import { usageFromAgentResult } from '../core/llm-usage.js';
 import { channelEnabled, hasTriggerKeywords, inTestMode, matchesDemoOff, matchesDemoOn, matchVariantKeyword, messageMatchesTrigger, resolveTenant, roleEnabled } from '../core/tenant.js';
 import { buildAgentRequestContext } from '../core/runtime-context.js';
+import { hasHumanReplies, toModelMessages } from '../core/model-messages.js';
 import { cadenceForRound, totalRounds } from '../core/reactivation-rounds.js';
 import { auxReasoningEffort } from '../core/reasoning.js';
 import type { AiProvider, ConversationMessage, ConversationStatus, DemoHandoff, FollowUpKind, TenantContext, TurnContext } from '../core/types.js';
@@ -123,7 +124,6 @@ function doTurnsEnabled(tenant: TenantContext): boolean {
   return flag.split(',').map((s) => s.trim()).includes(tenant.tenantId);
 }
 
-type ChatMessage = { role: 'user'; content: string } | { role: 'assistant'; content: string };
 
 /** Outcome of a send: whether GHL accepted it, its id if we could read one, and the
  *  GHL error (status + body) on failure so a dropped delivery is diagnosable. */
@@ -441,15 +441,6 @@ function buildDemoHandoff(
   };
 }
 
-/** Map our stored turns into the model's user/assistant view. */
-function toModelMessages(history: ConversationMessage[]): ChatMessage[] {
-  return history.map((m): ChatMessage =>
-    m.senderType === 'lead'
-      ? { role: 'user', content: m.content }
-      : { role: 'assistant', content: m.content },
-  );
-}
-
 /**
  * Gate checks → load history → generate reply → log outbound → deliver.
  * Called from ctx.waitUntil (debounced) or directly (sync/test path).
@@ -734,6 +725,8 @@ export async function runAgentTurn({
     promptVariant: promptVariant ?? undefined,
     activeAppointment,
     demoHandoff,
+    // Same window the model reads: a teammate's answer outside it is not "seen" either way.
+    hasHumanReplies: hasHumanReplies(history),
   };
   // A key fallback is logged, never swallowed, because from here on every usage row
   // would be misattributed.

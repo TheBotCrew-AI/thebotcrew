@@ -414,7 +414,10 @@ for the retry cron.
   message that arrives DURING the pause is not dropped (0053): the DO re-arms its alarm
   for the pause expiry and re-runs the turn through the **resume gate**
   (`worker/resume-gate.ts`: skip if someone already answered, skip if the last message is
-  a courtesy close — a cheap classifier biased to reply). See docs/business-logic.md §3. Both are enforced by
+  a courtesy close — a cheap classifier biased to reply). A human's message reaches the model
+  **marked** (`core/model-messages.ts`, `[Respuesta de una persona del equipo]`) and the prompt
+  treats it as the official answer — unmarked, the model read it as its own words and kept
+  "confirming with the team" what the team had confirmed. See docs/business-logic.md §3. Both are enforced by
   `isBotSuppressed`, re-checked again right before send (anti-double-message). **Exception:** a
   `source:'app'` message that is the conversation's FIRST message is a cold-outreach opener (e.g.
   a WhatsApp template on a new contact) — logged but no pause, so the bot answers the lead's reply.

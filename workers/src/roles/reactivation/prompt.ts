@@ -1,4 +1,5 @@
 import { CLOSED_QUESTION_RULE } from '../../core/prompt-rules.js';
+import { HUMAN_REPLY_PREFIX } from '../../core/model-messages.js';
 
 export interface DemoContext {
   businessName?: string;
@@ -102,6 +103,7 @@ ${closingRules}
 
 # Historial y diferenciación
 Revisa TODOS los mensajes anteriores del bot en el historial antes de escribir.
+- Los mensajes que empiezan con "${HUMAN_REPLY_PREFIX}" los escribió una persona del equipo, no tú: lo que ahí se afirmó es la respuesta oficial. No lo contradigas ni digas que sigue pendiente.
 - Si el historial ya contiene información del servicio (descripción, precio, condiciones, etc.), NO la repitas. El lead ya la vio; repetirla se siente como spam.
 - Tu mensaje DEBE explorar un ángulo distinto a los ya enviados — diferente pregunta, diferente tema, diferente enfoque.
 

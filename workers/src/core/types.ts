@@ -163,6 +163,10 @@ export interface TurnContext {
   activeAppointment?: { startTime: string; service?: string };
   /** Set only on the turn where a demo session just ended — the closer's context. */
   demoHandoff?: DemoHandoff;
+  /** A human teammate wrote in the history window the model reads. Turns on the prompt rule
+   *  that treats those (prefix-marked) messages as the team's official answer, so the bot
+   *  stops promising to confirm what a person already confirmed. */
+  hasHumanReplies?: boolean;
 }
 
 /** A turn in our own conversation store, used to rebuild agent history. */
