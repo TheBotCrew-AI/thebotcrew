@@ -718,6 +718,20 @@ persona**, controlled by keywords — useful for showing the bot to a prospect o
   message carrying only the demo keyword is dropped as `keyword_required` and the demo never
   starts. Put the demo keyword in `trigger_keywords` as well.
 
+**Grabar el demo en video (toma de 3 mensajes).** La palabra `demo botox` enciende el demo,
+pero queda a cuadro. Para grabar, el flip se hace desde la DB —
+`workers/scripts/demo-take.mjs` (arma / `--show` / `--off`): pone `active_role='demo'` y
+**re-estampa `role_started_at=now()`**, que es lo que hace la toma repetible — el historial
+se carga desde ahí, así que re-armar deja al modelo sin memoria de la toma anterior (la
+pantalla se limpia aparte, con "Vaciar chat"). El guion son tres mensajes del lead: llega del
+anuncio → da zona + primera vez y pide cita → elige uno de los DOS horarios. Se ensaya sin
+gastar grabación con `pnpm rehearse` (`evals/demo-video.eval.ts`), que imprime la
+transcripción y los horarios que el simulador va a ofrecer ese día. Nada real se mueve: cita
+simulada, sin GHL, sin follow-ups, sin etiquetas, sin CAPI — con **una** excepción, el
+`lead_started` de CAPI, que se encola en el primer turno si el contacto trae identidad de
+Meta (ver §6a), porque se dispara antes y aparte del rol. Graba desde un contacto sin
+atribución de anuncio y no sale nada.
+
 ## 5c. Demo sessions — the lead-magnet funnel (0038)
 
 Budgeted, per-lead self-demos: an ad lead gets a live demo of a bot **for their own
@@ -851,20 +865,6 @@ the lead's own services is forbidden. Normal conversations are untouched.
 Observability: `demo_session_started` / `demo_session_ended` (`{reason, botMessagesUsed}`) in
 `bot_events`; sessions keep `lead_data` + `persona_version` for cohort comparison.
 
-## 6. Models & factual grounding
-
-- **Platform default: `openai` / `gpt-5.6-luna`** (`DEFAULT_PROVIDER` / `DEFAULT_MODEL` in
-  `roles/front-desk/agent.ts`). Per-tenant override in `tenant_config.ai_provider` /
-  `ai_model`; `NULL` inherits the default.
-- **Reasoning effort per role:** front-desk `high`, reactivation `low`, the auxiliary
-  classifier/name-extractor calls `none` — wired in `core/reasoning.ts` and only sent to
-  models that accept it. See CLAUDE.md § Models.
-- **Anti-hallucination rule:** agents only state facts present in tenant config or returned by
-  tools. No invented prices, addresses, hours, availability, or promotions. When unsure, say so
-  — and see §6b for what "say so" now means.
-- Client-facing agent content defaults to **Spanish**.
-
-## 6b. When the bot doesn't have the answer (`flagPendingInfo`, 0050)
 ## 5d. The lead's timezone — remote-service tenants (0057)
 
 **The problem.** Every time label was rendered in `tenant_config.timezone`. For a walk-in
@@ -912,6 +912,20 @@ lead is not made to wait a message for the right hours.
 Evals: `evals/lead-timezone.eval.ts` (label repeated with suffix; tool call instead of
 prose arithmetic; ask-the-city before offering). DB precedence: `supabase/tests/0057_*`.
 
+## 6. Models & factual grounding
+
+- **Platform default: `openai` / `gpt-5.6-luna`** (`DEFAULT_PROVIDER` / `DEFAULT_MODEL` in
+  `roles/front-desk/agent.ts`). Per-tenant override in `tenant_config.ai_provider` /
+  `ai_model`; `NULL` inherits the default.
+- **Reasoning effort per role:** front-desk `high`, reactivation `low`, the auxiliary
+  classifier/name-extractor calls `none` — wired in `core/reasoning.ts` and only sent to
+  models that accept it. See CLAUDE.md § Models.
+- **Anti-hallucination rule:** agents only state facts present in tenant config or returned by
+  tools. No invented prices, addresses, hours, availability, or promotions. When unsure, say so
+  — and see §6b for what "say so" now means.
+- Client-facing agent content defaults to **Spanish**.
+
+## 6b. When the bot doesn't have the answer (`flagPendingInfo`, 0050)
 
 Not knowing something is normal — a config is never complete. What matters is what the bot
 *does* with it, and until 0050 it did the two worst things available: it **asked permission**

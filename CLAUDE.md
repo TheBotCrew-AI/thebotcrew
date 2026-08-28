@@ -406,13 +406,13 @@ for the retry cron.
   read as UTC. No match → the booking is **refused** (`booking_failed` reason `slot_unavailable`),
   the horizon is re-enforced, and the model is told to re-offer a real slot. Fixes the 2026-07-06
   demo bug where "5:15 p.m." (offset dropped) was booked as 10:15 a.m. (read as UTC).
-- Contact-merge recovery on send: GHL dedups contacts by phone/email, which can **merge away**
   **The wall-clock frame is the LEAD's zone for tenants with `lead_timezone_enabled`** (0057,
   `core/lead-timezone.ts` + `tools/slot-label.ts`): every label the tools hand the model is
   rendered in the clock the lead reads, suffixed "hora de …" when it differs from the calendar's,
   and matched back in that same frame. The zone is guessed from the phone's area code (fills
   only) or stated by the lead (`setLeadTimezone` tool, wins). Off by default — right for a
   video call, wrong for a walk-in clinic. See docs/business-logic.md §5d.
+- Contact-merge recovery on send: GHL dedups contacts by phone/email, which can **merge away**
   the `contactId` a webhook gave us (Instant-Form lead whose number already exists as another
   contact) → send fails `CONVERSATIONS_CONTACT_NOT_FOUND`. Crucially the merge **also destroys the
   old `conversationId`** (GHL re-parents the contact to a single new unified conversation), so the
