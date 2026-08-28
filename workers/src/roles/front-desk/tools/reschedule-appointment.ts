@@ -15,20 +15,9 @@ import { resolveAgentContext } from './agent-context.js';
 import { resolveActiveAppointment } from './resolve-appointment.js';
 import { bookingQueryWindow, resolveBookableSlot } from './booking-time.js';
 import { simSlotLabel, simulatedSlots } from './demo-sim.js';
+import { slotLabel } from './slot-label.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-
-/** Tenant-tz label (same format getAvailability emits) so the agent never re-derives a date. */
-function formatSlotLabel(iso: string, timeZone: string): string {
-  try {
-    return new Intl.DateTimeFormat('es-MX', {
-      timeZone, weekday: 'long', day: 'numeric', month: 'long',
-      hour: 'numeric', minute: '2-digit', hour12: true,
-    }).format(new Date(iso));
-  } catch {
-    return iso;
-  }
-}
 
 export const rescheduleAppointmentTool = createTool({
   id: 'rescheduleAppointment',
@@ -46,7 +35,7 @@ export const rescheduleAppointmentTool = createTool({
     message: z.string(),
   }),
   execute: async ({ startTime }, ctx) => {
-    const { tenant, turn, config } = resolveAgentContext(ctx);
+    const { tenant, turn, config, frameTz } = resolveAgentContext(ctx);
 
     // Demo mode: move the SIMULATED booking, with the same only-real-slots guard.
     if (turn.activeRole === 'demo') {
@@ -105,7 +94,7 @@ export const rescheduleAppointmentTool = createTool({
         new Date(fromMs).toISOString(),
         new Date(toMs).toISOString(),
       );
-      const resolved = resolveBookableSlot(slots, startTime, config.timezone);
+      const resolved = resolveBookableSlot(slots, startTime, frameTz);
       if (!resolved) {
         await logBotEvent(tenant.clientId, turn.ghlConversationId, 'booking_failed', {
           stage: 'reschedule',
@@ -190,7 +179,7 @@ export const rescheduleAppointmentTool = createTool({
 
     // Hand back a tenant-tz label so the agent confirms the real time instead of
     // re-rendering an ISO string it might mis-state.
-    const label = formatSlotLabel(canonicalStart, config.timezone);
+    const label = slotLabel(canonicalStart, frameTz, config.timezone);
     return {
       rescheduled: true,
       message: `Cita reagendada: ${label}. Confírmasela al lead usando EXACTAMENTE ese texto.`,

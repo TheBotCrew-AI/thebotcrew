@@ -54,7 +54,7 @@ export async function loadTenantConfig(ghlLocationId: string): Promise<TenantCon
   const { data, error } = await supabase
     .from('tenant_config')
     .select(
-      'business_name, timezone, tone, services, hours, calendars, faq, enabled_roles, prompt_overrides, ai_provider, ai_model, ai_key_ref, awaiting_human_tag, pending_info_tag, follow_up_tiers, follow_up_cadence, follow_up_angles, follow_up_rounds, quiet_hours, booking_horizon_days, human_pause_minutes, enabled_channels, test_contact_ids, trigger_keywords, demo_on_keywords, demo_off_keywords, demo_prompt_overrides, keyword_variants, prompt_variants, demo_sessions_enabled, meta_capi,' +
+      'business_name, timezone, tone, services, hours, calendars, faq, enabled_roles, prompt_overrides, ai_provider, ai_model, ai_key_ref, awaiting_human_tag, pending_info_tag, follow_up_tiers, follow_up_cadence, follow_up_angles, follow_up_rounds, quiet_hours, booking_horizon_days, human_pause_minutes, enabled_channels, test_contact_ids, trigger_keywords, demo_on_keywords, demo_off_keywords, demo_prompt_overrides, keyword_variants, prompt_variants, demo_sessions_enabled, meta_capi, lead_timezone_enabled,' +
         'tenants!inner(id, client_id, ghl_location_id, is_active)',
     )
     .eq('tenants.ghl_location_id', ghlLocationId)
@@ -114,6 +114,7 @@ export async function loadTenantConfig(ghlLocationId: string): Promise<TenantCon
           ? row.human_pause_minutes
           : null,
       aiKeyRef: row.ai_key_ref?.trim() ? row.ai_key_ref.trim() : null,
+      leadTimezoneEnabled: row.lead_timezone_enabled === true,
     },
   };
 }
@@ -238,6 +239,8 @@ export interface ConversationPersona {
   /** How many reactivation rounds this lead has already consumed (0049). Picks
    *  the cadence shape at arming time; `>= totalRounds(config)` = never arm again. */
   reactivationRound: number;
+  /** The lead's IANA zone (0057), or null when unknown. See core/lead-timezone.ts. */
+  leadTimezone: string | null;
 }
 
 /** Read the conversation's persona (null activeRole = normal front-desk; 'demo' = demo persona). */
@@ -245,7 +248,7 @@ export async function getConversationPersona(conversationId: string): Promise<Co
   const supabase = getSupabase();
   const { data, error } = await supabase
     .from('conversations')
-    .select('active_role, role_started_at, demo_started_at, prompt_variant, reactivation_round')
+    .select('active_role, role_started_at, demo_started_at, prompt_variant, reactivation_round, lead_timezone')
     .eq('id', conversationId)
     .maybeSingle();
   fail('getConversationPersona', error);
@@ -255,6 +258,7 @@ export async function getConversationPersona(conversationId: string): Promise<Co
     demo_started_at: string | null;
     prompt_variant: string | null;
     reactivation_round: number | null;
+    lead_timezone: string | null;
   } | null;
   return {
     activeRole: row?.active_role ?? null,
@@ -262,6 +266,7 @@ export async function getConversationPersona(conversationId: string): Promise<Co
     demoStartedAt: row?.demo_started_at ?? null,
     promptVariant: row?.prompt_variant ?? null,
     reactivationRound: row?.reactivation_round ?? 0,
+    leadTimezone: row?.lead_timezone ?? null,
   };
 }
 
@@ -495,6 +500,26 @@ export async function setPromptVariant(ghlConversationId: string, variant: strin
     p_variant: variant,
   });
   fail('setPromptVariant', error);
+  return data === true;
+}
+
+/**
+ * The lead's timezone (0057, app_set_lead_timezone). Precedence is the RPC's:
+ * a 'phone' guess only fills an empty column, the lead's own word ('lead')
+ * overwrites. Returns true when the row was written.
+ */
+export async function setLeadTimezone(
+  ghlConversationId: string,
+  timezone: string,
+  source: 'phone' | 'lead',
+): Promise<boolean> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase.rpc('app_set_lead_timezone', {
+    p_ghl_conversation_id: ghlConversationId,
+    p_timezone: timezone,
+    p_source: source,
+  });
+  fail('setLeadTimezone', error);
   return data === true;
 }
 

@@ -83,6 +83,48 @@ describe('buildFrontDeskInstructions', () => {
     expect(buildFrontDeskInstructions(cfg(), NOW)).not.toContain('# Este contacto YA tiene una cita agendada');
   });
 
+  // 0057: remote-service tenants render times in the lead's clock. Three states, and the
+  // section never asks the model to convert anything — the tools already did.
+  describe('lead timezone section (0057)', () => {
+    const tz = (raw: Record<string, unknown> = {}) => cfg({ timezone: 'America/Tijuana', leadTimezoneEnabled: true, ...raw });
+    const build = (config = tz(), leadTimezone?: string, activeRole?: string) =>
+      buildFrontDeskInstructions(config, NOW, undefined, activeRole, undefined, undefined, undefined, undefined, undefined, leadTimezone);
+
+    it('located in another zone → names it, states the lead\'s current time, forbids converting', () => {
+      const out = build(tz(), 'America/Mexico_City');
+      expect(out).toContain('# Zona horaria del lead');
+      expect(out).toContain('hora de Ciudad de México');
+      // NOW is 10:00 Tijuana (July, -07:00) → 11:00 a.m. in Mexico City (-06:00).
+      expect(out).toMatch(/ahora son las 11:00 a\.?\s?m\./);
+      expect(out).toContain('NUNCA conviertas');
+      expect(out).toContain('setLeadTimezone');
+    });
+
+    it('located in the same clock → says so, no suffix instruction', () => {
+      const out = build(tz(), 'America/Tijuana');
+      expect(out).toContain('misma zona horaria que el negocio');
+      expect(out).not.toContain('otra zona horaria');
+    });
+
+    it('not located → asks for the city BEFORE offering hours', () => {
+      const out = build(tz(), undefined);
+      expect(out).toContain('No sabemos en qué zona horaria');
+      expect(out).toContain('pregúntale');
+      expect(out).toContain('no ofrezcas horas');
+    });
+
+    it('absent for a tenant that did not opt in, and inside the demo', () => {
+      expect(build(cfg({ timezone: 'America/Tijuana' }), 'America/Mexico_City')).not.toContain('# Zona horaria del lead');
+      expect(build(tz({ demoPromptOverrides: { identity: 'demo' } }), 'America/Mexico_City', 'demo')).not.toContain('# Zona horaria del lead');
+    });
+
+    it('renders the existing appointment in the lead zone, labelled', () => {
+      const out = buildFrontDeskInstructions(tz(), NOW, undefined, undefined, undefined,
+        { startTime: '2026-07-04T14:30:00-07:00', service: 'Corte' }, undefined, undefined, undefined, 'America/Mexico_City');
+      expect(out).toMatch(/3:30 p\.?\s?m\. hora de Ciudad de México/);
+    });
+  });
+
   it('custom qualificationNotes replaces the default flow', () => {
     const out = buildFrontDeskInstructions(cfg({ promptOverrides: { qualificationNotes: 'MI FLUJO PERSONALIZADO' } }), NOW);
     expect(out).toContain('MI FLUJO PERSONALIZADO');

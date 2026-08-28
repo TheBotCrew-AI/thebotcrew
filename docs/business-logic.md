@@ -391,7 +391,8 @@ slots. Rules (also reinforced in the front-desk prompt):
 - **Timezone:** slot labels are formatted in `tenant_config.timezone`, which **must match the
   GHL calendar's timezone** (else labels are offset — e.g. a Pacific calendar shown in CDMX is
   +1h wrong). The Bot Crew's calendar is `America/Tijuana`.
-- Slots are labeled **in code** in the tenant's timezone (correct weekday); the agent presents
+- Slots are labeled **in code** — in the tenant's timezone, or in the **lead's** for a tenant
+  with `lead_timezone_enabled` (§5d) — with the correct weekday; the agent presents
   the `label` **verbatim** and never recomputes/translates a date. Dates are grounded from the
   prompt's "today" line — the model never does weekday math.
 - **Never claim a specific time is unavailable unless it's absent from the returned labels**,
@@ -864,6 +865,53 @@ Observability: `demo_session_started` / `demo_session_ended` (`{reason, botMessa
 - Client-facing agent content defaults to **Spanish**.
 
 ## 6b. When the bot doesn't have the answer (`flagPendingInfo`, 0050)
+## 5d. The lead's timezone — remote-service tenants (0057)
+
+**The problem.** Every time label was rendered in `tenant_config.timezone`. For a walk-in
+business that is the only correct answer: the customer comes to the clinic. For a remote
+service it is wrong the moment the lead lives in another zone — The Bot Crew's calendar is
+`America/Tijuana` and ~80% of its leads are on Mexico City time (by WhatsApp area code:
+~40 of ~60 leads with a phone), one hour apart in summer and **two in winter** (Tijuana
+follows US DST, Mexico City has none since 2022). "Las 3" meant two different hours and
+calls were missed.
+
+**The fix is mechanical, not a prompt rule.** `core/lead-timezone.ts` decides which clock
+a conversation reads (`frameTimeZone`), and every label a tool hands the model
+(`tools/slot-label.ts`: availability, booking confirmation, lookup, reschedule, and the
+prompt's own "ya tiene cita" line) is formatted in that clock, with a suffix —
+`jueves 4 de septiembre, 3:00 p.m. hora de Ciudad de México` — **only when the lead's
+offset differs from the calendar's at that instant** (Hermosillo and Tijuana agree in
+summer, split in winter). Wall-clock matching in `bookAppointment`/`rescheduleAppointment`
+happens in the same frame, so a dropped offset is read back in the clock the lead picked
+from — the 5:15→10:15 bug class can't come back through the lead's zone. The model never
+converts: the prompt section `# Zona horaria del lead` says so and names the zone.
+
+**Where the zone comes from** (`conversations.lead_timezone` + `lead_timezone_source`):
+- `'phone'` — inferred at turn time from the number's area code (LADA → state → zone; a
+  table of the codes *outside* zona Centro, everything else in +52 is `America/Mexico_City`;
+  +1 area codes for the border/diaspora; other countries → unknown). A good guess, not a
+  fact: the RPC `app_set_lead_timezone` lets it **fill** an empty column, never overwrite.
+- `'lead'` — the lead said where they are; the `setLeadTimezone` tool resolves the place in
+  code (`timezoneFromPlace`: states, common cities, or a valid IANA id) and persists it.
+  Overrides the guess, and a later guess can never override it back. Unrecognised place →
+  the tool says so and the model asks for the state; it never guesses.
+- Unknown → the prompt has the model **ask the city before offering hours**.
+
+**Off by default — `tenant_config.lead_timezone_enabled` (boolean, false).** Turning it on
+for a walk-in business is a bug: a customer with a Mexico City number who lives in Tijuana
+would be offered hours shifted by one and show up at the wrong time. Only remote-service
+tenants (a video call) opt in. With the flag off nothing changes: labels, matching and
+prompt are exactly what they were, and the phone is not even inferred. The **demo** is
+pinned to the tenant's clock regardless (a roleplayed walk-in clinic whose simulated slots
+are generated in that zone).
+
+**Same turn.** `setLeadTimezone` mutates `turn.leadTimezone` on the shared request context,
+so a `getAvailability` later in the same turn already renders in the corrected zone — the
+lead is not made to wait a message for the right hours.
+
+Evals: `evals/lead-timezone.eval.ts` (label repeated with suffix; tool call instead of
+prose arithmetic; ask-the-city before offering). DB precedence: `supabase/tests/0057_*`.
+
 
 Not knowing something is normal — a config is never complete. What matters is what the bot
 *does* with it, and until 0050 it did the two worst things available: it **asked permission**

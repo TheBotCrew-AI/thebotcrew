@@ -110,6 +110,8 @@ export const frontDeskConfigSchema = z.object({
   promptVariants: z.record(z.string(), promptVariantSchema).nullable().default(null),
   /** Max days ahead the bot may look for / offer slots. null = no cap. Enforced in getAvailability. */
   bookingHorizonDays: z.number().int().positive().nullable().default(null),
+  /** Show times in the lead's zone (remote-service tenants only). See core/lead-timezone.ts. */
+  leadTimezoneEnabled: z.boolean().default(false),
 });
 
 export type FrontDeskConfig = z.infer<typeof frontDeskConfigSchema>;
@@ -165,5 +167,6 @@ export function parseFrontDeskConfig(raw: RawTenantConfig): FrontDeskConfig {
     demoPromptOverrides: raw.demoPromptOverrides ?? null,
     promptVariants: raw.promptVariants ?? null,
     bookingHorizonDays: raw.bookingHorizonDays ?? null,
+    leadTimezoneEnabled: raw.leadTimezoneEnabled === true,
   });
 }

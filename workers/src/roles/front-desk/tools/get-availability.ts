@@ -10,6 +10,7 @@ import { getActiveDemoSession, logBotEvent } from '../../../db/queries.js';
 import { resolveAgentContext } from './agent-context.js';
 import { resolveBookingWindow } from './booking-window.js';
 import { simulatedSlots } from './demo-sim.js';
+import { slotLabel } from './slot-label.js';
 
 export const getAvailabilityTool = createTool({
   id: 'getAvailability',
@@ -26,7 +27,7 @@ export const getAvailabilityTool = createTool({
     note: z.string().optional(),
   }),
   execute: async ({ serviceName, fromDate, toDate }, ctx) => {
-    const { tenant, turn, config } = resolveAgentContext(ctx);
+    const { tenant, turn, config, frameTz } = resolveAgentContext(ctx);
 
     // Demo mode: SIMULATED slots — no GHL call (nothing can fail in front of a
     // prospect), no real calendar involved. Deterministic per conversation+day so
@@ -65,31 +66,18 @@ export const getAvailabilityTool = createTool({
       };
     }
 
-    // Format each slot's day/time in code (correct weekday in the tenant's tz), so
-    // the agent presents them verbatim and never computes a date itself.
-    const fmt = new Intl.DateTimeFormat('es-MX', {
-      timeZone: config.timezone,
-      weekday: 'long',
-      day: 'numeric',
-      month: 'long',
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true,
-    });
-    const label = (iso: string): string => {
-      try {
-        return fmt.format(new Date(iso));
-      } catch {
-        return iso;
-      }
-    };
+    // Format each slot's day/time in code (correct weekday, in the clock the LEAD reads —
+    // frameTz — with a "hora de …" suffix when that differs from the calendar's), so the
+    // agent presents them verbatim and never computes or converts a date itself.
+    const label = (iso: string): string => slotLabel(iso, frameTz, config.timezone);
 
     // Deterministic booking horizon (business rule, per-tenant): the tool never looks
     // past now + bookingHorizonDays. Does NOT rely on the model behaving — the range is
     // clamped here, or (if it starts entirely beyond the horizon) we return that fact so
     // the agent redirects the lead to the valid window.
     const horizon = config.bookingHorizonDays ?? null;
-    const window = resolveBookingWindow(Date.now(), fromDate, toDate, horizon, config.timezone);
+    // The model types fromDate/toDate in the clock it reads, so they're interpreted in frameTz.
+    const window = resolveBookingWindow(Date.now(), fromDate, toDate, horizon, frameTz);
 
     if (window.outOfHorizon && window.maxMs != null) {
       const maxLabel = label(new Date(window.maxMs).toISOString());

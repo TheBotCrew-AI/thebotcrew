@@ -74,7 +74,7 @@ beforeEach(() => {
   vi.mocked(q.endDemoSession).mockResolvedValue(undefined);
   vi.mocked(q.setActiveRole).mockResolvedValue(undefined);
   vi.mocked(q.getConversationPersona).mockResolvedValue({
-    activeRole: null, roleStartedAt: null, demoStartedAt: null, promptVariant: null, reactivationRound: 0,
+    activeRole: null, roleStartedAt: null, demoStartedAt: null, promptVariant: null, reactivationRound: 0, leadTimezone: null,
   });
   vi.mocked(findUpcomingAppointment).mockResolvedValue(null);
   vi.mocked(agent.generate).mockResolvedValue({ text: 'te esperamos 👋' } as never);
@@ -169,7 +169,7 @@ describe('runPendingFollowUps — the send gate (a lead who replies must not be 
 
   it('a cadence nudge that finds the conversation back in a demo aborts', async () => {
     vi.mocked(q.getConversationPersona).mockResolvedValue({
-      activeRole: 'demo', roleStartedAt: null, demoStartedAt: null, promptVariant: null, reactivationRound: 0,
+      activeRole: 'demo', roleStartedAt: null, demoStartedAt: null, promptVariant: null, reactivationRound: 0, leadTimezone: null,
     });
     const res = await runPendingFollowUps(agent);
     expect(agent.generate).not.toHaveBeenCalled();
@@ -183,7 +183,7 @@ describe('runPendingFollowUps — demo reminders', () => {
     ghl.sendMessage.mock.calls.map((c) => (c[0] as { text: string }).text).join('\n');
   const inDemo = () =>
     vi.mocked(q.getConversationPersona).mockResolvedValue({
-      activeRole: 'demo', roleStartedAt: null, demoStartedAt: null, promptVariant: null, reactivationRound: 0,
+      activeRole: 'demo', roleStartedAt: null, demoStartedAt: null, promptVariant: null, reactivationRound: 0, leadTimezone: null,
     });
 
   beforeEach(() => {
@@ -256,7 +256,7 @@ describe('runPendingFollowUps — demo reminders', () => {
 
   it('the demo ended before the reminder fired → nothing is sent', async () => {
     vi.mocked(q.getConversationPersona).mockResolvedValue({
-      activeRole: 'closer', roleStartedAt: null, demoStartedAt: null, promptVariant: null, reactivationRound: 0,
+      activeRole: 'closer', roleStartedAt: null, demoStartedAt: null, promptVariant: null, reactivationRound: 0, leadTimezone: null,
     });
     const res = await runPendingFollowUps(agent);
     expect(ghl.sendMessage).not.toHaveBeenCalled();
@@ -286,14 +286,14 @@ describe('runPendingFollowUps — campaign-aware angle pools', () => {
 
   it('a variant-pinned conversation nudges from the variant pool', async () => {
     vi.mocked(q.loadTenantConfig).mockResolvedValue(variantTenant());
-    vi.mocked(q.getConversationPersona).mockResolvedValue({ activeRole: null, roleStartedAt: null, demoStartedAt: null, promptVariant: 'laser-promo', reactivationRound: 0 });
+    vi.mocked(q.getConversationPersona).mockResolvedValue({ activeRole: null, roleStartedAt: null, demoStartedAt: null, promptVariant: 'laser-promo', reactivationRound: 0, leadTimezone: null });
     await runPendingFollowUps(agent);
     expect(await candidatesArg()).toEqual(['promo laser angle']);
   });
 
   it('no pinned variant → tenant pool', async () => {
     vi.mocked(q.loadTenantConfig).mockResolvedValue(variantTenant());
-    vi.mocked(q.getConversationPersona).mockResolvedValue({ activeRole: null, roleStartedAt: null, demoStartedAt: null, promptVariant: null, reactivationRound: 0 });
+    vi.mocked(q.getConversationPersona).mockResolvedValue({ activeRole: null, roleStartedAt: null, demoStartedAt: null, promptVariant: null, reactivationRound: 0, leadTimezone: null });
     await runPendingFollowUps(agent);
     expect(await candidatesArg()).toEqual(['angle A', 'angle B']);
   });
@@ -317,7 +317,7 @@ describe('runPendingFollowUps — post-demo nudges (the roleplay must not leak)'
 
   it('a closer conversation loads history from the persona flip, not the whole roleplay', async () => {
     vi.mocked(q.getConversationPersona).mockResolvedValue({
-      activeRole: 'closer', roleStartedAt: '2026-07-30T17:55:00Z', demoStartedAt: null, promptVariant: null, reactivationRound: 0,
+      activeRole: 'closer', roleStartedAt: '2026-07-30T17:55:00Z', demoStartedAt: null, promptVariant: null, reactivationRound: 0, leadTimezone: null,
     });
     vi.mocked(q.getLatestDemoSession).mockResolvedValue({
       leadData: { businessName: 'BeautyFull' }, endReason: 'booked', endedAt: '2026-07-30T17:55:00Z', booked: true,
@@ -328,7 +328,7 @@ describe('runPendingFollowUps — post-demo nudges (the roleplay must not leak)'
 
   it('passes the demo context so the nudge never chases the simulated appointment', async () => {
     vi.mocked(q.getConversationPersona).mockResolvedValue({
-      activeRole: 'closer', roleStartedAt: '2026-07-30T17:55:00Z', demoStartedAt: null, promptVariant: null, reactivationRound: 0,
+      activeRole: 'closer', roleStartedAt: '2026-07-30T17:55:00Z', demoStartedAt: null, promptVariant: null, reactivationRound: 0, leadTimezone: null,
     });
     vi.mocked(q.getLatestDemoSession).mockResolvedValue({
       leadData: { businessName: 'BeautyFull' }, endReason: 'booked', endedAt: null, booked: true,
@@ -339,7 +339,7 @@ describe('runPendingFollowUps — post-demo nudges (the roleplay must not leak)'
 
   it('a normal (non-demo) conversation is untouched: full history, no demo context', async () => {
     vi.mocked(q.getConversationPersona).mockResolvedValue({
-      activeRole: null, roleStartedAt: null, demoStartedAt: null, promptVariant: null, reactivationRound: 0,
+      activeRole: null, roleStartedAt: null, demoStartedAt: null, promptVariant: null, reactivationRound: 0, leadTimezone: null,
     });
     await runPendingFollowUps(agent);
     expect(q.loadRecentMessages).toHaveBeenCalledWith('cv1', 20, undefined);
@@ -349,7 +349,7 @@ describe('runPendingFollowUps — post-demo nudges (the roleplay must not leak)'
 
   it('a failed demo-context read still sends the nudge', async () => {
     vi.mocked(q.getConversationPersona).mockResolvedValue({
-      activeRole: 'closer', roleStartedAt: '2026-07-30T17:55:00Z', demoStartedAt: null, promptVariant: null, reactivationRound: 0,
+      activeRole: 'closer', roleStartedAt: '2026-07-30T17:55:00Z', demoStartedAt: null, promptVariant: null, reactivationRound: 0, leadTimezone: null,
     });
     vi.mocked(q.getLatestDemoSession).mockRejectedValue(new Error('db down'));
     const res = await runPendingFollowUps(agent);
@@ -378,7 +378,7 @@ describe('runPendingFollowUps — reactivation rounds (0049)', () => {
   it("the row's stamped round wins over the conversation's moved counter", async () => {
     vi.mocked(q.loadDueFollowUps).mockResolvedValue([due({ round: 0, tier: 1 })]);
     vi.mocked(q.getConversationPersona).mockResolvedValue({
-      activeRole: null, roleStartedAt: null, demoStartedAt: null, promptVariant: null, reactivationRound: 1,
+      activeRole: null, roleStartedAt: null, demoStartedAt: null, promptVariant: null, reactivationRound: 1, leadTimezone: null,
     });
     await runPendingFollowUps(agent);
     // Round 0 = tenant cadence [60, 1440] → next rung at 1440, stamped round 0.
@@ -471,7 +471,7 @@ describe('runPendingFollowUps — reactivation rounds (0049)', () => {
     vi.mocked(q.countSentDemoReminders).mockResolvedValue(2);
     vi.mocked(q.getActiveDemoSession).mockResolvedValue({ id: 'sess1' } as never);
     vi.mocked(q.getConversationPersona).mockResolvedValue({
-      activeRole: 'demo', roleStartedAt: null, demoStartedAt: null, promptVariant: null, reactivationRound: 1,
+      activeRole: 'demo', roleStartedAt: null, demoStartedAt: null, promptVariant: null, reactivationRound: 1, leadTimezone: null,
     });
     await runPendingFollowUps(agent);
     expect(q.scheduleFollowUp).toHaveBeenCalledWith('cv1', 1, 360, 'America/Mexico_City', null, 'cadence', 1);
@@ -482,7 +482,7 @@ describe('runPendingFollowUps — reactivation rounds (0049)', () => {
     vi.mocked(q.countSentDemoReminders).mockResolvedValue(2);
     vi.mocked(q.getActiveDemoSession).mockResolvedValue({ id: 'sess1' } as never);
     vi.mocked(q.getConversationPersona).mockResolvedValue({
-      activeRole: 'demo', roleStartedAt: null, demoStartedAt: null, promptVariant: null, reactivationRound: 3,
+      activeRole: 'demo', roleStartedAt: null, demoStartedAt: null, promptVariant: null, reactivationRound: 3, leadTimezone: null,
     });
     await runPendingFollowUps(agent);
     expect(q.setActiveRole).toHaveBeenCalledWith('conv1', 'closer'); // the rescue still happens

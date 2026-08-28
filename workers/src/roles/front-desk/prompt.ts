@@ -9,6 +9,9 @@
 import { CLOSED_QUESTION_RULE } from '../../core/prompt-rules.js';
 import { HUMAN_REPLY_PREFIX } from '../../core/model-messages.js';
 import type { DemoHandoff } from '../../core/types.js';
+import { frameTimeZone, zoneLabel, zoneSuffix } from '../../core/lead-timezone.js';
+import { zonedWallClockToMs } from './tools/booking-time.js';
+import { slotLabel } from './tools/slot-label.js';
 import { resolveEffectiveOverrides, type FrontDeskConfig } from './config.js';
 
 /**
@@ -238,6 +241,7 @@ export function buildFrontDeskInstructions(
   promptVariant?: string,
   demoHandoff?: DemoHandoff,
   hasHumanReplies?: boolean,
+  leadTimezone?: string,
 ): string {
   // Override precedence: demo persona > pinned campaign variant (merged over base) > base.
   const { overrides, usingDemo } = resolveEffectiveOverrides(config, activeRole, promptVariant);
@@ -476,9 +480,14 @@ Nunca prometas que sabrá algo que el negocio no le vaya a dar: se entrena con l
   // sales. Package customers live here for months; re-qualifying them reads as spam.
   // Rendered even without booking tools: staff books those tenants' appointments in GHL,
   // and their contacts still write in with questions.
+  // The clock the lead reads (core/lead-timezone.ts). Only differs from the tenant's for a
+  // remote-service tenant that opted in AND a lead we located; pinned to the tenant's in
+  // demo (a roleplayed walk-in clinic). The tools resolve the same zone through agent-context.
+  const frameTz = usingDemo ? config.timezone : frameTimeZone(config, { leadTimezone });
+
   let existingAppointmentSection = '';
   if (activeAppointment) {
-    const apptLabel = formatApptLabel(activeAppointment.startTime, config.timezone);
+    const apptLabel = slotLabel(activeAppointment.startTime, frameTz, config.timezone);
     const svc = activeAppointment.service?.trim();
     const helpModeIntro = `\n\n# Este contacto YA tiene una cita agendada — modo asistencia (regla estricta)
 El contacto ya tiene una cita activa${svc ? ` de "${svc}"` : ''}: ${apptLabel}.
@@ -516,13 +525,34 @@ Los mensajes del historial que empiezan con "${HUMAN_REPLY_PREFIX}" NO los escri
 - Si el lead pregunta algo nuevo, contéstalo con normalidad. No te disculpes por la intervención ni la expliques.`
       : '';
 
+  // Remote-service tenants only (lead_timezone_enabled): the lead may read a different clock
+  // than the calendar. Three states — located in another zone, located in the same zone, not
+  // located at all — and in none of them does the model convert an hour itself: the tools
+  // already render labels in the lead's clock with a "hora de …" suffix when it differs.
+  let leadTimezoneSection = '';
+  if (config.leadTimezoneEnabled && bookingEnabled && !usingDemo) {
+    const located = !!leadTimezone && frameTz === leadTimezone;
+    const differs = located && zoneSuffix(frameTz, config.timezone, new Date(nowIso)) !== '';
+    const leadNow = located ? nowInZone(nowIso, config.timezone, frameTz) : '';
+    leadTimezoneSection = located
+      ? `\n\n# Zona horaria del lead
+${differs
+  ? `Este lead está en otra zona horaria: hora de ${zoneLabel(frameTz)}${leadNow ? ` (para él ahora son las ${leadNow})` : ''}. Los horarios que te devuelven getAvailability, bookAppointment, lookupAppointment y rescheduleAppointment YA vienen convertidos a SU hora y traen el sufijo "hora de ${zoneLabel(frameTz)}": preséntalos tal cual, CON el sufijo, siempre.`
+  : `Este lead está en la misma zona horaria que el negocio (hora de ${zoneLabel(frameTz)}). Los horarios de las herramientas ya vienen en esa hora; preséntalos tal cual.`}
+- NUNCA conviertas, sumes ni restes horas tú, ni menciones la hora del negocio: la conversión ya está hecha.
+- Si el lead dice o da a entender que está en OTRA ciudad o estado, llama setLeadTimezone con el lugar tal como lo dijo, y vuelve a consultar getAvailability antes de ofrecer horarios.`
+      : `\n\n# Zona horaria del lead
+No sabemos en qué zona horaria está este lead, y los horarios se le muestran en SU hora. ANTES de consultar u ofrecer horarios pregúntale, con naturalidad, en qué ciudad está, y llama setLeadTimezone con lo que responda. Mientras no lo sepas, no ofrezcas horas.
+- NUNCA conviertas horas tú: las herramientas ya devuelven los labels en la hora del lead una vez registrada su ciudad.`;
+  }
+
   return `${identityLine}
 
 # Fecha y hora actuales
 Hoy es ${nowReadable} (zona horaria: ${config.timezone}).
 Formato ISO para herramientas: ${nowIso}.
 NUNCA calcules tú el día de la semana de una fecha — usa el día que ya viene en los
-horarios de getAvailability (campo "label") o la fecha de hoy de arriba.${horizonLine}
+horarios de getAvailability (campo "label") o la fecha de hoy de arriba.${horizonLine}${leadTimezoneSection}
 
 # Tono y formato
 ${toneBody}
@@ -675,19 +705,18 @@ export function buildDemoEndAnnouncement(handoff: DemoHandoff): string {
   );
 }
 
-/** Human, tenant-tz label for an appointment's ISO start (weekday + date + time, es-MX). */
-function formatApptLabel(iso: string, timeZone: string): string {
+/**
+ * The current time as the LEAD reads it: `nowIso` is tenant-local wall-clock (agent.ts
+ * builds it that way), so it is re-anchored as an instant in the tenant zone and then
+ * formatted in the lead's. '' when either step fails — the section just omits it.
+ */
+function nowInZone(nowIso: string, tenantTz: string, leadTz: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(nowIso);
+  if (!m) return '';
   try {
-    return new Intl.DateTimeFormat('es-MX', {
-      timeZone,
-      weekday: 'long',
-      day: 'numeric',
-      month: 'long',
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true,
-    }).format(new Date(iso));
+    const ms = zonedWallClockToMs(+m[1]!, +m[2]!, +m[3]!, +m[4]!, +m[5]!, tenantTz);
+    return new Intl.DateTimeFormat('es-MX', { timeZone: leadTz, hour: 'numeric', minute: '2-digit', hour12: true }).format(new Date(ms));
   } catch {
-    return iso;
+    return '';
   }
 }

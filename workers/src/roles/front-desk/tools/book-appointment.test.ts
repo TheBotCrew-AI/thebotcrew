@@ -38,6 +38,16 @@ const run = (input: { serviceName: string; startTime: string; whatsappPhone?: st
 
 const START = '2026-07-10T17:00:00.000Z';
 
+/** Same tenant, opted into lead-zone rendering, with the lead located in Cancún (-05:00). */
+function leadCtx(leadTimezone?: string) {
+  const t = { ...tenant, config: { ...(tenant.config as object), leadTimezoneEnabled: true } } as unknown as TenantContext;
+  const tn = { ...turn, leadTimezone } as TurnContext;
+  return { requestContext: { get: (k: string) => (k === 'tenant' ? t : k === 'turn' ? tn : undefined) } };
+}
+type LeadCtx = ReturnType<typeof leadCtx>;
+const runWith = (input: { serviceName: string; startTime: string }, c: LeadCtx) =>
+  (bookAppointmentTool.execute as (i: typeof input, c: LeadCtx) => Promise<{ booked: boolean; ghlAppointmentId?: string; message: string }>)(input, c);
+
 beforeEach(() => {
   vi.clearAllMocks();
   ghl.getContactPhone.mockResolvedValue(undefined);
@@ -52,6 +62,33 @@ beforeEach(() => {
 });
 
 describe('bookAppointment', () => {
+  // 0057: the lead picked the hour off a label rendered in THEIR clock, so an offset-less
+  // startTime is read back in that same clock. 17:00Z is 12:00 p.m. in Cancún (-05:00) and
+  // 11:00 a.m. in Mexico City (-06:00): typing the Cancún wall-clock must book, typing the
+  // tenant's must not — the frame is the lead's now, and one of the two is a wrong hour.
+  describe('lead timezone (0057)', () => {
+    it('matches an offset-less wall-clock in the lead zone and confirms with a labelled time', async () => {
+      const res = await runWith({ serviceName: 'Consulta', startTime: '2026-07-10T12:00:00' }, leadCtx('America/Cancun'));
+      expect(res.booked).toBe(true);
+      expect(ghl.bookAppointment).toHaveBeenCalledWith(expect.objectContaining({ startTime: START }));
+      expect(res.message).toMatch(/12:00 p\.?\s?m\./);
+      expect(res.message).toContain('hora de Cancún');
+      expect(res.message).not.toContain(START);
+    });
+
+    it('refuses the tenant wall-clock for a lead reading another zone', async () => {
+      const res = await runWith({ serviceName: 'Consulta', startTime: '2026-07-10T11:00:00' }, leadCtx('America/Cancun'));
+      expect(res.booked).toBe(false);
+      expect(ghl.bookAppointment).not.toHaveBeenCalled();
+    });
+
+    it('keeps the tenant clock while the lead is not located', async () => {
+      const res = await runWith({ serviceName: 'Consulta', startTime: '2026-07-10T11:00:00' }, leadCtx(undefined));
+      expect(res.booked).toBe(true);
+      expect(res.message).not.toContain('hora de');
+    });
+  });
+
   it('unknown service (no calendar) → not booked, GHL never called', async () => {
     const res = await run({ serviceName: 'NoExiste', startTime: START });
     expect(res.booked).toBe(false);

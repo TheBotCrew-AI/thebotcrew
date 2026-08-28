@@ -8,7 +8,7 @@ vi.mock('../../../db/queries.js');
 import * as q from '../../../db/queries.js';
 import { getAvailabilityTool } from './get-availability.js';
 
-function makeCtx(bookingHorizonDays: number | null = null) {
+function makeCtx(bookingHorizonDays: number | null = null, lead: { enabled?: boolean; leadTimezone?: string; activeRole?: string } = {}) {
   const tenant = {
     tenantId: 't1',
     clientId: 'client1',
@@ -23,9 +23,10 @@ function makeCtx(bookingHorizonDays: number | null = null) {
       faq: [],
       promptOverrides: {},
       bookingHorizonDays,
+      leadTimezoneEnabled: lead.enabled ?? false,
     },
   } as unknown as TenantContext;
-  const turn = { ghlContactId: 'c1', ghlConversationId: 'conv1', channel: 'whatsapp' } as TurnContext;
+  const turn = { ghlContactId: 'c1', ghlConversationId: 'conv1', channel: 'whatsapp', leadTimezone: lead.leadTimezone, activeRole: lead.activeRole } as TurnContext;
   return { requestContext: { get: (k: string) => (k === 'tenant' ? tenant : k === 'turn' ? turn : undefined) } };
 }
 
@@ -57,6 +58,40 @@ describe('getAvailability', () => {
     expect(res.slots[0]).toHaveProperty('label');
     expect(typeof res.slots[0]!.label).toBe('string');
     expect(res.note).toContain('EXACTAMENTE el texto del campo "label"');
+  });
+
+  // 0057: a remote-service tenant renders slots in the LEAD's clock, labelled. The
+  // instant is 18:00Z → 12:00 p.m. in Mexico City (-06:00), 11:00 a.m. in Tijuana (-07:00
+  // in summer) and 1:00 p.m. in Cancún (-05:00). Only the label changes; `start` stays the
+  // exact GHL string bookAppointment needs.
+  describe('lead timezone (0057)', () => {
+    const START = '2026-09-03T18:00:00.000Z';
+    beforeEach(() => ghl.getAvailability.mockResolvedValue([{ start: START, end: START }]));
+
+    it('labels in the lead zone with a "hora de …" suffix when it differs from the calendar', async () => {
+      const res = await run({ serviceName: 'Consulta' }, makeCtx(null, { enabled: true, leadTimezone: 'America/Cancun' }));
+      expect(res.slots[0]!.label).toMatch(/1:00 p\.?\s?m\./);
+      expect(res.slots[0]!.label).toContain('hora de Cancún');
+      expect(res.slots[0]!.start).toBe(START);
+    });
+
+    it('drops the suffix when the lead reads the same clock as the calendar', async () => {
+      const res = await run({ serviceName: 'Consulta' }, makeCtx(null, { enabled: true, leadTimezone: 'America/Mexico_City' }));
+      expect(res.slots[0]!.label).toMatch(/12:00 p\.?\s?m\./);
+      expect(res.slots[0]!.label).not.toContain('hora de');
+    });
+
+    it('ignores the lead zone for a tenant that did not opt in (walk-in business)', async () => {
+      const res = await run({ serviceName: 'Consulta' }, makeCtx(null, { enabled: false, leadTimezone: 'America/Cancun' }));
+      expect(res.slots[0]!.label).toMatch(/12:00 p\.?\s?m\./);
+      expect(res.slots[0]!.label).not.toContain('hora de');
+    });
+
+    it('falls back to the calendar clock while the lead is not located', async () => {
+      const res = await run({ serviceName: 'Consulta' }, makeCtx(null, { enabled: true }));
+      expect(res.slots[0]!.label).toMatch(/12:00 p\.?\s?m\./);
+      expect(res.slots[0]!.label).not.toContain('hora de');
+    });
   });
 
   it('no slots in range → "sin disponibilidad" note', async () => {

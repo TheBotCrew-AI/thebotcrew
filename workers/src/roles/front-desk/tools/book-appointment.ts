@@ -11,6 +11,7 @@ import { queueCapiEvent } from '../../../meta/capi.js';
 import { resolveAgentContext } from './agent-context.js';
 import { bookingQueryWindow, resolveBookableSlot } from './booking-time.js';
 import { simSlotLabel, simulatedSlots } from './demo-sim.js';
+import { slotLabel } from './slot-label.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -38,7 +39,7 @@ export const bookAppointmentTool = createTool({
     message: z.string(),
   }),
   execute: async ({ serviceName, startTime, whatsappPhone }, ctx) => {
-    const { config, tenant, turn } = resolveAgentContext(ctx);
+    const { config, tenant, turn, frameTz } = resolveAgentContext(ctx);
 
     // Demo mode: SIMULATED booking — same anti-hallucination guard as the real path
     // (only the exact slot string the sim returned can be "booked"), but no GHL call,
@@ -88,7 +89,9 @@ export const bookAppointmentTool = createTool({
         new Date(fromMs).toISOString(),
         new Date(toMs).toISOString(),
       );
-      const resolved = resolveBookableSlot(slots, startTime, config.timezone);
+      // Wall-clock matching happens in frameTz: the lead picked the hour off a label
+      // rendered in THAT clock, so a dropped offset must be read back in the same one.
+      const resolved = resolveBookableSlot(slots, startTime, frameTz);
       if (!resolved) {
         await logBotEvent(tenant.clientId, turn.ghlConversationId, 'booking_failed', {
           serviceName,
@@ -222,7 +225,9 @@ export const bookAppointmentTool = createTool({
     return {
       booked: true,
       ghlAppointmentId,
-      message: `Cita agendada: ${serviceName} el ${canonicalStart}.`,
+      // A label, not the ISO string: the model would otherwise re-render (and, for a lead
+      // in another zone, re-convert) the instant itself — the one thing it must never do.
+      message: `Cita agendada: ${serviceName} el ${slotLabel(canonicalStart, frameTz, config.timezone)}. Confírmasela al lead usando EXACTAMENTE ese texto.`,
     };
   },
 });

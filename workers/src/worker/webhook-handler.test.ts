@@ -78,7 +78,7 @@ beforeEach(() => {
   vi.mocked(q.findUnansweredInbound).mockResolvedValue(null);
   // Explicit default: clearAllMocks() does NOT drop implementations, so a test that
   // sets a demo persona would otherwise leak it into every later test.
-  vi.mocked(q.getConversationPersona).mockResolvedValue({ activeRole: null, roleStartedAt: null, demoStartedAt: null, promptVariant: null, reactivationRound: 0 });
+  vi.mocked(q.getConversationPersona).mockResolvedValue({ activeRole: null, roleStartedAt: null, demoStartedAt: null, promptVariant: null, reactivationRound: 0, leadTimezone: null });
   vi.mocked(q.setConversationContactKeys).mockResolvedValue(undefined);
   vi.mocked(q.getConversationContactKeys).mockResolvedValue({ phone: null, email: null });
   vi.mocked(q.setConversationAttribution).mockResolvedValue(undefined);
@@ -371,6 +371,61 @@ describe('handleInboundWebhook — Meta CAPI status hook (0048)', () => {
   });
 });
 
+describe('handleInboundWebhook — lead timezone (0057)', () => {
+  const turnFrom = (agent: Agent) => {
+    const call = vi.mocked(agent.generate).mock.calls[0] as unknown as [unknown, { requestContext: { get(k: string): unknown } }];
+    return call[1].requestContext.get('turn') as { leadTimezone?: string };
+  };
+  const remoteTenant = () =>
+    tenant({ config: { ...tenant().config, leadTimezoneEnabled: true } as TenantContext['config'] });
+  // A Mexico City mobile in the shape GHL stores it (legacy `1` after the country code).
+  const cdmxInbound = { ...inbound, phone: '+5215512345678' };
+
+  beforeEach(() => {
+    vi.mocked(q.setLeadTimezone).mockResolvedValue(true);
+  });
+
+  it('guesses the zone from the area code, persists it as a phone guess, and threads it into the turn', async () => {
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(remoteTenant());
+    const agent = agentReplying();
+    await handleInboundWebhook(cdmxInbound, agent);
+    expect(q.setLeadTimezone).toHaveBeenCalledWith('conv1', 'America/Mexico_City', 'phone');
+    expect(turnFrom(agent).leadTimezone).toBe('America/Mexico_City');
+  });
+
+  it('does not re-guess once the conversation already has a zone', async () => {
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(remoteTenant());
+    vi.mocked(q.getConversationPersona).mockResolvedValue({ activeRole: null, roleStartedAt: null, demoStartedAt: null, promptVariant: null, reactivationRound: 0, leadTimezone: 'America/Cancun' });
+    const agent = agentReplying();
+    await handleInboundWebhook(cdmxInbound, agent);
+    expect(q.setLeadTimezone).not.toHaveBeenCalled();
+    expect(turnFrom(agent).leadTimezone).toBe('America/Cancun');
+  });
+
+  it('does nothing for a tenant that did not opt in', async () => {
+    const agent = agentReplying();
+    await handleInboundWebhook(cdmxInbound, agent);
+    expect(q.setLeadTimezone).not.toHaveBeenCalled();
+    expect(turnFrom(agent).leadTimezone).toBeUndefined();
+  });
+
+  it('leaves the zone unknown for a number it cannot place (the prompt then asks)', async () => {
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(remoteTenant());
+    const agent = agentReplying();
+    await handleInboundWebhook({ ...inbound, phone: '+59173123456' }, agent);
+    expect(q.setLeadTimezone).not.toHaveBeenCalled();
+    expect(turnFrom(agent).leadTimezone).toBeUndefined();
+  });
+
+  it('a failed persist still leaves the guess on the turn', async () => {
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(remoteTenant());
+    vi.mocked(q.setLeadTimezone).mockRejectedValue(new Error('db down'));
+    const agent = agentReplying();
+    await handleInboundWebhook(cdmxInbound, agent);
+    expect(turnFrom(agent).leadTimezone).toBe('America/Mexico_City');
+  });
+});
+
 describe('handleInboundWebhook — active appointment guard', () => {
   const turnFrom = (agent: Agent) => {
     const call = vi.mocked(agent.generate).mock.calls[0] as unknown as [
@@ -395,7 +450,7 @@ describe('handleInboundWebhook — active appointment guard', () => {
   });
 
   it('skips the appointment lookup in demo mode (clean-start)', async () => {
-    vi.mocked(q.getConversationPersona).mockResolvedValue({ activeRole: 'demo', roleStartedAt: null, demoStartedAt: null, promptVariant: null, reactivationRound: 0 });
+    vi.mocked(q.getConversationPersona).mockResolvedValue({ activeRole: 'demo', roleStartedAt: null, demoStartedAt: null, promptVariant: null, reactivationRound: 0, leadTimezone: null });
     vi.mocked(findUpcomingAppointment).mockResolvedValue({ startTime: '2026-07-04T14:30:00-07:00', service: 'Corte' });
     const agent = agentReplying();
     await handleInboundWebhook(inbound, agent);
@@ -795,7 +850,7 @@ describe('handleInboundWebhook — campaign prompt variants', () => {
   });
 
   it("threads the conversation's pinned variant into the turn context", async () => {
-    vi.mocked(q.getConversationPersona).mockResolvedValue({ activeRole: null, roleStartedAt: null, demoStartedAt: null, promptVariant: 'laser-promo', reactivationRound: 0 });
+    vi.mocked(q.getConversationPersona).mockResolvedValue({ activeRole: null, roleStartedAt: null, demoStartedAt: null, promptVariant: 'laser-promo', reactivationRound: 0, leadTimezone: null });
     const agent = agentReplying();
     await handleInboundWebhook(inbound, agent);
     const call = vi.mocked(agent.generate).mock.calls[0] as unknown as [unknown, { requestContext: { get(k: string): unknown } }];
@@ -805,7 +860,7 @@ describe('handleInboundWebhook — campaign prompt variants', () => {
 });
 
 describe('handleInboundWebhook — demo-mode guards (roleplay must not touch real state)', () => {
-  const demoPersona = { activeRole: 'demo', roleStartedAt: null, demoStartedAt: '2026-07-29T10:00:00Z', promptVariant: null, reactivationRound: 0 };
+  const demoPersona = { activeRole: 'demo', roleStartedAt: null, demoStartedAt: '2026-07-29T10:00:00Z', promptVariant: null, reactivationRound: 0, leadTimezone: null };
   /** A running session: far-future expiry and a budget the default message count can't reach. */
   const liveSession = {
     id: 'sess-1',
@@ -871,7 +926,7 @@ describe('handleInboundWebhook — demo-mode guards (roleplay must not touch rea
       tenant({ config: { ...tenant().config, followUpCadence: [30, 180] } }),
     );
     vi.mocked(q.getConversationPersona).mockResolvedValue({
-      activeRole: null, roleStartedAt: null, demoStartedAt: null, promptVariant: null, reactivationRound: 1,
+      activeRole: null, roleStartedAt: null, demoStartedAt: null, promptVariant: null, reactivationRound: 1, leadTimezone: null,
     });
     await handleInboundWebhook(inbound, agentReplying());
     expect(q.scheduleFollowUp).toHaveBeenCalledWith('cv-uuid', 1, 360, 'America/Mexico_City', undefined, 'cadence', 1);
@@ -882,7 +937,7 @@ describe('handleInboundWebhook — demo-mode guards (roleplay must not touch rea
       tenant({ config: { ...tenant().config, followUpCadence: [30, 180], followUpRounds: [[15]] } }),
     );
     vi.mocked(q.getConversationPersona).mockResolvedValue({
-      activeRole: null, roleStartedAt: null, demoStartedAt: null, promptVariant: null, reactivationRound: 1,
+      activeRole: null, roleStartedAt: null, demoStartedAt: null, promptVariant: null, reactivationRound: 1, leadTimezone: null,
     });
     await handleInboundWebhook(inbound, agentReplying());
     expect(q.scheduleFollowUp).toHaveBeenCalledWith('cv-uuid', 1, 15, 'America/Mexico_City', undefined, 'cadence', 1);
@@ -893,7 +948,7 @@ describe('handleInboundWebhook — demo-mode guards (roleplay must not touch rea
       tenant({ config: { ...tenant().config, followUpCadence: [30, 180] } }),
     );
     vi.mocked(q.getConversationPersona).mockResolvedValue({
-      activeRole: null, roleStartedAt: null, demoStartedAt: null, promptVariant: null, reactivationRound: 3,
+      activeRole: null, roleStartedAt: null, demoStartedAt: null, promptVariant: null, reactivationRound: 3, leadTimezone: null,
     });
     await handleInboundWebhook(inbound, agentReplying());
     expect(ghl.sendMessage).toHaveBeenCalled();
@@ -905,7 +960,7 @@ describe('handleInboundWebhook — demo-mode guards (roleplay must not touch rea
       tenant({ config: { ...tenant().config, followUpCadence: [30, 180], followUpRounds: [] } }),
     );
     vi.mocked(q.getConversationPersona).mockResolvedValue({
-      activeRole: null, roleStartedAt: null, demoStartedAt: null, promptVariant: null, reactivationRound: 1,
+      activeRole: null, roleStartedAt: null, demoStartedAt: null, promptVariant: null, reactivationRound: 1, leadTimezone: null,
     });
     await handleInboundWebhook(inbound, agentReplying());
     expect(q.scheduleFollowUp).not.toHaveBeenCalled();
@@ -1015,7 +1070,7 @@ describe('handleInboundWebhook — demo-mode guards (roleplay must not touch rea
 });
 
 describe('handleInboundWebhook — demo sessions (budget, expiry, closer flip)', () => {
-  const demoPersona = { activeRole: 'demo', roleStartedAt: '2026-07-29T10:00:00Z', demoStartedAt: '2026-07-29T10:00:00Z', promptVariant: null, reactivationRound: 0 };
+  const demoPersona = { activeRole: 'demo', roleStartedAt: '2026-07-29T10:00:00Z', demoStartedAt: '2026-07-29T10:00:00Z', promptVariant: null, reactivationRound: 0, leadTimezone: null };
   const session = (over: Record<string, unknown> = {}) => ({
     id: 'sess-1',
     activatedAt: '2026-07-29T10:00:00Z',
@@ -1050,7 +1105,7 @@ describe('handleInboundWebhook — demo sessions (budget, expiry, closer flip)',
   it('budget exhausted → session ended, closer answers with the handoff context', async () => {
     vi.mocked(q.getConversationPersona)
       .mockResolvedValueOnce(demoPersona) // turn-time read: still demo
-      .mockResolvedValue({ activeRole: null, roleStartedAt: '2026-07-29T12:00:00Z', demoStartedAt: null, promptVariant: null, reactivationRound: 0 }); // re-read after flip
+      .mockResolvedValue({ activeRole: null, roleStartedAt: '2026-07-29T12:00:00Z', demoStartedAt: null, promptVariant: null, reactivationRound: 0, leadTimezone: null }); // re-read after flip
     vi.mocked(q.getActiveDemoSession).mockResolvedValue(session() as never);
     vi.mocked(q.countBotMessagesSince).mockResolvedValue(15);
     const agent = agentReplying();
@@ -1072,7 +1127,7 @@ describe('handleInboundWebhook — demo sessions (budget, expiry, closer flip)',
   it('expired session → same flip with reason expired', async () => {
     vi.mocked(q.getConversationPersona)
       .mockResolvedValueOnce(demoPersona)
-      .mockResolvedValue({ activeRole: null, roleStartedAt: '2026-07-29T12:00:00Z', demoStartedAt: null, promptVariant: null, reactivationRound: 0 });
+      .mockResolvedValue({ activeRole: null, roleStartedAt: '2026-07-29T12:00:00Z', demoStartedAt: null, promptVariant: null, reactivationRound: 0, leadTimezone: null });
     vi.mocked(q.getActiveDemoSession).mockResolvedValue(session({ expiresAt: '2020-01-01T00:00:00Z' }) as never);
     vi.mocked(q.countBotMessagesSince).mockResolvedValue(2);
     const agent = agentReplying();
@@ -1104,7 +1159,7 @@ describe('handleInboundWebhook — demo sessions (budget, expiry, closer flip)',
 });
 
 describe('handleInboundWebhook — demo funnel tags + off-keyword session close', () => {
-  const demoPersona = { activeRole: 'demo', roleStartedAt: '2026-07-29T10:00:00Z', demoStartedAt: '2026-07-29T10:00:00Z', promptVariant: null, reactivationRound: 0 };
+  const demoPersona = { activeRole: 'demo', roleStartedAt: '2026-07-29T10:00:00Z', demoStartedAt: '2026-07-29T10:00:00Z', promptVariant: null, reactivationRound: 0, leadTimezone: null };
   const demoTenant = () => tenant({ demoOffKeywords: ['demo off'] });
   const activeSession = {
     id: 'sess-1', activatedAt: '2026-07-29T10:00:00Z', expiresAt: '2099-01-01T00:00:00Z',
@@ -1114,7 +1169,7 @@ describe('handleInboundWebhook — demo funnel tags + off-keyword session close'
   it('budget exhausted → contact tagged demo-completada (a completed demo is a hot lead)', async () => {
     vi.mocked(q.getConversationPersona)
       .mockResolvedValueOnce(demoPersona)
-      .mockResolvedValue({ activeRole: null, roleStartedAt: '2026-07-29T12:00:00Z', demoStartedAt: null, promptVariant: null, reactivationRound: 0 });
+      .mockResolvedValue({ activeRole: null, roleStartedAt: '2026-07-29T12:00:00Z', demoStartedAt: null, promptVariant: null, reactivationRound: 0, leadTimezone: null });
     vi.mocked(q.getActiveDemoSession).mockResolvedValue(activeSession as never);
     vi.mocked(q.countBotMessagesSince).mockResolvedValue(15);
     await handleInboundWebhook(inbound, agentReplying());
@@ -1124,7 +1179,7 @@ describe('handleInboundWebhook — demo funnel tags + off-keyword session close'
   it('expired session → tagged demo-incompleta (retargeting pool)', async () => {
     vi.mocked(q.getConversationPersona)
       .mockResolvedValueOnce(demoPersona)
-      .mockResolvedValue({ activeRole: null, roleStartedAt: '2026-07-29T12:00:00Z', demoStartedAt: null, promptVariant: null, reactivationRound: 0 });
+      .mockResolvedValue({ activeRole: null, roleStartedAt: '2026-07-29T12:00:00Z', demoStartedAt: null, promptVariant: null, reactivationRound: 0, leadTimezone: null });
     vi.mocked(q.getActiveDemoSession).mockResolvedValue({ ...activeSession, expiresAt: '2020-01-01T00:00:00Z' } as never);
     vi.mocked(q.countBotMessagesSince).mockResolvedValue(2);
     await handleInboundWebhook(inbound, agentReplying());
@@ -1153,7 +1208,7 @@ describe('handleInboundWebhook — demo funnel tags + off-keyword session close'
   it('a tag failure never blocks the closer turn', async () => {
     vi.mocked(q.getConversationPersona)
       .mockResolvedValueOnce(demoPersona)
-      .mockResolvedValue({ activeRole: null, roleStartedAt: '2026-07-29T12:00:00Z', demoStartedAt: null, promptVariant: null, reactivationRound: 0 });
+      .mockResolvedValue({ activeRole: null, roleStartedAt: '2026-07-29T12:00:00Z', demoStartedAt: null, promptVariant: null, reactivationRound: 0, leadTimezone: null });
     vi.mocked(q.getActiveDemoSession).mockResolvedValue(activeSession as never);
     vi.mocked(q.countBotMessagesSince).mockResolvedValue(15);
     ghl.addContactTags.mockRejectedValue(new Error('ghl 500'));
@@ -1163,7 +1218,7 @@ describe('handleInboundWebhook — demo funnel tags + off-keyword session close'
 });
 
 describe('handleInboundWebhook — demo self-block guard + closer context hygiene', () => {
-  const demoPersona = { activeRole: 'demo', roleStartedAt: '2026-07-30T14:00:00Z', demoStartedAt: '2026-07-30T14:00:00Z', promptVariant: null, reactivationRound: 0 };
+  const demoPersona = { activeRole: 'demo', roleStartedAt: '2026-07-30T14:00:00Z', demoStartedAt: '2026-07-30T14:00:00Z', promptVariant: null, reactivationRound: 0, leadTimezone: null };
   const session = (over: Record<string, unknown> = {}) => ({
     id: 'sess-1', activatedAt: '2026-07-30T14:00:00Z', expiresAt: '2099-01-01T00:00:00Z',
     messageBudget: 15, personaVersion: 3, leadData: { businessName: 'Beautiful Desire' },
@@ -1216,7 +1271,7 @@ describe('handleInboundWebhook — demo self-block guard + closer context hygien
     // preparada?") and the model answered it, so the demo just... stopped being a demo.
     vi.mocked(q.getConversationPersona)
       .mockResolvedValueOnce(demoPersona)
-      .mockResolvedValue({ activeRole: 'closer', roleStartedAt: '2026-07-30T14:29:29Z', demoStartedAt: null, promptVariant: null, reactivationRound: 0 });
+      .mockResolvedValue({ activeRole: 'closer', roleStartedAt: '2026-07-30T14:29:29Z', demoStartedAt: null, promptVariant: null, reactivationRound: 0, leadTimezone: null });
     vi.mocked(q.getActiveDemoSession).mockResolvedValue(session() as never);
     vi.mocked(q.firstInboundAfter).mockResolvedValue('2026-07-30T14:01:00Z');
     vi.mocked(q.countBotMessagesSince).mockResolvedValue(15);
@@ -1232,7 +1287,7 @@ describe('handleInboundWebhook — demo self-block guard + closer context hygien
   it('the handover still respects a human takeover mid-turn', async () => {
     vi.mocked(q.getConversationPersona)
       .mockResolvedValueOnce(demoPersona)
-      .mockResolvedValue({ activeRole: 'closer', roleStartedAt: '2026-07-29T12:00:00Z', demoStartedAt: null, promptVariant: null, reactivationRound: 0 });
+      .mockResolvedValue({ activeRole: 'closer', roleStartedAt: '2026-07-29T12:00:00Z', demoStartedAt: null, promptVariant: null, reactivationRound: 0, leadTimezone: null });
     vi.mocked(q.getActiveDemoSession).mockResolvedValue(session() as never);
     vi.mocked(q.countBotMessagesSince).mockResolvedValue(15);
     vi.mocked(q.isHumanActive).mockResolvedValue(true);
@@ -1242,7 +1297,7 @@ describe('handleInboundWebhook — demo self-block guard + closer context hygien
 });
 
 describe('handleInboundWebhook — the closer persists after the demo (active_role=closer)', () => {
-  const closerPersona = { activeRole: 'closer', roleStartedAt: '2026-07-30T15:58:39Z', demoStartedAt: null, promptVariant: null, reactivationRound: 0 };
+  const closerPersona = { activeRole: 'closer', roleStartedAt: '2026-07-30T15:58:39Z', demoStartedAt: null, promptVariant: null, reactivationRound: 0, leadTimezone: null };
   const lastSession = {
     leadData: { businessName: 'BeautyFull', businessType: 'Med spa', leadName: 'Leo', services: ['HydraFacial'] },
     endReason: 'exhausted',
@@ -1310,7 +1365,7 @@ describe('handleInboundWebhook — the demo START announcement is deterministic'
   // The normal persona is speaking and startDemo creates a session mid-turn. The rules of
   // the game must ride on THAT reply: ad leads arrive not knowing what a demo is, and the
   // ones who found out too late spent it interrogating a roleplayed receptionist.
-  const normalPersona = { activeRole: null, roleStartedAt: null, demoStartedAt: null, promptVariant: null, reactivationRound: 0 };
+  const normalPersona = { activeRole: null, roleStartedAt: null, demoStartedAt: null, promptVariant: null, reactivationRound: 0, leadTimezone: null };
   const created = {
     id: 'sess-new', activatedAt: '2026-07-31T16:00:00Z', expiresAt: '2099-01-01T00:00:00Z',
     messageBudget: 7, personaVersion: 3,
@@ -1391,7 +1446,7 @@ describe('handleInboundWebhook — the demo START announcement is deterministic'
 });
 
 describe('handleInboundWebhook — booking ends the demo (objective met)', () => {
-  const demoPersona = { activeRole: 'demo', roleStartedAt: '2026-07-30T16:00:00Z', demoStartedAt: '2026-07-30T16:00:00Z', promptVariant: null, reactivationRound: 0 };
+  const demoPersona = { activeRole: 'demo', roleStartedAt: '2026-07-30T16:00:00Z', demoStartedAt: '2026-07-30T16:00:00Z', promptVariant: null, reactivationRound: 0, leadTimezone: null };
   const base = {
     id: 'sess-9', activatedAt: '2026-07-30T16:00:00Z', expiresAt: '2099-01-01T00:00:00Z',
     messageBudget: 7, personaVersion: 3,

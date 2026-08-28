@@ -13,6 +13,7 @@ import { GhlClient } from '../../../ghl/client.js';
 import { getActiveDemoSession } from '../../../db/queries.js';
 import { resolveAgentContext } from './agent-context.js';
 import { resolveActiveAppointment } from './resolve-appointment.js';
+import { slotLabel } from './slot-label.js';
 
 export const lookupAppointmentTool = createTool({
   id: 'lookupAppointment',
@@ -28,7 +29,7 @@ export const lookupAppointmentTool = createTool({
     message: z.string(),
   }),
   execute: async (_input, ctx) => {
-    const { tenant, turn, config } = resolveAgentContext(ctx);
+    const { tenant, turn, config, frameTz } = resolveAgentContext(ctx);
 
     // Demo mode: answer from the session's simulated booking — never from the
     // real store/GHL (the demo must not see the lead's real appointments).
@@ -72,7 +73,7 @@ export const lookupAppointmentTool = createTool({
       return { found: false, message: 'Tienes una cita registrada, pero no pude leer la fecha/hora. Contacta al equipo para confirmarla.' };
     }
 
-    const label = formatLabel(startTime, config.timezone);
+    const label = slotLabel(startTime, frameTz, config.timezone);
     return {
       found: true,
       startTime,
@@ -82,20 +83,3 @@ export const lookupAppointmentTool = createTool({
     };
   },
 });
-
-/** Human, tenant-tz label for an ISO time (weekday + date + time in es-MX). */
-function formatLabel(iso: string, timeZone: string): string {
-  try {
-    return new Intl.DateTimeFormat('es-MX', {
-      timeZone,
-      weekday: 'long',
-      day: 'numeric',
-      month: 'long',
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true,
-    }).format(new Date(iso));
-  } catch {
-    return iso;
-  }
-}

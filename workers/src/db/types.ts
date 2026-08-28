@@ -34,6 +34,7 @@ export interface TenantConfigRow {
   booking_horizon_days: number | null;
   /** Sliding human-takeover pause in minutes. NULL = platform default (5). */
   human_pause_minutes: number | null;
+  lead_timezone_enabled: boolean | null;
   /** Channels the bot may reply on. NULL = none (installed but silent). */
   enabled_channels: string[] | null;
   /** Pre-live test allowlist: when non-empty, reply only to these GHL contact ids. */

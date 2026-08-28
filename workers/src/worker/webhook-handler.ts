@@ -20,6 +20,7 @@ import { buildAgentRequestContext } from '../core/runtime-context.js';
 import { hasHumanReplies, toModelMessages } from '../core/model-messages.js';
 import { cadenceForRound, totalRounds } from '../core/reactivation-rounds.js';
 import { auxReasoningEffort } from '../core/reasoning.js';
+import { timezoneFromPhone } from '../core/lead-timezone.js';
 import type { AiProvider, ConversationMessage, ConversationStatus, DemoHandoff, FollowUpKind, TenantContext, TurnContext } from '../core/types.js';
 import { DEMO_REMINDER_CADENCE } from '../core/types.js';
 import {
@@ -33,6 +34,7 @@ import {
   getLatestDemoSession,
   type SimulatedBooking,
   getConversationPersona,
+  setLeadTimezone,
   setActiveRole,
   getHumanActiveUntil,
   hasReplyAfter,
@@ -571,11 +573,12 @@ export async function runAgentTurn({
   let roleStartedAt: string | null = null;
   let demoStartedAt: string | null = null;
   let promptVariant: string | null = null;
+  let leadTimezone: string | null = null;
   // Fails open to round 0 with the rest of the persona: a transient read failure
   // costs at most one extra round-0 cycle, never a silenced lead.
   let reactivationRound = 0;
   try {
-    ({ activeRole, roleStartedAt, demoStartedAt, promptVariant, reactivationRound } =
+    ({ activeRole, roleStartedAt, demoStartedAt, promptVariant, reactivationRound, leadTimezone } =
       await getConversationPersona(conversationId));
   } catch (e) {
     console.error('[demo] getConversationPersona failed:', e instanceof Error ? e.message : String(e));
@@ -746,6 +749,20 @@ export async function runAgentTurn({
     }
   }
 
+  // The lead's clock (0057), for tenants that render times in it. The phone's area code
+  // is a good guess at where the lead is, so it fills the column when nothing is known
+  // yet; the RPC never lets it overwrite a zone the lead stated. Kept in memory for this
+  // turn even if the write fails — a lost row costs a re-inference, not a wrong hour.
+  if (tenant.config.leadTimezoneEnabled && !leadTimezone && contactPhone) {
+    const guess = timezoneFromPhone(contactPhone);
+    if (guess) {
+      leadTimezone = guess.timezone;
+      setLeadTimezone(parsed.conversationId, guess.timezone, guess.source).catch((e: unknown) =>
+        console.error('[lead-timezone] persist failed (non-blocking):', e instanceof Error ? e.message : String(e)),
+      );
+    }
+  }
+
   // Surface the contact's active appointment so the agent knows it already booked and never
   // re-checks availability against its own just-created appointment (the self-block class).
   // The demo needs the SAME guard against its OWN simulated booking: the sim excludes a
@@ -782,6 +799,7 @@ export async function runAgentTurn({
     channel: parsed.channel,
     activeRole: activeRole ?? undefined,
     promptVariant: promptVariant ?? undefined,
+    leadTimezone: leadTimezone ?? undefined,
     activeAppointment,
     demoHandoff,
     // Same window the model reads: a teammate's answer outside it is not "seen" either way.

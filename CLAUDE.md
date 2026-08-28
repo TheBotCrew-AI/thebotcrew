@@ -235,7 +235,14 @@ supabase/
                                #      Instagram — todas expuestas por GHL en contact.attributionSource; ctwa_clid sigue
                                #      dual-write hasta el contract. El messaging_channel viaja congelado en el payload de la
                                #      cola, sin cambio de RPC. meta_capi gana whatsapp_business_account_id /
-                               #      instagram_business_account_id (IG lo REQUIERE) — ver business-logic §6a)
+                               #      instagram_business_account_id (IG lo REQUIERE) — ver business-logic §6a),
+                               # 0057 lead_timezone (la zona horaria DEL LEAD para tenants de servicio remoto:
+                               #      conversations.lead_timezone + _source ('phone' = adivinada por LADA, sólo rellena;
+                               #      'lead' = la dijo el lead, siempre gana — la precedencia vive en el RPC
+                               #      app_set_lead_timezone), tenant_config.lead_timezone_enabled DEFAULT false — un
+                               #      negocio presencial con el flag prendido ofrece horas corridas. Los labels salen en
+                               #      la hora del lead con sufijo "hora de …" sólo cuando el offset difiere; el modelo
+                               #      nunca convierte. Ver business-logic §5d)
   clients.sql, seed-tenants.sql# seeds (run by `supabase db reset` per config.toml)
 sites/                         # client marketing sites: static HTML, no build step, no deps
   _template/                   # starting point for a new client
@@ -399,6 +406,12 @@ for the retry cron.
   the horizon is re-enforced, and the model is told to re-offer a real slot. Fixes the 2026-07-06
   demo bug where "5:15 p.m." (offset dropped) was booked as 10:15 a.m. (read as UTC).
 - Contact-merge recovery on send: GHL dedups contacts by phone/email, which can **merge away**
+  **The wall-clock frame is the LEAD's zone for tenants with `lead_timezone_enabled`** (0057,
+  `core/lead-timezone.ts` + `tools/slot-label.ts`): every label the tools hand the model is
+  rendered in the clock the lead reads, suffixed "hora de …" when it differs from the calendar's,
+  and matched back in that same frame. The zone is guessed from the phone's area code (fills
+  only) or stated by the lead (`setLeadTimezone` tool, wins). Off by default — right for a
+  video call, wrong for a walk-in clinic. See docs/business-logic.md §5d.
   the `contactId` a webhook gave us (Instant-Form lead whose number already exists as another
   contact) → send fails `CONVERSATIONS_CONTACT_NOT_FOUND`. Crucially the merge **also destroys the
   old `conversationId`** (GHL re-parents the contact to a single new unified conversation), so the

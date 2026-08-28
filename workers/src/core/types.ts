@@ -84,6 +84,9 @@ export interface RawTenantConfig {
   bookingHorizonDays?: number | null;
   /** Sliding pause (minutes) opened by a human agent's reply; null = platform default (5). */
   humanPauseMinutes?: number | null;
+  /** Render appointment times in the LEAD's timezone (0057). Off by default: right for a
+   *  remote service (a video call), wrong for a walk-in business. See core/lead-timezone.ts. */
+  leadTimezoneEnabled?: boolean;
   /** Slug of the Worker secret holding this tenant's own provider key
    *  (`'MADI'` → `OPENAI_API_KEY__MADI`). Never the key itself. null = platform key. */
   aiKeyRef?: string | null;
@@ -148,6 +151,11 @@ export interface TurnContext {
   ghlConversationId: string;
   ghlContactId: string;
   contactPhone?: string;
+  /** The lead's IANA timezone (0057) — inferred from the phone's area code or stated by the
+   *  lead. Only honoured when the tenant opted in (`leadTimezoneEnabled`); see
+   *  core/lead-timezone.ts `frameTimeZone`. Mutated in place by the setLeadTimezone tool so
+   *  a later tool call in the SAME turn already renders in the corrected zone. */
+  leadTimezone?: string;
   /** Name the contact is stored under in GHL. Fetched only during the opening turns so the
    *  agent can confirm/correct it (page-form leads often arrive named after their business). */
   contactName?: string;
