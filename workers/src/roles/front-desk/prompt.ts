@@ -211,23 +211,36 @@ function renderHours(config: FrontDeskConfig): string {
   const entries = Object.entries(config.hours);
   if (entries.length === 0) return '- (No hay horario configurado.)';
 
-  // Group days with identical schedules
+  // Group days with identical schedules, in weekday order regardless of config key order.
+  const order = Object.keys(WEEKDAY_LABEL);
+  const sorted = [...entries].sort(([a], [b]) => order.indexOf(a) - order.indexOf(b));
   const scheduleMap = new Map<string, string[]>();
-  for (const [day, ranges] of entries) {
+  for (const [day, ranges] of sorted) {
     const key = ranges.map((r) => `${r.open}–${r.close}`).join(', ');
-    const label = WEEKDAY_LABEL[day] ?? day;
     const group = scheduleMap.get(key) ?? [];
-    group.push(label);
+    group.push(day);
     scheduleMap.set(key, group);
   }
 
-  if (scheduleMap.size === 1) {
+  // "Todos los días" only when all seven are configured. A Mon–Fri tenant whose five days
+  // share one schedule used to collapse to it too, telling the model the business opens
+  // on weekends it never listed.
+  if (scheduleMap.size === 1 && sorted.length === order.length) {
     const schedule = [...scheduleMap.keys()][0] ?? '';
     return `- Todos los días: ${schedule}`;
   }
 
+  const labelDays = (days: string[]): string => {
+    const idx = days.map((d) => order.indexOf(d));
+    const contiguous = idx.every((i, n) => i >= 0 && (n === 0 || i === idx[n - 1]! + 1));
+    if (contiguous && days.length >= 3) {
+      return `${WEEKDAY_LABEL[days[0]!]} a ${WEEKDAY_LABEL[days[days.length - 1]!]}`;
+    }
+    return days.map((d) => WEEKDAY_LABEL[d] ?? d).join(', ');
+  };
+
   return [...scheduleMap.entries()]
-    .map(([schedule, days]) => `- ${days.join(', ')}: ${schedule}`)
+    .map(([schedule, days]) => `- ${labelDays(days)}: ${schedule}`)
     .join('\n');
 }
 

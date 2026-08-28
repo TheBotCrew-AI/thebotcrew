@@ -29,9 +29,24 @@ describe('buildFrontDeskInstructions', () => {
     expect(out).toContain('# Tu objetivo'); // default flow present
   });
 
-  it('collapses identical daily schedules into "Todos los días"', () => {
-    const out = buildFrontDeskInstructions(cfg({ hours: { mon: [{ open: '09:00', close: '18:00' }], tue: [{ open: '09:00', close: '18:00' }] } }), NOW);
-    expect(out).toContain('Todos los días: 09:00–18:00');
+  it('says "Todos los días" only when all seven days share one schedule', () => {
+    const day = [{ open: '09:00', close: '18:00' }];
+    const week = { mon: day, tue: day, wed: day, thu: day, fri: day, sat: day, sun: day };
+    expect(buildFrontDeskInstructions(cfg({ hours: week }), NOW)).toContain('Todos los días: 09:00–18:00');
+
+    // Two days sharing a schedule are named, never generalized to the whole week.
+    const two = buildFrontDeskInstructions(cfg({ hours: { mon: day, tue: day } }), NOW);
+    expect(two).toContain('Lunes, Martes: 09:00–18:00');
+    expect(two).not.toContain('Todos los días');
+  });
+
+  it('a Monday–Friday tenant with two daily ranges renders as a weekday span, not the whole week', () => {
+    const split = [{ open: '10:30', close: '12:30' }, { open: '15:45', close: '18:45' }];
+    // Keys deliberately out of weekday order: the span must not depend on jsonb key order.
+    const out = buildFrontDeskInstructions(cfg({ hours: { fri: split, mon: split, wed: split, tue: split, thu: split } }), NOW);
+    expect(out).toContain('Lunes a Viernes: 10:30–12:30, 15:45–18:45');
+    expect(out).not.toContain('Todos los días');
+    expect(out).not.toContain('Sábado');
   });
 
   it('booking horizon → adds the clamp line', () => {
