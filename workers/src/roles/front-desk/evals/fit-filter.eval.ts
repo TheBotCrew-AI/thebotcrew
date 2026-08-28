@@ -10,7 +10,7 @@
  *     ruling out a real lead is far more expensive than talking to a bad one, so an
  *     AMBIGUOUS signal must produce a QUESTION, never a disqualification.
  *
- *   · THE MONEY DISCLOSURE. The price has two parts — the $1,500 monthly founder fee AND
+ *   · THE MONEY DISCLOSURE. The price has two parts — the $3,000 monthly founder fee AND
  *     the ad spend on top, minimum $200 MXN a day, paid straight to Meta. The fee alone is
  *     the seductive half, and a model that omits the second one breaks nothing any metric
  *     can see: the clinic signs, discovers the ad budget later, and feels lied to.
@@ -165,7 +165,7 @@ describe.skipIf(!evalApiKey)('money — the ad spend is the half that gets swall
       { requestContext: rc() },
     );
 
-    expect(reply(res)).toMatch(/1[,.]?500/);
+    expect(reply(res)).toMatch(/3[,.]?000/);
     // The ad budget, in the same breath — by amount or by naming it as separate spend.
     expect(reply(res)).toMatch(/200|anuncios? (van?|corre|se paga|aparte)|aparte|publicidad/);
   });
@@ -188,7 +188,7 @@ describe.skipIf(!evalApiKey)('money — the ad spend is the half that gets swall
       { requestContext: rc() },
     );
 
-    expect(reply(res)).toMatch(/1[,.]?500/);
+    expect(reply(res)).toMatch(/3[,.]?000/);
     // The ad budget, in the SAME message — and "incluye el manejo de anuncios" is not it.
     expect(reply(res)).toMatch(/200|aparte|directo a meta|no incluye|va(n)? por (tu|su) cuenta/);
   });
@@ -219,7 +219,7 @@ describe.skipIf(!evalApiKey)('money — the ad spend is the half that gets swall
     );
 
     // The three that DO belong together.
-    expect(reply(res)).toMatch(/1[,.]?500/);
+    expect(reply(res)).toMatch(/3[,.]?000/);
     expect(reply(res)).toMatch(/200|aparte|directo a meta/);
     // The four that were riding along uninvited.
     expect(reply(res), `info dump: ${res.text}`).not.toMatch(/factura|transferencia|tarjeta de (crédito|debito|débito)/);
@@ -310,6 +310,6 @@ describe.skipIf(!evalApiKey)('the call with Leo — offered when it IS the answe
       { requestContext: rc() },
     );
 
-    expect(reply(res)).not.toMatch(/1[,.]?500|precio de fundador|instalación sin costo/);
+    expect(reply(res)).not.toMatch(/3[,.]?000|precio de fundador|instalación sin costo/);
   });
 });

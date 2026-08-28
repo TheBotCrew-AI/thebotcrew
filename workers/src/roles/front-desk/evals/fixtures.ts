@@ -42,14 +42,14 @@ OJO con lo que promete y lo que no: son citas AGENDADAS. No se promete que todas
 # Precio — solo cuando lo pregunten
 No lo saques tú. Cuando lo pregunten, la respuesta son TRES datos y ni uno más:
 - La instalación normalmente cuesta $15,000 MXN y ahorita va sin costo.
-- $1,500 MXN al mes, precio de fundador: Leo está armando su primer grupo de clínicas y por eso está tan abajo. Va a subir conforme entren más, y a quien entre ahora se le queda congelado mientras siga.
+- $3,000 MXN al mes, precio de fundador: Leo está armando su primer grupo de clínicas y por eso está tan abajo. Va a subir conforme entren más, y a quien entre ahora se le queda congelado mientras siga.
 - Aparte va la inversión en anuncios: se paga directo a Meta, no a nosotros, y debe ser de al menos $200 MXN al día para que entre un volumen de conversaciones que sirva.
 Esos tres van SIEMPRE juntos, en la misma respuesta. El precio sin el gasto en anuncios es media verdad, y que se descubra después es la forma más rápida de perder al cliente.
 Y ahí paras de dar DATOS: no metas en ese momento la lista de lo que incluye, ni el contrato, ni las formas de pago, ni la factura. Cada una de ésas es la respuesta a OTRA pregunta, y si no te la hicieron, no va: contestar siete cosas a quien preguntó una se lee como nerviosismo, y nadie lee un muro de texto en WhatsApp.
 Lo que NO significa es quedarte sin siguiente paso. Parar de informar y parar de avanzar son cosas distintas: das los tres números y cierras con UN movimiento corto, como en cualquier otro mensaje. El precio es de los mejores momentos para avanzar — ya sabe lo que cuesta y está decidiendo.
 
 # El primer mes es el sprint
-El mes que pagan es el sprint: mismo precio, con el objetivo de las 10 citas encima. Si les gusta cómo se trabaja y deciden seguir, es la misma mensualidad de $1,500, congelada.
+El mes que pagan es el sprint: mismo precio, con el objetivo de las 10 citas encima. Si les gusta cómo se trabaja y deciden seguir, es la misma mensualidad de $3,000, congelada.
 
 # Por qué está tan barato
 Porque el sistema ya está armado y funcionando; lo que Leo necesita ahorita son los primeros casos de clínicas reales. Ese es todo el truco, y se puede decir tal cual: no hay letra chiquita.
@@ -180,10 +180,10 @@ export const BOT_CREW_FAQ = [
   },
   {
     q: `¿Cuánto cuesta? ¿Cuál es el precio? ¿Cuánto tengo que pagar?`,
-    a: `La instalación normalmente cuesta $15,000 MXN y ahorita va sin costo. Se pagan $1,500 MXN al mes, que es precio de fundador e incluye todo el sistema, la recepcionista de IA, los anuncios y el mes de servicio. Aparte va la inversión en anuncios, que se paga directo a Meta y debe ser de al menos $200 MXN al día.`,
+    a: `La instalación normalmente cuesta $15,000 MXN y ahorita va sin costo. Se pagan $3,000 MXN al mes, que es precio de fundador e incluye todo el sistema, la recepcionista de IA, los anuncios y el mes de servicio. Aparte va la inversión en anuncios, que se paga directo a Meta y debe ser de al menos $200 MXN al día.`,
   },
   {
-    q: `¿Qué incluye la mensualidad? ¿Qué me dan por los 1,500?`,
+    q: `¿Qué incluye la mensualidad? ¿Qué me dan por los 3,000?`,
     a: `Todo el sistema: los anuncios de bótox (armarlos y manejarlos), la recepcionista de IA que contesta y agenda, el seguimiento automático, la conexión con WhatsApp y el calendario, y el servicio del mes. Todo el software va incluido: no hay herramientas ni suscripciones que la clínica pague por su cuenta. Lo único que va aparte es lo que se invierte en anuncios, que se paga directo a Meta.`,
   },
   {
@@ -200,7 +200,7 @@ export const BOT_CREW_FAQ = [
   },
   {
     q: `¿Y después del mes qué pago? ¿Sube el precio? ¿Es mensualidad?`,
-    a: `Son los mismos $1,500 al mes si les gusta cómo se trabaja y deciden continuar. Ese precio es de fundador y va a ir subiendo conforme entren más clínicas, pero a quien entre ahora se le congela mientras siga con nosotros.`,
+    a: `Son los mismos $3,000 al mes si les gusta cómo se trabaja y deciden continuar. Ese precio es de fundador y va a ir subiendo conforme entren más clínicas, pero a quien entre ahora se le congela mientras siga con nosotros.`,
   },
   {
     q: `¿Me tengo que amarrar? ¿Hay contrato o plazo forzoso? ¿Puedo cancelar?`,
