@@ -14,6 +14,7 @@
     "test:unit": "pnpm --filter @thebotcrew/workers test:unit",
     "test:db": "for f in supabase/tests/*.test.sql; do echo \"— $f\"; psql \"postgresql://postgres:postgres@127.0.0.1:54322/postgres\" -v ON_ERROR_STOP=1 -q -f \"$f\" || exit 1; done",
     "eval": "pnpm --filter @thebotcrew/workers eval",
+    "rehearse": "pnpm --filter @thebotcrew/workers rehearse",
     "webhook:simulate": "pnpm --filter @thebotcrew/workers webhook:simulate"
   }
 }

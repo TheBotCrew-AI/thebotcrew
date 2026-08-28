@@ -150,6 +150,7 @@ workers/                       # Mastra + Cloudflare Worker package (@thebotcrew
     db/                        # service-role Supabase client, queries (config read + RPC writes)
     worker/                    # webhook-handler (inbound) + conversation-do (per-conversation Durable Object: durable-alarm debounce + serialized turn) + outbound-handler (human takeover) + tag-handler (bot-off) + delivery-retry + followup-runner + capi-runner (Meta CAPI queue drain) + info-gap-runner + info-gaps/ (0054: what the bot couldn't answer — extraction queue, aggregate, report; pending_info escalation)
   scripts/simulate-webhook.mjs # local dev: fire a fake GHL webhook
+  scripts/demo-take.mjs        # arma/cierra una toma del demo de bótox para grabar video (business-logic §5b)
   fixtures/                    # sample webhook payloads
   wrangler.jsonc, vitest.config.ts, tsconfig.json
 supabase/

@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "test:unit": "vitest run --exclude '**/*.eval.ts'",
     "eval": "vitest run",
+    "rehearse": "vitest run src/roles/front-desk/evals/demo-video.eval.ts --fileParallelism=false",
     "webhook:simulate": "node scripts/simulate-webhook.mjs"
   },
   "dependencies": {
