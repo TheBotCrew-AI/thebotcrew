@@ -29,7 +29,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { createClient } from '@supabase/supabase-js';
-import { BOT_CREW_PERSONA, DEMO_BOTOX_PERSONA, MADI_HOUSE_RULES } from './fixtures.js';
+import { BOT_CREW_PERSONA, DEMO_BOTOX_PERSONA, HERIBERTO_PERSONA, MADI_HOUSE_RULES } from './fixtures.js';
 
 /**
  * Tenants whose `houseRules` an eval fixture mirrors, and must keep mirroring.
@@ -49,14 +49,21 @@ const MIRRORED_HOUSE_RULES: { label: string; tenantId: string; fixture: string }
  */
 const BOT_CREW_TENANT_ID = '04385692-5c0d-436e-af77-4b1aa3fcc223';
 
+/**
+ * A persona is addressed by `tenantId` when the fixture predates the tenant's UUID being
+ * known, or by `locationId` (the GHL id, the one onboarding actually starts from) — the
+ * check resolves the latter through `tenants` before reading the row.
+ */
 const MIRRORED_PERSONAS: {
   label: string;
-  tenantId: string;
+  tenantId?: string;
+  locationId?: string;
   column: 'prompt_overrides' | 'demo_prompt_overrides';
   fixture: Record<string, unknown>;
 }[] = [
   { label: 'The Bot Crew — base (Botox Sprint)', tenantId: BOT_CREW_TENANT_ID, column: 'prompt_overrides', fixture: BOT_CREW_PERSONA },
   { label: 'The Bot Crew — botox demo', tenantId: BOT_CREW_TENANT_ID, column: 'demo_prompt_overrides', fixture: DEMO_BOTOX_PERSONA },
+  { label: 'Dr. Heriberto Valdivia — base', locationId: 'rfL7uM3c5mpfIUGxCR3C', column: 'prompt_overrides', fixture: HERIBERTO_PERSONA },
 ];
 
 const supabaseUrl = process.env.SUPABASE_URL;
@@ -115,14 +122,26 @@ describe.skipIf(!supabaseUrl || !serviceKey)('prompt drift — live tenant vs ev
 describe.skipIf(!supabaseUrl || !serviceKey)('prompt drift — mirrored personas', () => {
   it.each(MIRRORED_PERSONAS.flatMap((p) => Object.keys(p.fixture).map((field) => ({ ...p, field }))))(
     '$label: $column.$field still matches the fixture',
-    async ({ tenantId, column, fixture, field }) => {
+    async ({ tenantId, locationId, column, fixture, field }) => {
       const supabase = createClient(supabaseUrl!, serviceKey!, {
         auth: { persistSession: false, autoRefreshToken: false },
       });
+      let resolvedTenantId = tenantId;
+      if (!resolvedTenantId) {
+        const { data: t, error: tErr } = await supabase
+          .from('tenants')
+          .select('id')
+          .eq('ghl_location_id', locationId!)
+          .single();
+        expect(tErr, `tenants read failed for location ${locationId}: ${tErr?.message}`).toBeNull();
+        resolvedTenantId = (t as { id: string } | null)?.id;
+      }
+      // No tenant row is the loudest drift of all: the fixture describes a client that isn't onboarded.
+      expect(resolvedTenantId, `no tenant for location ${locationId}`).toBeTruthy();
       const { data, error } = await supabase
         .from('tenant_config')
         .select(column)
-        .eq('tenant_id', tenantId)
+        .eq('tenant_id', resolvedTenantId!)
         .single();
 
       expect(error, `tenant_config read failed: ${error?.message}`).toBeNull();

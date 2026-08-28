@@ -1,0 +1,524 @@
+<!doctype html>
+<html lang="es-MX">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dr. Heriberto Valdivia — Medicina estética y regenerativa en Chihuahua</title>
+<meta name="description" content="Consultorio de medicina estética y regenerativa en Plaza Cumbres, Chihuahua. Botox, ácido hialurónico, bioestimuladores, láser CO₂, skinboosters y consulta de bariatría. Toda persona nueva empieza con una consulta con el Dr. Heriberto Valdivia. Citas por WhatsApp.">
+<link rel="canonical" href="https://drvaldiviamedstetic.com/">
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     Dr. Heriberto Valdivia — Medicina Estética y Regenerativa · Chihuahua
+     Identidad y notas de edición en README.md.
+
+     COPIAR DESDE AQUÍ ↓ para pegar en el bloque de Custom Code de GHL
+     ══════════════════════════════════════════════════════════════════════════ -->
+
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,400;0,6..96,500;1,6..96,400&family=Jost:wght@300;400;500;600&display=swap');
+
+/* Única regla global: scroll suave para los enlaces del menú. */
+html { scroll-behavior: smooth; }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   MARCA — el logo es un monograma «ME» en Didone, negro sobre blanco.
+   La paleta lo respeta: tinta y papel mandan; el bronce aparece poco.
+   ───────────────────────────────────────────────────────────────────────── */
+.site {
+  --base:      #F7F5F1;   /* papel */
+  --campo:     #ECE8E1;   /* secciones alternas */
+  --tarjeta:   #FFFFFF;   /* tarjetas */
+  --suave:     #E3DED5;   /* rellenos suaves, chips */
+  --acento:    #9A7B4F;   /* bronce apagado — se usa poco, a propósito */
+  --acento-osc:#7A6039;   /* bronce en texto e hover */
+  --profundo:  #111111;   /* bandas de contraste */
+  --profundo-2:#1E1E1E;   /* tarjetas sobre banda profunda */
+  --tinta:     #111111;   /* texto principal */
+  --humo:      #6B6661;   /* texto secundario */
+  --bruma:     #C9C3BA;   /* texto secundario sobre banda profunda */
+  --linea:     rgba(17,17,17,.12);
+  --linea-p:   rgba(255,255,255,.16);
+  --sombra:    0 20px 46px -30px rgba(17,17,17,.4);
+
+  --display: 'Bodoni Moda', 'Didot', 'Bodoni 72', Georgia, serif;
+  --texto:   'Jost', 'Futura', 'Helvetica Neue', Arial, sans-serif;
+
+  --ancho: 1160px;
+  --radio: 2px;   /* clínico, editorial */
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Reset local — aísla el sitio del CSS que GHL inyecta en la página.
+   NO renombres .site sin renombrar todo; el aislamiento depende del prefijo.
+   ───────────────────────────────────────────────────────────────────────── */
+.site, .site * { box-sizing: border-box; margin: 0; padding: 0; }
+.site {
+  font-family: var(--texto);
+  font-weight: 400;
+  font-size: 17px;
+  line-height: 1.68;
+  color: var(--tinta);
+  background: var(--base);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+.site img { display: block; max-width: 100%; height: auto; }
+.site a { color: inherit; text-decoration: none; }
+.site ul { list-style: none; }
+.site h1, .site h2, .site h3, .site h4 { font-weight: 400; line-height: 1.14; }
+.site :focus-visible { outline: 2px solid var(--acento); outline-offset: 3px; border-radius: 4px; }
+
+/* ── Utilidades ─────────────────────────────────────────────────────────── */
+.site-wrap { width: 100%; max-width: var(--ancho); margin: 0 auto; padding: 0 28px; }
+.site-sec { padding: 104px 0; }
+.site-sec--base { background: var(--base); }
+.site-sec--campo { background: var(--campo); }
+
+.site-eyebrow {
+  font-size: 11px; font-weight: 600; letter-spacing: .22em;
+  text-transform: uppercase; color: var(--acento);
+}
+
+.site-h2 { font-family: var(--display); font-size: clamp(1.95rem, 4.3vw, 3rem); color: var(--tinta); margin: 16px 0 0; letter-spacing: -.005em; }
+.site-lede { max-width: 54ch; margin-top: 18px; font-size: 1.04rem; font-weight: 300; color: var(--humo); }
+
+.site-precio { font-family: var(--display); font-size: 1.45rem; color: var(--tinta); white-space: nowrap; }
+.site-precio span { font-family: var(--texto); font-size: .64rem; font-weight: 500; letter-spacing: .12em; text-transform: uppercase; color: var(--humo); }
+
+/* ── Botones ────────────────────────────────────────────────────────────── */
+.site-btn {
+  display: inline-flex; align-items: center; gap: 9px;
+  padding: 15px 30px; border-radius: var(--radio); border: 1px solid transparent;
+  font-family: var(--texto); font-size: 13px; font-weight: 500;
+  letter-spacing: .12em; text-transform: uppercase; cursor: pointer;
+  transition: transform .25s ease, background-color .25s ease, color .25s ease,
+              border-color .25s ease, box-shadow .25s ease;
+}
+.site .site-btn--acento { background: var(--profundo); color: #FFF; }
+.site .site-btn--acento:hover { background: #000; transform: translateY(-2px); box-shadow: var(--sombra); }
+.site .site-btn--linea { border-color: rgba(17,17,17,.28); color: var(--tinta); }
+.site .site-btn--linea:hover { border-color: var(--tinta); transform: translateY(-2px); }
+.site .site-btn--claro { background: var(--base); color: var(--profundo); }
+.site .site-btn--claro:hover { background: #FFF; transform: translateY(-2px); }
+.site-btn svg { width: 16px; height: 16px; fill: currentColor; }
+
+/* ── Encabezado ─────────────────────────────────────────────────────────── */
+.site-head {
+  position: sticky; top: 0; z-index: 50;
+  background: rgba(255,255,255,.9);
+  -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--linea);
+}
+.site-head__in { display: flex; align-items: center; justify-content: space-between; gap: 24px; height: 88px; }
+/* El JPG del logo trae aire blanco alrededor: object-fit lo recorta al monograma + nombre y
+   mix-blend-mode funde su fondo blanco con el papel (no queda un rectángulo blanco). */
+.site-logo { display: block; width: 200px; height: 84px; overflow: hidden; flex-shrink: 0; }
+.site-logo img { display: block; width: 200px; height: 84px; max-width: none; object-fit: cover; object-position: 50% 57%; mix-blend-mode: multiply; }
+.site-nav { display: flex; gap: 34px; }
+.site-nav a { font-size: 12px; font-weight: 500; letter-spacing: .14em; text-transform: uppercase; color: var(--humo); transition: color .2s ease; }
+.site-nav a:hover { color: var(--tinta); }
+.site-head .site-btn { padding: 11px 22px; font-size: 11.5px; }
+
+/* ── Hero ───────────────────────────────────────────────────────────────── */
+.site-hero { position: relative; overflow: hidden; background: var(--base); padding: 112px 0 96px; }
+/* Fondo: el monograma del logo, en marca de agua. Es del cliente, no un resplandor genérico. */
+.site-hero__fondo {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -54%);
+  font-family: var(--display); font-weight: 400; line-height: 1;
+  font-size: clamp(22rem, 62vw, 46rem); letter-spacing: -.06em;
+  color: var(--tinta); opacity: .035; pointer-events: none; user-select: none;
+}
+.site-hero__in { position: relative; z-index: 1; text-align: center; }
+.site-hero h1 {
+  font-family: var(--display); font-size: clamp(2.5rem, 6.4vw, 4.8rem);
+  line-height: 1.1; color: var(--tinta); margin: 22px auto 0; max-width: 18ch; letter-spacing: -.01em;
+}
+.site-hero h1 em { font-style: italic; font-weight: 400; color: var(--acento-osc); }
+.site-hero__lede { max-width: 52ch; margin: 26px auto 0; color: var(--humo); font-size: 1.06rem; font-weight: 300; }
+.site-hero__cta { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; margin-top: 38px; }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   FIRMA — Índice de indicaciones.
+   Lo que la persona quiere mejorar → con qué se trabaja. Un índice editorial:
+   numerado como tabla de contenido, en Bodoni, con filetes finos.
+   ───────────────────────────────────────────────────────────────────────── */
+.site-indice { max-width: 980px; margin: 86px auto 0; text-align: left; }
+.site-indice__cab { display: flex; align-items: baseline; justify-content: space-between; gap: 20px; padding-bottom: 14px; border-bottom: 1px solid var(--tinta); }
+.site-indice__cab p:last-child { font-size: .82rem; font-weight: 300; color: var(--humo); }
+.site-indice__lista { display: grid; grid-template-columns: 1fr 1fr; column-gap: 56px; }
+.site-indice__f {
+  display: grid; grid-template-columns: 44px 1fr auto; align-items: baseline; gap: 14px;
+  padding: 17px 0; border-bottom: 1px solid var(--linea);
+  transition: color .2s ease;
+}
+.site-indice__f:hover .site-indice__t { color: var(--acento-osc); }
+.site-indice__n { font-family: var(--display); font-size: 1.05rem; color: var(--acento); font-variant-numeric: tabular-nums; }
+.site-indice__q { font-size: .98rem; font-weight: 500; color: var(--tinta); }
+.site-indice__t { font-size: .9rem; font-weight: 300; color: var(--humo); text-align: right; white-space: nowrap; transition: color .2s ease; }
+.site-indice__t::before { content: '→'; margin-right: 8px; color: var(--acento); }
+
+/* ── Tira de diferenciadores ────────────────────────────────────────────── */
+.site-tira { background: var(--campo); }
+.site-tira__in { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; padding: 56px 28px; }
+.site-tira__t { font-family: var(--display); font-size: 1.14rem; color: var(--tinta); margin-bottom: 8px; }
+.site-tira__d { font-size: .87rem; font-weight: 300; line-height: 1.6; color: var(--humo); }
+
+/* ── Servicios ──────────────────────────────────────────────────────────── */
+.site-grupo { margin-top: 64px; }
+.site-grupo__cab {
+  display: flex; align-items: baseline; gap: 18px;
+  padding-bottom: 16px; border-bottom: 1px solid var(--tinta); margin-bottom: 32px;
+}
+.site-grupo__cab h3 { font-family: var(--display); font-size: 1.5rem; color: var(--tinta); }
+.site-grupo__cab p { font-size: .84rem; font-weight: 300; color: var(--humo); margin-left: auto; text-align: right; }
+
+.site-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+.site-card {
+  display: flex; flex-direction: column;
+  background: var(--tarjeta); border: 1px solid var(--linea); border-radius: var(--radio);
+  padding: 34px 30px 30px;
+  transition: transform .3s ease, box-shadow .3s ease, border-color .3s ease;
+}
+.site-card:hover { transform: translateY(-5px); border-color: var(--tinta); box-shadow: var(--sombra); }
+.site-card h4 { font-family: var(--display); font-size: 1.38rem; color: var(--tinta); }
+.site-card__d { margin: 16px 0 26px; font-size: .93rem; font-weight: 300; color: var(--humo); }
+.site-card__pie {
+  margin-top: auto; padding-top: 20px; border-top: 1px solid var(--linea);
+  display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+}
+
+/* Filas (piel y regeneración) */
+.site-filas { border-top: 1px solid var(--linea); }
+.site-fila {
+  display: grid; grid-template-columns: 220px 1fr auto; gap: 28px; align-items: center;
+  padding: 24px 18px; border-bottom: 1px solid var(--linea); border-radius: var(--radio);
+  transition: background-color .25s ease;
+}
+.site-fila:hover { background: var(--tarjeta); }
+.site-fila__n { font-family: var(--display); font-size: 1.28rem; color: var(--tinta); }
+.site-fila__d { font-size: .88rem; font-weight: 300; color: var(--humo); margin-top: 4px; }
+.site-fila__z { display: flex; flex-wrap: wrap; gap: 8px; }
+.site-fila__z span {
+  padding: 5px 14px; border-radius: 999px; background: var(--campo);
+  font-size: .78rem; font-weight: 500; color: var(--profundo);
+}
+
+/* Cuerpo y control de peso */
+.site-mini { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+.site-mini__i { display: flex; flex-direction: column; padding: 30px 28px; background: var(--tarjeta); border: 1px solid var(--linea); border-radius: var(--radio); }
+.site-mini__i h4 { font-family: var(--display); font-size: 1.2rem; color: var(--tinta); }
+.site-mini__i p { font-size: .91rem; font-weight: 300; color: var(--humo); margin: 10px 0 18px; }
+.site-mini__i .site-precio { margin-top: auto; font-size: 1.25rem; }
+
+.site-nota-precios { margin-top: 44px; font-size: .86rem; font-weight: 300; color: var(--humo); max-width: 70ch; }
+
+/* ── La consulta ────────────────────────────────────────────────────────── */
+.site-dos { display: grid; grid-template-columns: 1fr 1fr; gap: 72px; align-items: start; }
+.site-dos p + p { margin-top: 14px; }
+.site-pasos li { display: grid; grid-template-columns: 34px 1fr; gap: 14px; padding: 17px 0; border-bottom: 1px solid var(--linea); }
+.site-pasos li:last-child { border-bottom: 0; }
+.site-pasos__n { font-family: var(--display); font-size: 1.05rem; color: var(--acento); padding-top: 2px; }
+.site-pasos__t { font-size: .99rem; font-weight: 500; color: var(--tinta); }
+.site-pasos__d { font-size: .88rem; font-weight: 300; color: var(--humo); margin-top: 3px; }
+
+/* ── FAQ ────────────────────────────────────────────────────────────────── */
+.site-faq { max-width: 820px; margin: 46px auto 0; border-top: 1px solid var(--tinta); }
+.site-faq details { border-bottom: 1px solid var(--linea); }
+.site-faq summary {
+  display: flex; align-items: center; justify-content: space-between; gap: 20px;
+  padding: 22px 2px; cursor: pointer; list-style: none;
+  font-size: 1.03rem; font-weight: 500; color: var(--tinta); transition: color .2s ease;
+}
+.site-faq summary::-webkit-details-marker { display: none; }
+.site-faq summary:hover { color: var(--acento-osc); }
+.site-faq summary::after { content: '+'; font-family: var(--display); font-size: 1.5rem; font-weight: 400; color: var(--acento); transition: transform .3s ease; flex-shrink: 0; line-height: 1; }
+.site-faq details[open] summary::after { transform: rotate(45deg); }
+.site-faq__r { padding: 0 58px 26px 2px; font-size: .96rem; font-weight: 300; color: var(--humo); }
+
+/* ── Contacto ───────────────────────────────────────────────────────────── */
+.site-contacto__in { display: grid; grid-template-columns: 1fr 1fr; gap: 72px; align-items: start; }
+.site-nap { margin-top: 36px; border-top: 1px solid var(--tinta); }
+.site-nap__f { padding: 19px 0; border-bottom: 1px solid var(--linea); }
+.site-nap__l { font-size: 10px; font-weight: 600; letter-spacing: .2em; text-transform: uppercase; color: var(--acento); margin-bottom: 6px; }
+.site-nap__v { font-size: 1.01rem; font-weight: 300; color: var(--tinta); line-height: 1.5; }
+.site-nap__v a { border-bottom: 1px solid var(--suave); }
+.site-nap__v a:hover { color: var(--acento-osc); border-color: var(--acento); }
+.site-cta-caja { background: var(--tarjeta); border: 1px solid var(--linea); border-radius: var(--radio); padding: 46px 40px; box-shadow: var(--sombra); }
+.site-cta-caja h3 { font-family: var(--display); font-size: 1.75rem; color: var(--tinta); }
+.site-cta-caja p { font-size: .96rem; font-weight: 300; color: var(--humo); margin: 14px 0 28px; }
+.site-cta-caja .site-btn { width: 100%; justify-content: center; }
+.site-cta-caja__nota { margin-top: 18px; font-size: .82rem; font-weight: 300; color: var(--humo); opacity: .8; text-align: center; }
+
+/* ── Pie ────────────────────────────────────────────────────────────────── */
+.site-pie { background: var(--profundo); color: var(--bruma); padding: 52px 0; }
+.site-pie__in { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 22px; font-size: .82rem; font-weight: 300; }
+.site-pie__marca { display: flex; align-items: center; gap: 18px; }
+/* Sello: el logo es negro sobre blanco, así que va en su propio papel. */
+.site-pie__sello { width: 76px; height: 76px; background: #FFF; padding: 4px; flex-shrink: 0; }
+.site-pie__links { display: flex; flex-wrap: wrap; gap: 24px; }
+.site-pie__links a:hover { color: var(--base); }
+
+/* ── Responsive ─────────────────────────────────────────────────────────── */
+@media (max-width: 940px) {
+  .site-nav { display: none; }
+  .site-sec { padding: 74px 0; }
+  .site-hero { padding: 76px 0 64px; }
+  .site-indice__lista { grid-template-columns: 1fr; }
+  .site-cards, .site-mini { grid-template-columns: 1fr; }
+  .site-dos, .site-contacto__in { grid-template-columns: 1fr; gap: 46px; }
+  .site-tira__in { grid-template-columns: 1fr 1fr; gap: 30px; padding: 44px 28px; }
+  .site-fila { grid-template-columns: 1fr; gap: 14px; padding: 22px 14px; }
+  .site-faq__r { padding-right: 28px; }
+}
+@media (max-width: 560px) {
+  .site { font-size: 16px; }
+  .site-wrap { padding: 0 20px; }
+  .site-head__in { height: 76px; }
+  .site-logo { width: 160px; height: 68px; }
+  .site-logo img { width: 160px; height: 68px; }
+  .site-hero__cta .site-btn { width: 100%; justify-content: center; }
+  .site-indice__cab { flex-direction: column; gap: 6px; }
+  .site-indice__f { grid-template-columns: 34px 1fr; }
+  .site-indice__t { grid-column: 2; text-align: left; white-space: normal; }
+  .site-tira__in { grid-template-columns: 1fr; padding: 40px 20px; }
+  .site-cta-caja { padding: 34px 26px; }
+}
+
+/* ── Entrada + accesibilidad ────────────────────────────────────────────── */
+.site-rise { animation: site-rise .9s cubic-bezier(.2,.7,.3,1) both; }
+@keyframes site-rise { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .site *, .site *::before, .site *::after { animation: none !important; transition: none !important; }
+  .site-rise { opacity: 1; transform: none; }
+}
+</style>
+
+<div class="site">
+
+  <!-- ── Encabezado ────────────────────────────────────────────────────── -->
+  <header class="site-head">
+    <div class="site-wrap site-head__in">
+      <a class="site-logo" href="#top" aria-label="Dr. Heriberto Valdivia — inicio">
+        <img src="data:image/jpeg;base64,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" alt="Dr. Heriberto Valdivia — Medicina Estética y Regenerativa" width="500" height="500">
+      </a>
+      <nav class="site-nav" aria-label="Secciones">
+        <a href="#servicios">Tratamientos</a>
+        <a href="#consulta">La consulta</a>
+        <a href="#faq">Preguntas</a>
+        <a href="#contacto">Contacto</a>
+      </nav>
+      <a class="site-btn site-btn--acento"
+         href="https://wa.me/526145149916?text=Hola%2C%20quiero%20m%C3%A1s%20informaci%C3%B3n."
+         target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.5 14.4c-.3-.2-1.7-.9-2-1-.3-.1-.5-.1-.7.2-.2.3-.7 1-.9 1.2-.2.2-.3.2-.6.1-.3-.2-1.2-.5-2.3-1.4-.9-.8-1.4-1.7-1.6-2-.2-.3 0-.5.1-.6.1-.1.3-.3.4-.5.2-.2.2-.3.3-.5.1-.2 0-.4 0-.5 0-.2-.7-1.6-.9-2.2-.2-.6-.5-.5-.7-.5h-.6c-.2 0-.5.1-.8.4-.3.3-1 1-1 2.4s1.1 2.8 1.2 3c.2.2 2.1 3.2 5.1 4.5.7.3 1.3.5 1.7.6.7.2 1.4.2 1.9.1.6-.1 1.7-.7 2-1.4.2-.7.2-1.3.2-1.4-.1-.2-.3-.3-.6-.4zM12 2C6.5 2 2 6.5 2 12c0 1.8.5 3.4 1.3 4.9L2 22l5.3-1.4c1.4.8 3 1.2 4.7 1.2 5.5 0 10-4.5 10-10S17.5 2 12 2z"/></svg>
+        WhatsApp
+      </a>
+    </div>
+  </header>
+
+  <!-- ── Hero ──────────────────────────────────────────────────────────── -->
+  <section class="site-hero" id="top">
+    <div class="site-hero__fondo" aria-hidden="true">ME</div>
+    <div class="site-wrap site-hero__in">
+      <p class="site-eyebrow site-rise" style="animation-delay:.05s">Plaza Cumbres · Chihuahua</p>
+      <h1 class="site-rise" style="animation-delay:.15s">Primero la consulta. <em>Después, el tratamiento que sí conviene.</em></h1>
+      <p class="site-hero__lede site-rise" style="animation-delay:.28s">Medicina estética y regenerativa en Chihuahua. Botox, ácido hialurónico, bioestimuladores, láser CO₂ y skinboosters. Toda persona nueva empieza con una consulta con el Dr. Heriberto Valdivia: ahí se valora tu caso y se define qué tratamiento conviene.</p>
+      <div class="site-hero__cta site-rise" style="animation-delay:.4s">
+        <a class="site-btn site-btn--acento"
+           href="https://wa.me/526145149916?text=Hola%2C%20quiero%20agendar%20una%20consulta."
+           target="_blank" rel="noopener">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.5 14.4c-.3-.2-1.7-.9-2-1-.3-.1-.5-.1-.7.2-.2.3-.7 1-.9 1.2-.2.2-.3.2-.6.1-.3-.2-1.2-.5-2.3-1.4-.9-.8-1.4-1.7-1.6-2-.2-.3 0-.5.1-.6.1-.1.3-.3.4-.5.2-.2.2-.3.3-.5.1-.2 0-.4 0-.5 0-.2-.7-1.6-.9-2.2-.2-.6-.5-.5-.7-.5h-.6c-.2 0-.5.1-.8.4-.3.3-1 1-1 2.4s1.1 2.8 1.2 3c.2.2 2.1 3.2 5.1 4.5.7.3 1.3.5 1.7.6.7.2 1.4.2 1.9.1.6-.1 1.7-.7 2-1.4.2-.7.2-1.3.2-1.4-.1-.2-.3-.3-.6-.4zM12 2C6.5 2 2 6.5 2 12c0 1.8.5 3.4 1.3 4.9L2 22l5.3-1.4c1.4.8 3 1.2 4.7 1.2 5.5 0 10-4.5 10-10S17.5 2 12 2z"/></svg>
+          Agendar consulta
+        </a>
+        <a class="site-btn site-btn--linea" href="#servicios">Ver tratamientos</a>
+      </div>
+
+      <!-- FIRMA — Índice de indicaciones -->
+      <div class="site-indice site-rise" style="animation-delay:.55s">
+        <div class="site-indice__cab">
+          <p class="site-eyebrow">Índice de indicaciones</p>
+          <p>Lo que quieres mejorar → con qué se trabaja. Qué conviene en tu caso lo define el doctor en consulta.</p>
+        </div>
+        <div class="site-indice__lista">
+          <a class="site-indice__f" href="#servicios"><span class="site-indice__n">01</span><span class="site-indice__q">Líneas de expresión</span><span class="site-indice__t">Botox</span></a>
+          <a class="site-indice__f" href="#servicios"><span class="site-indice__n">02</span><span class="site-indice__q">Volumen y contornos</span><span class="site-indice__t">Ácido hialurónico</span></a>
+          <a class="site-indice__f" href="#servicios"><span class="site-indice__n">03</span><span class="site-indice__q">Firmeza y calidad de la piel</span><span class="site-indice__t">Sculptra / Facetem</span></a>
+          <a class="site-indice__f" href="#servicios"><span class="site-indice__n">04</span><span class="site-indice__q">Textura, poros y manchas</span><span class="site-indice__t">Láser CO₂ fraccionado</span></a>
+          <a class="site-indice__f" href="#servicios"><span class="site-indice__n">05</span><span class="site-indice__q">Hidratación y luminosidad</span><span class="site-indice__t">Skinvive / PDRN</span></a>
+          <a class="site-indice__f" href="#servicios"><span class="site-indice__n">06</span><span class="site-indice__q">Grasa localizada</span><span class="site-indice__t">Enzimas lipolíticas</span></a>
+          <a class="site-indice__f" href="#servicios"><span class="site-indice__n">07</span><span class="site-indice__q">Tono muscular</span><span class="site-indice__t">Emsculpt</span></a>
+          <a class="site-indice__f" href="#servicios"><span class="site-indice__n">08</span><span class="site-indice__q">Control de peso</span><span class="site-indice__t">Consulta de bariatría</span></a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Diferenciadores ───────────────────────────────────────────────── -->
+  <section class="site-tira">
+    <div class="site-wrap site-tira__in">
+      <div class="site-tira__i"><p class="site-tira__t">Medicina estética y regenerativa</p><p class="site-tira__d">Tratamientos para el rostro, la piel y el cuerpo, además de consulta de bariatría para control de peso.</p></div>
+      <div class="site-tira__i"><p class="site-tira__t">Atención médica</p><p class="site-tira__d">Cada tratamiento se indica en consulta con el Dr. Heriberto Valdivia, no desde un catálogo.</p></div>
+      <div class="site-tira__i"><p class="site-tira__t">Consulta primero</p><p class="site-tira__d">Toda persona nueva pasa primero por consulta: ahí se valora tu caso y se resuelven las dudas.</p></div>
+      <div class="site-tira__i"><p class="site-tira__t">Plaza Cumbres</p><p class="site-tira__d">Periférico de la Juventud 6902, Chihuahua. La plaza cuenta con estacionamiento.</p></div>
+    </div>
+  </section>
+
+  <!-- ── Tratamientos ──────────────────────────────────────────────────── -->
+  <section class="site-sec site-sec--base" id="servicios">
+    <div class="site-wrap">
+      <p class="site-eyebrow">Tratamientos</p>
+      <h2 class="site-h2">Lista de tratamientos y precios</h2>
+      <p class="site-lede">Precios en pesos mexicanos, por tratamiento. Cuántas sesiones o jeringas hacen falta depende de cada caso y se define en consulta.</p>
+
+      <!-- Rostro -->
+      <div class="site-grupo">
+        <div class="site-grupo__cab"><h3>Rostro</h3><p>Expresión, volumen e hidratación</p></div>
+        <div class="site-cards">
+          <article class="site-card">
+            <h4>Botox</h4>
+            <p class="site-card__d">Suaviza líneas de expresión y ayuda a prevenir la formación de nuevas arrugas.</p>
+            <div class="site-card__pie"><span class="site-precio">$4,000 <span>MXN</span></span></div>
+          </article>
+          <article class="site-card">
+            <h4>Ácido hialurónico</h4>
+            <p class="site-card__d">Restaura volumen, mejora contornos y armoniza diferentes zonas del rostro.</p>
+            <div class="site-card__pie"><span class="site-precio">$5,500 <span>MXN · por jeringa</span></span></div>
+          </article>
+          <article class="site-card">
+            <h4>Skinvive</h4>
+            <p class="site-card__d">Skinbooster de ácido hialurónico que mejora hidratación, luminosidad y suavidad de la piel.</p>
+            <div class="site-card__pie"><span class="site-precio">$5,000 <span>MXN</span></span></div>
+          </article>
+        </div>
+      </div>
+
+      <!-- Piel y regeneración -->
+      <div class="site-grupo">
+        <div class="site-grupo__cab"><h3>Piel y regeneración</h3><p>Textura, firmeza y calidad de la piel</p></div>
+        <div class="site-filas">
+          <div class="site-fila">
+            <div><p class="site-fila__n">Láser CO₂ fraccionado</p><p class="site-fila__d">Estimula la renovación de la piel.</p></div>
+            <div class="site-fila__z"><span>Textura</span><span>Poros</span><span>Manchas</span><span>Cicatrices</span></div>
+            <span class="site-precio">$3,000 <span>MXN · por sesión</span></span>
+          </div>
+          <div class="site-fila">
+            <div><p class="site-fila__n">PDRN Salmón</p><p class="site-fila__d">Tratamiento regenerativo.</p></div>
+            <div class="site-fila__z"><span>Hidratación</span><span>Textura</span><span>Calidad de la piel</span></div>
+            <span class="site-precio">$2,000 <span>MXN</span></span>
+          </div>
+          <div class="site-fila">
+            <div><p class="site-fila__n">Sculptra</p><p class="site-fila__d">Bioestimulador de colágeno, de efecto progresivo.</p></div>
+            <div class="site-fila__z"><span>Firmeza</span><span>Volumen</span><span>Calidad de la piel</span></div>
+            <span class="site-precio">$12,500 <span>MXN</span></span>
+          </div>
+          <div class="site-fila">
+            <div><p class="site-fila__n">Facetem</p><p class="site-fila__d">Bioestimulador a base de hidroxiapatita de calcio.</p></div>
+            <div class="site-fila__z"><span>Firmeza</span><span>Definición</span><span>Calidad de la piel</span></div>
+            <span class="site-precio">$8,500 <span>MXN</span></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Cuerpo y control de peso -->
+      <div class="site-grupo">
+        <div class="site-grupo__cab"><h3>Cuerpo y control de peso</h3></div>
+        <div class="site-mini">
+          <div class="site-mini__i"><h4>Enzimas lipolíticas</h4><p>Ayudan a reducir depósitos de grasa localizada en zonas específicas.</p><span class="site-precio">$2,200 <span>MXN · por sesión</span></span></div>
+          <div class="site-mini__i"><h4>Emsculpt</h4><p>Estimula la musculatura y ayuda a mejorar definición y tono corporal.</p><span class="site-precio">$5,000 <span>MXN · por 10 sesiones</span></span></div>
+          <div class="site-mini__i"><h4>Consulta de bariatría</h4><p>Valoración médica y seguimiento para control de peso. Incluye tratamiento con GLP-1, de acuerdo con valoración médica.</p><span class="site-precio">$1,500 <span>MXN</span></span></div>
+        </div>
+      </div>
+
+      <p class="site-nota-precios">Los precios pueden cambiar sin previo aviso; el vigente es el que se confirma al agendar. Formas de pago: efectivo, tarjeta y transferencia.</p>
+    </div>
+  </section>
+
+  <!-- ── La consulta ───────────────────────────────────────────────────── -->
+  <section class="site-sec site-sec--campo" id="consulta">
+    <div class="site-wrap site-dos">
+      <div>
+        <p class="site-eyebrow">La consulta</p>
+        <h2 class="site-h2">Antes de cualquier tratamiento, una consulta.</h2>
+        <p class="site-lede">Toda persona nueva empieza con una consulta con el Dr. Heriberto Valdivia. Ahí se valora la zona, se resuelven las dudas y se define qué tratamiento conviene — y cuál no.</p>
+        <p class="site-lede">Los precios publicados son por tratamiento. Cuántas sesiones o jeringas hacen falta depende de cada caso, y eso se define en consulta, no por WhatsApp.</p>
+      </div>
+      <ul class="site-pasos">
+        <li><span class="site-pasos__n">01</span><div><p class="site-pasos__t">Escríbenos por WhatsApp</p><p class="site-pasos__d">Cuéntanos qué te gustaría mejorar o qué tratamiento tienes en mente.</p></div></li>
+        <li><span class="site-pasos__n">02</span><div><p class="site-pasos__t">Agenda tu consulta</p><p class="site-pasos__d">Lunes a viernes, de 10:30 a 12:30 y de 15:45 a 18:45, en Plaza Cumbres.</p></div></li>
+        <li><span class="site-pasos__n">03</span><div><p class="site-pasos__t">Valoración con el doctor</p><p class="site-pasos__d">El Dr. Valdivia revisa tu caso, resuelve tus dudas y define el tratamiento indicado.</p></div></li>
+        <li><span class="site-pasos__n">04</span><div><p class="site-pasos__t">Tratamiento</p><p class="site-pasos__d">Se realiza el tratamiento que se indicó en consulta, con el precio confirmado.</p></div></li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ── FAQ ───────────────────────────────────────────────────────────── -->
+  <section class="site-sec site-sec--base" id="faq">
+    <div class="site-wrap">
+      <p class="site-eyebrow">Preguntas frecuentes</p>
+      <h2 class="site-h2">Lo que más nos preguntan</h2>
+      <div class="site-faq">
+        <details><summary>¿Dónde está el consultorio? ¿Hay estacionamiento?</summary><p class="site-faq__r">En Periférico de la Juventud 6902, Plaza Cumbres, Chihuahua, Chihuahua, C.P. 31217. La plaza cuenta con estacionamiento.</p></details>
+        <details><summary>¿Cómo agendo una consulta?</summary><p class="site-faq__r">Por WhatsApp, al +52 614 514 9916. Ahí se agenda tu primera consulta con el Dr. Valdivia.</p></details>
+        <details><summary>¿Qué pasa en la primera consulta?</summary><p class="site-faq__r">El doctor valora tu caso, resuelve tus dudas y define qué tratamiento conviene. Todo tratamiento se indica en consulta, no antes.</p></details>
+        <details><summary>¿Puedo agendar directamente un tratamiento, por ejemplo Botox?</summary><p class="site-faq__r">Lo que se agenda es la consulta. El tratamiento —Botox o cualquier otro— lo indica el doctor ahí, según tu caso.</p></details>
+        <details><summary>¿Qué formas de pago aceptan?</summary><p class="site-faq__r">Efectivo, tarjeta y transferencia.</p></details>
+        <details><summary>¿Cómo muevo o cancelo mi cita?</summary><p class="site-faq__r">Avísanos por WhatsApp y te ayudamos a moverla o cancelarla.</p></details>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Contacto ──────────────────────────────────────────────────────── -->
+  <section class="site-sec site-sec--campo" id="contacto">
+    <div class="site-wrap site-contacto__in">
+      <div>
+        <p class="site-eyebrow">Contacto</p>
+        <h2 class="site-h2">Consultorio en Plaza Cumbres</h2>
+        <div class="site-nap">
+          <div class="site-nap__f"><p class="site-nap__l">Negocio</p><p class="site-nap__v">Dr. Heriberto Valdivia — Medicina Estética y Regenerativa</p></div>
+          <div class="site-nap__f"><p class="site-nap__l">Dirección</p><p class="site-nap__v">Periférico de la Juventud 6902, Plaza Cumbres, Chihuahua, Chihuahua, C.P. 31217</p></div>
+          <div class="site-nap__f"><p class="site-nap__l">Teléfono / WhatsApp</p><p class="site-nap__v"><a href="https://wa.me/526145149916" target="_blank" rel="noopener">+52 614 514 9916</a></p></div>
+          <div class="site-nap__f"><p class="site-nap__l">Correo</p><p class="site-nap__v"><a href="mailto:contacto@drvaldiviamedstetic.com">contacto@drvaldiviamedstetic.com</a></p></div>
+          <div class="site-nap__f"><p class="site-nap__l">Instagram</p><p class="site-nap__v"><a href="https://instagram.com/dr.heribertovaldivia" target="_blank" rel="noopener">@dr.heribertovaldivia</a></p></div>
+          <div class="site-nap__f"><p class="site-nap__l">Horario</p><p class="site-nap__v">Lunes a viernes, 10:30–12:30 y 15:45–18:45</p></div>
+        </div>
+      </div>
+      <div class="site-cta-caja">
+        <h3>Agenda tu consulta</h3>
+        <p>Escríbenos por WhatsApp con lo que te gustaría mejorar o el tratamiento que tienes en mente, y agendamos tu consulta con el Dr. Valdivia.</p>
+        <a class="site-btn site-btn--acento" href="https://wa.me/526145149916?text=Hola%2C%20quiero%20agendar%20una%20consulta." target="_blank" rel="noopener">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.5 14.4c-.3-.2-1.7-.9-2-1-.3-.1-.5-.1-.7.2-.2.3-.7 1-.9 1.2-.2.2-.3.2-.6.1-.3-.2-1.2-.5-2.3-1.4-.9-.8-1.4-1.7-1.6-2-.2-.3 0-.5.1-.6.1-.1.3-.3.4-.5.2-.2.2-.3.3-.5.1-.2 0-.4 0-.5 0-.2-.7-1.6-.9-2.2-.2-.6-.5-.5-.7-.5h-.6c-.2 0-.5.1-.8.4-.3.3-1 1-1 2.4s1.1 2.8 1.2 3c.2.2 2.1 3.2 5.1 4.5.7.3 1.3.5 1.7.6.7.2 1.4.2 1.9.1.6-.1 1.7-.7 2-1.4.2-.7.2-1.3.2-1.4-.1-.2-.3-.3-.6-.4zM12 2C6.5 2 2 6.5 2 12c0 1.8.5 3.4 1.3 4.9L2 22l5.3-1.4c1.4.8 3 1.2 4.7 1.2 5.5 0 10-4.5 10-10S17.5 2 12 2z"/></svg>
+          Escribir por WhatsApp
+        </a>
+        <p class="site-cta-caja__nota">+52 614 514 9916 · Plaza Cumbres, Chihuahua</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Pie ───────────────────────────────────────────────────────────── -->
+  <footer class="site-pie">
+    <div class="site-wrap">
+      <div class="site-pie__in">
+        <div class="site-pie__marca">
+          <img class="site-pie__sello" src="data:image/jpeg;base64,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" alt="Dr. Heriberto Valdivia — Medicina Estética y Regenerativa" width="500" height="500">
+          <p>© 2026 Dr. Heriberto Valdivia · Plaza Cumbres, Chihuahua</p>
+        </div>
+        <div class="site-pie__links">
+          <a href="/privacidad">Aviso de privacidad</a>
+          <a href="/terminos">Términos y condiciones</a>
+          <a href="https://wa.me/526145149916" target="_blank" rel="noopener">WhatsApp</a>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     COPIAR HASTA AQUÍ ↑
+     ══════════════════════════════════════════════════════════════════════════ -->
+
+</body>
+</html>

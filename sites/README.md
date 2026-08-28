@@ -9,7 +9,7 @@ para verificar su cuenta en Meta.
 sites/
   _template/           # scaffold neutro — punto de partida de cada cliente
   madi-skincare/       # primer cliente (referencia de identidad, no molde)
-  <client-slug>/       # una carpeta por cliente = tenants.slug en Supabase
+  <client-slug>/       # una carpeta por cliente (kebab-case del nombre; no hay columna slug en la DB)
 ```
 
 ## Modelo de dos capas
@@ -29,7 +29,8 @@ la identidad, no algo para copiar.
 ## Convenciones
 
 - Contenido en **español**, salvo que el cliente pida otra cosa.
-- Slug de la carpeta = `tenants.slug` del cliente en Supabase.
+- Slug de la carpeta: kebab-case del nombre del cliente (`madi-skincare`, `dr-valdivia`). No existe una
+  columna `slug` en `tenants`; el único slug en la DB es `tenant_config.ai_key_ref`, y es otra cosa.
 - Autocontenido: cada sitio se pega en GHL; no entra al workspace de pnpm.
 - Sin secretos en el repo.
 

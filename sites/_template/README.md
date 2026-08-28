@@ -26,7 +26,7 @@ scaffold son grises a propósito: si publicas sin cambiarlos, se nota.
    ```bash
    cp -r sites/_template sites/<slug-del-cliente>
    ```
-   Usa el mismo slug que `tenants.slug` en Supabase.
+   Kebab-case del nombre del cliente (no hay columna `slug` en la DB).
 
 2. **Decide la identidad ANTES de rellenar** (esto es el trabajo real):
    - **Paleta** — derívala del mundo del cliente, no de un genérico. 4–6 colores.
