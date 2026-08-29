@@ -4,7 +4,9 @@ import {
   buildCapiPayload,
   capiChannelFor,
   capiTokenSecretName,
+  countLeadReplies,
   extractCapiIdentity,
+  leadStartedDue,
   extractCtwaClid,
   normalizePhoneForCapi,
   parseMetaCapi,
@@ -60,6 +62,21 @@ describe('parseMetaCapi', () => {
     const blank = parseMetaCapi({ ...validRaw, whatsapp_business_account_id: '', instagram_business_account_id: '  ' });
     expect(blank?.whatsappBusinessAccountId).toBeUndefined();
     expect(blank?.instagramBusinessAccountId).toBeUndefined();
+  });
+
+  it('lead_replies_required: a positive integer is kept; 0/absent → undefined (first-inbound path)', () => {
+    expect(parseMetaCapi({ ...validRaw, lead_replies_required: 1 })?.leadRepliesRequired).toBe(1);
+    expect(parseMetaCapi({ ...validRaw, lead_replies_required: 3 })?.leadRepliesRequired).toBe(3);
+    expect(parseMetaCapi({ ...validRaw, lead_replies_required: 0 })?.leadRepliesRequired).toBeUndefined();
+    expect(parseMetaCapi(validRaw)?.leadRepliesRequired).toBeUndefined();
+  });
+
+  it('lead_replies_required: junk is ignored loudly, the config survives', () => {
+    for (const bad of [-1, 1.5, '1', null, true]) {
+      const parsed = parseMetaCapi({ ...validRaw, lead_replies_required: bad });
+      expect(parsed?.datasetId).toBe('123456');
+      expect(parsed?.leadRepliesRequired).toBeUndefined();
+    }
   });
 
   it('parses event overrides: rename, value+currency, and false to disable', () => {
@@ -338,5 +355,47 @@ describe('buildCapiPayload', () => {
       identity: wa,
     });
     expect(payload?.custom_data).toEqual({ value: 350, currency: 'MXN' });
+  });
+});
+
+describe('countLeadReplies / leadStartedDue — the reply threshold (The Bot Crew, 2026-08-29)', () => {
+  // 14 of the first 22 LeadSubmitted were the ad's pre-filled "CITAS" from leads who never
+  // answered the bot: a first-inbound signal teaches Meta to find clickers, not leads.
+  const lead = (content = 'hola') => ({ direction: 'inbound', senderType: 'lead', content, sentAt: '' }) as const;
+  const bot = () => ({ direction: 'outbound', senderType: 'bot', content: '¡Hola!', sentAt: '' }) as const;
+  const human = () => ({ direction: 'outbound', senderType: 'human_agent', content: 'Hola, soy Leo', sentAt: '' }) as const;
+  type Msg = Parameters<typeof countLeadReplies>[0];
+
+  it("the ad greeting is not a reply: nothing of ours came before it", () => {
+    expect(countLeadReplies([lead('CITAS')] as unknown as Msg)).toEqual({ before: 0, total: 0 });
+    expect(countLeadReplies([lead('CITAS'), lead('hola?')] as unknown as Msg)).toEqual({ before: 0, total: 0 });
+  });
+
+  it('the first inbound after the bot spoke is reply #1; a burst in one turn counts each message', () => {
+    expect(countLeadReplies([lead('CITAS'), bot(), lead()] as unknown as Msg)).toEqual({ before: 0, total: 1 });
+    expect(countLeadReplies([lead('CITAS'), bot(), lead(), lead()] as unknown as Msg)).toEqual({ before: 0, total: 2 });
+    expect(countLeadReplies([lead('CITAS'), bot(), lead(), bot(), lead()] as unknown as Msg)).toEqual({ before: 1, total: 2 });
+  });
+
+  it('an Instant-Form lead answering a human opener is a reply from message one', () => {
+    expect(countLeadReplies([human(), lead()] as unknown as Msg)).toEqual({ before: 0, total: 1 });
+  });
+
+  it('leadStartedDue fires on exactly the crossing turn, never before, never again', () => {
+    const cfg = config({ leadRepliesRequired: 1 });
+    expect(leadStartedDue(cfg, [lead('CITAS')] as unknown as Msg)).toBe(false);
+    expect(leadStartedDue(cfg, [lead('CITAS'), bot(), lead()] as unknown as Msg)).toBe(true);
+    expect(leadStartedDue(cfg, [lead('CITAS'), bot(), lead(), bot(), lead()] as unknown as Msg)).toBe(false);
+  });
+
+  it('a higher threshold waits for that many replies, and a burst that jumps past it still fires', () => {
+    const cfg = config({ leadRepliesRequired: 2 });
+    expect(leadStartedDue(cfg, [lead('CITAS'), bot(), lead()] as unknown as Msg)).toBe(false);
+    expect(leadStartedDue(cfg, [lead('CITAS'), bot(), lead(), bot(), lead()] as unknown as Msg)).toBe(true);
+    expect(leadStartedDue(cfg, [lead('CITAS'), bot(), lead(), lead(), lead()] as unknown as Msg)).toBe(true);
+  });
+
+  it('no threshold configured → never due here (the first-inbound path owns it)', () => {
+    expect(leadStartedDue(config(), [lead('CITAS'), bot(), lead()] as unknown as Msg)).toBe(false);
   });
 });

@@ -141,6 +141,12 @@ Drop the keys for channels the client doesn't use. Optional per-tenant event tun
 `lead_started → LeadSubmitted`, `appointment_booked → QualifiedLead` — are right for a
 service business.
 
+**For click-to-message ads add `"lead_replies_required": 1`.** Without it `LeadSubmitted`
+fires on the lead's first inbound, which on a CTWA/Messenger/IG ad is the pre-filled
+greeting — i.e. every click, including the majority who never answer the bot (The Bot Crew:
+8 of the first 22 replied). With it the event fires when the lead first *answers* us, which
+is the signal you want the ad set to optimize on. See business-logic §6a.
+
 No deploy. The 1-minute cron reads this row fresh on every drain.
 
 ---
@@ -247,8 +253,9 @@ row (`stage: rejected`) in `bot_events`. Match on the `error_subcode` / title.
    **Maximize number of conversions**, event **`LeadSubmitted`** (later `QualifiedLead`
    once bookings flow). *This* is the step that filters the bad leads; the events alone
    only inform.
-4. Tell the client which events they'll see in Events Manager: `LeadSubmitted` on first
-   contact, `QualifiedLead` when the bot books. Nothing is sent for disqualified leads —
+4. Tell the client which events they'll see in Events Manager: `LeadSubmitted` when the
+   lead first answers the bot (or on first contact if `lead_replies_required` is unset),
+   `QualifiedLead` when the bot books. Nothing is sent for disqualified leads —
    the absence is the signal.
 
 ---

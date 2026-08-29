@@ -9,7 +9,7 @@
  * this file stays importable from `db/queries.ts` without a cycle.
  */
 
-import type { Channel } from '../core/types.js';
+import type { Channel, ConversationMessage } from '../core/types.js';
 
 export const CAPI_GRAPH_VERSION = 'v23.0';
 
@@ -87,6 +87,12 @@ export interface MetaCapiConfig {
   whatsappBusinessAccountId?: string;
   /** Instagram business account id — REQUIRED for Instagram events; without it they are skipped. */
   instagramBusinessAccountId?: string;
+  /**
+   * How many times the lead must have answered us before `lead_started` fires. 0 (default)
+   * = the first inbound. On a click-to-message ad the first inbound is the ad's pre-filled
+   * greeting, so 0 signals every click; 1 signals only leads who replied to the bot.
+   */
+  leadRepliesRequired?: number;
   events?: Partial<Record<CapiEventKind, CapiEventSpec | false>>;
 }
 
@@ -149,6 +155,14 @@ export function parseMetaCapi(raw: unknown): MetaCapiConfig | null {
   }
   if (typeof o.instagram_business_account_id === 'string' && o.instagram_business_account_id.trim()) {
     config.instagramBusinessAccountId = o.instagram_business_account_id.trim();
+  }
+  if (o.lead_replies_required !== undefined) {
+    const n = o.lead_replies_required;
+    if (typeof n === 'number' && Number.isInteger(n) && n >= 0) {
+      if (n > 0) config.leadRepliesRequired = n;
+    } else {
+      console.error('[capi] meta_capi.lead_replies_required must be a non-negative integer — ignoring');
+    }
   }
   if (o.events && typeof o.events === 'object' && !Array.isArray(o.events)) {
     const events: MetaCapiConfig['events'] = {};
@@ -220,6 +234,44 @@ export function resolveCapiTestEventCode(config: MetaCapiConfig, channel: CapiMe
 export function resolveEventSpec(config: MetaCapiConfig, kind: CapiEventKind): CapiEventSpec | null {
   const spec = config.events?.[kind] ?? DEFAULT_EVENT_SPECS[kind];
   return spec === false ? null : spec;
+}
+
+/**
+ * A lead "reply" is an inbound that follows at least one message of ours (bot or human).
+ * The ad's pre-filled greeting is the lead's first inbound with nothing of ours before it,
+ * so it never counts; an Instant-Form lead answering our opener counts from message one.
+ * Returns the count before this turn and including it: the debounce coalesces the lead's
+ * trailing messages into ONE turn, so "this turn" is the run of lead messages at the tail.
+ */
+export function countLeadReplies(history: ConversationMessage[]): { before: number; total: number } {
+  let weHaveSpoken = false;
+  let total = 0;
+  let trailing = 0;
+  for (const m of history) {
+    if (m.senderType === 'lead') {
+      if (weHaveSpoken) {
+        total += 1;
+        trailing += 1;
+      }
+    } else {
+      weHaveSpoken = true;
+      trailing = 0;
+    }
+  }
+  return { before: total - trailing, total };
+}
+
+/**
+ * Whether THIS turn is the one where the lead crossed `leadRepliesRequired` replies —
+ * fires exactly once per conversation (the enqueue is idempotent anyway, so a re-crossing
+ * after a clean-start history truncation costs a no-op insert, never a duplicate event).
+ * With no threshold configured the first-inbound path in the handler fires instead.
+ */
+export function leadStartedDue(config: MetaCapiConfig, history: ConversationMessage[]): boolean {
+  const required = config.leadRepliesRequired ?? 0;
+  if (required === 0) return false;
+  const { before, total } = countLeadReplies(history);
+  return before < required && total >= required;
 }
 
 /** One event per conversation per kind — the queue's UNIQUE key and Meta's dedup event_id. */

@@ -366,8 +366,9 @@ group by key_source;
 Optional, per tenant. For a client running **click-to-WhatsApp (CTWA) ads**: without
 this, Meta optimizes toward "anyone who messages" and the ads fill with bad leads.
 With it, the platform reports back which conversations became real leads
-(`LeadSubmitted` on first contact, `QualifiedLead` on booking by default), and the
-campaigns can train on that. Full behavior: `docs/business-logic.md` § Meta CAPI.
+(`LeadSubmitted` on first contact — or on the lead's first *reply* with
+`lead_replies_required: 1`, the right setting for click-to-message ads — and
+`QualifiedLead` on booking by default), and the campaigns can train on that. Full behavior: `docs/business-logic.md` § Meta CAPI.
 
 Attribution is automatic and per channel: GHL stores Meta's matching key on the contact
 (`attributionSource.ctwaClid` for click-to-WhatsApp, `.pSid` for Facebook/Messenger,
@@ -443,8 +444,10 @@ events — the queue parks them `pending` (one loud `capi_error` per tenant, sta
 after 48h expire (`failed`, reason `expired`) because the click id's attribution value
 decays in days anyway.
 
-Per-tenant event tuning (all optional, in the same jsonb): rename an event or attach a
-value, or disable a kind —
+Per-tenant event tuning (all optional, in the same jsonb): move `lead_started` to the
+lead's N-th reply (`"lead_replies_required": 1` — on a click-to-message ad the first inbound
+is the ad's pre-filled greeting, so 0/absent signals every click), rename an event or attach
+a value, or disable a kind —
 
 ```jsonc
 "events": {
