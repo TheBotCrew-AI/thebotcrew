@@ -35,3 +35,6 @@ npm-debug.log*
 
 # Supabase local (si usas CLI)
 supabase/.temp/
+
+# Battery renders (PNG/HTML) are regenerated from the committed transcripts
+workers/battery/*/render/

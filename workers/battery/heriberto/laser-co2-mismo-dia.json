@@ -1,0 +1,230 @@
+{
+  "tenant": {
+    "slug": "heriberto",
+    "businessName": "Dr. Heriberto Valdivia",
+    "assistantName": "Sofía",
+    "timezone": "America/Chihuahua",
+    "configSource": "supabase"
+  },
+  "scenario": {
+    "id": "laser-co2-mismo-dia",
+    "order": 8,
+    "title": "Láser CO₂ — \"¿me lo hacen el mismo día?\"",
+    "shows": "Pregunta algo que Sofía no tiene en su información (si el láser se aplica el mismo día de la consulta). No inventa: lo confirma con el equipo y aun así deja la cita agendada.",
+    "lead": {
+      "name": "Daniela",
+      "channel": "whatsapp"
+    }
+  },
+  "model": "gpt-5.6-luna",
+  "leadModel": "gpt-5.6-luna",
+  "generatedAt": "2026-08-29T23:04:44.332Z",
+  "messages": [
+    {
+      "from": "lead",
+      "text": "Buenas, me interesa el láser co2 para cicatrices de acné. Vivo en Delicias, me lo pueden hacer el mismo día de la consulta?",
+      "at": "2026-08-29T23:03:49.806Z"
+    },
+    {
+      "from": "bot",
+      "text": "¡Hola! Soy Sofía, del consultorio del Dr. Heriberto Valdivia. El láser CO₂ cuesta $3,000 por sesión y primero el doctor valora tus cicatrices para definir el tratamiento.",
+      "at": "2026-08-29T23:04:37.806Z",
+      "turn": 1
+    },
+    {
+      "from": "bot",
+      "text": "Lo de realizarlo el mismo día de la consulta te lo confirmo con el equipo. ¿Te acomoda venir por la mañana o por la tarde?",
+      "at": "2026-08-29T23:04:43.306Z",
+      "turn": 1
+    },
+    {
+      "from": "lead",
+      "text": "por la mañana me queda mejor, gracias.",
+      "at": "2026-08-29T23:06:57.306Z"
+    },
+    {
+      "from": "bot",
+      "text": "Perfecto. Para la consulta de valoración tengo lunes, 31 de agosto, 11:30 a.m. o martes, 1 de septiembre, 10:30 a.m. ¿Cuál te queda mejor?",
+      "at": "2026-08-29T23:07:58.306Z",
+      "turn": 2
+    },
+    {
+      "from": "lead",
+      "text": "El martes, 1 de septiembre, 10:30 a.m. por favor.",
+      "at": "2026-08-29T23:10:49.306Z"
+    },
+    {
+      "from": "bot",
+      "text": "Perfecto, ese horario está disponible: martes, 1 de septiembre, 10:30 a.m. ¿A nombre de quién agendo la cita?",
+      "at": "2026-08-29T23:11:33.306Z",
+      "turn": 3
+    },
+    {
+      "from": "lead",
+      "text": "Daniela.",
+      "at": "2026-08-29T23:13:01.306Z"
+    },
+    {
+      "from": "bot",
+      "text": "¡Listo, Daniela! Tu cita quedó agendada para el martes, 1 de septiembre, 10:30 a.m. Te llegará la confirmación y los recordatorios por WhatsApp.",
+      "at": "2026-08-29T23:13:58.306Z",
+      "turn": 4
+    },
+    {
+      "from": "lead",
+      "text": "Gracias, quedo pendiente de la confirmación y de saber si se puede realizar el láser ese mismo día.",
+      "at": "2026-08-29T23:16:03.306Z"
+    },
+    {
+      "from": "bot",
+      "text": "Claro, Daniela. Te llegará la confirmación por WhatsApp. También queda pendiente confirmar si el láser puede realizarse ese mismo día; te avisamos por aquí.",
+      "at": "2026-08-29T23:16:43.306Z",
+      "turn": 5
+    }
+  ],
+  "toolCalls": [
+    {
+      "turn": 1,
+      "name": "lookupFaq",
+      "args": {
+        "question": "¿El láser CO₂ fraccionado para cicatrices de acné se puede realizar el mismo día de la consulta?"
+      }
+    },
+    {
+      "turn": 1,
+      "name": "setLeadTimezone",
+      "args": {
+        "place": "Delicias"
+      }
+    },
+    {
+      "turn": 1,
+      "name": "flagPendingInfo",
+      "args": {
+        "question": "¿Me lo pueden hacer el mismo día de la consulta?",
+        "topic": "aplicación mismo día"
+      }
+    },
+    {
+      "turn": 2,
+      "name": "lookupFaq",
+      "args": {
+        "question": "¿El láser CO₂ para cicatrices de acné se puede realizar el mismo día de la consulta?"
+      }
+    },
+    {
+      "turn": 2,
+      "name": "setLeadTimezone",
+      "args": {
+        "place": "Delicias"
+      }
+    },
+    {
+      "turn": 2,
+      "name": "getAvailability",
+      "args": {
+        "serviceName": "Consulta",
+        "fromDate": "2026-08-29T17:03:59-06:00",
+        "toDate": "2026-09-05T23:59:59-06:00"
+      }
+    },
+    {
+      "turn": 2,
+      "name": "flagPendingInfo",
+      "args": {
+        "question": "¿me lo pueden hacer el mismo día de la consulta?",
+        "topic": "láser mismo día"
+      }
+    },
+    {
+      "turn": 3,
+      "name": "setLeadTimezone",
+      "args": {
+        "place": "Delicias"
+      }
+    },
+    {
+      "turn": 3,
+      "name": "getAvailability",
+      "args": {
+        "serviceName": "Consulta",
+        "fromDate": "2026-09-01T00:00:00-06:00",
+        "toDate": "2026-09-01T23:59:59-06:00"
+      }
+    },
+    {
+      "turn": 4,
+      "name": "setLeadTimezone",
+      "args": {
+        "place": "Delicias"
+      }
+    },
+    {
+      "turn": 4,
+      "name": "getAvailability",
+      "args": {
+        "serviceName": "Consulta",
+        "fromDate": "2026-09-01T00:00:00-06:00",
+        "toDate": "2026-09-01T23:59:59-06:00"
+      }
+    },
+    {
+      "turn": 4,
+      "name": "bookAppointment",
+      "args": {
+        "serviceName": "Consulta",
+        "startTime": "2026-09-01T10:30:00-06:00",
+        "whatsappPhone": null,
+        "contactName": "Daniela"
+      }
+    },
+    {
+      "turn": 4,
+      "name": "updateConversationStatus",
+      "args": {
+        "status": "completed",
+        "reason": ""
+      }
+    },
+    {
+      "turn": 4,
+      "name": "updateConversationStatus",
+      "args": {
+        "status": "completed",
+        "reason": "Cita agendada"
+      }
+    },
+    {
+      "turn": 5,
+      "name": "lookupFaq",
+      "args": {
+        "question": "¿Se puede realizar el láser CO₂ fraccionado el mismo día de la consulta de valoración para cicatrices de acné?"
+      }
+    },
+    {
+      "turn": 5,
+      "name": "flagPendingInfo",
+      "args": {
+        "question": "¿Me pueden hacer el láser CO₂ el mismo día de la consulta?",
+        "topic": "láser mismo día"
+      }
+    }
+  ],
+  "ghl": {
+    "appointments": [
+      {
+        "id": "appt_1",
+        "calendarId": "qh8yxxSnb4DAo72obVmG",
+        "serviceName": "Consulta",
+        "startTime": "2026-09-01T10:30:00-06:00",
+        "status": "confirmed"
+      }
+    ],
+    "tags": [
+      "dato-pendiente",
+      "bot-completed"
+    ],
+    "contactName": "Daniela"
+  },
+  "endedBy": "goal"
+}

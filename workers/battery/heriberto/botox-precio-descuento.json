@@ -1,0 +1,248 @@
+{
+  "tenant": {
+    "slug": "heriberto",
+    "businessName": "Dr. Heriberto Valdivia",
+    "assistantName": "Sofía",
+    "timezone": "America/Chihuahua",
+    "configSource": "supabase"
+  },
+  "scenario": {
+    "id": "botox-precio-descuento",
+    "order": 7,
+    "title": "Bótox — pregunta precio y pide descuento",
+    "shows": "Va directo al precio y pide descuento. Sofía da el precio real, no inventa promociones que no existen y lleva la conversación a la valoración.",
+    "lead": {
+      "name": "Karla",
+      "channel": "whatsapp"
+    }
+  },
+  "model": "gpt-5.6-luna",
+  "leadModel": "gpt-5.6-luna",
+  "generatedAt": "2026-08-29T23:03:49.259Z",
+  "messages": [
+    {
+      "from": "lead",
+      "text": "Hola, cuánto cobran el bótox? es por zona?",
+      "at": "2026-08-29T23:02:49.739Z"
+    },
+    {
+      "from": "bot",
+      "text": "El bótox tiene un precio de $4,000. Sobre si se cobra por zona, déjame confirmarlo con el equipo. ¿Te interesa frente, entrecejo o patas de gallo?",
+      "at": "2026-08-29T23:03:37.739Z",
+      "turn": 1
+    },
+    {
+      "from": "lead",
+      "text": "frente y entrecejo, ya me lo he puesto antes en otra clínica. ¿el precio es por zona o por el tratamiento completo?",
+      "at": "2026-08-29T23:05:51.739Z"
+    },
+    {
+      "from": "bot",
+      "text": "El precio publicado del bótox es de $4,000, pero estoy confirmando si corresponde al tratamiento completo o si se maneja por zona. Como ya te lo has aplicado antes, el Dr. Valdivia revisa frente y entrecejo en consulta y define la aplicación adecuada.",
+      "at": "2026-08-29T23:06:52.739Z",
+      "turn": 2
+    },
+    {
+      "from": "bot",
+      "text": "Para ir adelantando, ¿te acomoda más por la mañana o por la tarde?",
+      "at": "2026-08-29T23:06:58.239Z",
+      "turn": 2
+    },
+    {
+      "from": "lead",
+      "text": "antes de agendar, ¿tienen alguna promoción, descuento o meses sin intereses?",
+      "at": "2026-08-29T23:09:49.239Z"
+    },
+    {
+      "from": "bot",
+      "text": "Déjame confirmarlo con el equipo: promociones, descuentos y meses sin intereses. Por ahora, las formas de pago disponibles son efectivo, tarjeta y transferencia.",
+      "at": "2026-08-29T23:10:33.239Z",
+      "turn": 3
+    },
+    {
+      "from": "lead",
+      "text": "ok, me confirmas si tienen alguna promo, descuento o meses sin intereses?",
+      "at": "2026-08-29T23:12:01.239Z"
+    },
+    {
+      "from": "bot",
+      "text": "Lo dejé pendiente con el equipo para confirmar si hay promoción, descuento o meses sin intereses. El precio publicado del bótox es de $4,000.",
+      "at": "2026-08-29T23:12:58.239Z",
+      "turn": 4
+    },
+    {
+      "from": "lead",
+      "text": "está bien, no hay problema. sí me interesa agendar la valoración por la tarde.",
+      "at": "2026-08-29T23:15:03.239Z"
+    },
+    {
+      "from": "bot",
+      "text": "Tengo el lunes, 31 de agosto, 4:15 p.m. o el martes, 1 de septiembre, 3:45 p.m. ¿Cuál te queda mejor?",
+      "at": "2026-08-29T23:15:43.239Z",
+      "turn": 5
+    },
+    {
+      "from": "lead",
+      "text": "el lunes, 31 de agosto, 4:15 p.m. me queda bien.",
+      "at": "2026-08-29T23:18:25.239Z"
+    },
+    {
+      "from": "bot",
+      "text": "Perfecto, ¿a nombre de quién agendo la cita?",
+      "at": "2026-08-29T23:19:18.239Z",
+      "turn": 6
+    },
+    {
+      "from": "lead",
+      "text": "Karla.",
+      "at": "2026-08-29T23:20:37.239Z"
+    },
+    {
+      "from": "bot",
+      "text": "¡Listo, Karla! Tu consulta quedó agendada el lunes, 31 de agosto, 4:15 p.m. Te llegará la confirmación y los recordatorios por WhatsApp.",
+      "at": "2026-08-29T23:21:13.239Z",
+      "turn": 7
+    },
+    {
+      "from": "lead",
+      "text": "Gracias, ahí estaré.",
+      "at": "2026-08-29T23:23:09.239Z"
+    },
+    {
+      "from": "bot",
+      "text": "¡Gracias a ti, Karla! Te esperamos el lunes, 31 de agosto, 4:15 p.m.",
+      "at": "2026-08-29T23:23:58.239Z",
+      "turn": 8
+    }
+  ],
+  "toolCalls": [
+    {
+      "turn": 1,
+      "name": "lookupFaq",
+      "args": {
+        "question": "Precio del Botox y si se cobra por zona"
+      }
+    },
+    {
+      "turn": 1,
+      "name": "flagPendingInfo",
+      "args": {
+        "question": "¿El bótox se cobra por zona?",
+        "topic": "cobro por zona"
+      }
+    },
+    {
+      "turn": 2,
+      "name": "lookupFaq",
+      "args": {
+        "question": "¿El precio del bótox de $4,000 es por zona o por el tratamiento completo? Para frente y entrecejo, ¿cómo se cobra?"
+      }
+    },
+    {
+      "turn": 2,
+      "name": "flagPendingInfo",
+      "args": {
+        "question": "¿El precio es por zona o por el tratamiento completo?",
+        "topic": "precio por zona"
+      }
+    },
+    {
+      "turn": 2,
+      "name": "updateContactName",
+      "args": {
+        "name": "?"
+      }
+    },
+    {
+      "turn": 3,
+      "name": "lookupFaq",
+      "args": {
+        "question": "¿Tienen alguna promoción, descuento o meses sin intereses para el bótox?"
+      }
+    },
+    {
+      "turn": 3,
+      "name": "flagPendingInfo",
+      "args": {
+        "question": "¿Tienen alguna promoción, descuento o meses sin intereses?",
+        "topic": "promociones y pagos"
+      }
+    },
+    {
+      "turn": 4,
+      "name": "lookupFaq",
+      "args": {
+        "question": "¿Tienen alguna promoción, descuento o meses sin intereses para el bótox?"
+      }
+    },
+    {
+      "turn": 4,
+      "name": "flagPendingInfo",
+      "args": {
+        "question": "¿Tienen alguna promoción, descuento o meses sin intereses?",
+        "topic": "promociones y pagos"
+      }
+    },
+    {
+      "turn": 5,
+      "name": "getAvailability",
+      "args": {
+        "serviceName": "Consulta",
+        "fromDate": "2026-08-29T17:03:26-06:00",
+        "toDate": "2026-09-05T23:59:59-06:00"
+      }
+    },
+    {
+      "turn": 7,
+      "name": "getAvailability",
+      "args": {
+        "serviceName": "Consulta",
+        "fromDate": "2026-08-31T00:00:00-06:00",
+        "toDate": "2026-09-01T00:00:00-06:00"
+      }
+    },
+    {
+      "turn": 7,
+      "name": "bookAppointment",
+      "args": {
+        "serviceName": "Consulta",
+        "startTime": "2026-08-31T16:15:00-06:00",
+        "whatsappPhone": null,
+        "contactName": "Karla"
+      }
+    },
+    {
+      "turn": 7,
+      "name": "updateConversationStatus",
+      "args": {
+        "status": "completed",
+        "reason": ""
+      }
+    },
+    {
+      "turn": 7,
+      "name": "updateConversationStatus",
+      "args": {
+        "status": "completed",
+        "reason": "Cita agendada"
+      }
+    }
+  ],
+  "ghl": {
+    "appointments": [
+      {
+        "id": "appt_1",
+        "calendarId": "qh8yxxSnb4DAo72obVmG",
+        "serviceName": "Consulta",
+        "startTime": "2026-08-31T16:15:00-06:00",
+        "status": "confirmed"
+      }
+    ],
+    "tags": [
+      "dato-pendiente",
+      "bot-completed"
+    ],
+    "contactName": "Karla"
+  },
+  "endedBy": "goal"
+}

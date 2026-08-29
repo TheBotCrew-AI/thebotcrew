@@ -1,0 +1,139 @@
+{
+  "tenant": {
+    "slug": "heriberto",
+    "businessName": "Dr. Heriberto Valdivia",
+    "assistantName": "Sofía",
+    "timezone": "America/Chihuahua",
+    "configSource": "supabase"
+  },
+  "scenario": {
+    "id": "cta-botox-valoracion",
+    "order": 5,
+    "title": "Anuncio Bótox — \"Sí, quiero una valoración\"",
+    "shows": "Quiere ir en sábado. Sofía no inventa un horario que no existe: le dice cuándo sí hay consulta y encuentra uno que le acomode entre semana.",
+    "lead": {
+      "name": "Ricardo",
+      "channel": "whatsapp"
+    }
+  },
+  "model": "gpt-5.6-luna",
+  "leadModel": "gpt-5.6-luna",
+  "generatedAt": "2026-08-29T23:01:59.905Z",
+  "messages": [
+    {
+      "from": "lead",
+      "text": "Sí, quiero una valoración para Botox",
+      "at": "2026-08-29T23:01:33.524Z"
+    },
+    {
+      "from": "bot",
+      "text": "Tengo el lunes, 31 de agosto, 11:30 a.m. o el lunes, 31 de agosto, 4:15 p.m. ¿Cuál te queda mejor?",
+      "at": "2026-08-29T23:02:21.524Z",
+      "turn": 1
+    },
+    {
+      "from": "lead",
+      "text": "¿No tienen algún horario más tarde entre semana? Trabajo en oficina y se me complica antes.",
+      "at": "2026-08-29T23:04:35.524Z"
+    },
+    {
+      "from": "bot",
+      "text": "Sí, hay horarios más tarde entre semana: martes, 1 de septiembre, 6:15 p.m. o jueves, 3 de septiembre, 6:15 p.m. ¿Cuál te queda mejor?",
+      "at": "2026-08-29T23:05:36.524Z",
+      "turn": 2
+    },
+    {
+      "from": "lead",
+      "text": "El martes, 1 de septiembre, 6:15 p.m. me queda bien. Soy Ricardo.",
+      "at": "2026-08-29T23:08:27.524Z"
+    },
+    {
+      "from": "bot",
+      "text": "¡Listo, Ricardo! Tu consulta quedó agendada para el martes, 1 de septiembre, 6:15 p.m. Te llegará la confirmación y los recordatorios por WhatsApp.",
+      "at": "2026-08-29T23:09:11.524Z",
+      "turn": 3
+    },
+    {
+      "from": "lead",
+      "text": "Gracias, ahí estaré.",
+      "at": "2026-08-29T23:10:39.524Z"
+    },
+    {
+      "from": "bot",
+      "text": "¡Perfecto, Ricardo! Te esperamos.",
+      "at": "2026-08-29T23:11:36.524Z",
+      "turn": 4
+    }
+  ],
+  "toolCalls": [
+    {
+      "turn": 1,
+      "name": "getAvailability",
+      "args": {
+        "serviceName": "Consulta",
+        "fromDate": "2026-08-29T17:01:33-06:00",
+        "toDate": "2026-09-05T23:59:59-06:00"
+      }
+    },
+    {
+      "turn": 2,
+      "name": "getAvailability",
+      "args": {
+        "serviceName": "Consulta",
+        "fromDate": "2026-08-29T17:01:40-06:00",
+        "toDate": "2026-09-05T23:59:59-06:00"
+      }
+    },
+    {
+      "turn": 3,
+      "name": "getAvailability",
+      "args": {
+        "serviceName": "Consulta",
+        "fromDate": "2026-09-01T18:15:00-06:00",
+        "toDate": "2026-09-01T18:16:00-06:00"
+      }
+    },
+    {
+      "turn": 3,
+      "name": "bookAppointment",
+      "args": {
+        "serviceName": "Consulta",
+        "startTime": "2026-09-01T18:15:00-06:00",
+        "whatsappPhone": null,
+        "contactName": "Ricardo"
+      }
+    },
+    {
+      "turn": 3,
+      "name": "updateConversationStatus",
+      "args": {
+        "status": "completed",
+        "reason": ""
+      }
+    },
+    {
+      "turn": 3,
+      "name": "updateConversationStatus",
+      "args": {
+        "status": "completed",
+        "reason": "Cita agendada"
+      }
+    }
+  ],
+  "ghl": {
+    "appointments": [
+      {
+        "id": "appt_1",
+        "calendarId": "qh8yxxSnb4DAo72obVmG",
+        "serviceName": "Consulta",
+        "startTime": "2026-09-01T18:15:00-06:00",
+        "status": "confirmed"
+      }
+    ],
+    "tags": [
+      "bot-completed"
+    ],
+    "contactName": "Ricardo"
+  },
+  "endedBy": "goal"
+}

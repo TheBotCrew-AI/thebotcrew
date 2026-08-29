@@ -1,0 +1,159 @@
+{
+  "tenant": {
+    "slug": "heriberto",
+    "businessName": "Dr. Heriberto Valdivia",
+    "assistantName": "Sofía",
+    "timezone": "America/Chihuahua",
+    "configSource": "supabase"
+  },
+  "scenario": {
+    "id": "cta-laser-co2-valoracion",
+    "order": 3,
+    "title": "Anuncio Láser CO₂ — \"Sí, quiero una valoración\"",
+    "shows": "Llega directo del anuncio del láser con la intención clara. Sofía confirma para qué le sirve, resuelve una duda sobre la recuperación y agenda la consulta.",
+    "lead": {
+      "name": "Claudia",
+      "channel": "whatsapp"
+    }
+  },
+  "model": "gpt-5.6-luna",
+  "leadModel": "gpt-5.6-luna",
+  "generatedAt": "2026-08-29T23:00:08.528Z",
+  "messages": [
+    {
+      "from": "lead",
+      "text": "👌Sí, quiero una valoración para Láser CO2 Fraccionado",
+      "at": "2026-08-29T22:59:35.804Z"
+    },
+    {
+      "from": "bot",
+      "text": "Perfecto, la valoración para Láser CO₂ Fraccionado es con el Dr. Valdivia. Tengo lunes, 31 de agosto, 11:30 a.m. o lunes, 31 de agosto, 4:15 p.m., ¿cuál te queda mejor?",
+      "at": "2026-08-29T23:00:23.804Z",
+      "turn": 1
+    },
+    {
+      "from": "lead",
+      "text": "lunes, 31 de agosto, 11:30 a.m. me queda perfecto, ¿cuántos días queda la piel roja o pelándose?",
+      "at": "2026-08-29T23:02:37.804Z"
+    },
+    {
+      "from": "bot",
+      "text": "El primer día la piel queda roja y con ardor; el segundo y tercer día puede tomar un tono marrón, y a partir del cuarto empieza la descamación. La recuperación exacta la revisa el Dr. Valdivia según tu piel.",
+      "at": "2026-08-29T23:03:38.804Z",
+      "turn": 2
+    },
+    {
+      "from": "bot",
+      "text": "Para apartar el lunes 31 de agosto a las 11:30 a.m., ¿a nombre de quién agendo la cita?",
+      "at": "2026-08-29T23:03:44.304Z",
+      "turn": 2
+    },
+    {
+      "from": "lead",
+      "text": "a nombre de Claudia.",
+      "at": "2026-08-29T23:06:35.304Z"
+    },
+    {
+      "from": "bot",
+      "text": "¡Listo, Claudia! Tu cita quedó agendada para el lunes, 31 de agosto, 11:30 a.m. Te llegará la confirmación y los recordatorios por WhatsApp.",
+      "at": "2026-08-29T23:07:19.304Z",
+      "turn": 3
+    },
+    {
+      "from": "lead",
+      "text": "gracias, quedo pendiente de la confirmación.",
+      "at": "2026-08-29T23:08:47.304Z"
+    },
+    {
+      "from": "bot",
+      "text": "¡Claro, Claudia! Te llegará la confirmación y los recordatorios por WhatsApp. Nos vemos el lunes.",
+      "at": "2026-08-29T23:09:44.304Z",
+      "turn": 4
+    }
+  ],
+  "toolCalls": [
+    {
+      "turn": 1,
+      "name": "getAvailability",
+      "args": {
+        "serviceName": "Consulta",
+        "fromDate": "2026-08-29T16:59:35-06:00",
+        "toDate": "2026-09-05T23:59:59-06:00"
+      }
+    },
+    {
+      "turn": 2,
+      "name": "lookupFaq",
+      "args": {
+        "question": "Para el Láser CO₂ Fraccionado, ¿cuántos días queda la piel roja o pelándose?"
+      }
+    },
+    {
+      "turn": 3,
+      "name": "getAvailability",
+      "args": {
+        "serviceName": "Consulta",
+        "fromDate": "2026-08-31T00:00:00-06:00",
+        "toDate": "2026-09-01T00:00:00-06:00"
+      }
+    },
+    {
+      "turn": 3,
+      "name": "bookAppointment",
+      "args": {
+        "serviceName": "Consulta",
+        "startTime": "2026-08-31T11:30:00-06:00",
+        "whatsappPhone": null,
+        "contactName": "Claudia"
+      }
+    },
+    {
+      "turn": 3,
+      "name": "updateConversationStatus",
+      "args": {
+        "status": "completed",
+        "reason": ""
+      }
+    },
+    {
+      "turn": 3,
+      "name": "updateConversationStatus",
+      "args": {
+        "status": "completed",
+        "reason": "Cita agendada"
+      }
+    },
+    {
+      "turn": 4,
+      "name": "updateConversationStatus",
+      "args": {
+        "status": "completed",
+        "reason": ""
+      }
+    },
+    {
+      "turn": 4,
+      "name": "updateConversationStatus",
+      "args": {
+        "status": "completed",
+        "reason": "Cita agendada"
+      }
+    }
+  ],
+  "ghl": {
+    "appointments": [
+      {
+        "id": "appt_1",
+        "calendarId": "qh8yxxSnb4DAo72obVmG",
+        "serviceName": "Consulta",
+        "startTime": "2026-08-31T11:30:00-06:00",
+        "status": "confirmed"
+      }
+    ],
+    "tags": [
+      "bot-completed"
+    ],
+    "contactName": "Claudia"
+  },
+  "endedBy": "goal"
+}

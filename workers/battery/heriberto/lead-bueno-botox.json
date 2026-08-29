@@ -1,0 +1,227 @@
+{
+  "tenant": {
+    "slug": "heriberto",
+    "businessName": "Dr. Heriberto Valdivia",
+    "assistantName": "Sofía",
+    "timezone": "America/Chihuahua",
+    "configSource": "supabase"
+  },
+  "scenario": {
+    "id": "lead-bueno-botox",
+    "order": 0,
+    "title": "Lead bueno — bótox, agenda esta semana",
+    "shows": "Llega del anuncio, pregunta lo que le preocupa y Sofía le ofrece dos horarios reales de la agenda. Pide el nombre y deja la consulta agendada.",
+    "lead": {
+      "name": "María Fernanda",
+      "channel": "whatsapp"
+    }
+  },
+  "model": "gpt-5.6-luna",
+  "leadModel": "gpt-5.6-luna",
+  "generatedAt": "2026-08-29T22:35:59.086Z",
+  "messages": [
+    {
+      "from": "lead",
+      "text": "Hola, vi su anuncio del bótox en Instagram, me pueden dar informes?",
+      "at": "2026-08-29T22:35:07.070Z"
+    },
+    {
+      "from": "bot",
+      "text": "¡Hola! Soy Sofía, del consultorio del Dr. Heriberto Valdivia. El bótox cuesta $4,000 y ayuda a suavizar líneas de expresión y prevenir nuevas arrugas. Primero tienes una consulta con el Dr. Valdivia para valorar tu rostro y definir lo que te conviene.",
+      "at": "2026-08-29T22:35:55.070Z",
+      "turn": 1
+    },
+    {
+      "from": "bot",
+      "text": "¿Ya te has aplicado bótox antes o sería tu primera vez?",
+      "at": "2026-08-29T22:36:00.570Z",
+      "turn": 1
+    },
+    {
+      "from": "lead",
+      "text": "sería mi primera vez, me molestan las líneas de la frente y el entrecejo. ¿duele?",
+      "at": "2026-08-29T22:38:14.570Z"
+    },
+    {
+      "from": "bot",
+      "text": "Como es tu primera vez, es muy común tener esa duda. Déjame confirmar con el equipo qué tan molesta es la aplicación de bótox y te aviso.",
+      "at": "2026-08-29T22:39:15.570Z",
+      "turn": 2
+    },
+    {
+      "from": "bot",
+      "text": "Para ir avanzando, ¿te acomoda más venir por la mañana o por la tarde?",
+      "at": "2026-08-29T22:39:21.070Z",
+      "turn": 2
+    },
+    {
+      "from": "lead",
+      "text": "por la tarde, por favor.",
+      "at": "2026-08-29T22:42:12.070Z"
+    },
+    {
+      "from": "bot",
+      "text": "Perfecto. Para valorar las líneas de la frente y el entrecejo, tengo el lunes, 31 de agosto, 4:15 p.m. o el martes, 1 de septiembre, 4:45 p.m. ¿Cuál te queda mejor?",
+      "at": "2026-08-29T22:42:56.070Z",
+      "turn": 3
+    },
+    {
+      "from": "lead",
+      "text": "el martes, 1 de septiembre, 4:45 p.m. me queda bien.",
+      "at": "2026-08-29T22:44:24.070Z"
+    },
+    {
+      "from": "bot",
+      "text": "Perfecto, la consulta sería el martes, 1 de septiembre, 4:45 p.m. ¿A nombre de quién agendo la cita?",
+      "at": "2026-08-29T22:45:21.070Z",
+      "turn": 4
+    },
+    {
+      "from": "lead",
+      "text": "María Fernanda.",
+      "at": "2026-08-29T22:47:26.070Z"
+    },
+    {
+      "from": "bot",
+      "text": "¡Listo, María Fernanda! Tu consulta quedó agendada para el martes, 1 de septiembre, 4:45 p.m. Te llegará la confirmación y los recordatorios por WhatsApp.",
+      "at": "2026-08-29T22:48:06.070Z",
+      "turn": 5
+    },
+    {
+      "from": "lead",
+      "text": "¡Muchas gracias!",
+      "at": "2026-08-29T22:50:48.070Z"
+    },
+    {
+      "from": "bot",
+      "text": "¡Con gusto, María Fernanda! Nos vemos el martes, 1 de septiembre, 4:45 p.m.",
+      "at": "2026-08-29T22:51:41.070Z",
+      "turn": 6
+    }
+  ],
+  "toolCalls": [
+    {
+      "turn": 1,
+      "name": "lookupFaq",
+      "args": {
+        "question": "Información sobre Botox: precio, qué hace y cómo es la primera consulta"
+      }
+    },
+    {
+      "turn": 2,
+      "name": "lookupFaq",
+      "args": {
+        "question": "¿Duele la aplicación de bótox? Es la primera vez y le molestan las líneas de la frente y el entrecejo."
+      }
+    },
+    {
+      "turn": 2,
+      "name": "flagPendingInfo",
+      "args": {
+        "question": "¿Duele la aplicación de bótox?",
+        "topic": "molestia del bótox"
+      }
+    },
+    {
+      "turn": 3,
+      "name": "lookupFaq",
+      "args": {
+        "question": "¿Duele la aplicación de bótox? ¿Qué tan molesta es?"
+      }
+    },
+    {
+      "turn": 3,
+      "name": "getAvailability",
+      "args": {
+        "serviceName": "Consulta",
+        "fromDate": "2026-08-29T16:35:25-06:00",
+        "toDate": "2026-09-05T23:59:59-06:00"
+      }
+    },
+    {
+      "turn": 3,
+      "name": "flagPendingInfo",
+      "args": {
+        "question": "¿duele la aplicación de bótox?",
+        "topic": "molestia del bótox"
+      }
+    },
+    {
+      "turn": 4,
+      "name": "getAvailability",
+      "args": {
+        "serviceName": "Consulta",
+        "fromDate": "2026-09-01T00:00:00-06:00",
+        "toDate": "2026-09-01T23:59:59-06:00"
+      }
+    },
+    {
+      "turn": 5,
+      "name": "getAvailability",
+      "args": {
+        "serviceName": "Consulta",
+        "fromDate": "2026-09-01T00:00:00-06:00",
+        "toDate": "2026-09-02T00:00:00-06:00"
+      }
+    },
+    {
+      "turn": 5,
+      "name": "bookAppointment",
+      "args": {
+        "serviceName": "Consulta",
+        "startTime": "2026-09-01T16:45:00-06:00",
+        "whatsappPhone": null,
+        "contactName": "María Fernanda"
+      }
+    },
+    {
+      "turn": 5,
+      "name": "updateConversationStatus",
+      "args": {
+        "status": "completed",
+        "reason": ""
+      }
+    },
+    {
+      "turn": 5,
+      "name": "updateConversationStatus",
+      "args": {
+        "status": "completed",
+        "reason": "Cita agendada"
+      }
+    },
+    {
+      "turn": 6,
+      "name": "updateConversationStatus",
+      "args": {
+        "status": "completed",
+        "reason": ""
+      }
+    },
+    {
+      "turn": 6,
+      "name": "updateConversationStatus",
+      "args": {
+        "status": "completed",
+        "reason": "Cita agendada"
+      }
+    }
+  ],
+  "ghl": {
+    "appointments": [
+      {
+        "id": "appt_1",
+        "calendarId": "qh8yxxSnb4DAo72obVmG",
+        "serviceName": "Consulta",
+        "startTime": "2026-09-01T16:45:00-06:00",
+        "status": "confirmed"
+      }
+    ],
+    "tags": [
+      "dato-pendiente",
+      "bot-completed"
+    ],
+    "contactName": "María Fernanda"
+  },
+  "endedBy": "goal"
+}

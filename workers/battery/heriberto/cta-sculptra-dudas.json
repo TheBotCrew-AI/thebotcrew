@@ -1,0 +1,163 @@
+{
+  "tenant": {
+    "slug": "heriberto",
+    "businessName": "Dr. Heriberto Valdivia",
+    "assistantName": "Sofía",
+    "timezone": "America/Chihuahua",
+    "configSource": "supabase"
+  },
+  "scenario": {
+    "id": "cta-sculptra-dudas",
+    "order": 6,
+    "title": "Anuncio Sculptra — \"tengo dudas\"",
+    "shows": "Pregunta qué es Sculptra y en qué se diferencia del ácido hialurónico. Sofía explica lo que sabe, deja lo médico para el doctor y respeta que quiera pensarlo.",
+    "lead": {
+      "name": "Lorena",
+      "channel": "whatsapp"
+    }
+  },
+  "model": "gpt-5.6-luna",
+  "leadModel": "gpt-5.6-luna",
+  "generatedAt": "2026-08-29T23:02:49.347Z",
+  "messages": [
+    {
+      "from": "lead",
+      "text": "🤔Me interesa el Sculptra, pero tengo dudas",
+      "at": "2026-08-29T23:02:00.567Z"
+    },
+    {
+      "from": "bot",
+      "text": "¡Hola! Soy Sofía, del consultorio del Dr. Heriberto Valdivia. Sculptra cuesta $12,500 y es un bioestimulador de colágeno que mejora progresivamente la firmeza, el volumen y la calidad de la piel. El doctor define en consulta si es lo indicado para ti. ¿Tu duda es sobre cómo funciona o sobre el precio?",
+      "at": "2026-08-29T23:02:48.567Z",
+      "turn": 1
+    },
+    {
+      "from": "lead",
+      "text": "¿me podrías explicar cómo funciona y qué hace exactamente en la piel?",
+      "at": "2026-08-29T23:05:02.567Z"
+    },
+    {
+      "from": "bot",
+      "text": "Sculptra es un bioestimulador de colágeno. Trabaja de forma progresiva para mejorar la firmeza, recuperar volumen y elevar la calidad general de la piel, logrando una apariencia más revitalizada con el tiempo.",
+      "at": "2026-08-29T23:06:03.567Z",
+      "turn": 2
+    },
+    {
+      "from": "bot",
+      "text": "En consulta, el Dr. Valdivia revisa tu piel y define si es lo más adecuado para ti. ¿Te interesa principalmente mejorar la firmeza o recuperar volumen?",
+      "at": "2026-08-29T23:06:09.067Z",
+      "turn": 2
+    },
+    {
+      "from": "lead",
+      "text": "sobre todo me interesa mejorar la flacidez de las mejillas y la línea de la mandíbula, ¿y en qué se diferencia del ácido hialurónico?",
+      "at": "2026-08-29T23:09:00.067Z"
+    },
+    {
+      "from": "bot",
+      "text": "Para la flacidez de mejillas y mandíbula, Sculptra estimula la producción de colágeno y mejora la firmeza y calidad de la piel de forma progresiva. El ácido hialurónico se enfoca más en restaurar volumen y mejorar el contorno de zonas específicas.",
+      "at": "2026-08-29T23:09:44.067Z",
+      "turn": 3
+    },
+    {
+      "from": "bot",
+      "text": "El Dr. Valdivia revisa tu caso y define cuál te conviene. ¿Te acomoda más venir por la mañana o por la tarde?",
+      "at": "2026-08-29T23:09:49.567Z",
+      "turn": 3
+    },
+    {
+      "from": "lead",
+      "text": "¿y cuánto tiempo dura el efecto del Sculptra?",
+      "at": "2026-08-29T23:11:17.567Z"
+    },
+    {
+      "from": "bot",
+      "text": "Déjame confirmarlo con el equipo y te aviso. En consulta, el Dr. Valdivia también revisa tu flacidez y define si Sculptra es lo más adecuado para ti. ¿Te acomoda más venir por la mañana o por la tarde?",
+      "at": "2026-08-29T23:12:14.567Z",
+      "turn": 4
+    },
+    {
+      "from": "lead",
+      "text": "sí, gracias, quedo pendiente de cuánto dura el efecto. el precio es de $12,500, ¿verdad?",
+      "at": "2026-08-29T23:14:19.567Z"
+    },
+    {
+      "from": "bot",
+      "text": "Sí, el precio de Sculptra es de $12,500. La duración del efecto queda pendiente de confirmación con el equipo. Para valorar la flacidez de tus mejillas y mandíbula, ¿te acomoda más venir por la mañana o por la tarde?",
+      "at": "2026-08-29T23:14:59.567Z",
+      "turn": 5
+    },
+    {
+      "from": "lead",
+      "text": "lo quiero platicar con mi esposo y pensarlo bien, yo les escribo después. gracias",
+      "at": "2026-08-29T23:17:41.567Z"
+    },
+    {
+      "from": "bot",
+      "text": "Claro, tómense el tiempo para pensarlo. Aquí estaremos cuando decidas escribirnos. ¡Gracias a ti!",
+      "at": "2026-08-29T23:18:34.567Z",
+      "turn": 6
+    }
+  ],
+  "toolCalls": [
+    {
+      "turn": 1,
+      "name": "lookupFaq",
+      "args": {
+        "question": "Sculptra: información, precio, cómo funciona, duración, sesiones, resultados, aplicación y cuidados"
+      }
+    },
+    {
+      "turn": 2,
+      "name": "lookupFaq",
+      "args": {
+        "question": "¿Cómo funciona Sculptra y qué hace exactamente en la piel?"
+      }
+    },
+    {
+      "turn": 3,
+      "name": "lookupFaq",
+      "args": {
+        "question": "¿En qué se diferencia Sculptra del ácido hialurónico, especialmente para flacidez de mejillas y línea de la mandíbula?"
+      }
+    },
+    {
+      "turn": 4,
+      "name": "lookupFaq",
+      "args": {
+        "question": "¿Cuánto tiempo dura el efecto del Sculptra?"
+      }
+    },
+    {
+      "turn": 4,
+      "name": "flagPendingInfo",
+      "args": {
+        "question": "¿y cuánto tiempo dura el efecto del Sculptra?",
+        "topic": "duración Sculptra"
+      }
+    },
+    {
+      "turn": 5,
+      "name": "lookupFaq",
+      "args": {
+        "question": "¿Cuánto dura el efecto del Sculptra y cuál es su precio? La persona confirma si cuesta $12,500."
+      }
+    },
+    {
+      "turn": 6,
+      "name": "updateConversationStatus",
+      "args": {
+        "status": "standby",
+        "reason": "La persona quiere consultarlo con su esposo y pensarlo antes de agendar."
+      }
+    }
+  ],
+  "ghl": {
+    "appointments": [],
+    "tags": [
+      "dato-pendiente",
+      "bot-standby"
+    ]
+  },
+  "endedBy": "fin"
+}

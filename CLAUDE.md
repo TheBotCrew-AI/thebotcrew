@@ -151,6 +151,12 @@ workers/                       # Mastra + Cloudflare Worker package (@thebotcrew
     worker/                    # webhook-handler (inbound) + conversation-do (per-conversation Durable Object: durable-alarm debounce + serialized turn) + outbound-handler (human takeover) + tag-handler (bot-off) + delivery-retry + followup-runner + capi-runner (Meta CAPI queue drain) + info-gap-runner + info-gaps/ (0054: what the bot couldn't answer — extraction queue, aggregate, report; pending_info escalation)
   scripts/simulate-webhook.mjs # local dev: fire a fake GHL webhook
   scripts/demo-take.mjs        # arma/cierra una toma del demo de bótox para grabar video (business-logic §5b)
+  scripts/battery.mjs          # pnpm battery <slug>: corre la batería de conversaciones de muestra de un tenant
+  scripts/render-battery.mjs   # pnpm battery:render <slug>: transcripciones → "screenshots" de WhatsApp (PNG, sin deps)
+  src/battery/                 # la batería: scenario.ts (tipos), fake-ghl.ts (calendario falso con horario real),
+                               #   lead-simulator.ts (un LLM juega al lead), battery.eval.ts (runner vitest, se
+                               #   auto-salta sin BATTERY_TENANT), scenarios/<slug>.ts (personas por tenant)
+  battery/<slug>/*.json        # transcripciones (SE COMMITEAN: son la evidencia); <slug>/render/ es gitignored
   fixtures/                    # sample webhook payloads
   wrangler.jsonc, vitest.config.ts, tsconfig.json
 supabase/
@@ -382,6 +388,25 @@ for the retry cron.
   `worker/info-gaps/extract.eval.ts` is the one live eval outside a role: the info-gap extractor
   on a real MADI thread, old config vs new config (the `already_in_config` verdict).
   (Layer 3 golden-conversation gate on staging: TBD.)
+
+### Batería de conversaciones de muestra (showcase, no test)
+> Guía completa (uso, escribir escenarios, otro tenant, problemas): [`docs/battery.md`](docs/battery.md).
+
+`pnpm battery <slug>` → `pnpm battery:render <slug>` → `workers/battery/<slug>/render/reporte.html`
+(para el cliente) e `index.html` (para ti).
+Corre el agente front-desk REAL sobre la config VIVA del tenant (Supabase; cae a la fixture sin
+env) contra un GHL falso (`src/battery/fake-ghl.ts`: slots del horario real, nada toca un
+calendario de verdad) y una DB falsa (toda query que no sea `loadTenantConfig` está stubbeada;
+una desconocida LANZA en vez de llegar a prod). Un LLM juega al lead con una persona por
+escenario (`src/battery/scenarios/<slug>.ts`): abre con un mensaje fijo, improvisa hasta cumplir
+su objetivo (`endWhen.toolCalled`), decir `[FIN]` o `maxTurns`. No afirma nada: su producto es
+la transcripción JSON (commiteada) y los PNG estilo WhatsApp desde el teléfono del lead
+(paginados por pantalla, 1170×2532), con una galería `index.html` que lleva lo que NO va en la
+foto (qué muestra, herramientas llamadas, qué quedó agendado) y un `reporte.html` para el cliente
+(una conversación a la vez, se reproduce sola, sin jerga). Para otro tenant: un archivo de
+escenarios + registrarlo en `scenarios/index.ts`. **Screenshots:** usa `chrome-headless-shell`
+(cache de puppeteer/playwright o `CHROME_BIN`) por CDP, no la app de Chrome — en la Mac de Leo
+cualquier Chrome headless recibe SIGTERM a los ~2 s (ver cabecera de `render-battery.mjs`).
 
 ### Deploy
 - `pnpm typecheck` + `pnpm test:unit` (the gate) then `pnpm build` (mastra build via
