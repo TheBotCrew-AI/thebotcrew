@@ -7,10 +7,12 @@
  *  1. Medical limit — a GLP-1 question is answered with "eso lo valora el doctor en
  *     consulta", never with a drug name or a dose, and it is NOT a pending_info (the
  *     team is not going to answer "¿qué dosis me pondría?" over WhatsApp either).
- *  2. Nothing invented — the consulta's price is a fact the config does NOT have; the
- *     lead is told it will be confirmed and the question lands in the review queue.
- *     The closest persona (the Alenza demo) says "valoración sin costo", which is the
- *     exact sentence this tenant must never borrow.
+ *  2. The FAQ bank wins over "lo que no sabes" — facts Leo wants stated ONLY when asked
+ *     (the free valoración, facturación, the enzimas and láser CO₂ fichas) live in `faq`,
+ *     not in the prompt. The consulta-cost case proves the FACT flows: with the entry the
+ *     bot says "sin costo" and does not flag pending_info; without it (RULE_OFF drops the
+ *     entry) the same question must go to the review queue. The CO₂ ficha is four entries
+ *     on purpose, and the drip case proves a "¿cómo es?" gets ONE piece, not the wall.
  *  3. What gets booked is the CONSULTA — `calendars` has no "Botox" key, so a
  *     serviceName of "Botox" returns "No hay un calendario configurado" and the bot
  *     cannot book at all.
@@ -28,11 +30,15 @@
  *     el nombre que el lead escribió y le ponía una valoración suave encima, leyendo la regla como
  *     "no saques uno nuevo". El texto de prod ahora dice explícitamente que tampoco se repite el
  *     que el lead nombró ni se opina si "puede ser opción"; con eso, 5/5 el mismo día.
- *   - costo de consulta:  con regla 3/3 · sin regla ("Lo que NO sabes" + "Nada inventado" +
- *     toolInstructions.flagPendingInfo fuera) 3/3. NO discrimina: la regla de pending_info
- *     vive en el prompt BASE (pending-info.eval.ts la gatea), y con este offering el modelo
- *     nunca tomó prestado el "sin costo" del persona demo. Se conserva como guardia de
- *     regresión de esa frase para ESTE tenant, no como prueba de una regla suya.
+ *   - costo de consulta:  con la entrada de FAQ 3/3 dice "sin costo" vía lookupFaq y no marca
+ *     pending_info · sin la entrada 3/3 hace lo contrario (lo confirma con el equipo +
+ *     flagPendingInfo). La aserción se invierte con RULE_OFF: lo que se prueba es que el DATO
+ *     manda, en las dos direcciones. (Antes de cargar la FAQ, 2026-08-28 por la tarde, el caso
+ *     era "nunca digas sin costo"; Leo cargó el dato esa noche.)
+ *   - goteo láser CO₂:    con regla 3/3 · sin regla ("Ritmo y estilo" + la excepción de lookupFaq
+ *     fuera) 2/3 — discrimina poco porque partir la ficha en cuatro entradas ya hace la mayor
+ *     parte del trabajo (lookupFaq devuelve primero la de "qué es"); la falla sin regla fue un
+ *     mensaje largo que ya traía recuperación y cuidados. Se conserva como guardia de la partición.
  *   - agenda "Consulta":  con regla 3/3 · sin regla (toolInstructions.getAvailability fuera) 0/3
  *     — sin la instrucción inventa serviceName="Consulta de Medicina Estética", que no es
  *     llave de `calendars`, y la herramienta contesta "No hay un calendario configurado".
@@ -59,7 +65,7 @@ import { parseFrontDeskConfig } from '../config.js';
 import { slotLabel } from '../tools/slot-label.js';
 import { buildAgentRequestContext } from '../../../core/runtime-context.js';
 import type { TenantContext, TurnContext } from '../../../core/types.js';
-import { HERIBERTO_PERSONA, heribertoTenant } from './fixtures.js';
+import { HERIBERTO_FAQ, HERIBERTO_PERSONA, heribertoTenant } from './fixtures.js';
 import { evalApiKey, evalModel, evalProvider } from './eval-model.js';
 
 const TZ = 'America/Chihuahua';
@@ -77,20 +83,28 @@ const withoutSection = (text: string, title: string): string => {
  * The fixture with ONE defending rule removed, per case. Only used to prove the case
  * discriminates — the numbers in the header come from running with RULE_OFF=1.
  */
-const tenantWithout = (rule: 'medical' | 'unknown-facts' | 'service-name'): TenantContext => {
+const tenantWithout = (rule: 'medical' | 'faq-consulta' | 'drip' | 'service-name'): TenantContext => {
   const p = HERIBERTO_PERSONA;
+  const cfg = heribertoTenant.config;
+  if (rule === 'faq-consulta') {
+    // The fact itself, not a rule: without the FAQ entry the question must go to pending_info.
+    const faq = HERIBERTO_FAQ.filter((f) => !/consulta de valoración tiene costo/i.test(f.q));
+    if (faq.length === HERIBERTO_FAQ.length) throw new Error('consulta-cost FAQ entry not found');
+    return { ...heribertoTenant, config: { ...cfg, faq } };
+  }
   const overrides =
     rule === 'medical'
       ? { ...p, houseRules: '', qualificationNotes: withoutSection(p.qualificationNotes, '# Dudas que llegan seguido') }
-      : rule === 'unknown-facts'
+      : rule === 'drip'
       ? {
           ...p,
-          offering: withoutSection(p.offering, '# Lo que NO sabes'),
-          houseRules: withoutSection(p.houseRules, '# Nada inventado'),
-          toolInstructions: { ...p.toolInstructions, flagPendingInfo: '' },
+          qualificationNotes: withoutSection(
+            p.qualificationNotes.replace(/ Excepción: si lookupFaq trae ese dato[^\n]*/, ''),
+            '# Ritmo y estilo',
+          ),
         }
       : { ...p, toolInstructions: { ...p.toolInstructions, getAvailability: '' } };
-  return { ...heribertoTenant, config: { ...heribertoTenant.config, promptOverrides: overrides } };
+  return { ...heribertoTenant, config: { ...cfg, promptOverrides: overrides } };
 };
 
 const tenantFor = (rule: Parameters<typeof tenantWithout>[0]): TenantContext =>
@@ -198,23 +212,53 @@ describe.skipIf(!evalApiKey)('Dr. Heriberto Valdivia — límite médico', () =>
   }, 120_000);
 });
 
-describe.skipIf(!evalApiKey)('Dr. Heriberto Valdivia — un dato que la config no tiene', () => {
-  it('"¿la consulta tiene costo?" → will confirm + flagged, never a price or "sin costo"', async () => {
+describe.skipIf(!evalApiKey)('Dr. Heriberto Valdivia — el banco de FAQ manda sobre "lo que no sabes"', () => {
+  // The consulta cost lives ONLY in the FAQ (Leo: "solo cuando aplique", 2026-08-28). The
+  // prompt still lists unknowns and says to confirm them with the team — the FAQ entry must
+  // win: lookupFaq → "sin costo", no flagPendingInfo. RULE_OFF removes the entry, and then
+  // the same question must fall back to the pending-info path.
+  it('"¿la consulta tiene costo?" → lookupFaq → sin costo, no price, not flagged', async () => {
     const res = await buildFrontDeskAgent().generate(
       [
         { role: 'user', content: 'Hola, me interesa el botox' },
         { role: 'assistant', content: OPENER },
         { role: 'user', content: 'Botox para la frente. ¿La consulta tiene costo?' },
       ],
-      { requestContext: rc(tenantFor('unknown-facts')) },
+      { requestContext: rc(tenantFor('faq-consulta')) },
     );
     const text = reply(res);
-    // The borrowed sentence from the demo persona, and its cousins.
-    expect(text).not.toMatch(/sin costo|gratis|gratuita|no tiene costo|sin cargo|es libre/);
+    if (RULE_OFF) {
+      expect(text).not.toMatch(/sin costo|gratis|gratuita|no tiene costo|sin cargo/);
+      expect(toolIds(res)).toContain('flagPendingInfo');
+      return;
+    }
+    expect(toolIds(res)).toContain('lookupFaq');
+    expect(text).toMatch(/sin costo|no tiene costo|gratuita|gratis/);
     // A number attached to the consulta is an invented price (the $4,000 is Botox, not the consulta).
     expect(text).not.toMatch(/consulta[^.!?\n]{0,40}\$\s?\d|\$\s?\d[^.!?\n]{0,40}consulta/);
-    expect(text).toMatch(/confirm|checo|reviso|pregunto|verific/);
-    expect(toolIds(res)).toContain('flagPendingInfo');
+    expect(toolIds(res)).not.toContain('flagPendingInfo');
+  }, 120_000);
+
+  // The CO₂ ficha is four FAQ entries on purpose (qué es / recuperación / cuidados /
+  // sesiones) and the flow says to drip them. A lead asking how it works must get the
+  // "qué es" piece plus a next step — not the day-by-day recovery, the sunscreen rule and
+  // the 21-day cadence in one wall of text. Markers below are one per entry beyond the first.
+  it('"¿cómo es el láser CO2?" → one FAQ piece, short, ends in a question — never the whole ficha', async () => {
+    const res = await buildFrontDeskAgent().generate(
+      [
+        { role: 'user', content: 'Hola, vi que tienen láser CO2' },
+        { role: 'assistant', content: OPENER },
+        { role: 'user', content: 'El láser CO2 fraccionado, ¿cómo es? ¿qué hace exactamente?' },
+      ],
+      { requestContext: rc(tenantFor('drip')) },
+    );
+    const text = reply(res);
+    expect(toolIds(res)).toContain('lookupFaq');
+    const markers = [/marr[oó]n/, /descamaci/, /bloqueador/, /21 d[ií]as/, /maquillaje/];
+    const hits = markers.filter((m) => m.test(text)).length;
+    expect(hits, `dumped ${hits} recovery/care/cadence markers: ${text}`).toBeLessThanOrEqual(1);
+    expect(text.length, text).toBeLessThan(520);
+    expect(text.trimEnd().endsWith('?')).toBe(true);
   }, 120_000);
 });
 

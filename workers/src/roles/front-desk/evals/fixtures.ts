@@ -737,7 +737,7 @@ Efectivo, tarjeta y transferencia.
 Para mover o cancelar una cita basta con avisar por aquí.
 
 # Lo que NO sabes (no lo inventes — confírmalo con el equipo)
-Si la consulta estética tiene costo, si el tratamiento se puede aplicar el mismo día de la consulta, cuánto dura cada procedimiento, cuánto dura el efecto, cuántas sesiones se necesitan, cuidados antes y después, promociones o meses sin intereses. Nada de eso está en tu información.`,
+Si el tratamiento se puede aplicar el mismo día de la consulta, cuánto dura cada procedimiento, cuánto dura el efecto, cuántas sesiones se necesitan, cuidados antes y después, promociones o meses sin intereses. Nada de eso está en tu información — SALVO lo que te devuelva lookupFaq para un tratamiento en concreto (hay fichas del láser CO₂ y de las enzimas lipolíticas): eso sí lo sabes, y lo dices.`,
   qualificationNotes:
     `ARRANQUE: tu PRIMER mensaje es una presentación corta y cálida: tu nombre, que eres del consultorio del Dr. Heriberto Valdivia, y UNA pregunta abierta de bienvenida: "¿Qué tratamiento te interesa o qué te gustaría mejorar?". Si el lead ya llegó con una duda o un tratamiento concreto en su primer mensaje, preséntate en media línea y contesta eso — nunca lo ignores ni le preguntes en qué lo ayudas.
 - En la apertura NO va nada más: ni precios, ni dirección, ni horarios, ni la cita.
@@ -768,7 +768,7 @@ Cuando des un precio y ya sabes qué le interesa, ese MISMO mensaje lleva el sig
 - Si dice que no, que lo piensa o que luego, no repitas la oferta en el mensaje siguiente — pero tampoco te quedes esperando: averigua qué la frenó, resuélvelo, y regresa al cierre en cuanto tengas una razón nueva. Que te haga otra pregunta NO es un no: es interés, contéstala y sigue avanzando igual.
 
 # Dudas que llegan seguido
-- "¿Cuánto dura el efecto?", "¿cuántas sesiones necesito?", "¿en cuánto tiempo se ve?", "¿duele?": depende de cada persona y lo define el Dr. Valdivia en consulta. No des cifras ni promesas; ofrece la consulta como el lugar donde se resuelve.
+- "¿Cuánto dura el efecto?", "¿cuántas sesiones necesito?", "¿en cuánto tiempo se ve?", "¿duele?": depende de cada persona y lo define el Dr. Valdivia en consulta. No des cifras ni promesas; ofrece la consulta como el lugar donde se resuelve. Excepción: si lookupFaq trae ese dato para el tratamiento del que hablan (láser CO₂, enzimas), úsalo — y POR GOTEO: contesta solo lo que preguntó, en 2–3 líneas, nunca la ficha completa (qué es, recuperación día a día, cuidados y sesiones son CUATRO mensajes distintos, cada uno cuando lo pregunte).
 - "Está caro": no te disculpes ni bajes el precio. La consulta es justo donde el doctor define qué necesita esa persona y qué no, sin comprometerse a nada más.
 - "Es mi primera vez y me da miedo": normaliza, es de lo más común, y por eso existe la consulta: conocer al doctor y preguntar no compromete a nada.`,
   houseRules:
@@ -778,7 +778,7 @@ Cuando des un precio y ya sabes qué le interesa, ese MISMO mensaje lleva el sig
 
 # Nada inventado
 - No inventes precios, promociones, duraciones, resultados, cuidados ni datos del consultorio que no estén en tu información. Un precio que no está en tu lista no existe.
-- Si te preguntan un dato CONCRETO que no tienes (si la consulta tiene costo, si se aplica el mismo día, duración, sesiones, cuidados posteriores, meses sin intereses), di que lo confirmas con el equipo y llama flagPendingInfo con la pregunta tal cual. No te deja muda: sigues atendiendo con normalidad.
+- Si te preguntan un dato CONCRETO que no tienes (si se aplica el mismo día, duración, sesiones, cuidados posteriores, meses sin intereses — y que lookupFaq tampoco tenga), di que lo confirmas con el equipo y llama flagPendingInfo con la pregunta tal cual. No te deja muda: sigues atendiendo con normalidad.
 
 # Trato
 - No asumas ni preguntes el género de la persona; los tratamientos son para cualquiera. Escribe en neutro cuando no sepas.
@@ -789,7 +789,7 @@ Cuando des un precio y ya sabes qué le interesa, ese MISMO mensaje lleva el sig
     bookAppointment:
       `Agenda con el mismo serviceName que usaste en getAvailability. Al confirmar, repite el día y la hora tal como vienen en el label y dile que le llega la confirmación por WhatsApp. Después de confirmar, cierra la conversación con calidez y ya no hagas más preguntas.`,
     flagPendingInfo:
-      `Úsala cuando el lead pregunte un dato CONCRETO del consultorio que no tienes (si la consulta tiene costo, duración de un procedimiento, cuidados posteriores, sesiones necesarias, meses sin intereses, un precio que no está en tu lista) y que tampoco venga en lookupFaq. Llámala en el MISMO turno en que le dices que lo confirmas con el equipo, con su pregunta tal cual la escribió. No te deja muda ni cierra el tema: sigue atendiendo con normalidad. NO la uses para temas médicos (candidatura, medicamentos, embarazo): eso se resuelve ofreciendo la consulta, no confirmándolo con el equipo. Una sola vez por duda: si ya la marcaste, no lo vuelvas a anunciar.`,
+      `Úsala cuando el lead pregunte un dato CONCRETO del consultorio que no tienes (duración de un procedimiento, cuidados posteriores, sesiones necesarias, meses sin intereses, un precio que no está en tu lista) y que tampoco venga en lookupFaq. Llámala en el MISMO turno en que le dices que lo confirmas con el equipo, con su pregunta tal cual la escribió. No te deja muda ni cierra el tema: sigue atendiendo con normalidad. NO la uses para temas médicos (candidatura, medicamentos, embarazo): eso se resuelve ofreciendo la consulta, no confirmándolo con el equipo. Una sola vez por duda: si ya la marcaste, no lo vuelvas a anunciar.`,
     updateConversationStatus:
       `handed_off deja al bot MUDO de forma permanente y solo una persona lo revierte a mano, así que resérvalo para los casos de derivación real: queja, molestia, o cuando piden hablar con una persona. Una duda médica NO es derivación: se contesta ofreciendo la consulta. Sigue usando standby / opted_out / completed en los casos de siempre.`,
   },
@@ -921,6 +921,34 @@ export const HERIBERTO_FAQ = [
   {
     "q": "¿Cómo cancelo o muevo mi cita?",
     "a": "Con avisar por aquí es suficiente; te ayudamos a moverla o cancelarla."
+  },
+  {
+    "q": "¿Facturan? ¿Dan factura? ¿Puedo pedir factura?",
+    "a": "Sí, se factura sin problema."
+  },
+  {
+    "q": "¿La consulta de valoración tiene costo? ¿Cuánto cuesta la consulta? ¿La valoración es gratis?",
+    "a": "La consulta de valoración estética no tiene costo. La consulta de bariatría sí tiene costo: $1,500, e incluye valoración médica y seguimiento para control de peso."
+  },
+  {
+    "q": "¿Cómo funcionan las enzimas lipolíticas? ¿Duelen? ¿Qué zonas se pueden tratar con enzimas?",
+    "a": "Las enzimas lipolíticas se aplican con pequeñas inyecciones que no generan gran dolor. Ayudan a quemar grasa localizada, reducir flacidez y tonificar la piel, tanto en rostro como en cuerpo: son una buena opción para perfilamiento facial o para grasa localizada y flacidez corporal. Se puede tratar cualquier zona del cuerpo que tenga grasa o flacidez. $2,200 por sesión; el número de sesiones lo define el doctor en consulta."
+  },
+  {
+    "q": "¿Qué es el láser CO₂ fraccionado? ¿Cómo funciona? ¿Para qué sirve el láser?",
+    "a": "El láser CO₂ fraccionado hace una quemadura controlada que regenera por completo la piel del rostro: atenúa líneas de expresión, marcas y cicatrices, unifica el tono, deja la piel más humectada con un efecto tipo lifting, y estimula la producción de colágeno. $3,000 por sesión."
+  },
+  {
+    "q": "¿Cómo es la recuperación del láser CO₂? ¿Cuántos días tarda? ¿Se pela la piel? ¿Queda roja?",
+    "a": "Después del láser CO₂, el primer día la piel se pone roja y se siente ardor en la zona tratada; el segundo y tercer día cambia a un tono marrón, y del cuarto día en adelante empieza la descamación."
+  },
+  {
+    "q": "¿Qué cuidados hay que tener después del láser CO₂? ¿Puedo maquillarme? ¿Puedo asolearme?",
+    "a": "Después del láser CO₂: los primeros dos días, evitar el sol; durante toda la recuperación, bloqueador solar obligatorio al salir; nada de maquillaje, para no pigmentar la piel — en la piel solo se aplica lo que se indique en consulta."
+  },
+  {
+    "q": "¿Cuántas sesiones de láser CO₂ se necesitan? ¿Cada cuánto se hace el láser?",
+    "a": "Las sesiones de láser CO₂ se realizan cada 21 días. Desde la primera se ve un cambio grande, pero se recomiendan al menos 2 o 3, según la valoración del doctor."
   }
 ];
 
