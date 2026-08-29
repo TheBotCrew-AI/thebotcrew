@@ -21,6 +21,7 @@ import { hasHumanReplies, toModelMessages } from '../core/model-messages.js';
 import { cadenceForRound, totalRounds } from '../core/reactivation-rounds.js';
 import { auxReasoningEffort } from '../core/reasoning.js';
 import { timezoneFromPhone } from '../core/lead-timezone.js';
+import { syncContactTimezone } from '../ghl/contact-timezone.js';
 import type { AiProvider, ConversationMessage, ConversationStatus, DemoHandoff, FollowUpKind, TenantContext, TurnContext } from '../core/types.js';
 import { DEMO_REMINDER_CADENCE } from '../core/types.js';
 import {
@@ -61,7 +62,7 @@ import {
 } from '../db/queries.js';
 import { findUpcomingAppointment } from '../db/upcoming-appointment.js';
 import { queueCapiEvent, queueCapiStatusEvent } from '../meta/capi.js';
-import { extractCapiIdentity } from '../meta/capi-config.js';
+import { extractCapiIdentity, leadStartedDue, type CapiIdentity } from '../meta/capi-config.js';
 import { GhlClient } from '../ghl/client.js';
 import { parseInboundWebhook } from '../ghl/webhook.js';
 import { transcribeAudio } from '../core/transcribe.js';
@@ -718,6 +719,7 @@ export async function runAgentTurn({
   let contactPhone: string | undefined = phone ?? undefined;
   let contactEmail: string | undefined;
   let fetchedContact = false;
+  let capturedCapiIdentity: CapiIdentity | undefined;
   if (!history.some((m) => m.senderType === 'bot')) {
     try {
       const contact = await ghl.getContact(parsed.contactId);
@@ -741,19 +743,24 @@ export async function runAgentTurn({
             extractCapiIdentity(parsed.channel, contact.attributionSource) ??
             extractCapiIdentity(parsed.channel, contact.lastAttributionSource);
           if (identity) {
+            capturedCapiIdentity = identity;
             await setConversationAttribution(parsed.conversationId, {
               identity,
               attribution: contact.attributionSource ?? contact.lastAttributionSource,
             }).catch((e: unknown) =>
               console.error('[capi] attribution persist failed (non-blocking):', e instanceof Error ? e.message : String(e)),
             );
-            await queueCapiEvent({
-              tenant,
-              ghlConversationId: parsed.conversationId,
-              kind: 'lead_started',
-              identity,
-              phone: contactPhone ?? null,
-            });
+            // A tenant with a reply threshold signals below, once the lead has answered —
+            // on a click-to-message ad THIS inbound is the ad's pre-filled greeting.
+            if (!tenant.metaCapi.leadRepliesRequired) {
+              await queueCapiEvent({
+                tenant,
+                ghlConversationId: parsed.conversationId,
+                kind: 'lead_started',
+                identity,
+                phone: contactPhone ?? null,
+              });
+            }
           }
         }
       }
@@ -773,6 +780,22 @@ export async function runAgentTurn({
     }
   }
 
+  // Meta CAPI with a reply threshold (`lead_replies_required`): `lead_started` fires on the
+  // turn the lead's reply count crosses it, not on the first inbound. The identity comes
+  // from this turn's capture when there was one (an Instant-Form lead answering our opener
+  // crosses on turn 1) and from the conversation row otherwise; a lead with no matching
+  // key still no-ops inside the helper. Fires before the model runs so a killed isolate
+  // can't lose the signal the same way a send can't.
+  if (tenant.metaCapi && leadStartedDue(tenant.metaCapi, history)) {
+    await queueCapiEvent({
+      tenant,
+      ghlConversationId: parsed.conversationId,
+      kind: 'lead_started',
+      ...(capturedCapiIdentity ? { identity: capturedCapiIdentity } : {}),
+      phone: contactPhone ?? null,
+    });
+  }
+
   // The lead's clock (0057), for tenants that render times in it. The phone's area code
   // is a good guess at where the lead is, so it fills the column when nothing is known
   // yet; the RPC never lets it overwrite a zone the lead stated. Kept in memory for this
@@ -781,9 +804,13 @@ export async function runAgentTurn({
     const guess = timezoneFromPhone(contactPhone);
     if (guess) {
       leadTimezone = guess.timezone;
-      setLeadTimezone(parsed.conversationId, guess.timezone, guess.source).catch((e: unknown) =>
-        console.error('[lead-timezone] persist failed (non-blocking):', e instanceof Error ? e.message : String(e)),
-      );
+      // Once the guess is the record, mirror it onto the GHL contact so GHL's own
+      // confirmation/reminder workflows render in the lead's clock (ghl/contact-timezone.ts).
+      setLeadTimezone(parsed.conversationId, guess.timezone, guess.source)
+        .then((written) => (written ? syncContactTimezone(ghl, parsed.contactId, guess.timezone, 'phone-guess') : false))
+        .catch((e: unknown) =>
+          console.error('[lead-timezone] persist failed (non-blocking):', e instanceof Error ? e.message : String(e)),
+        );
     }
   }
 

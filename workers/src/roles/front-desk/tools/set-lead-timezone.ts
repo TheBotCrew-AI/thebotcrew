@@ -14,6 +14,8 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { setLeadTimezone } from '../../../db/queries.js';
+import { GhlClient } from '../../../ghl/client.js';
+import { syncContactTimezone } from '../../../ghl/contact-timezone.js';
 import { timezoneFromPlace, zoneLabel } from '../../../core/lead-timezone.js';
 import { resolveAgentContext } from './agent-context.js';
 
@@ -35,7 +37,7 @@ export const setLeadTimezoneTool = createTool({
     message: z.string(),
   }),
   execute: async ({ place }, ctx) => {
-    const { config, turn } = resolveAgentContext(ctx);
+    const { config, tenant, turn } = resolveAgentContext(ctx);
 
     // A walk-in tenant renders the calendar's clock no matter where the number is from;
     // the demo is a roleplayed walk-in clinic. Both: acknowledge and change nothing.
@@ -72,6 +74,8 @@ export const setLeadTimezoneTool = createTool({
       // The turn keeps the zone in memory; only persistence failed. Logged, not surfaced.
       console.error('[setLeadTimezone] persist failed (non-blocking):', err instanceof Error ? err.message : String(err));
     }
+    // GHL's own confirmation/reminder workflows render in the contact's Timezone field.
+    await syncContactTimezone(new GhlClient(tenant.tenantId), turn.ghlContactId, tz, 'setLeadTimezone');
 
     return {
       ok: true,

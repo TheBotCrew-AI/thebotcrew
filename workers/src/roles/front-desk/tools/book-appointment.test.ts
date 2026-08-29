@@ -7,6 +7,7 @@ const ghl = {
   bookAppointment: vi.fn(),
   getAvailability: vi.fn(),
   removeContactTags: vi.fn(),
+  updateContactTimezone: vi.fn(),
 };
 vi.mock('../../../ghl/client.js', () => ({ GhlClient: vi.fn(() => ghl) }));
 vi.mock('../../../db/queries.js');
@@ -57,6 +58,7 @@ beforeEach(() => {
   // By default the requested slot IS available (start === START), so validation passes.
   ghl.getAvailability.mockResolvedValue([{ start: START, end: START }]);
   ghl.removeContactTags.mockResolvedValue(undefined);
+  ghl.updateContactTimezone.mockResolvedValue(undefined);
   vi.mocked(q.logAppointment).mockResolvedValue({ appointmentId: 'a-uuid' } as never);
   vi.mocked(q.logEvent).mockResolvedValue({ eventId: 'e-uuid' } as never);
   vi.mocked(q.logBotEvent).mockResolvedValue(undefined);
@@ -84,11 +86,40 @@ describe('bookAppointment', () => {
       expect(ghl.bookAppointment).not.toHaveBeenCalled();
     });
 
+    it('mirrors the lead zone onto the GHL contact BEFORE booking — the confirmation GHL sends renders in it', async () => {
+      const res = await runWith({ serviceName: 'Consulta', startTime: '2026-07-10T12:00:00' }, leadCtx('America/Cancun'));
+      expect(res.booked).toBe(true);
+      expect(ghl.updateContactTimezone).toHaveBeenCalledWith('c1', 'America/Cancun');
+      const syncAt = ghl.updateContactTimezone.mock.invocationCallOrder[0]!;
+      const bookAt = ghl.bookAppointment.mock.invocationCallOrder[0]!;
+      expect(syncAt).toBeLessThan(bookAt);
+    });
+
+    it('a contact-timezone sync that fails still books', async () => {
+      ghl.updateContactTimezone.mockRejectedValue(new Error('401'));
+      const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const res = await runWith({ serviceName: 'Consulta', startTime: '2026-07-10T12:00:00' }, leadCtx('America/Cancun'));
+      expect(res.booked).toBe(true);
+      expect(ghl.bookAppointment).toHaveBeenCalled();
+      spy.mockRestore();
+    });
+
+    it('does not touch the contact while the lead is not located', async () => {
+      await runWith({ serviceName: 'Consulta', startTime: '2026-07-10T11:00:00' }, leadCtx(undefined));
+      expect(ghl.updateContactTimezone).not.toHaveBeenCalled();
+    });
+
     it('keeps the tenant clock while the lead is not located', async () => {
       const res = await runWith({ serviceName: 'Consulta', startTime: '2026-07-10T11:00:00' }, leadCtx(undefined));
       expect(res.booked).toBe(true);
       expect(res.message).not.toContain('hora de');
     });
+  });
+
+  it('a tenant that did not opt into lead timezones never writes the contact field', async () => {
+    const res = await run({ serviceName: 'Consulta', startTime: START });
+    expect(res.booked).toBe(true);
+    expect(ghl.updateContactTimezone).not.toHaveBeenCalled();
   });
 
   it('unknown service (no calendar) → not booked, GHL never called', async () => {

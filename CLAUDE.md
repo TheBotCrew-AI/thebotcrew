@@ -146,7 +146,7 @@ workers/                       # Mastra + Cloudflare Worker package (@thebotcrew
       front-desk/              # config (zod), prompt (es template), agent, tools/, evals/
       reactivation/            # text-only follow-up/reactivation agent (no tools)
     ghl/                       # webhook parse/verify, OAuth, tags + transport-only API client (live)
-    meta/                      # Meta Conversions API (0048/0056): capi-config (pure parse/payload, per-channel identity) + capi (enqueue + Graph send)
+    meta/                      # Meta Conversions API (0048/0056): capi-config (pure parse/payload, per-channel identity, lead_replies_required reply-threshold) + capi (enqueue + Graph send)
     db/                        # service-role Supabase client, queries (config read + RPC writes)
     worker/                    # webhook-handler (inbound) + conversation-do (per-conversation Durable Object: durable-alarm debounce + serialized turn) + outbound-handler (human takeover) + tag-handler (bot-off) + delivery-retry + followup-runner + capi-runner (Meta CAPI queue drain) + info-gap-runner + info-gaps/ (0054: what the bot couldn't answer — extraction queue, aggregate, report; pending_info escalation)
   scripts/simulate-webhook.mjs # local dev: fire a fake GHL webhook
@@ -416,7 +416,11 @@ for the retry cron.
   rendered in the clock the lead reads, suffixed "hora de …" when it differs from the calendar's,
   and matched back in that same frame. The zone is guessed from the phone's area code (fills
   only) or stated by the lead (`setLeadTimezone` tool, wins). Off by default — right for a
-  video call, wrong for a walk-in clinic. See docs/business-logic.md §5d.
+  video call, wrong for a walk-in clinic. **The zone is also mirrored onto the GHL contact's
+  Timezone field** (`ghl/contact-timezone.ts`, when learned + right before every
+  book/reschedule): GHL's own confirmation/reminder workflows render `{{appointment.start_time}}`
+  in that field, and the booking API carries no timezone — it's the only lever. See
+  docs/business-logic.md §5d.
 - Contact-merge recovery on send: GHL dedups contacts by phone/email, which can **merge away**
   the `contactId` a webhook gave us (Instant-Form lead whose number already exists as another
   contact) → send fails `CONVERSATIONS_CONTACT_NOT_FOUND`. Crucially the merge **also destroys the

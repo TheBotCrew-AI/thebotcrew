@@ -131,6 +131,20 @@ describe('GhlClient — getContact / updateContactName', () => {
     stubFetch().mockResolvedValue(err(401));
     await expect(new GhlClient().updateContactName('c1', { firstName: 'A', lastName: '' })).rejects.toThrow(/updateContactName failed 401/);
   });
+
+  it('updateContactTimezone PUTs only the timezone field', async () => {
+    const f = stubFetch();
+    f.mockResolvedValue(ok({}));
+    await new GhlClient().updateContactTimezone('c1', 'America/Mexico_City');
+    expect(f.mock.calls[0]![0]).toBe('https://api.ghl/contacts/c1');
+    expect((f.mock.calls[0]![1] as RequestInit).method).toBe('PUT');
+    expect(bodyOf(f)).toEqual({ timezone: 'America/Mexico_City' });
+  });
+
+  it('updateContactTimezone throws on a non-ok response', async () => {
+    stubFetch().mockResolvedValue(err(422, 'bad tz'));
+    await expect(new GhlClient().updateContactTimezone('c1', 'Nope/Zone')).rejects.toThrow(/updateContactTimezone failed 422/);
+  });
 });
 
 describe('GhlClient — getAvailability', () => {

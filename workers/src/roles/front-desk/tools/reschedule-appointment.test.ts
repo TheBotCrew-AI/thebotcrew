@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { TenantContext, TurnContext } from '../../../core/types.js';
 
-const ghl = { getAvailability: vi.fn(), rescheduleAppointment: vi.fn(), getContactAppointments: vi.fn() };
+const ghl = { getAvailability: vi.fn(), rescheduleAppointment: vi.fn(), getContactAppointments: vi.fn(), updateContactTimezone: vi.fn() };
 vi.mock('../../../ghl/client.js', () => ({ GhlClient: vi.fn(() => ghl) }));
 vi.mock('../../../db/queries.js');
 
@@ -105,6 +105,24 @@ describe('rescheduleAppointment', () => {
     );
     expect(res.rescheduled).toBe(true);
     expect(q.logAppointment).toHaveBeenCalledWith(expect.objectContaining({ p_action: 'rescheduled', p_ghl_appointment_id: 'appt1' }));
+  });
+
+  it('a plain tenant never writes the contact timezone field', async () => {
+    await run(START);
+    expect(ghl.updateContactTimezone).not.toHaveBeenCalled();
+  });
+
+  it('a lead-timezone tenant mirrors the lead zone onto the contact BEFORE moving the appointment', async () => {
+    ghl.updateContactTimezone.mockResolvedValue(undefined);
+    const base = makeCtx();
+    const tenant = base.requestContext.get('tenant') as TenantContext;
+    const t = { ...tenant, config: { ...(tenant.config as object), leadTimezoneEnabled: true } } as unknown as TenantContext;
+    const tn = { ...(base.requestContext.get('turn') as TurnContext), leadTimezone: 'America/Mexico_City' } as TurnContext;
+    const ctx = { requestContext: { get: (k: string) => (k === 'tenant' ? t : k === 'turn' ? tn : undefined) } };
+    const res = await run(START, ctx);
+    expect(res.rescheduled).toBe(true);
+    expect(ghl.updateContactTimezone).toHaveBeenCalledWith('c1', 'America/Mexico_City');
+    expect(ghl.updateContactTimezone.mock.invocationCallOrder[0]!).toBeLessThan(ghl.rescheduleAppointment.mock.invocationCallOrder[0]!);
   });
 
   it('store miss but GHL has the appointment (booked in GHL) → reschedules it via GHL data', async () => {

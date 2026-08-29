@@ -741,8 +741,9 @@ anuncio → da zona + primera vez y pide cita → elige uno de los DOS horarios.
 gastar grabación con `pnpm rehearse` (`evals/demo-video.eval.ts`), que imprime la
 transcripción y los horarios que el simulador va a ofrecer ese día. Nada real se mueve: cita
 simulada, sin GHL, sin follow-ups, sin etiquetas, sin CAPI — con **una** excepción, el
-`lead_started` de CAPI, que se encola en el primer turno si el contacto trae identidad de
-Meta (ver §6a), porque se dispara antes y aparte del rol. Graba desde un contacto sin
+`lead_started` de CAPI, que se encola en el primer turno (o al cruzar
+`lead_replies_required`) si el contacto trae identidad de Meta (ver §6a), porque se dispara
+antes y aparte del rol. Graba desde un contacto sin
 atribución de anuncio y no sale nada.
 
 ## 5c. Demo sessions — the lead-magnet funnel (0038)
@@ -922,6 +923,23 @@ are generated in that zone).
 so a `getAvailability` later in the same turn already renders in the corrected zone — the
 lead is not made to wait a message for the right hours.
 
+**The messages GHL sends by itself — the contact's Timezone field.** The bot's labels were
+right, but the tenant's own GHL workflow (appointment confirmation / reminder, built on
+`{{appointment.start_time}}`) went out in the calendar's clock: GHL renders those merge
+fields in the **contact's** Timezone field when it is set and in the location's when it is
+not, and the booking API has no timezone field at all — the contact field is the only lever.
+So the zone is mirrored onto the GHL contact (`ghl/contact-timezone.ts`,
+`GhlClient.updateContactTimezone`, `contacts.write`): when it is learned — the phone guess
+once the RPC reports it written, the `setLeadTimezone` tool — and again **right before**
+`bookAppointment` / `rescheduleAppointment`, because that POST (`toNotify`) is what fires the
+confirmation and the field must be right before it, not after. The pre-booking sync also
+covers a failed earlier write and conversations that learned their zone before this shipped.
+Never blocks: a failed sync is logged (`[contact-timezone]`) and the booking proceeds — one
+confirmation in the wrong clock beats a lost booking. Gated like everything else in §5d
+(`lead_timezone_enabled`, skipped in demo). Belt on the GHL side, per tenant: write the
+time in the workflow as `{{appointment.only_start_time}} {{appointment.timezone}}` so the
+zone is printed even for a contact whose field is empty.
+
 Evals: `evals/lead-timezone.eval.ts` (label repeated with suffix; tool call instead of
 prose arithmetic; ask-the-city before offering). DB precedence: `supabase/tests/0057_*`.
 
@@ -1078,11 +1096,26 @@ not a filter).
 
 | kind | moment | default |
 |---|---|---|
-| `lead_started` | first turn of a CTWA lead | `LeadSubmitted`, on |
+| `lead_started` | the lead's first inbound — or, with `lead_replies_required`, the turn their reply count crosses it | `LeadSubmitted`, on |
 | `appointment_booked` | real booking success (demo/simulated never) | `QualifiedLead`, on |
 | `conversation_completed` | status → `completed`, applied (tool or classifier) | **off** unless configured |
 
 Deliberate choices:
+- **`LeadSubmitted` should mean "answered us", not "clicked"** (`meta_capi.lead_replies_required`,
+  2026-08-29). On a click-to-message ad the lead's first inbound is the ad's **pre-filled
+  greeting** (The Bot Crew's threads open with a literal `CITAS`), so firing on the first
+  inbound signals every click — the same thing Meta already optimizes for natively, and
+  the reason the ads fill with people who never answer: of the first 22 `LeadSubmitted`
+  sent, only 8 leads ever replied to the bot. With `lead_replies_required: N` the event
+  fires on the turn the lead's N-th **reply** lands — a reply being an inbound that follows
+  at least one message of ours, bot or human (`countLeadReplies` / `leadStartedDue`,
+  `meta/capi-config.ts`). The greeting never counts; an Instant-Form lead answering our
+  opener counts from message one; a debounced burst counts each message, so a jump past
+  the threshold still fires. Absent/0 keeps the first-inbound behaviour. Meta has no
+  "engaged"/"replied" event and an ad set optimizes on ONE event, so this moves *when* the
+  lead event fires rather than adding a name; `1` is the recommended value for any tenant
+  running click-to-message ads. Identity capture is unchanged (turn 1, sticky) — only
+  the enqueue moves.
 - **Booking maps to `QualifiedLead`, not `Purchase`** — for service SMBs a booking is a
   qualified lead; `QualifiedLead` is what Meta's CTWA lead filtering trains on. A tenant
   that wants purchase optimization overrides with `{"name":"Purchase","value":...}`.

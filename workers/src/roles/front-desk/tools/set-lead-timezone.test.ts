@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { TenantContext, TurnContext } from '../../../core/types.js';
 
+const ghl = { updateContactTimezone: vi.fn() };
+vi.mock('../../../ghl/client.js', () => ({ GhlClient: vi.fn(() => ghl) }));
 vi.mock('../../../db/queries.js');
 
 import * as q from '../../../db/queries.js';
@@ -40,6 +42,7 @@ const run = (place: string, ctx: ReturnType<typeof makeCtx>['ctx']) =>
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(q.setLeadTimezone).mockResolvedValue(true);
+  ghl.updateContactTimezone.mockResolvedValue(undefined);
 });
 
 describe('setLeadTimezone tool', () => {
@@ -52,6 +55,18 @@ describe('setLeadTimezone tool', () => {
     expect(q.setLeadTimezone).toHaveBeenCalledWith('conv1', 'America/Cancun', 'lead');
     // The same object getAvailability reads later in this turn.
     expect(turn.leadTimezone).toBe('America/Cancun');
+    // And the GHL contact, so GHL's own confirmation workflow renders in the lead's clock.
+    expect(ghl.updateContactTimezone).toHaveBeenCalledWith('c1', 'America/Cancun');
+  });
+
+  it('a GHL contact update that fails does not fail the tool', async () => {
+    ghl.updateContactTimezone.mockRejectedValue(new Error('401'));
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { turn, ctx } = makeCtx();
+    const res = await run('Cancún', ctx);
+    expect(res.ok).toBe(true);
+    expect(turn.leadTimezone).toBe('America/Cancun');
+    spy.mockRestore();
   });
 
   it('an unrecognised place with a zone already on file keeps that zone and does not stall', async () => {
@@ -72,6 +87,7 @@ describe('setLeadTimezone tool', () => {
     expect(res.timezone).toBeUndefined();
     expect(res.message).toContain('No reconocí');
     expect(q.setLeadTimezone).not.toHaveBeenCalled();
+    expect(ghl.updateContactTimezone).not.toHaveBeenCalled();
     expect(turn.leadTimezone).toBeUndefined();
   });
 

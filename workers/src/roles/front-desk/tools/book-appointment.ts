@@ -6,6 +6,7 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { GhlClient } from '../../../ghl/client.js';
+import { syncContactTimezone } from '../../../ghl/contact-timezone.js';
 import { CANCELLED_APPOINTMENT_TAG } from '../../../ghl/tags.js';
 import { getActiveDemoSession, logAppointment, logBotEvent, logEvent, resetReactivationRound, setSimulatedBooking } from '../../../db/queries.js';
 import { queueCapiEvent } from '../../../meta/capi.js';
@@ -166,6 +167,15 @@ export const bookAppointmentTool = createTool({
           });
         }
       }
+    }
+
+    // GHL fires the tenant's confirmation workflow on this POST (`toNotify`), and renders
+    // its `{{appointment.start_time}}` in the contact's Timezone field — so the field must
+    // be right BEFORE the call. Re-done here (not only when the zone was learned) so a
+    // failed earlier sync, or a zone learned before this shipped, can't cost the one
+    // message the lead reads twice.
+    if (config.leadTimezoneEnabled && turn.leadTimezone) {
+      await syncContactTimezone(ghl, turn.ghlContactId, turn.leadTimezone, 'bookAppointment');
     }
 
     let ghlAppointmentId: string | undefined;

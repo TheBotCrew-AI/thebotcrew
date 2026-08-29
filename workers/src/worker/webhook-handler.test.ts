@@ -8,6 +8,7 @@ const ghl = {
   getContactPhone: vi.fn(),
   getContact: vi.fn(),
   updateContactName: vi.fn(),
+  updateContactTimezone: vi.fn(),
   sendMessage: vi.fn(),
   addContactTags: vi.fn(),
 };
@@ -87,6 +88,7 @@ beforeEach(() => {
   ghl.getContactPhone.mockResolvedValue(undefined);
   ghl.getContact.mockResolvedValue(undefined);
   ghl.updateContactName.mockResolvedValue(undefined);
+  ghl.updateContactTimezone.mockResolvedValue(undefined);
   ghl.sendMessage.mockResolvedValue({ ghlMessageId: 'out-ghl-1' });
   ghl.addContactTags.mockResolvedValue(undefined);
 });
@@ -338,6 +340,66 @@ describe('handleInboundWebhook — Meta CAPI attribution capture (0048)', () => 
     expect(queueCapiEvent).not.toHaveBeenCalled();
   });
 
+  describe('lead_replies_required (2026-08-29): LeadSubmitted means "answered us", not "clicked"', () => {
+    const gated = { ...metaCapi, leadRepliesRequired: 1 };
+    const greetingOnly = [
+      { direction: 'inbound', senderType: 'lead', content: 'CITAS', sentAt: '' },
+    ] as Awaited<ReturnType<typeof q.loadRecentMessages>>;
+    const replied = [
+      { direction: 'inbound', senderType: 'lead', content: 'CITAS', sentAt: '' },
+      { direction: 'outbound', senderType: 'bot', content: '¡Hola! ¿Qué te interesa?', sentAt: '' },
+      { direction: 'inbound', senderType: 'lead', content: 'quiero saber precios', sentAt: '' },
+    ] as Awaited<ReturnType<typeof q.loadRecentMessages>>;
+
+    it("turn 1 (the ad's pre-filled greeting): identity persisted, NO lead_started", async () => {
+      vi.mocked(q.loadTenantConfig).mockResolvedValue(tenant({ metaCapi: gated } as Partial<TenantContext>));
+      vi.mocked(q.loadRecentMessages).mockResolvedValue(greetingOnly);
+      ghl.getContact.mockResolvedValue(ctwaContact);
+      await handleInboundWebhook(inbound, agentReplying());
+      expect(q.setConversationAttribution).toHaveBeenCalledWith('conv1', expect.objectContaining({
+        identity: { channel: 'whatsapp', key: 'AfjMi93Y-clid' },
+      }));
+      expect(queueCapiEvent).not.toHaveBeenCalled();
+    });
+
+    it('the turn the lead answers the bot → lead_started, identity read from the row', async () => {
+      vi.mocked(q.loadTenantConfig).mockResolvedValue(tenant({ metaCapi: gated } as Partial<TenantContext>));
+      vi.mocked(q.loadRecentMessages).mockResolvedValue(replied);
+      await handleInboundWebhook(inbound, agentReplying());
+      expect(ghl.getContact).not.toHaveBeenCalled();
+      expect(queueCapiEvent).toHaveBeenCalledTimes(1);
+      expect(queueCapiEvent).toHaveBeenCalledWith({
+        tenant: expect.objectContaining({ tenantId: 't1' }),
+        ghlConversationId: 'conv1',
+        kind: 'lead_started',
+        phone: '+521',
+      });
+    });
+
+    it('an Instant-Form lead answering our opener crosses on turn 1, with the identity just captured', async () => {
+      vi.mocked(q.loadTenantConfig).mockResolvedValue(tenant({ metaCapi: gated } as Partial<TenantContext>));
+      vi.mocked(q.loadRecentMessages).mockResolvedValue([
+        { direction: 'outbound', senderType: 'human_agent', humanAgentId: 'h1', content: 'Hola, vi tu registro', sentAt: '' },
+        { direction: 'inbound', senderType: 'lead', content: 'sí, cuéntame', sentAt: '' },
+      ] as Awaited<ReturnType<typeof q.loadRecentMessages>>);
+      ghl.getContact.mockResolvedValue(ctwaContact);
+      await handleInboundWebhook(inbound, agentReplying());
+      expect(queueCapiEvent).toHaveBeenCalledTimes(1);
+      expect(queueCapiEvent).toHaveBeenCalledWith(
+        expect.objectContaining({ kind: 'lead_started', identity: { channel: 'whatsapp', key: 'AfjMi93Y-clid' } }),
+      );
+    });
+
+    it('no threshold → the first-inbound path is byte-identical to before', async () => {
+      vi.mocked(q.loadTenantConfig).mockResolvedValue(tenant({ metaCapi } as Partial<TenantContext>));
+      vi.mocked(q.loadRecentMessages).mockResolvedValue(greetingOnly);
+      ghl.getContact.mockResolvedValue(ctwaContact);
+      await handleInboundWebhook(inbound, agentReplying());
+      expect(queueCapiEvent).toHaveBeenCalledTimes(1);
+      expect(queueCapiEvent).toHaveBeenCalledWith(expect.objectContaining({ kind: 'lead_started', identity: { channel: 'whatsapp', key: 'AfjMi93Y-clid' } }));
+    });
+  });
+
   it('an attribution persist failure never blocks the turn', async () => {
     vi.mocked(q.loadTenantConfig).mockResolvedValue(tenant({ metaCapi } as Partial<TenantContext>));
     ghl.getContact.mockResolvedValue(ctwaContact);
@@ -378,6 +440,8 @@ describe('handleInboundWebhook — lead timezone (0057)', () => {
   };
   const remoteTenant = () =>
     tenant({ config: { ...tenant().config, leadTimezoneEnabled: true } as TenantContext['config'] });
+  // The persist → contact-sync chain is fire-and-forget; let it settle before asserting on it.
+  const flush = () => new Promise((r) => setTimeout(r, 0));
   // A Mexico City mobile in the shape GHL stores it (legacy `1` after the country code).
   const cdmxInbound = { ...inbound, phone: '+5215512345678' };
 
@@ -391,6 +455,17 @@ describe('handleInboundWebhook — lead timezone (0057)', () => {
     await handleInboundWebhook(cdmxInbound, agent);
     expect(q.setLeadTimezone).toHaveBeenCalledWith('conv1', 'America/Mexico_City', 'phone');
     expect(turnFrom(agent).leadTimezone).toBe('America/Mexico_City');
+    // The guess became the record → mirrored onto the GHL contact (its confirmation workflow reads it).
+    await flush();
+    expect(ghl.updateContactTimezone).toHaveBeenCalledWith('c1', 'America/Mexico_City');
+  });
+
+  it('does not write the contact when the guess was NOT written (a zone was already on file)', async () => {
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(remoteTenant());
+    vi.mocked(q.setLeadTimezone).mockResolvedValue(false);
+    await handleInboundWebhook(cdmxInbound, agentReplying());
+    await flush();
+    expect(ghl.updateContactTimezone).not.toHaveBeenCalled();
   });
 
   it('does not re-guess once the conversation already has a zone', async () => {
@@ -417,12 +492,14 @@ describe('handleInboundWebhook — lead timezone (0057)', () => {
     expect(turnFrom(agent).leadTimezone).toBeUndefined();
   });
 
-  it('a failed persist still leaves the guess on the turn', async () => {
+  it('a failed persist still leaves the guess on the turn — and does not write the contact', async () => {
     vi.mocked(q.loadTenantConfig).mockResolvedValue(remoteTenant());
     vi.mocked(q.setLeadTimezone).mockRejectedValue(new Error('db down'));
     const agent = agentReplying();
     await handleInboundWebhook(cdmxInbound, agent);
     expect(turnFrom(agent).leadTimezone).toBe('America/Mexico_City');
+    await flush();
+    expect(ghl.updateContactTimezone).not.toHaveBeenCalled();
   });
 });
 

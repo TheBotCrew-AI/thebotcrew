@@ -10,6 +10,7 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { GhlClient } from '../../../ghl/client.js';
+import { syncContactTimezone } from '../../../ghl/contact-timezone.js';
 import { getActiveDemoSession, logAppointment, logBotEvent, setSimulatedBooking } from '../../../db/queries.js';
 import { resolveAgentContext } from './agent-context.js';
 import { resolveActiveAppointment } from './resolve-appointment.js';
@@ -144,6 +145,11 @@ export const rescheduleAppointmentTool = createTool({
     const endTime = durationMin
       ? new Date(Date.parse(canonicalStart) + durationMin * 60_000).toISOString()
       : undefined;
+
+    // The reschedule notification renders in the contact's Timezone field — see bookAppointment.
+    if (config.leadTimezoneEnabled && turn.leadTimezone) {
+      await syncContactTimezone(ghl, turn.ghlContactId, turn.leadTimezone, 'rescheduleAppointment');
+    }
 
     try {
       await ghl.rescheduleAppointment({

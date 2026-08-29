@@ -321,6 +321,28 @@ export class GhlClient {
     }
   }
 
+  /** Set a GHL contact's Timezone field (IANA id). GHL renders the appointment merge fields
+   *  of its own workflows — `{{appointment.start_time}}` in a confirmation or reminder — in
+   *  the CONTACT's timezone when one is set, and in the location's otherwise. The booking
+   *  API carries no timezone at all, so this field is the only lever that makes a
+   *  GHL-sent confirmation read in the lead's clock. Requires the `contacts.write` scope. */
+  async updateContactTimezone(contactId: string, timezone: string): Promise<void> {
+    const token = await this.getAccessToken();
+    const res = await fetch(`${this.apiBase}/contacts/${contactId}`, {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Version: '2021-07-28',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ timezone }),
+    });
+    if (!res.ok) {
+      const detail = await res.text();
+      throw new Error(`[ghl] updateContactTimezone failed ${res.status}: ${detail}`);
+    }
+  }
+
   async getAvailability(calendarId: string, from: string, to: string): Promise<Slot[]> {
     const token = await this.getAccessToken();
     const url = new URL(`${this.apiBase}/calendars/${calendarId}/free-slots`);
