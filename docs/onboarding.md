@@ -94,7 +94,7 @@ from t;
 | `hours` | **Always rendered** into the prompt as `# Horario`, even when `prompt_overrides.offering` is set. |
 | `services` | Rendered **only if** `prompt_overrides.offering` is absent — `offering` replaces that whole section. |
 | `calendars` | `{ "<service name>": "<GHL calendar id>" }`. `getAvailability`/`bookAppointment` look up the **exact string** the model passes as `serviceName`. A miss returns "No hay un calendario configurado" and the bot cannot book. |
-| `faq` | Fed to the `lookupFaq` tool, not inlined into the prompt. |
+| `faq` | Fed to the `lookupFaq` tool, not inlined into the prompt. **When nothing overlaps the question, the tool returns the WHOLE FAQ**, so an entry is in front of the model on most turns anyway — a fact meant to be stated only when asked (Dr. Valdivia's free consulta) needs its answer self-conditioned ("Solo si el lead pregunta por…: …") plus a `houseRules` prohibition; a line in the flow alone measured 3/5 vs 4/5, i.e. nothing. |
 | `booking_horizon_days` | Deterministically clamps `getAvailability`, and the prompt states the cutoff as a pre-computed date. `NULL` = no cap. |
 | `quiet_hours` | `NULL` = platform default 21:00–08:00 local. |
 | `lead_timezone_enabled` | `false` (default): times in `timezone`. `true`: times in the **lead's** zone (guessed from the WhatsApp area code, or stated by the lead), suffixed "hora de …" when it differs. **Only for remote services** (a video call) — for a walk-in business it shifts hours for anyone with an out-of-town number. See business-logic §5d. |

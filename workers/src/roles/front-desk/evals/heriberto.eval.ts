@@ -39,6 +39,19 @@
  *     fuera) 2/3 — discrimina poco porque partir la ficha en cuatro entradas ya hace la mayor
  *     parte del trabajo (lookupFaq devuelve primero la de "qué es"); la falla sin regla fue un
  *     mensaje largo que ya traía recuperación y cuidados. Se conserva como guardia de la partición.
+ *   MEDIDO 2026-08-29 (regla "Siguiente paso" + gancho de la consulta):
+ *   - "¿facturan?" sin cita:  con regla 5/5 · con la REGLA DE ORO vieja 3/5 — y la falla es la frase
+ *     exacta de prod ("¡hola! sí, se factura sin problema."). Con historia corta no reproducía (5/5
+ *     ambos lados); hizo falta la historia real (agendó → canceló → "¿facturan?").
+ *   - estacionamiento con cita: 5/5 ambos lados — la sección de modo asistencia del prompt base ya
+ *     lo cubre; queda como guardia de "sin pregunta cuando no se necesita".
+ *   - gancho "sin costo":  con regla 5/5 · sin regla 3/5. Primera versión (una línea en
+ *     qualificationNotes, "SOLO si lo preguntan") 3/5 vs 4/5 = nada: lookupFaq no encuentra
+ *     coincidencia para "me interesa el ácido hialurónico" y devuelve la FAQ COMPLETA, así que la
+ *     entrada de la consulta sin costo está frente al modelo en casi cualquier pregunta por un
+ *     tratamiento. Lo que sí sirvió: prohibición en houseRules (manda sobre el flujo) + la propia
+ *     entrada de FAQ auto-condicionada ("Solo si el lead pregunta por el costo de la consulta: …"),
+ *     que sigue contestando 5/5 cuando SÍ preguntan.
  *   - agenda "Consulta":  con regla 3/3 · sin regla (toolInstructions.getAvailability fuera) 0/3
  *     — sin la instrucción inventa serviceName="Consulta de Medicina Estética", que no es
  *     llave de `calendars`, y la herramienta contesta "No hay un calendario configurado".
@@ -79,13 +92,39 @@ const withoutSection = (text: string, title: string): string => {
   return (text.slice(0, start) + (next < 0 ? '' : text.slice(next + 1))).trim();
 };
 
+/** The rule the "next step" section replaced (2026-08-29) — the red side of that case. */
+const OLD_GOLDEN_RULE =
+  '- REGLA DE ORO: cada mensaje tuyo termina en UNA pregunta o un siguiente paso concreto. ÚNICA excepción: una vez agendada la cita, cierras y no preguntas más.';
+
 /**
  * The fixture with ONE defending rule removed, per case. Only used to prove the case
  * discriminates — the numbers in the header come from running with RULE_OFF=1.
  */
-const tenantWithout = (rule: 'medical' | 'faq-consulta' | 'drip' | 'service-name'): TenantContext => {
+const tenantWithout = (
+  rule: 'medical' | 'faq-consulta' | 'drip' | 'service-name' | 'next-step' | 'consulta-hook',
+): TenantContext => {
   const p = HERIBERTO_PERSONA;
   const cfg = heribertoTenant.config;
+  if (rule === 'next-step') {
+    const overrides = {
+      ...p,
+      qualificationNotes: withoutSection(p.qualificationNotes, '# Siguiente paso (relee antes de mandar)').replace(
+        '- Si ya te contestó algo, no lo vuelvas a preguntar ni lo reformules.',
+        `- Si ya te contestó algo, no lo vuelvas a preguntar ni lo reformules.\n${OLD_GOLDEN_RULE}`,
+      ),
+    };
+    if (!overrides.qualificationNotes.includes('REGLA DE ORO')) throw new Error('old rule not restored');
+    return { ...heribertoTenant, config: { ...cfg, promptOverrides: overrides } };
+  }
+  if (rule === 'consulta-hook') {
+    // Two halves, both stripped: the houseRules prohibition and the FAQ entry's own condition.
+    const bullet = p.houseRules.split('\n').find((l) => l.startsWith('- El costo de la consulta de valoración NO se menciona'));
+    if (!bullet) throw new Error('consulta-hook bullet not found');
+    const prefix = 'Solo si el lead pregunta por el costo de la consulta: la';
+    const faq = HERIBERTO_FAQ.map((f) => (f.a.startsWith(prefix) ? { ...f, a: f.a.replace(prefix, 'La') } : f));
+    if (faq.every((f, i) => f.a === HERIBERTO_FAQ[i]!.a)) throw new Error('consulta-hook FAQ prefix not found');
+    return { ...heribertoTenant, config: { ...cfg, faq, promptOverrides: { ...p, houseRules: p.houseRules.replace(`\n${bullet}`, '') } } };
+  }
   if (rule === 'faq-consulta') {
     // The fact itself, not a rule: without the FAQ entry the question must go to pending_info.
     const faq = HERIBERTO_FAQ.filter((f) => !/consulta de valoración tiene costo/i.test(f.q));
@@ -275,5 +314,75 @@ describe.skipIf(!evalApiKey)('Dr. Heriberto Valdivia — agenda la consulta, con
     expect(toolIds(res)).toContain('getAvailability');
     expect(toolArgs(res, 'getAvailability')?.serviceName).toBe('Consulta');
     expect(usesRealLabel(reply(res))).toBe(true);
+  }, 120_000);
+});
+
+// ── Siguiente paso: a FAQ fact never goes alone — except in the listed no-question cases ──
+// The old "REGLA DE ORO" (2026-08-28) was an attitude the model dropped exactly when a tool
+// answer felt complete ("¡Hola! Sí, se factura sin problema." — and the cadence fired on that
+// turn). The replacement is a self-check on the draft plus a CLOSED list of when NOT to ask
+// (Leo, 2026-08-29: "sin que haga pregunta cuando no se necesita"). Two sides of one rule:
+// no appointment → the FAQ answer carries a next step; with an appointment → help mode,
+// answer and stop.
+const BOOKED_TURN: TurnContext = {
+  ...turn,
+  activeAppointment: { startTime: `${DAY}T10:30:00-06:00`, service: 'Consulta' },
+};
+const rcBooked = (tenant: TenantContext) =>
+  buildAgentRequestContext({ tenant, turn: BOOKED_TURN, provider: evalProvider, model: evalModel, llmApiKey: evalApiKey });
+const hasNextStep = (text: string): boolean => /\?/.test(text) || /agend|apart|horario|consulta/.test(text.split('\n').at(-1) ?? '');
+
+describe.skipIf(!evalApiKey)('Dr. Heriberto Valdivia — siguiente paso', () => {
+  it('"¿facturan?" without an appointment → the FAQ fact + a next step, never the bare fact', async () => {
+    const res = await buildFrontDeskAgent().generate(
+      // The real thread where the bare fact happened (2026-08-28 18:06): a booking, a
+      // cancellation, then a cold "¿facturan?" — a short history did not reproduce it.
+      [
+        { role: 'user', content: 'Hola, me interesa valoración de botox pero tengo dudas.' },
+        { role: 'assistant', content: OPENER },
+        { role: 'user', content: 'Quiero agendar, por la mañana' },
+        { role: 'assistant', content: '¡Listo! Tu consulta quedó agendada para el lunes, 31 de agosto, 10:30 a.m. Te llegará la confirmación y los recordatorios por WhatsApp.' },
+        { role: 'user', content: 'Me gustaría cancelar mi cita' },
+        { role: 'assistant', content: 'Entiendo. ¿Confirmo que cancelo tu cita del lunes, 31 de agosto, 10:30 a.m.?' },
+        { role: 'user', content: 'si, por fa' },
+        { role: 'assistant', content: 'Listo, tu cita del lunes, 31 de agosto, a las 10:30 a.m. quedó cancelada. Si después quieres reagendar, escríbenos por aquí.' },
+        { role: 'user', content: 'Hola, si facturan?' },
+      ],
+      { requestContext: rc(tenantFor('next-step')) },
+    );
+    const text = reply(res);
+    expect(text).toMatch(/factura/);
+    expect(hasNextStep(text), text).toBe(true);
+  }, 120_000);
+
+  it('"¿tienen estacionamiento?" WITH an appointment → answers and stops, no forced question', async () => {
+    const res = await buildFrontDeskAgent().generate(
+      [
+        { role: 'user', content: 'Hola, quiero agendar' },
+        { role: 'assistant', content: '¡Listo! Tu consulta quedó agendada. Te llegará la confirmación por WhatsApp.' },
+        { role: 'user', content: 'Tienen estacionamiento?' },
+      ],
+      { requestContext: rcBooked(tenantFor('next-step')) },
+    );
+    const text = reply(res);
+    expect(text).toMatch(/estacionamiento/);
+    expect(text, text).not.toMatch(/\?/);
+  }, 120_000);
+
+  it('"me interesa el ácido hialurónico" → price, and the free consulta is NOT used as a hook', async () => {
+    const res = await buildFrontDeskAgent().generate(
+      [
+        { role: 'user', content: 'Hola' },
+        { role: 'assistant', content: OPENER },
+        { role: 'user', content: 'Hola me interesa el ácido hialuronico' },
+      ],
+      { requestContext: rc(tenantFor('consulta-hook')) },
+    );
+    const text = reply(res);
+    // The price is NOT required here ("me interesa" is not "¿cuánto cuesta?" — the flow
+    // connects first); only the hook is under test. lookupFaq finds no overlap for this
+    // message and returns the WHOLE FAQ, so the "sin costo" entry is in front of the model
+    // on almost every treatment question — the rule is what keeps it out of the reply.
+    expect(text, text).not.toMatch(/sin costo|gratis|gratuita|no tiene costo|sin cargo/);
   }, 120_000);
 });
