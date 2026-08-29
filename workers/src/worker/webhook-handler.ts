@@ -65,7 +65,8 @@ import { extractCapiIdentity } from '../meta/capi-config.js';
 import { GhlClient } from '../ghl/client.js';
 import { parseInboundWebhook } from '../ghl/webhook.js';
 import { transcribeAudio } from '../core/transcribe.js';
-import { demoEndTag, STATUS_TAGS } from '../ghl/tags.js';
+import { demoEndTag, interestTag, STATUS_TAGS } from '../ghl/tags.js';
+import { interestPromptAddendum, matchInterest, serviceNames } from '../core/interest.js';
 import type { GhlInboundWebhook, InboundAttachment, ParsedInbound } from '../ghl/types.js';
 import { DEFAULT_MODEL, DEFAULT_PROVIDER, FRONT_DESK_ROLE } from '../roles/front-desk/index.js';
 import { buildDemoEndAnnouncement, buildDemoStartAnnouncement } from '../roles/front-desk/prompt.js';
@@ -225,7 +226,9 @@ function typingDelayMs(text: string): number {
   return Math.min(3000, Math.max(800, text.length * 25));
 }
 
-const CLASSIFY_PROMPT = (leadMessage: string, botReply: string) =>
+// `services` is passed ONLY for tenants with interest tags on (0058): the prompt every
+// other tenant sends stays byte-identical to what it was before that feature.
+const CLASSIFY_PROMPT = (leadMessage: string, botReply: string, services?: string[]) =>
   `Clasifica el estado de esta conversación de ventas tras el último intercambio.
 
 Lead dijo: "${leadMessage.slice(0, 200)}"
@@ -237,9 +240,17 @@ Elige UNO:
 - opted_out: el lead dijo EXPLÍCITAMENTE que no quiere más mensajes, que pare, que no le interesa, o pidió que no lo contacten. Requiere una expresión directa de rechazo, no solo no calificar.
 - completed: el lead completó el proceso (agendó, se registró, pagó).
 
-Responde SOLO con JSON: {"status":"active"} o {"status":"standby"} o {"status":"opted_out"} o {"status":"completed"}. Sin explicaciones.`;
+Responde SOLO con JSON: {"status":"active"} o {"status":"standby"} o {"status":"opted_out"} o {"status":"completed"}. Sin explicaciones.${services?.length ? interestPromptAddendum(services) : ''}`;
 
 const VALID_STATUSES = new Set(['active', 'standby', 'opted_out', 'completed']);
+
+/** What the classifier hands back: a terminal status (or null) and, for interest-tag
+ *  tenants, the configured service the lead asked about (validated, or null). */
+interface ClassifyResult {
+  status: Exclude<ConversationStatus, 'active' | 'handed_off'> | null;
+  interest: string | null;
+}
+const NO_CLASSIFY: ClassifyResult = { status: null, interest: null };
 
 /**
  * Provider, model and key for this tenant's model calls. The tenant's own key when it
@@ -265,14 +276,24 @@ function resolveTurnLlm(tenant: TenantContext, parsed: ParsedInbound) {
 /**
  * Classify whether the conversation reached a terminal state after this turn.
  * Only runs when the bot's reply has no question (optimization — most active
- * turns end with a question). Returns null if still active or on error.
+ * turns end with a question). Returns a null status if still active or on error.
+ *
+ * Interest tags (0058): when `services` is given the SAME call also names the configured
+ * service the lead is asking about, and then it runs on every replied turn — a lead
+ * names the treatment in the exchanges that end with a question, which is where the
+ * old short-circuit never looked. The status half keeps its rule: on a turn whose reply
+ * carries a question the status is ignored, exactly as if the call had not run.
  */
 async function classifyConversationOutcome(
   leadMessage: string,
   botReply: string,
   llm: AuxLlmCall,
-): Promise<Exclude<ConversationStatus, 'active' | 'handed_off'> | null> {
-  if (botReply.includes('?')) return null; // has a question → still active
+  services?: string[],
+): Promise<ClassifyResult> {
+  const wantStatus = !botReply.includes('?'); // has a question → still active
+  const wantInterest = !!services?.length;
+  if (!wantStatus && !wantInterest) return NO_CLASSIFY;
+  const prompt = CLASSIFY_PROMPT(leadMessage, botReply, wantInterest ? services : undefined);
 
   try {
     let raw: string;
@@ -288,7 +309,7 @@ async function classifyConversationOutcome(
         body: JSON.stringify({
           model: llm.model,
           max_tokens: 32,
-          messages: [{ role: 'user', content: CLASSIFY_PROMPT(leadMessage, botReply) }],
+          messages: [{ role: 'user', content: prompt }],
         }),
       });
       if (!res.ok) throw new Error(`anthropic classify ${res.status}`);
@@ -305,7 +326,7 @@ async function classifyConversationOutcome(
           max_completion_tokens: AUX_MAX_COMPLETION_TOKENS,
           ...(auxEffort && { reasoning_effort: auxEffort }),
           response_format: { type: 'json_object' },
-          messages: [{ role: 'user', content: CLASSIFY_PROMPT(leadMessage, botReply) }],
+          messages: [{ role: 'user', content: prompt }],
         }),
       });
       if (!res.ok) throw new Error(`openai classify ${res.status}`);
@@ -314,14 +335,17 @@ async function classifyConversationOutcome(
       raw = data.choices[0]?.message?.content ?? '';
     }
 
-    const parsed = JSON.parse(raw) as { status?: string };
+    const parsed = JSON.parse(raw) as { status?: string; interest?: unknown };
+    // Only a CONFIGURED service name gets through — the model picks from a closed list.
+    const interest = wantInterest ? matchInterest(services!, parsed.interest) : null;
     const status = parsed.status;
-    if (!status || !VALID_STATUSES.has(status)) return null;
-    if (status === 'active') return null;
-    return status as Exclude<ConversationStatus, 'active' | 'handed_off'>;
+    if (!wantStatus || !status || !VALID_STATUSES.has(status) || status === 'active') {
+      return { status: null, interest };
+    }
+    return { status: status as Exclude<ConversationStatus, 'active' | 'handed_off'>, interest };
   } catch (err) {
     console.error('[classify] failed:', err instanceof Error ? err.message : String(err));
-    return null; // fail safe: never block the main flow
+    return NO_CLASSIFY; // fail safe: never block the main flow
   }
 }
 
@@ -981,10 +1005,24 @@ export async function runAgentTurn({
   console.log(`[classify] conv=${parsed.conversationId} hasQuestion=${hasQuestion}`);
   // Skipped for the forced handover too: it always ends in a question, and the lead's last
   // message was in-character roleplay — nothing there is a real terminal state.
-  const outcome = activeRole === 'demo' || forcedReply || endedByBooking
-    ? null
-    : await classifyConversationOutcome(parsed.text, reply, aux);
-  console.log(`[classify] outcome=${outcome ?? 'null (active or error)'}`);
+  // Interest tags (0058): the same call also names the service the lead asked about, for
+  // tenants that opted in. The list is the tenant's own `services[].name`; empty = off.
+  const interestServices = tenant.config.interestTags ? serviceNames(tenant.config.services) : undefined;
+  const classified = activeRole === 'demo' || forcedReply || endedByBooking
+    ? NO_CLASSIFY
+    : await classifyConversationOutcome(parsed.text, reply, aux, interestServices);
+  const outcome = classified.status;
+  console.log(`[classify] outcome=${outcome ?? 'null (active or error)'} interest=${classified.interest ?? 'null'}`);
+  if (classified.interest) {
+    // Fire-and-forget: a tag is for smart lists, never worth a slower or lost reply.
+    // The event repeats if the lead keeps naming the same treatment — GHL treats an
+    // existing tag as a no-op, and the repeat is cheaper than a lookup on every turn.
+    const tag = interestTag(classified.interest);
+    ghl.addContactTags(parsed.contactId, [tag]).catch((e: unknown) =>
+      console.error('[tags] interest tag failed:', e instanceof Error ? e.message : String(e)),
+    );
+    void logBotEvent(tenant.clientId, parsed.conversationId, 'interest_tagged', { service: classified.interest, tag });
+  }
   if (outcome) {
     try {
       // false = refused (0044): an `awaiting_human` lead can't be classified into

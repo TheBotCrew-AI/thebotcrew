@@ -99,6 +99,7 @@ from t;
 | `quiet_hours` | `NULL` = platform default 21:00–08:00 local. |
 | `lead_timezone_enabled` | `false` (default): times in `timezone`. `true`: times in the **lead's** zone (guessed from the WhatsApp area code, or stated by the lead), suffixed "hora de …" when it differs. **Only for remote services** (a video call) — for a walk-in business it shifts hours for anyone with an out-of-town number. See business-logic §5d. |
 | `follow_up_rounds` | Cadences for reactivation **rounds 1+** (0049) as an array of arrays of minutes, e.g. `'[[360,1080],[960]]'::jsonb` — each time the lead ghosts again the next (shorter, softer) round runs, and past the last one pursuit stops for good. `NULL` = platform default taper (`[[360,1080],[960]]`); `[]` = round 0 only (one ghost cycle, then stop). Round 0 always runs `follow_up_cadence`. See business-logic §4.3. |
+| `interest_tags` | `false` (default). `true` = the classifier also names the service the lead is asking about and the contact gets `interes-<servicio>` tags (one per `services[].name`, slugged). Costs one extra aux call per replied turn. See business-logic §9. |
 | `ai_provider` / `ai_model` | `NULL` = platform default (`openai` / `gpt-5.6-luna`). Only override with reason — an override also opts the tenant out of the per-role reasoning effort unless the model accepts it. |
 
 ### What goes inside `prompt_overrides` (the jsonb blob)

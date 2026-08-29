@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { TenantContext } from '../core/types.js';
 
 vi.mock('../db/queries.js');
-const ghl = { getContactAppointments: vi.fn(), resolveContactByPhoneOrEmail: vi.fn(), removeContactTags: vi.fn() };
+const ghl = { getContactAppointments: vi.fn(), resolveContactByPhoneOrEmail: vi.fn(), removeContactTags: vi.fn(), addContactTags: vi.fn() };
 vi.mock('../ghl/client.js', () => ({ GhlClient: vi.fn(() => ghl) }));
 
 import * as q from '../db/queries.js';
@@ -39,6 +39,7 @@ beforeEach(() => {
   vi.mocked(q.resetReactivationRound).mockResolvedValue(undefined);
   vi.mocked(q.setAwaitingHumanByContact).mockResolvedValue(1);
   ghl.removeContactTags.mockResolvedValue(undefined);
+  ghl.addContactTags.mockResolvedValue(undefined);
   ghl.getContactAppointments.mockResolvedValue([
     { id: 'appt-9', startTime: '2099-08-09T16:00:00-07:00', title: 'Depilación láser' },
     { id: 'other', startTime: '2099-01-01T10:00:00-07:00', title: 'Otra' },
@@ -190,11 +191,13 @@ describe('handleAppointmentWebhook — 0049 parity with a bot booking', () => {
     expect(ghl.removeContactTags).toHaveBeenCalledWith('c1', ['esperando-agenda']);
   });
 
-  it('tenant without an awaiting-human tag → no tag machinery touched', async () => {
+  it('tenant without an awaiting-human tag → the awaiting-human machinery is not touched', async () => {
     vi.mocked(q.loadTenantConfig).mockResolvedValue({ ...tenant, awaitingHumanTag: null } as never);
     await run();
     expect(q.setAwaitingHumanByContact).not.toHaveBeenCalled();
-    expect(ghl.removeContactTags).not.toHaveBeenCalled();
+    expect(ghl.removeContactTags).not.toHaveBeenCalledWith('c1', ['esperando-agenda']);
+    // `cita-cancelada` is platform-wide (no per-tenant tag), so its clearing still runs.
+    expect(ghl.removeContactTags).toHaveBeenCalledWith('c1', ['cita-cancelada']);
   });
 
   it('tag-clearing failures are non-fatal', async () => {
@@ -205,7 +208,7 @@ describe('handleAppointmentWebhook — 0049 parity with a bot booking', () => {
     expect(q.logAppointment).toHaveBeenCalled();
   });
 
-  it('cancelled → logs the action but neither cancels nudges nor resets rounds nor touches the tag', async () => {
+  it('cancelled → logs the action but neither cancels nudges nor resets rounds nor touches the awaiting-human tag', async () => {
     await run(payload({ action: 'cancelled' }));
     expect(q.logAppointment).toHaveBeenCalledWith(expect.objectContaining({ p_action: 'cancelled' }));
     expect(q.cancelFollowUps).not.toHaveBeenCalled();
@@ -227,5 +230,37 @@ describe('handleAppointmentWebhook — 0049 parity with a bot booking', () => {
     const res = await run();
     expect(res.status).toBe(200);
     expect(q.logAppointment).toHaveBeenCalled();
+  });
+});
+
+describe('handleAppointmentWebhook — the `cita-cancelada` tag (parity with the bot tools)', () => {
+  it('a staff cancellation tags the contact', async () => {
+    await run(payload({ action: 'cancelled' }));
+    expect(ghl.addContactTags).toHaveBeenCalledWith('c1', ['cita-cancelada']);
+  });
+
+  it('a staff booking clears it (alongside the awaiting-human tag)', async () => {
+    await run();
+    expect(ghl.removeContactTags).toHaveBeenCalledWith('c1', ['cita-cancelada']);
+    expect(ghl.addContactTags).not.toHaveBeenCalled();
+  });
+
+  it('rescheduled → neither adds nor removes it', async () => {
+    await run(payload({ action: 'rescheduled' }));
+    expect(ghl.addContactTags).not.toHaveBeenCalled();
+    expect(ghl.removeContactTags).not.toHaveBeenCalledWith('c1', ['cita-cancelada']);
+  });
+
+  it('a duplicate delivery never re-tags', async () => {
+    vi.mocked(q.appointmentActionLogged).mockResolvedValue(true);
+    await run(payload({ action: 'cancelled' }));
+    expect(ghl.addContactTags).not.toHaveBeenCalled();
+  });
+
+  it('tag failures are non-fatal for the stat row', async () => {
+    ghl.addContactTags.mockRejectedValue(new Error('ghl 500'));
+    const res = await run(payload({ action: 'cancelled' }));
+    expect(res.status).toBe(200);
+    expect(q.logAppointment).toHaveBeenCalledWith(expect.objectContaining({ p_action: 'cancelled' }));
   });
 });

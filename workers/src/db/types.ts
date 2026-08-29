@@ -35,6 +35,8 @@ export interface TenantConfigRow {
   /** Sliding human-takeover pause in minutes. NULL = platform default (5). */
   human_pause_minutes: number | null;
   lead_timezone_enabled: boolean | null;
+  /** Interest tags on the GHL contact (0058); false/null = off. */
+  interest_tags?: boolean | null;
   /** Channels the bot may reply on. NULL = none (installed but silent). */
   enabled_channels: string[] | null;
   /** Pre-live test allowlist: when non-empty, reply only to these GHL contact ids. */
@@ -273,7 +275,10 @@ export type BotEventType =
   // The FINAL reactivation round exhausted unanswered ({round, followUpId}, 0049):
   // the lead got the farewell and the arming gate now keeps every nudge off. The
   // runner also writes the `reactivacion-agotada` GHL tag alongside this.
-  | 'reactivation_exhausted';
+  | 'reactivation_exhausted'
+  // Interest tag written on the GHL contact ({service, tag}, 0058). Repeats when the
+  // lead names the same treatment again — adding an existing tag in GHL is a no-op.
+  | 'interest_tagged';
 
 export interface LogAppointmentParams {
   p_client_id: string;

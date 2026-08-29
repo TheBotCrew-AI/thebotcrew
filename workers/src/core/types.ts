@@ -87,6 +87,9 @@ export interface RawTenantConfig {
   /** Render appointment times in the LEAD's timezone (0057). Off by default: right for a
    *  remote service (a video call), wrong for a walk-in business. See core/lead-timezone.ts. */
   leadTimezoneEnabled?: boolean;
+  /** Tag the GHL contact `interes-<servicio>` for each configured service the lead asks
+   *  about (0058). Off by default: with it on the classifier runs on every replied turn. */
+  interestTags?: boolean;
   /** Slug of the Worker secret holding this tenant's own provider key
    *  (`'MADI'` → `OPENAI_API_KEY__MADI`). Never the key itself. null = platform key. */
   aiKeyRef?: string | null;

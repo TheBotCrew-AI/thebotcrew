@@ -43,6 +43,7 @@ import {
   setAwaitingHumanByContact,
 } from '../db/queries.js';
 import { GhlClient } from '../ghl/client.js';
+import { CANCELLED_APPOINTMENT_TAG } from '../ghl/tags.js';
 import type { WebhookResult } from './webhook-handler.js';
 
 const ACTIONS: readonly AppointmentAction[] = ['booked', 'rescheduled', 'cancelled'];
@@ -167,6 +168,19 @@ export async function handleAppointmentWebhook(
         console.error('[appt-webhook] tag removal failed (non-blocking):', e instanceof Error ? e.message : String(e)),
       );
     }
+  }
+
+  // `cita-cancelada` parity with the bot's own tools: a staff cancellation tags the contact,
+  // a staff booking clears it. No demo guard is needed here — a simulated demo booking never
+  // reaches GHL, so the workflow never fires for it. Non-blocking, like the tag above.
+  if (action === 'cancelled') {
+    ghl.addContactTags(contactId, [CANCELLED_APPOINTMENT_TAG]).catch((e: unknown) =>
+      console.error('[appt-webhook] cancelled tag add failed (non-blocking):', e instanceof Error ? e.message : String(e)),
+    );
+  } else if (action === 'booked') {
+    ghl.removeContactTags(contactId, [CANCELLED_APPOINTMENT_TAG]).catch((e: unknown) =>
+      console.error('[appt-webhook] cancelled tag removal failed (non-blocking):', e instanceof Error ? e.message : String(e)),
+    );
   }
 
   console.log(`[appt-webhook] ${action} appt=${appointmentId} contact=${contactId} tenant=${tenant.tenantId} conv=${conversationId ?? 'none'}`);

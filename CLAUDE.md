@@ -243,7 +243,12 @@ supabase/
                                #      app_set_lead_timezone), tenant_config.lead_timezone_enabled DEFAULT false — un
                                #      negocio presencial con el flag prendido ofrece horas corridas. Los labels salen en
                                #      la hora del lead con sufijo "hora de …" sólo cuando el offset difiere; el modelo
-                               #      nunca convierte. Ver business-logic §5d)
+                               #      nunca convierte. Ver business-logic §5d),
+                               # 0058 interest_tags (tenant_config.interest_tags DEFAULT false: el clasificador de status
+                               #      —la misma llamada aux— devuelve además `interest` = UN nombre de services[].name, validado
+                               #      en core/interest.ts, y el contacto recibe el tag `interes-<slug>` + evento interest_tagged.
+                               #      Con el flag, el clasificador corre en CADA turno contestado; sin él, byte-idéntico a antes.
+                               #      Ver business-logic §9)
   clients.sql, seed-tenants.sql# seeds (run by `supabase db reset` per config.toml)
 sites/                         # client marketing sites: static HTML, no build step, no deps
   _template/                   # starting point for a new client
@@ -466,6 +471,15 @@ for the retry cron.
 - Opt-out undo (0045): `opted_out` now mutes the bot like `handed_off`, and since a classifier
   (an LLM) sets it, **removing the `bot-opted-out` tag clears it** — same route/handler. Adding
   the tag opts nobody out; the switch only undoes. See docs/business-logic.md §2a.
+- Interest tags (0058): `interes-<servicio>` per configured service the lead asks about, chosen by the
+  status classifier (not the agent, not a keyword match), validated against `services[].name`
+  (`core/interest.ts`), opt-in per tenant via `tenant_config.interest_tags`. Never removed. See
+  docs/business-logic.md §9.
+- Cancelled-appointment tag (2026-08-28): `cita-cancelada` is ADDED by `cancelAppointment` and by the
+  staff workflow's `cancelled` action, REMOVED by any new booking (both paths). Platform constant
+  (`ghl/tags.ts`), no config, no LLM, skipped in demo. A smart-list hook for GHL reactivation
+  campaigns — it does not change what the bot does after a cancel (still `standby`, no nudges).
+  The cancel prompt rule now offers to reschedule first; see docs/business-logic.md §5.
 - Marketing opt-out (0051) — a date, not a switch. The `marketing-opt-out` tag stamps
   `conversations.marketing_opted_out_at` and changes nothing else: it is consent about the GHL
   **campaigns**, which the bot neither sends nor reads. Do not confuse it with `bot-opted-out`

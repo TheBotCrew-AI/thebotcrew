@@ -260,6 +260,18 @@ describe('buildFrontDeskInstructions', () => {
     });
   });
 
+  it('a cancel request is met with a reschedule offer first; cancel needs insistence + explicit confirmation', () => {
+    const out = buildFrontDeskInstructions(cfg(), NOW);
+    expect(out).toContain('# Reagendar o cancelar una cita');
+    expect(out).toContain('antes de cancelar, ofrécele moverla — llama getAvailability y dale DOS horarios reales');
+    expect(out).toContain('Solo si insiste en cancelar');
+    expect(out).toContain('vuelve a pedir cancelar, no insistas con más horarios: confirma y cancela');
+    // Still gated by the explicit confirmation — the offer never replaces it.
+    expect(out).toContain('"¿Confirmo que cancelo tu cita del [día] a las [hora]?"');
+    // Suppressed with the rest of the booking half.
+    expect(buildFrontDeskInstructions(cfg({ promptOverrides: { bookingEnabled: false } }), NOW)).not.toContain('ofrécele moverla');
+  });
+
   describe('bookingEnabled = false (tenant books by hand)', () => {
     const noBooking = () => cfg({ promptOverrides: { bookingEnabled: false } });
 

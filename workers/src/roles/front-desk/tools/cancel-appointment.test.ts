@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { TenantContext, TurnContext } from '../../../core/types.js';
 
-const ghl = { cancelAppointment: vi.fn(), getContactAppointments: vi.fn() };
+const ghl = { cancelAppointment: vi.fn(), getContactAppointments: vi.fn(), addContactTags: vi.fn() };
 vi.mock('../../../ghl/client.js', () => ({ GhlClient: vi.fn(() => ghl) }));
 vi.mock('../../../db/queries.js');
 
@@ -31,6 +31,7 @@ beforeEach(() => {
   vi.mocked(q.reactivateConversation).mockResolvedValue(undefined);
   ghl.cancelAppointment.mockResolvedValue(undefined);
   ghl.getContactAppointments.mockResolvedValue([]);
+  ghl.addContactTags.mockResolvedValue(undefined);
 });
 
 describe('cancelAppointment', () => {
@@ -71,5 +72,36 @@ describe('cancelAppointment', () => {
     expect(res.cancelled).toBe(false);
     expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'booking_failed', expect.objectContaining({ stage: 'cancel' }));
     expect(q.reactivateConversation).not.toHaveBeenCalled();
+  });
+});
+
+describe('cancelAppointment — the `cita-cancelada` tag', () => {
+  it('a real cancellation tags the contact (smart lists / reactivation campaigns)', async () => {
+    await run();
+    expect(ghl.addContactTags).toHaveBeenCalledWith('c1', ['cita-cancelada']);
+  });
+
+  it('GHL cancel failed → nothing was cancelled, so no tag', async () => {
+    ghl.cancelAppointment.mockRejectedValue(new Error('ghl 500'));
+    await run();
+    expect(ghl.addContactTags).not.toHaveBeenCalled();
+  });
+
+  it('a tag failure never fails the cancellation the lead already got', async () => {
+    ghl.addContactTags.mockRejectedValue(new Error('tags 500'));
+    const res = await run();
+    expect(res).toMatchObject({ cancelled: true });
+    expect(ghl.cancelAppointment).toHaveBeenCalledWith('appt1');
+  });
+
+  it('demo mode: a simulated cancel never tags the real contact', async () => {
+    const demoTurn = { ...turn, activeRole: 'demo' } as TurnContext;
+    const demoCtx = { requestContext: { get: (k: string) => (k === 'tenant' ? tenant : k === 'turn' ? demoTurn : undefined) } };
+    vi.mocked(q.getActiveDemoSession).mockResolvedValue({ id: 'ds1', simulatedBooking: { startTime: '2099-07-10T17:00:00-06:00', serviceName: 'Valoración', label: 'x' } } as never);
+    vi.mocked(q.setSimulatedBooking).mockResolvedValue(undefined);
+    const res = await (cancelAppointmentTool.execute as (i: Record<string, never>, c: typeof demoCtx) => Promise<{ cancelled: boolean }>)({}, demoCtx);
+    expect(res.cancelled).toBe(true);
+    expect(ghl.cancelAppointment).not.toHaveBeenCalled();
+    expect(ghl.addContactTags).not.toHaveBeenCalled();
   });
 });

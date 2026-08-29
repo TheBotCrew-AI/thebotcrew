@@ -6,6 +6,7 @@ const ghl = {
   updateContactPhone: vi.fn(),
   bookAppointment: vi.fn(),
   getAvailability: vi.fn(),
+  removeContactTags: vi.fn(),
 };
 vi.mock('../../../ghl/client.js', () => ({ GhlClient: vi.fn(() => ghl) }));
 vi.mock('../../../db/queries.js');
@@ -55,6 +56,7 @@ beforeEach(() => {
   ghl.bookAppointment.mockResolvedValue({ ghlAppointmentId: 'appt1' });
   // By default the requested slot IS available (start === START), so validation passes.
   ghl.getAvailability.mockResolvedValue([{ start: START, end: START }]);
+  ghl.removeContactTags.mockResolvedValue(undefined);
   vi.mocked(q.logAppointment).mockResolvedValue({ appointmentId: 'a-uuid' } as never);
   vi.mocked(q.logEvent).mockResolvedValue({ eventId: 'e-uuid' } as never);
   vi.mocked(q.logBotEvent).mockResolvedValue(undefined);
@@ -282,5 +284,26 @@ describe('bookAppointment — demo mode (simulated booking)', () => {
     expect(q.resetReactivationRound).not.toHaveBeenCalled(); // a fake conversion resets nothing (0049)
     // A roleplayed booking is not a conversion — nothing goes to Meta (0048).
     expect(queueCapiEvent).not.toHaveBeenCalled();
+  });
+});
+
+describe('bookAppointment — clears the `cita-cancelada` tag', () => {
+  it('a real booking removes the tag (idempotent — GHL ignores an absent tag)', async () => {
+    const res = await run({ serviceName: 'Consulta', startTime: START });
+    expect(res.booked).toBe(true);
+    expect(ghl.removeContactTags).toHaveBeenCalledWith('c1', ['cita-cancelada']);
+  });
+
+  it('a tag-removal failure never fails the booking', async () => {
+    ghl.removeContactTags.mockRejectedValue(new Error('tags 500'));
+    const res = await run({ serviceName: 'Consulta', startTime: START });
+    expect(res.booked).toBe(true);
+  });
+
+  it('GHL booking failed → nothing to clear', async () => {
+    ghl.bookAppointment.mockRejectedValue(new Error('ghl 500'));
+    const res = await run({ serviceName: 'Consulta', startTime: START });
+    expect(res.booked).toBe(false);
+    expect(ghl.removeContactTags).not.toHaveBeenCalled();
   });
 });

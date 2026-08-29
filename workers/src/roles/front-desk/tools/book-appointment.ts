@@ -6,6 +6,7 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { GhlClient } from '../../../ghl/client.js';
+import { CANCELLED_APPOINTMENT_TAG } from '../../../ghl/tags.js';
 import { getActiveDemoSession, logAppointment, logBotEvent, logEvent, resetReactivationRound, setSimulatedBooking } from '../../../db/queries.js';
 import { queueCapiEvent } from '../../../meta/capi.js';
 import { resolveAgentContext } from './agent-context.js';
@@ -211,6 +212,11 @@ export const bookAppointmentTool = createTool({
     // starts pursuit at round 0. A reschedule is NOT a new conversion and never resets.
     resetReactivationRound(turn.ghlConversationId).catch((e: unknown) =>
       console.error('[bookAppointment] round reset failed (non-blocking):', e instanceof Error ? e.message : String(e)),
+    );
+    // A new booking closes the cancellation: the contact leaves the `cita-cancelada` smart
+    // list. Idempotent (removing an absent tag is a no-op in GHL) and non-blocking.
+    ghl.removeContactTags(turn.ghlContactId, [CANCELLED_APPOINTMENT_TAG]).catch((e: unknown) =>
+      console.error('[bookAppointment] tag removal failed (non-blocking):', e instanceof Error ? e.message : String(e)),
     );
     // Meta CAPI (0048): a real booking is the strongest lead-quality signal. Only the
     // real path reaches here (the demo short-circuit returned above) and the helper

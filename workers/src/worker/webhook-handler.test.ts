@@ -1774,3 +1774,98 @@ describe('runAgentTurn — resume after the human pause (0053)', () => {
     expect(agent.generate).toHaveBeenCalledOnce();
   });
 });
+
+describe('handleInboundWebhook — interest tags (0058)', () => {
+  const services = [{ name: 'Botox' }, { name: 'Ácido Hialurónico' }, { name: 'Láser CO₂ Fraccionado' }];
+  const withInterest = () =>
+    tenant({
+      config: {
+        businessName: 'Demo',
+        timezone: 'America/Mexico_City',
+        tone: null,
+        services,
+        hours: {},
+        calendars: {},
+        faq: {},
+        promptOverrides: {},
+        interestTags: true,
+      },
+    });
+  const classifierReturning = (json: string) =>
+    vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: json } }] }),
+    });
+  const classifierPrompt = (fetchSpy: ReturnType<typeof vi.fn>): string => {
+    const call = fetchSpy.mock.calls.find(([url]) => String(url).includes('openai.com'));
+    const body = JSON.parse((call![1] as { body: string }).body) as { messages: { content: string }[] };
+    return body.messages[0]!.content;
+  };
+
+  it('flag off: a question reply still skips the classifier, and the prompt is unchanged', async () => {
+    const fetchSpy = classifierReturning('{"status":"active"}');
+    vi.stubGlobal('fetch', fetchSpy);
+    // Services configured but the flag is off — the tenant must see exactly the old behaviour.
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(tenant({ config: { ...withInterest().config, interestTags: false } }));
+    await handleInboundWebhook(inbound, agentReplying('¿Te interesa el botox?'));
+    expect(fetchSpy).not.toHaveBeenCalled();
+
+    await handleInboundWebhook(inbound, agentReplying('Gracias, hasta luego.'));
+    expect(fetchSpy).toHaveBeenCalledOnce();
+    const prompt = classifierPrompt(fetchSpy);
+    expect(prompt).not.toContain('"interest"');
+    expect(prompt).not.toContain('- Botox');
+    expect(ghl.addContactTags).not.toHaveBeenCalledWith('c1', expect.arrayContaining([expect.stringMatching(/^interes-/)]));
+  });
+
+  it('flag on: runs on a question reply, lists the services, tags the pick — status ignored', async () => {
+    const fetchSpy = classifierReturning('{"status":"standby","interest":"botox"}');
+    vi.stubGlobal('fetch', fetchSpy);
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(withInterest());
+    await handleInboundWebhook(inbound, agentReplying('¿Es tu primera vez con botox?'));
+
+    expect(fetchSpy).toHaveBeenCalledOnce();
+    const prompt = classifierPrompt(fetchSpy);
+    expect(prompt).toContain('- Botox');
+    expect(prompt).toContain('- Láser CO₂ Fraccionado');
+    expect(prompt).toContain('"interest":null');
+    expect(ghl.addContactTags).toHaveBeenCalledWith('c1', ['interes-botox']);
+    expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'interest_tagged', { service: 'Botox', tag: 'interes-botox' });
+    // The reply carried a question: the status half is ignored exactly as before.
+    expect(q.updateConversationStatus).not.toHaveBeenCalled();
+  });
+
+  it('flag on, no-question reply: status AND interest both apply from the one call', async () => {
+    vi.stubGlobal('fetch', classifierReturning('{"status":"standby","interest":"Ácido Hialurónico"}'));
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(withInterest());
+    await handleInboundWebhook(inbound, agentReplying('Entendido, gracias.'));
+    expect(q.updateConversationStatus).toHaveBeenCalledWith('conv1', 'standby');
+    expect(ghl.addContactTags).toHaveBeenCalledWith('c1', ['interes-acido-hialuronico']);
+  });
+
+  it('a service the tenant did not configure never becomes a tag', async () => {
+    vi.stubGlobal('fetch', classifierReturning('{"status":"active","interest":"Rinomodelación"}'));
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(withInterest());
+    await handleInboundWebhook(inbound, agentReplying('¿Qué te gustaría mejorar?'));
+    expect(ghl.addContactTags).not.toHaveBeenCalledWith('c1', expect.arrayContaining([expect.stringMatching(/^interes-/)]));
+    expect(q.logBotEvent).not.toHaveBeenCalledWith('client1', 'conv1', 'interest_tagged', expect.anything());
+  });
+
+  it('demo: no classifier call, no tag — the roleplay names someone else\'s services', async () => {
+    const fetchSpy = classifierReturning('{"status":"active","interest":"Botox"}');
+    vi.stubGlobal('fetch', fetchSpy);
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(withInterest());
+    vi.mocked(q.getConversationPersona).mockResolvedValue({ activeRole: 'demo', roleStartedAt: null, demoStartedAt: '2026-07-29T10:00:00Z', promptVariant: null, reactivationRound: 0, leadTimezone: null });
+    await handleInboundWebhook(inbound, agentReplying('¿Te agendo el botox?'));
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(ghl.addContactTags).not.toHaveBeenCalledWith('c1', expect.arrayContaining([expect.stringMatching(/^interes-/)]));
+  });
+
+  it('a failing tag write never breaks the turn', async () => {
+    vi.stubGlobal('fetch', classifierReturning('{"status":"active","interest":"Botox"}'));
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(withInterest());
+    ghl.addContactTags.mockRejectedValueOnce(new Error('ghl down'));
+    await expect(handleInboundWebhook(inbound, agentReplying('¿Primera vez?'))).resolves.not.toThrow();
+    expect(ghl.sendMessage).toHaveBeenCalled();
+  });
+});

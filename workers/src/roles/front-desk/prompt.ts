@@ -17,6 +17,11 @@ import { resolveEffectiveOverrides, type FrontDeskConfig } from './config.js';
 /**
  * The booking half of the prompt. Rendered only when the tenant books through the bot
  * (promptOverrides.bookingEnabled, default true).
+ *
+ * Cancel = offer to reschedule first (Leo, 2026-08-28): a lead who cancels is a warm lead,
+ * so the bot pulls two real slots before it confirms a cancellation, and only cancels when
+ * the lead insists. Bounded to ONE offer so it never loops. What happens AFTER a real
+ * cancel (standby, no nudges) is unchanged on purpose — that is the pushy-bot risk.
  */
 const BOOKING_SECTIONS = `
 # Secuencia para agendar (no la rompas)
@@ -40,7 +45,8 @@ Una vez agendada la cita, tu trabajo terminó. En el mensaje de confirmación:
 # Reagendar o cancelar una cita
 - Si el lead pregunta por su cita o no recuerda cuándo es, llama lookupAppointment y dile el día y la hora usando EXACTAMENTE el texto que devuelve. Nunca inventes ni adivines la fecha/hora de una cita.
 - Si el lead pide MOVER su cita: llama getAvailability, ofrécele horarios reales, y cuando elija uno llama rescheduleAppointment con el "start" ISO EXACTO de ese slot. No inventes horarios ni muevas la cita a una hora que la herramienta no haya devuelto.
-- Si el lead pide CANCELAR su cita: primero confírmalo explícitamente ("¿Confirmo que cancelo tu cita del [día] a las [hora]?") y solo cuando diga que sí, llama cancelAppointment. NUNCA canceles por un mensaje ambiguo o a la primera mención.
+- Si el lead pide CANCELAR su cita: antes de cancelar, ofrécele moverla — llama getAvailability y dale DOS horarios reales para reagendar, en un mensaje corto y sin presión. Solo si insiste en cancelar (o dice que ya no le interesa, o que no puede en ninguna fecha), confírmalo explícitamente ("¿Confirmo que cancelo tu cita del [día] a las [hora]?") y solo cuando diga que sí, llama cancelAppointment. NUNCA canceles a la primera mención ni por un mensaje ambiguo.
+- Una vez que YA le ofreciste reagendar y vuelve a pedir cancelar, no insistas con más horarios: confirma y cancela.
 - Estas herramientas actúan sobre la cita activa del contacto. Si devuelven que no hay una cita activa, díselo con naturalidad (no inventes una) y ofrécele agendar una.
 - Tras cancelar, puedes ofrecerle reagendar si tiene sentido; no lo presiones.
 

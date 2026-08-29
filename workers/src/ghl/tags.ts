@@ -73,3 +73,37 @@ export function demoEndTag(reason: 'exhausted' | 'expired' | 'closed' | 'booked'
     ? DEMO_SESSION_TAGS.completed
     : DEMO_SESSION_TAGS.incomplete;
 }
+
+/**
+ * Written on the contact when an appointment is CANCELLED — by the bot's cancelAppointment
+ * tool or by staff through the appointment workflow webhook — and removed again the moment
+ * the contact books (either path). Deterministic, no config, no LLM: it exists so a
+ * cancellation is visible in GHL (smart list → a reactivation campaign) without changing
+ * what the bot does. Orthogonal to STATUS_TAGS: the conversation status the model writes
+ * after a cancel (usually `standby`) still carries its own tag.
+ */
+export const CANCELLED_APPOINTMENT_TAG = 'cita-cancelada';
+
+/**
+ * Interest tags (0058): `interes-<servicio>` per configured service the lead asked
+ * about, chosen by the classifier and validated against `services[].name`. Slug =
+ * lowercase, accents stripped, subscript digits normalized ("CO₂" → "co2"), anything
+ * else collapsed to a single dash — so the tag is stable across spellings and safe
+ * as a GHL tag name.
+ */
+export const INTEREST_TAG_PREFIX = 'interes-';
+
+const SUBSCRIPT_DIGITS: Record<string, string> = {
+  '₀': '0', '₁': '1', '₂': '2', '₃': '3', '₄': '4', '₅': '5', '₆': '6', '₇': '7', '₈': '8', '₉': '9',
+};
+
+export function interestTag(serviceName: string): string {
+  const slug = serviceName
+    .replace(/[₀-₉]/g, (d) => SUBSCRIPT_DIGITS[d] ?? d)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return `${INTEREST_TAG_PREFIX}${slug}`;
+}

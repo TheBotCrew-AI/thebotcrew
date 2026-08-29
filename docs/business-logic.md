@@ -466,10 +466,23 @@ slots. Rules (also reinforced in the front-desk prompt):
   against real `getAvailability` (same anti-hallucination guard as booking, and within the booking
   horizon) before moving it, then logs a `rescheduled` row. Cancel is a **soft** GHL cancel
   (`appointmentStatus='cancelled'`, not a delete), logs a `cancelled` row, and **reopens** the
-  conversation (`reactivateConversation`) so the bot can offer to rebook. Prompt rules: the agent
-  must **confirm explicitly before cancelling** (never on an ambiguous message) and must call
-  `getAvailability` before rescheduling. No schema change — `appointments.action` already allowed
-  `rescheduled`/`cancelled`.
+  conversation (`reactivateConversation`) so the bot can offer to rebook. Prompt rules: on a
+  cancel request the agent **first offers to move the appointment** (two real slots from
+  `getAvailability`, one short message, no pressure — a cancellation is a warm lead, Leo
+  2026-08-28); only if the lead insists (or says they're no longer interested / can't make any
+  date) does it **confirm explicitly before cancelling** (never on an ambiguous message), and once
+  the reschedule offer was made and refused it does not loop back to more slots. The agent must
+  call `getAvailability` before rescheduling. No schema change — `appointments.action` already
+  allowed `rescheduled`/`cancelled`.
+- **`cita-cancelada` tag (2026-08-28).** A cancellation — the bot's `cancelAppointment` or the staff
+  workflow's `cancelled` action — adds the platform tag **`cita-cancelada`** to the GHL contact;
+  a new booking (either path) removes it. Deterministic, no LLM, no per-tenant config
+  (`ghl/tags.ts` `CANCELLED_APPOINTMENT_TAG`, same family as `bot-standby`). Never in demo mode.
+  It exists so the client can build a smart list and run reactivation campaigns **from GHL** on
+  people who cancelled; the bot's own behaviour after a real cancel is unchanged on purpose —
+  the model still parks the conversation (`standby`) and no nudges fire until the lead writes
+  again (§4). Leo chose not to turn the cadence back on for cancellations ("no quiero volver al
+  bot pesado por accidente").
 - Booking is created via the GHL API (`bookAppointment` tool) and recorded in `appointments`.
   A GHL rejection logs a **`booking_failed`** event to `bot_events` with the GHL status/body +
   `startTime`/`calendarId`/`serviceName`, so a failed booking is diagnosable (the reason is not
@@ -1241,3 +1254,41 @@ and 0 real bugs. A topic that shows up in 3b again on the NEXT run is the real t
 changes ship with evals (§6c) — the report drafts the text, a person decides. The first
 MADI report's acceptance test was the manual tracker it replaced
 (`docs/madi-info-gaps.md`): it must rediscover the open gaps and none of the closed ones.
+
+## 9. Interest tags — which treatment the lead asked about (0058)
+
+A tenant with `tenant_config.interest_tags = true` gets one **`interes-<servicio>`** tag on the
+GHL contact per configured service the lead shows interest in (`interes-botox`,
+`interes-acido-hialuronico`, `interes-laser-co2-fraccionado` — slug = the `services[].name`,
+lowercased, accents stripped, `₂` → `2`, non-alphanumerics → `-`). The point is GHL smart lists
+and campaigns per treatment; nothing in the Worker reads the tags back.
+
+**Who decides.** Not the agent (a side-effect-only tool is exactly the kind OpenAI models skip —
+the `updateContactName` lesson) and not a keyword match (Leo's call, 2026-08-28: "para 3 está
+bien seguir con el clasificador"). The existing **status classifier** — the cheap aux Chat
+Completions call, `reasoning_effort: none`, ~250 in / ~15 out tokens — gets the tenant's
+`services[].name` list appended to its prompt and returns `{status, interest}`; `interest`
+must be one name from the list, copied verbatim, or `null`. `core/interest.ts`
+(`matchInterest`) accepts only a case/accent-insensitive match against the configured names
+and returns the configured spelling — the model cannot invent a service, so it cannot invent a
+tag. Skipped in demo mode.
+
+**When it runs.** The classifier normally runs only on turns whose reply carries no `?` (most
+active turns end in a question, and a status change is unlikely there). With the flag on, the
+same call runs on **every replied turn** — the treatment is usually named in exactly those
+question-ending exchanges — and on a question turn the returned `status` is ignored as if the
+call had not run; only `interest` is used. With the flag off, the prompt and the short-circuit
+are byte-identical to before (pinned by a test), so the three older tenants are untouched.
+
+**Cost.** One extra aux call per replied turn for an opted-in tenant: ~$0.00006 on
+gpt-5.6-luna — under 1% of the turn. If `classify` ever rivals `front-desk` in
+`llm_cost_monthly`, this flag is the first thing to look at.
+
+**Write.** `ghl.addContactTags` fire-and-forget (a failed write is logged, never blocks the
+reply) + `bot_events` `interest_tagged {service, tag}`. Deliberately no per-conversation dedupe:
+the event repeats if the lead names the same treatment again, and GHL no-ops an existing tag.
+Tags are never removed — interest is history, and the client's campaigns decide what to do
+with it.
+
+Enable per tenant: `update tenant_config set interest_tags = true where tenant_id = '…'`.
+First tenant: Dr. Heriberto Valdivia (2026-08-28).

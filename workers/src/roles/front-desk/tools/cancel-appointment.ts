@@ -9,6 +9,7 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { GhlClient } from '../../../ghl/client.js';
+import { CANCELLED_APPOINTMENT_TAG } from '../../../ghl/tags.js';
 import { getActiveDemoSession, logAppointment, logBotEvent, reactivateConversation, setSimulatedBooking } from '../../../db/queries.js';
 import { resolveAgentContext } from './agent-context.js';
 import { resolveActiveAppointment } from './resolve-appointment.js';
@@ -73,6 +74,14 @@ export const cancelAppointmentTool = createTool({
     // Reopen the conversation (booking had set it 'completed') so the bot can offer to rebook.
     reactivateConversation(turn.ghlConversationId).catch((e: unknown) =>
       console.error('[cancelAppointment] reactivateConversation failed:', e),
+    );
+
+    // Make the cancellation visible in GHL (smart lists / reactivation campaigns). Fire-and-
+    // forget: a tag failure must never turn a cancellation that already happened into an
+    // error the model then reports to the lead. The demo path returned above, so a simulated
+    // cancel never tags a real contact.
+    ghl.addContactTags(turn.ghlContactId, [CANCELLED_APPOINTMENT_TAG]).catch((e: unknown) =>
+      console.error('[cancelAppointment] tag add failed (non-blocking):', e instanceof Error ? e.message : String(e)),
     );
 
     return { cancelled: true, message: 'Cita cancelada.' };
