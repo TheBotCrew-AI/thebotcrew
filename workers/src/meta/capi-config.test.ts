@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import {
   buildCapiEventId,
   buildCapiPayload,
@@ -16,6 +16,7 @@ import {
   resolveEventSpec,
   sha256Hex,
   type MetaCapiConfig,
+  isExcludedPhone,
 } from './capi-config.js';
 
 const validRaw = { dataset_id: '123456', page_id: '789', token_ref: 'MADI' };
@@ -397,5 +398,34 @@ describe('countLeadReplies / leadStartedDue — the reply threshold (The Bot Cre
 
   it('no threshold configured → never due here (the first-inbound path owns it)', () => {
     expect(leadStartedDue(config(), [lead('CITAS'), bot(), lead()] as unknown as Msg)).toBe(false);
+  });
+});
+
+describe('exclude_phones — the operator\'s test numbers on a live tenant', () => {
+  const base = { dataset_id: '123456', page_id: '789', token_ref: 'MADI' };
+
+  it('parses to digits, drops junk, and matches either MX form of the same number', () => {
+    const cfg = parseMetaCapi({ ...base, exclude_phones: ['+52 664 385 0341', '', 'abc'] });
+    expect(cfg?.excludePhones).toEqual(['526643850341']);
+    expect(isExcludedPhone(cfg!, '+5216643850341')).toBe(true);
+    expect(isExcludedPhone(cfg!, '+526643850341')).toBe(true);
+    expect(isExcludedPhone(cfg!, '6643850341')).toBe(true);
+    expect(isExcludedPhone(cfg!, '+5216643850342')).toBe(false);
+  });
+
+  it('no list, or no phone on the conversation → never excluded', () => {
+    const cfg = parseMetaCapi(base)!;
+    expect(isExcludedPhone(cfg, '+5216643850341')).toBe(false);
+    const withList = parseMetaCapi({ ...base, exclude_phones: ['+526643850341'] })!;
+    expect(isExcludedPhone(withList, null)).toBe(false);
+    expect(isExcludedPhone(withList, undefined)).toBe(false);
+  });
+
+  it('a non-array is ignored, loudly, and the feature stays on', () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const cfg = parseMetaCapi({ ...base, exclude_phones: '+526643850341' });
+    expect(cfg?.excludePhones).toBeUndefined();
+    expect(spy).toHaveBeenCalledWith(expect.stringContaining('exclude_phones'));
+    spy.mockRestore();
   });
 });

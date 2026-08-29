@@ -23,7 +23,7 @@ import * as q from '../db/queries.js';
 import { findUpcomingAppointment } from '../db/upcoming-appointment.js';
 import { getAiApiKey, resolveAiApiKey } from '../core/env.js';
 import { queueCapiEvent, queueCapiStatusEvent } from '../meta/capi.js';
-import { handleInboundWebhook, runAgentTurn, splitIntoMessages } from './webhook-handler.js';
+import { handleInboundWebhook, runAgentTurn, splitIntoMessages, calledTool } from './webhook-handler.js';
 import { parseInboundWebhook } from '../ghl/webhook.js';
 
 function tenant(overrides: Partial<TenantContext> = {}): TenantContext {
@@ -430,6 +430,50 @@ describe('handleInboundWebhook — Meta CAPI status hook (0048)', () => {
     vi.mocked(q.updateConversationStatus).mockResolvedValue(false);
     await handleInboundWebhook(inbound, agentReplying(noQuestion));
     expect(queueCapiStatusEvent).not.toHaveBeenCalled();
+  });
+});
+
+describe('handleInboundWebhook — the classifier stands down when the agent set the status', () => {
+  const closingReply = '¡Listo! Tu llamada quedó agendada para el lunes a las 9:00 a.m. Te llegará la confirmación.';
+  const agentThatClosed = (): Agent =>
+    ({
+      generate: vi.fn().mockResolvedValue({
+        text: closingReply,
+        toolCalls: [{ payload: { toolName: 'bookAppointment' } }],
+        steps: [
+          { text: '', toolCalls: [{ payload: { toolName: 'updateConversationStatus', args: { status: 'completed' } } }] },
+          { text: closingReply },
+        ],
+      }),
+    }) as unknown as Agent;
+
+  it('no classify call and no second status write on a turn where the agent called updateConversationStatus', async () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+    await handleInboundWebhook(inbound, agentThatClosed());
+    expect(ghl.sendMessage).toHaveBeenCalled();
+    expect(fetchSpy).not.toHaveBeenCalled(); // the classifier is an aux fetch
+    expect(q.updateConversationStatus).not.toHaveBeenCalled();
+  });
+
+  it('a closing reply without that tool call is still classified (the fallback the agent skips)', async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: JSON.stringify({ status: 'completed' }) } }], usage: {} }),
+    });
+    vi.stubGlobal('fetch', fetchSpy);
+    await handleInboundWebhook(inbound, agentReplying(closingReply));
+    expect(fetchSpy).toHaveBeenCalled();
+    expect(q.updateConversationStatus).toHaveBeenCalledWith('conv1', 'completed');
+  });
+});
+
+describe('calledTool', () => {
+  it('finds the tool in the top-level calls or in any step, under either call shape', () => {
+    expect(calledTool({ toolCalls: [{ payload: { toolName: 'a' } }] }, 'a')).toBe(true);
+    expect(calledTool({ steps: [{ toolCalls: [{ toolName: 'b' }] }] }, 'b')).toBe(true);
+    expect(calledTool({ steps: [{ text: 'x' }], toolCalls: [] }, 'a')).toBe(false);
+    expect(calledTool(undefined, 'a')).toBe(false);
   });
 });
 

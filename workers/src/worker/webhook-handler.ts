@@ -351,6 +351,17 @@ async function classifyConversationOutcome(
   }
 }
 
+/** Whether the agent called a given tool anywhere in this turn (any step). Tolerant of the
+ *  two shapes a tool call takes in the result: `{ payload: { toolName } }` and `{ toolName }`. */
+export function calledTool(result: unknown, toolName: string): boolean {
+  type Call = { toolName?: string; payload?: { toolName?: string } };
+  const nameOf = (c: Call) => c.payload?.toolName ?? c.toolName;
+  const r = result as { toolCalls?: Call[]; steps?: Array<{ toolCalls?: Call[] }> } | null | undefined;
+  if (!r) return false;
+  if (r.toolCalls?.some((c) => nameOf(c) === toolName)) return true;
+  return (r.steps ?? []).some((s) => s.toolCalls?.some((c) => nameOf(c) === toolName));
+}
+
 const EXTRACT_NAME_PROMPT = (assistantQuestion: string, leadMessage: string, storedName: string) =>
   `El asistente le pidió su nombre al usuario. Extrae el NOMBRE DE LA PERSONA si lo dio.
 
@@ -887,6 +898,8 @@ export async function runAgentTurn({
   const forcedReply = demoJustEnded && demoHandoff ? buildDemoEndAnnouncement(demoHandoff) : undefined;
 
   let reply: string;
+  // Whether the agent closed the conversation itself this turn (see the classifier below).
+  let agentSetStatus = false;
   if (forcedReply) {
     reply = forcedReply;
     console.log(`[demo-session] deterministic handover reply conv=${parsed.conversationId}`);
@@ -911,6 +924,7 @@ export async function runAgentTurn({
       return { status: 500, body: { error: 'agent_generate_failed', conversationId } };
     }
     console.log(`[agent] reply conv=${parsed.conversationId} replyLen=${result.text?.length ?? 0}`);
+    agentSetStatus = calledTool(result, 'updateConversationStatus');
     // The agent turn is the bulk of the spend — record it before any of the
     // early-return paths below (human takeover, etc.) can skip it. The tokens were
     // burned whether or not we end up sending the reply.
@@ -1037,10 +1051,15 @@ export async function runAgentTurn({
   // Interest tags (0058): the same call also names the service the lead asked about, for
   // tenants that opted in. The list is the tenant's own `services[].name`; empty = off.
   const interestServices = tenant.config.interestTags ? serviceNames(tenant.config.services) : undefined;
-  const classified = activeRole === 'demo' || forcedReply || endedByBooking
+  // The agent closing the conversation itself (updateConversationStatus in this turn) makes
+  // the classifier's status guess redundant — applying it again logged a second
+  // `status_changed completed→completed` on every booked lead. Skipped entirely unless the
+  // call is still needed for interest tags, in which case only its status is ignored.
+  if (agentSetStatus) console.log(`[classify] status skipped: the agent set it conv=${parsed.conversationId}`);
+  const classified = activeRole === 'demo' || forcedReply || endedByBooking || (agentSetStatus && !interestServices)
     ? NO_CLASSIFY
     : await classifyConversationOutcome(parsed.text, reply, aux, interestServices);
-  const outcome = classified.status;
+  const outcome = agentSetStatus ? undefined : classified.status;
   console.log(`[classify] outcome=${outcome ?? 'null (active or error)'} interest=${classified.interest ?? 'null'}`);
   if (classified.interest) {
     // Fire-and-forget: a tag is for smart lists, never worth a slower or lost reply.

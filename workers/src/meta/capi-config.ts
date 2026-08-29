@@ -93,7 +93,28 @@ export interface MetaCapiConfig {
    * greeting, so 0 signals every click; 1 signals only leads who replied to the bot.
    */
   leadRepliesRequired?: number;
+  /**
+   * Phones whose conversations never produce an event — the operator's own test numbers on
+   * a LIVE tenant. Digits only after parsing; matched on the last 10 digits so the Mexican
+   * `+52 1 …` / `+52 …` forms of one number both hit. A conversation's `contact_phone` is
+   * captured at inbound and survives every reset, unlike the click id we once NULLed by
+   * hand (re-captured from the GHL contact on the next first turn).
+   */
+  excludePhones?: string[];
   events?: Partial<Record<CapiEventKind, CapiEventSpec | false>>;
+}
+
+/** Digits only; the last 10 are the comparable part (country code and the MX mobile `1` vary). */
+function phoneKey(phone: string): string {
+  const digits = phone.replace(/\D/g, '');
+  return digits.length > 10 ? digits.slice(-10) : digits;
+}
+
+/** Whether a conversation's phone is on the tenant's CAPI exclusion list. Unknown phone → not excluded. */
+export function isExcludedPhone(config: MetaCapiConfig, phone: string | null | undefined): boolean {
+  if (!config.excludePhones?.length || !phone) return false;
+  const key = phoneKey(phone);
+  return key.length >= 7 && config.excludePhones.some((p) => phoneKey(p) === key);
 }
 
 /**
@@ -162,6 +183,14 @@ export function parseMetaCapi(raw: unknown): MetaCapiConfig | null {
       if (n > 0) config.leadRepliesRequired = n;
     } else {
       console.error('[capi] meta_capi.lead_replies_required must be a non-negative integer — ignoring');
+    }
+  }
+  if (o.exclude_phones !== undefined) {
+    if (Array.isArray(o.exclude_phones) && o.exclude_phones.every((p) => typeof p === 'string')) {
+      const phones = (o.exclude_phones as string[]).map((p) => p.replace(/\D/g, '')).filter((p) => p.length >= 7);
+      if (phones.length) config.excludePhones = phones;
+    } else {
+      console.error('[capi] meta_capi.exclude_phones must be an array of strings — ignoring');
     }
   }
   if (o.events && typeof o.events === 'object' && !Array.isArray(o.events)) {

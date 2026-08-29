@@ -52,6 +52,12 @@ describe('updateConversationStatus tool', () => {
     expect(q.logBotEvent).not.toHaveBeenCalled();
   });
 
+  it('a reason on `completed` is dropped — a booked lead is not a disqualification', async () => {
+    await run('completed', 'Cita agendada');
+    expect(q.updateConversationStatus).toHaveBeenCalledWith('conv1', 'completed');
+    expect(q.logBotEvent).not.toHaveBeenCalledWith('client1', 'conv1', 'lead_disqualified', expect.anything());
+  });
+
   it('the reason rides along on any status, not just standby', async () => {
     await run('handed_off', 'pidió hablar con una persona');
     expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'lead_disqualified', {

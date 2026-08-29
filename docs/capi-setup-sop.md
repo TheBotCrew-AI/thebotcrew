@@ -147,6 +147,11 @@ greeting — i.e. every click, including the majority who never answer the bot (
 8 of the first 22 replied). With it the event fires when the lead first *answers* us, which
 is the signal you want the ad set to optimize on. See business-logic §6a.
 
+**Add your own test numbers to `"exclude_phones"`** (e.g. `["+526643850341"]`) before the first
+test on a live tenant — otherwise every test thread sends a real conversion to Meta, and
+clearing the click id on the row by hand does not stick (it is re-captured from the GHL
+contact on the next first turn). Matched on the last 10 digits. See business-logic §6a.
+
 No deploy. The 1-minute cron reads this row fresh on every drain.
 
 ---

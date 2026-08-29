@@ -1132,6 +1132,15 @@ Deliberate choices:
   lead event fires rather than adding a name; `1` is the recommended value for any tenant
   running click-to-message ads. Identity capture is unchanged (turn 1, sticky) — only
   the enqueue moves.
+- **Test numbers never signal (`meta_capi.exclude_phones`, 2026-08-29).** The operator's own
+  number on a LIVE tenant is a real ad click as far as Meta is concerned, so every test
+  thread sent real `LeadSubmitted`/`QualifiedLead` events. NULLing the click id on the row
+  by hand does not hold: the first turn re-captures attribution from the GHL contact. The
+  only key every reset preserves is the conversation's `contact_phone`, so `queueCapiEvent`
+  skips any conversation whose phone is on the list (last-10-digit match, so the MX `+52 1`
+  and `+52` forms both hit; read from the row when the hook didn't pass a phone).
+  Belt, not the only guard: the queue's one-event-per-conversation-per-kind dedup still
+  applies. Config-only, no deploy.
 - **Booking maps to `QualifiedLead`, not `Purchase`** — for service SMBs a booking is a
   qualified lead; `QualifiedLead` is what Meta's CTWA lead filtering trains on. A tenant
   that wants purchase optimization overrides with `{"name":"Purchase","value":...}`.

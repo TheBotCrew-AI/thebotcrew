@@ -10,11 +10,12 @@
  */
 
 import type { ConversationStatus, TenantContext } from '../core/types.js';
-import { enqueueCapiEvent, getConversationCapiIdentity } from '../db/queries.js';
+import { enqueueCapiEvent, getConversationCapiIdentity, getConversationContactKeys } from '../db/queries.js';
 import {
   buildCapiEventId,
   buildCapiPayload,
   CAPI_GRAPH_VERSION,
+  isExcludedPhone,
   resolveEventSpec,
   type CapiEventKind,
   type CapiIdentity,
@@ -41,6 +42,15 @@ export async function queueCapiEvent(args: {
     if (!spec) return;
     const identity = args.identity ?? (await getConversationCapiIdentity(args.ghlConversationId));
     if (!identity) return;
+    // Test numbers on a live tenant (exclude_phones): the phone is the one key every reset
+    // preserves. Read from the conversation when the hook didn't pass it (status paths).
+    if (config.excludePhones?.length) {
+      const phone = args.phone ?? (await getConversationContactKeys(args.ghlConversationId)).phone;
+      if (isExcludedPhone(config, phone)) {
+        console.log(`[capi] skipped ${args.kind}: excluded phone conv=${args.ghlConversationId}`);
+        return;
+      }
+    }
 
     const payload = await buildCapiPayload({ config, spec, identity, phone: args.phone });
     if (!payload) {

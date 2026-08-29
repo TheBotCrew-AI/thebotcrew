@@ -77,7 +77,11 @@ export const updateConversationStatusTool = createTool({
     // Why, not just what. Awaited (not fire-and-forget) for the same reason as every
     // other event write: the Worker can be killed the moment the response is sent.
     // logBotEvent swallows its own errors, so this can never fail the status change.
-    if (reason) {
+    // `completed` is the one status that is by definition NOT a disqualification (the lead
+    // booked or was helped), and the model still narrates a reason there ("Cita agendada")
+    // despite the argument's description — so it would pollute the 0042 audit
+    // (`payload->>'reason' … group by`) with every booked lead. Dropped, not logged.
+    if (reason && status !== 'completed') {
       await logBotEvent(tenant.clientId, turn.ghlConversationId, 'lead_disqualified', { status, reason });
     }
 

@@ -35,6 +35,32 @@ describe('queueCapiEvent — gates', () => {
     expect(q.enqueueCapiEvent).not.toHaveBeenCalled();
   });
 
+  it('excluded phone passed by the hook → no event', async () => {
+    const t = tenant({ datasetId: 'ds1', pageId: 'pg1', tokenRef: 'MADI', excludePhones: ['526643850341'] });
+    await queueCapiEvent({ tenant: t, ghlConversationId: 'conv1', kind: 'lead_started', identity: wa, phone: '+5216643850341' });
+    expect(q.enqueueCapiEvent).not.toHaveBeenCalled();
+    expect(q.getConversationContactKeys).not.toHaveBeenCalled();
+  });
+
+  it('excluded phone read from the conversation when the hook passed none (status path) → no event', async () => {
+    const t = tenant({ datasetId: 'ds1', pageId: 'pg1', tokenRef: 'MADI', excludePhones: ['526643850341'] });
+    vi.mocked(q.getConversationContactKeys).mockResolvedValue({ phone: '+526643850341', email: null });
+    await queueCapiEvent({ tenant: t, ghlConversationId: 'conv1', kind: 'appointment_booked', identity: wa });
+    expect(q.getConversationContactKeys).toHaveBeenCalledWith('conv1');
+    expect(q.enqueueCapiEvent).not.toHaveBeenCalled();
+  });
+
+  it('a phone NOT on the list still enqueues; no list → the conversation is never read for it', async () => {
+    const t = tenant({ datasetId: 'ds1', pageId: 'pg1', tokenRef: 'MADI', excludePhones: ['526643850341'] });
+    await queueCapiEvent({ tenant: t, ghlConversationId: 'conv1', kind: 'lead_started', identity: wa, phone: '+5215512345678' });
+    expect(q.enqueueCapiEvent).toHaveBeenCalledTimes(1);
+    vi.clearAllMocks();
+    vi.mocked(q.enqueueCapiEvent).mockResolvedValue(true);
+    await queueCapiEvent({ tenant: tenant(), ghlConversationId: 'conv1', kind: 'lead_started', identity: wa });
+    expect(q.getConversationContactKeys).not.toHaveBeenCalled();
+    expect(q.enqueueCapiEvent).toHaveBeenCalledTimes(1);
+  });
+
   it('never throws — a DB failure is swallowed', async () => {
     vi.mocked(q.enqueueCapiEvent).mockRejectedValue(new Error('db down'));
     await expect(
