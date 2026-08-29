@@ -421,6 +421,11 @@ for the retry cron.
   book/reschedule): GHL's own confirmation/reminder workflows render `{{appointment.start_time}}`
   in that field, and the booking API carries no timezone — it's the only lever. See
   docs/business-logic.md §5d.
+- Name at booking (2026-08-29): the booking sequence asks "¿A nombre de quién agendo la cita?" only
+  when the lead hasn't said their name in the conversation (the CRM name doesn't count — IG/FB
+  leads arrive as their handle), and passes it as `contactName` to `bookAppointment`, which writes
+  the contact **before** the booking POST (GHL greets `{{contact.first_name}}` in the confirmation).
+  `core/contact-name.ts` is the one first/last split. Platform-wide; see docs/business-logic.md §5.
 - Contact-merge recovery on send: GHL dedups contacts by phone/email, which can **merge away**
   the `contactId` a webhook gave us (Instant-Form lead whose number already exists as another
   contact) → send fails `CONVERSATIONS_CONTACT_NOT_FOUND`. Crucially the merge **also destroys the

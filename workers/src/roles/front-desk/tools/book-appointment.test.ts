@@ -8,6 +8,7 @@ const ghl = {
   getAvailability: vi.fn(),
   removeContactTags: vi.fn(),
   updateContactTimezone: vi.fn(),
+  updateContactName: vi.fn(),
 };
 vi.mock('../../../ghl/client.js', () => ({ GhlClient: vi.fn(() => ghl) }));
 vi.mock('../../../db/queries.js');
@@ -59,6 +60,7 @@ beforeEach(() => {
   ghl.getAvailability.mockResolvedValue([{ start: START, end: START }]);
   ghl.removeContactTags.mockResolvedValue(undefined);
   ghl.updateContactTimezone.mockResolvedValue(undefined);
+  ghl.updateContactName.mockResolvedValue(undefined);
   vi.mocked(q.logAppointment).mockResolvedValue({ appointmentId: 'a-uuid' } as never);
   vi.mocked(q.logEvent).mockResolvedValue({ eventId: 'e-uuid' } as never);
   vi.mocked(q.logBotEvent).mockResolvedValue(undefined);
@@ -113,6 +115,51 @@ describe('bookAppointment', () => {
       const res = await runWith({ serviceName: 'Consulta', startTime: '2026-07-10T11:00:00' }, leadCtx(undefined));
       expect(res.booked).toBe(true);
       expect(res.message).not.toContain('hora de');
+    });
+  });
+
+  describe('contactName (the name the lead gave, saved at booking)', () => {
+    const runNamed = (contactName?: string) =>
+      (bookAppointmentTool.execute as (i: { serviceName: string; startTime: string; contactName?: string }, c: typeof ctx) => Promise<{ booked: boolean }>)(
+        { serviceName: 'Consulta', startTime: START, contactName }, ctx,
+      );
+
+    it('writes first/last to the GHL contact BEFORE the booking POST (the confirmation greets by name)', async () => {
+      const res = await runNamed('Karla Mendoza López');
+      expect(res.booked).toBe(true);
+      expect(ghl.updateContactName).toHaveBeenCalledWith('c1', { firstName: 'Karla', lastName: 'Mendoza López' });
+      expect(ghl.updateContactName.mock.invocationCallOrder[0]!).toBeLessThan(ghl.bookAppointment.mock.invocationCallOrder[0]!);
+    });
+
+    it('omitted → the contact is left alone', async () => {
+      await runNamed(undefined);
+      expect(ghl.updateContactName).not.toHaveBeenCalled();
+    });
+
+    it('blank → the contact is left alone', async () => {
+      await runNamed('   ');
+      expect(ghl.updateContactName).not.toHaveBeenCalled();
+    });
+
+    it('a failed name write is logged and the booking still happens', async () => {
+      ghl.updateContactName.mockRejectedValue(new Error('ghl 500'));
+      const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const res = await runNamed('Karla');
+      expect(res.booked).toBe(true);
+      expect(ghl.bookAppointment).toHaveBeenCalled();
+      expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'db_error', expect.objectContaining({ stage: 'update_contact_name' }));
+      spy.mockRestore();
+    });
+
+    it('demo: the roleplay name never touches the real contact', async () => {
+      vi.mocked(q.getActiveDemoSession).mockResolvedValue(null);
+      const demoTurn = { ...turn, activeRole: 'demo' } as TurnContext;
+      const demoCtx = { requestContext: { get: (k: string) => (k === 'tenant' ? tenant : k === 'turn' ? demoTurn : undefined) } };
+      await (bookAppointmentTool.execute as (i: { serviceName: string; startTime: string; contactName?: string }, c: typeof demoCtx) => Promise<unknown>)(
+        { serviceName: 'Consulta', startTime: START, contactName: 'Paciente Falsa' }, demoCtx,
+      );
+      expect(ghl.updateContactName).not.toHaveBeenCalled();
+      expect(ghl.bookAppointment).not.toHaveBeenCalled();
     });
   });
 

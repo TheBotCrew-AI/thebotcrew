@@ -417,6 +417,22 @@ slots. Rules (also reinforced in the front-desk prompt):
   failure still lets the appointment go through). This also removed an earlier class of bugs where
   gpt-5-mini scraped the number from a lead-form message and saved it prematurely (→ GHL
   dedup/merge → stale contactId).
+- **Name at booking — asked only when unknown (2026-08-29).** IG/FB leads arrive in GHL under
+  their social handle, and nothing asked their name, so the confirmation GHL sends greeted the
+  handle. Step 3 of the booking sequence now has the agent make sure it knows *a nombre de quién*
+  goes the appointment: if the lead said it anywhere in the conversation (a form they filled
+  counts — unlike the phone, the form name is the GOOD one), use it and never re-ask; otherwise
+  ask in the same message that closes the hour (merged with the WhatsApp ask when both apply,
+  never two messages). The stored CRM name explicitly does NOT count as known. The name rides
+  the same rail as the phone: the **`contactName` argument of `bookAppointment`**, written with
+  `updateContactName` (`core/contact-name.ts` split, shared with the opening-turn backstop)
+  **before the booking POST**, since GHL greets `{{contact.first_name}}` at that instant.
+  Non-blocking (a failed write logs `db_error/update_contact_name` and the booking proceeds).
+  Demo: the roleplay asks too (it folds into an existing message, no budget cost) and the
+  simulated booking discards it — the real contact is never touched. Platform-wide, no flag.
+  Evals: `evals/booking-name.eval.ts`. The opening-turn `confirmContactName` backstop is
+  unchanged and orthogonal — it corrects the name early for tenants whose flow asks it;
+  this one guarantees it at the moment that matters.
 - **Booking sequence (prompt-enforced):** once the lead picks a time already validated by
   `getAvailability`, the agent must **not** re-run `getAvailability` or re-offer slots — it goes
   straight to confirm/capture the number → `bookAppointment` → confirm. When it *does* offer

@@ -22,6 +22,7 @@ import { cadenceForRound, totalRounds } from '../core/reactivation-rounds.js';
 import { auxReasoningEffort } from '../core/reasoning.js';
 import { timezoneFromPhone } from '../core/lead-timezone.js';
 import { syncContactTimezone } from '../ghl/contact-timezone.js';
+import { splitContactName } from '../core/contact-name.js';
 import type { AiProvider, ConversationMessage, ConversationStatus, DemoHandoff, FollowUpKind, TenantContext, TurnContext } from '../core/types.js';
 import { DEMO_REMINDER_CADENCE } from '../core/types.js';
 import {
@@ -420,8 +421,9 @@ async function correctContactName(
     if (!extracted) return; // no personal name given
     if (storedName && extracted.toLowerCase() === storedName.toLowerCase()) return; // already correct
 
-    const parts = extracted.replace(/\s+/g, ' ').split(' ');
-    await ghl.updateContactName(contactId, { firstName: parts[0] ?? extracted, lastName: parts.slice(1).join(' ') });
+    const split = splitContactName(extracted);
+    if (!split) return;
+    await ghl.updateContactName(contactId, split);
     console.log(`[contact-name] corrected "${storedName}" → "${extracted}"`);
   } catch (err) {
     console.error('[contact-name] backstop failed (non-blocking):', err instanceof Error ? err.message : String(err));

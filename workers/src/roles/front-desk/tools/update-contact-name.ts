@@ -9,6 +9,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { GhlClient } from '../../../ghl/client.js';
 import { logBotEvent } from '../../../db/queries.js';
+import { splitContactName } from '../../../core/contact-name.js';
 import { resolveAgentContext } from './agent-context.js';
 
 export const updateContactNameTool = createTool({
@@ -35,12 +36,10 @@ export const updateContactNameTool = createTool({
       return { ok: true };
     }
 
-    const trimmed = name.trim().replace(/\s+/g, ' ');
-    if (!trimmed) return { ok: false };
-    const [firstName, ...rest] = trimmed.split(' ');
-    const lastName = rest.join(' ');
+    const split = splitContactName(name);
+    if (!split) return { ok: false };
     try {
-      await new GhlClient(tenant.tenantId).updateContactName(turn.ghlContactId, { firstName, lastName });
+      await new GhlClient(tenant.tenantId).updateContactName(turn.ghlContactId, split);
       return { ok: true };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);

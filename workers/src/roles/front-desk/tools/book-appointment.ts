@@ -7,6 +7,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { GhlClient } from '../../../ghl/client.js';
 import { syncContactTimezone } from '../../../ghl/contact-timezone.js';
+import { splitContactName } from '../../../core/contact-name.js';
 import { CANCELLED_APPOINTMENT_TAG } from '../../../ghl/tags.js';
 import { getActiveDemoSession, logAppointment, logBotEvent, logEvent, resetReactivationRound, setSimulatedBooking } from '../../../db/queries.js';
 import { queueCapiEvent } from '../../../meta/capi.js';
@@ -34,13 +35,22 @@ export const bookAppointmentTool = createTool({
           'Inclúyelo SOLO si el lead te lo dio/confirmó ahora; NUNCA lo extraigas del texto de un ' +
           'formulario ni lo inventes. Omítelo si el contacto ya tiene el número correcto.',
       ),
+    contactName: z
+      .string()
+      .optional()
+      .describe(
+        'Nombre de la persona a cuyo nombre va la cita, tal como lo dijo el lead en la conversación ' +
+          '(nombre y, si lo dio, apellido; ej. "Karla Mendoza"). Se guarda en el CRM al agendar, porque el ' +
+          'nombre registrado suele ser el de su red social o su negocio. Si el lead no ha dicho su nombre, ' +
+          'pregúntaselo antes de agendar; no lo inventes ni uses el que está registrado.',
+      ),
   }),
   outputSchema: z.object({
     booked: z.boolean(),
     ghlAppointmentId: z.string().optional(),
     message: z.string(),
   }),
-  execute: async ({ serviceName, startTime, whatsappPhone }, ctx) => {
+  execute: async ({ serviceName, startTime, whatsappPhone, contactName }, ctx) => {
     const { config, tenant, turn, frameTz } = resolveAgentContext(ctx);
 
     // Demo mode: SIMULATED booking — same anti-hallucination guard as the real path
@@ -166,6 +176,24 @@ export const bookAppointmentTool = createTool({
             error: msg,
           });
         }
+      }
+    }
+
+    // The name the lead gave, written BEFORE the booking POST for the same reason as the
+    // timezone below: GHL's confirmation greets `{{contact.first_name}}` at that instant,
+    // and the stored name is usually the lead's social handle. A failure is logged and
+    // the booking proceeds — a confirmation to "fitgirl_88" beats no confirmation.
+    const split = splitContactName(contactName);
+    if (split) {
+      try {
+        await ghl.updateContactName(turn.ghlContactId, split);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error('[bookAppointment] contact name save failed (non-blocking):', msg);
+        await logBotEvent(tenant.clientId, turn.ghlConversationId, 'db_error', {
+          stage: 'update_contact_name',
+          error: msg,
+        });
       }
     }
 
