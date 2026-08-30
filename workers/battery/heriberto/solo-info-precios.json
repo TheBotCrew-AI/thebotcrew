@@ -18,56 +18,62 @@
   },
   "model": "gpt-5.6-luna",
   "leadModel": "gpt-5.6-luna",
-  "generatedAt": "2026-08-29T22:41:22.976Z",
+  "generatedAt": "2026-08-30T00:21:24.014Z",
   "messages": [
     {
       "from": "lead",
       "text": "Hola, cuánto cuesta el bótox?",
-      "at": "2026-08-29T22:40:55.423Z"
+      "at": "2026-08-30T00:20:56.613Z"
     },
     {
       "from": "bot",
-      "text": "¡Hola! Soy Sofía, del consultorio del Dr. Heriberto Valdivia. El bótox cuesta $4,000. Si es tu primera vez, primero pasas a consulta con el Dr. para valorar la zona y definir lo más adecuado. ¿Sería tu primera vez?",
-      "at": "2026-08-29T22:41:43.423Z",
+      "text": "¡Hola! Soy Sofía, del consultorio del Dr. Heriberto Valdivia. El bótox cuesta $4,000 por las tres zonas: frente, entrecejo y patas de gallo. También se aplica por zona.",
+      "at": "2026-08-30T00:21:44.613Z",
+      "turn": 1
+    },
+    {
+      "from": "bot",
+      "text": "¿Te interesan las tres zonas?",
+      "at": "2026-08-30T00:21:50.113Z",
       "turn": 1
     },
     {
       "from": "lead",
-      "text": "sí, sería mi primera vez. y cuánto cuesta el ácido hialurónico para labios?",
-      "at": "2026-08-29T22:43:57.423Z"
+      "text": "y cuánto cuesta el ácido hialurónico para labios?",
+      "at": "2026-08-30T00:24:04.113Z"
     },
     {
       "from": "bot",
-      "text": "El ácido hialurónico para labios cuesta $5,500 por jeringa. La cantidad que necesitas la define el Dr. Valdivia en consulta, según tu valoración.",
-      "at": "2026-08-29T22:44:58.423Z",
-      "turn": 2
-    },
-    {
-      "from": "bot",
-      "text": "¿Te interesa valorar labios o ambos tratamientos?",
-      "at": "2026-08-29T22:45:03.923Z",
+      "text": "El ácido hialurónico para labios cuesta $5,500 por jeringa. En consulta, el Dr. Valdivia valora cuánto necesitas y qué resultado buscas. ¿Te aparto un espacio?",
+      "at": "2026-08-30T00:25:05.113Z",
       "turn": 2
     },
     {
       "from": "lead",
-      "text": "por ahora solo estoy comparando, ¿los $5,500 ya incluyen todo o hay algún cargo extra?",
-      "at": "2026-08-29T22:47:54.923Z"
+      "text": "esos precios ya incluyen todo o hay algún cargo extra?",
+      "at": "2026-08-30T00:27:56.113Z"
     },
     {
       "from": "bot",
-      "text": "El precio registrado es de $5,500 por jeringa. Sobre si incluye todo o hay algún cargo extra, déjame confirmarlo con el equipo y te aviso. La cantidad de jeringas la define el Dr. Valdivia en consulta.",
-      "at": "2026-08-29T22:48:38.923Z",
+      "text": "En el ácido hialurónico, los $5,500 por jeringa incluyen la valoración y la aplicación. Si se requiere retoque, corresponde a otra jeringa. Sobre el bótox, déjame confirmarlo con el equipo.",
+      "at": "2026-08-30T00:28:40.113Z",
+      "turn": 3
+    },
+    {
+      "from": "bot",
+      "text": "¿Te reviso horarios para tu consulta de labios?",
+      "at": "2026-08-30T00:28:45.613Z",
       "turn": 3
     },
     {
       "from": "lead",
-      "text": "ok, gracias. lo voy a pensar y yo te aviso.",
-      "at": "2026-08-29T22:50:06.923Z"
+      "text": "lo voy a pensar, muchas gracias.",
+      "at": "2026-08-30T00:30:13.613Z"
     },
     {
       "from": "bot",
-      "text": "Claro, tómate tu tiempo. Aquí estaremos cuando decidas 😊",
-      "at": "2026-08-29T22:51:03.923Z",
+      "text": "Claro, gracias a ti. Cuando estés listo, aquí te ayudamos.",
+      "at": "2026-08-30T00:31:10.613Z",
       "turn": 4
     }
   ],
@@ -76,36 +82,29 @@
       "turn": 1,
       "name": "lookupFaq",
       "args": {
-        "question": "¿Cuánto cuesta el bótox?"
+        "question": "Precio del bótox y qué incluye"
       }
     },
     {
       "turn": 2,
       "name": "lookupFaq",
       "args": {
-        "question": "Precio del ácido hialurónico para labios y cómo se maneja la cantidad por jeringa en pacientes de primera vez"
+        "question": "¿Cuánto cuesta el ácido hialurónico para labios?"
       }
     },
     {
       "turn": 3,
       "name": "lookupFaq",
       "args": {
-        "question": "¿Los $5,500 del ácido hialurónico para labios ya incluyen todo o hay algún cargo extra?"
-      }
-    },
-    {
-      "turn": 3,
-      "name": "lookupFaq",
-      "args": {
-        "question": "¿Los $5,500 del ácido hialurónico para labios ya incluyen todo o hay algún cargo extra?"
+        "question": "¿Los precios del bótox y del ácido hialurónico ya incluyen todo o hay algún cargo extra?"
       }
     },
     {
       "turn": 3,
       "name": "flagPendingInfo",
       "args": {
-        "question": "¿los $5,500 ya incluyen todo o hay algún cargo extra?",
-        "topic": "cargos ácido hialurónico"
+        "question": "¿Esos precios ya incluyen todo o hay algún cargo extra?",
+        "topic": "cargos extra"
       }
     },
     {
@@ -113,7 +112,7 @@
       "name": "updateConversationStatus",
       "args": {
         "status": "standby",
-        "reason": "La persona está comparando y decidió pensarlo antes de continuar."
+        "reason": "La persona decidió pensarlo y no desea agendar por ahora."
       }
     }
   ],

@@ -18,40 +18,51 @@
   },
   "model": "gpt-5.6-luna",
   "leadModel": "gpt-5.6-luna",
-  "generatedAt": "2026-08-29T23:05:12.093Z",
+  "generatedAt": "2026-08-30T00:26:18.331Z",
   "messages": [
     {
       "from": "lead",
       "text": "Hola, tengo cita de valoración esta semana pero me salió un imprevisto, la puedo cambiar?",
-      "at": "2026-08-29T23:04:44.654Z"
+      "at": "2026-08-30T00:25:46.973Z"
     },
     {
       "from": "bot",
-      "text": "Claro, puedo moverla. Tengo el lunes, 31 de agosto, 12:00 p.m. o el lunes, 31 de agosto, 4:15 p.m., ¿cuál te queda mejor?",
-      "at": "2026-08-29T23:05:32.654Z",
+      "text": "Claro, podemos moverla. Tengo lunes, 31 de agosto, 12:00 p.m. o martes, 1 de septiembre, 10:30 a.m., ¿cuál te queda mejor?",
+      "at": "2026-08-30T00:26:34.973Z",
       "turn": 1
     },
     {
       "from": "lead",
-      "text": "El lunes, 31 de agosto, 4:15 p.m. me queda perfecto.",
-      "at": "2026-08-29T23:07:46.654Z"
+      "text": "Ninguno me queda por la mañana, ¿tendrán algún horario por la tarde la próxima semana?",
+      "at": "2026-08-30T00:28:48.973Z"
     },
     {
       "from": "bot",
-      "text": "Listo, tu cita quedó reagendada para el lunes, 31 de agosto, 4:15 p.m. Te llegará la confirmación y los recordatorios por WhatsApp.",
-      "at": "2026-08-29T23:08:47.654Z",
+      "text": "Sí, hay horarios por la tarde. Solo puedo agendar hasta el sábado 5 de septiembre: tengo lunes, 31 de agosto, 4:15 p.m. o martes, 1 de septiembre, 3:45 p.m., ¿cuál te queda mejor?",
+      "at": "2026-08-30T00:29:49.973Z",
       "turn": 2
     },
     {
       "from": "lead",
-      "text": "Muchas gracias, ahí estaré.",
-      "at": "2026-08-29T23:11:38.654Z"
+      "text": "El lunes, 31 de agosto, 4:15 p.m. me queda perfecto.",
+      "at": "2026-08-30T00:32:40.973Z"
     },
     {
       "from": "bot",
-      "text": "¡Claro! Te esperamos el lunes.",
-      "at": "2026-08-29T23:12:22.654Z",
+      "text": "¡Listo! Tu cita quedó reagendada para el lunes, 31 de agosto, 4:15 p.m. Te llegará la confirmación y los recordatorios por WhatsApp.",
+      "at": "2026-08-30T00:33:24.973Z",
       "turn": 3
+    },
+    {
+      "from": "lead",
+      "text": "Muchas gracias, ahí estaré.",
+      "at": "2026-08-30T00:34:52.973Z"
+    },
+    {
+      "from": "bot",
+      "text": "¡Con gusto! Te esperamos el lunes, 31 de agosto, a las 4:15 p.m.",
+      "at": "2026-08-30T00:35:49.973Z",
+      "turn": 4
     }
   ],
   "toolCalls": [
@@ -60,7 +71,7 @@
       "name": "getAvailability",
       "args": {
         "serviceName": "Consulta",
-        "fromDate": "2026-08-29T17:04:44-06:00",
+        "fromDate": "2026-08-29T18:25:46-06:00",
         "toDate": "2026-09-05T23:59:59-06:00"
       }
     },
@@ -69,19 +80,28 @@
       "name": "getAvailability",
       "args": {
         "serviceName": "Consulta",
-        "fromDate": "2026-08-31T00:00:00-06:00",
-        "toDate": "2026-09-01T00:00:00-06:00"
+        "fromDate": "2026-08-31T15:45:00-06:00",
+        "toDate": "2026-09-05T18:45:00-06:00"
       }
     },
     {
-      "turn": 2,
+      "turn": 3,
+      "name": "getAvailability",
+      "args": {
+        "serviceName": "Consulta",
+        "fromDate": "2026-08-31T15:45:00-06:00",
+        "toDate": "2026-08-31T18:45:00-06:00"
+      }
+    },
+    {
+      "turn": 3,
       "name": "rescheduleAppointment",
       "args": {
         "startTime": "2026-08-31T16:15:00-06:00"
       }
     },
     {
-      "turn": 2,
+      "turn": 3,
       "name": "updateConversationStatus",
       "args": {
         "status": "completed",
@@ -89,7 +109,7 @@
       }
     },
     {
-      "turn": 2,
+      "turn": 3,
       "name": "updateConversationStatus",
       "args": {
         "status": "completed",
@@ -97,15 +117,7 @@
       }
     },
     {
-      "turn": 3,
-      "name": "updateConversationStatus",
-      "args": {
-        "status": "completed",
-        "reason": ""
-      }
-    },
-    {
-      "turn": 3,
+      "turn": 4,
       "name": "updateConversationStatus",
       "args": {
         "status": "completed",

@@ -18,50 +18,50 @@
   },
   "model": "gpt-5.6-luna",
   "leadModel": "gpt-5.6-luna",
-  "generatedAt": "2026-08-29T23:01:59.905Z",
+  "generatedAt": "2026-08-30T00:23:24.569Z",
   "messages": [
     {
       "from": "lead",
       "text": "Sí, quiero una valoración para Botox",
-      "at": "2026-08-29T23:01:33.524Z"
+      "at": "2026-08-30T00:22:59.712Z"
     },
     {
       "from": "bot",
       "text": "Tengo el lunes, 31 de agosto, 11:30 a.m. o el lunes, 31 de agosto, 4:15 p.m. ¿Cuál te queda mejor?",
-      "at": "2026-08-29T23:02:21.524Z",
+      "at": "2026-08-30T00:23:47.712Z",
       "turn": 1
     },
     {
       "from": "lead",
-      "text": "¿No tienen algún horario más tarde entre semana? Trabajo en oficina y se me complica antes.",
-      "at": "2026-08-29T23:04:35.524Z"
+      "text": "¿cuál es el horario más tarde que tienen entre semana?",
+      "at": "2026-08-30T00:26:01.712Z"
     },
     {
       "from": "bot",
-      "text": "Sí, hay horarios más tarde entre semana: martes, 1 de septiembre, 6:15 p.m. o jueves, 3 de septiembre, 6:15 p.m. ¿Cuál te queda mejor?",
-      "at": "2026-08-29T23:05:36.524Z",
+      "text": "El horario más tarde disponible entre semana es el viernes, 4 de septiembre, 6:15 p.m. ¿Te aparto ese espacio?",
+      "at": "2026-08-30T00:27:02.712Z",
       "turn": 2
     },
     {
       "from": "lead",
-      "text": "El martes, 1 de septiembre, 6:15 p.m. me queda bien. Soy Ricardo.",
-      "at": "2026-08-29T23:08:27.524Z"
+      "text": "sí, apártenme el viernes, 4 de septiembre, 6:15 p.m. a nombre de Ricardo",
+      "at": "2026-08-30T00:29:53.712Z"
     },
     {
       "from": "bot",
-      "text": "¡Listo, Ricardo! Tu consulta quedó agendada para el martes, 1 de septiembre, 6:15 p.m. Te llegará la confirmación y los recordatorios por WhatsApp.",
-      "at": "2026-08-29T23:09:11.524Z",
+      "text": "¡Listo, Ricardo! Tu consulta quedó agendada para el viernes, 4 de septiembre, 6:15 p.m. Te llegará la confirmación y los recordatorios por WhatsApp.",
+      "at": "2026-08-30T00:30:37.712Z",
       "turn": 3
     },
     {
       "from": "lead",
       "text": "Gracias, ahí estaré.",
-      "at": "2026-08-29T23:10:39.524Z"
+      "at": "2026-08-30T00:32:05.712Z"
     },
     {
       "from": "bot",
-      "text": "¡Perfecto, Ricardo! Te esperamos.",
-      "at": "2026-08-29T23:11:36.524Z",
+      "text": "¡Con gusto, Ricardo! Te esperamos el viernes, 4 de septiembre, 6:15 p.m.",
+      "at": "2026-08-30T00:33:02.712Z",
       "turn": 4
     }
   ],
@@ -71,7 +71,7 @@
       "name": "getAvailability",
       "args": {
         "serviceName": "Consulta",
-        "fromDate": "2026-08-29T17:01:33-06:00",
+        "fromDate": "2026-08-29T18:22:59-06:00",
         "toDate": "2026-09-05T23:59:59-06:00"
       }
     },
@@ -80,7 +80,7 @@
       "name": "getAvailability",
       "args": {
         "serviceName": "Consulta",
-        "fromDate": "2026-08-29T17:01:40-06:00",
+        "fromDate": "2026-08-29T18:23:05-06:00",
         "toDate": "2026-09-05T23:59:59-06:00"
       }
     },
@@ -89,8 +89,8 @@
       "name": "getAvailability",
       "args": {
         "serviceName": "Consulta",
-        "fromDate": "2026-09-01T18:15:00-06:00",
-        "toDate": "2026-09-01T18:16:00-06:00"
+        "fromDate": "2026-09-04T18:15:00-06:00",
+        "toDate": "2026-09-04T18:16:00-06:00"
       }
     },
     {
@@ -98,7 +98,7 @@
       "name": "bookAppointment",
       "args": {
         "serviceName": "Consulta",
-        "startTime": "2026-09-01T18:15:00-06:00",
+        "startTime": "2026-09-04T18:15:00-06:00",
         "whatsappPhone": null,
         "contactName": "Ricardo"
       }
@@ -126,7 +126,7 @@
         "id": "appt_1",
         "calendarId": "qh8yxxSnb4DAo72obVmG",
         "serviceName": "Consulta",
-        "startTime": "2026-09-01T18:15:00-06:00",
+        "startTime": "2026-09-04T18:15:00-06:00",
         "status": "confirmed"
       }
     ],

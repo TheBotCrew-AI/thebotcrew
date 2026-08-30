@@ -18,67 +18,61 @@
   },
   "model": "gpt-5.6-luna",
   "leadModel": "gpt-5.6-luna",
-  "generatedAt": "2026-08-29T22:40:54.548Z",
+  "generatedAt": "2026-08-30T00:20:56.303Z",
   "messages": [
     {
       "from": "lead",
       "text": "Buenas tardes, quiero bajar de peso. Manejan la semaglutida?",
-      "at": "2026-08-29T22:40:19.438Z"
+      "at": "2026-08-30T00:20:22.758Z"
     },
     {
       "from": "bot",
-      "text": "Buenas tardes. Para control de peso manejamos consulta de bariatría: cuesta $1,500 e incluye valoración médica y seguimiento. El tratamiento con GLP-1 se indica de acuerdo con la valoración del Dr. Valdivia. ¿Te reviso horarios para tu consulta?",
-      "at": "2026-08-29T22:41:07.438Z",
+      "text": "¡Buenas tardes! Para bajar de peso, el Dr. Valdivia lo revisa en la consulta de bariatría y ahí define el tratamiento adecuado de acuerdo con tu valoración médica. ¿Te paso horarios o primero resolvemos otra duda?",
+      "at": "2026-08-30T00:21:10.758Z",
       "turn": 1
     },
     {
       "from": "lead",
-      "text": "Sí, por favor. También quisiera saber qué incluye exactamente la consulta.",
-      "at": "2026-08-29T22:43:21.438Z"
+      "text": "Sí, pásame los horarios por favor.",
+      "at": "2026-08-30T00:23:24.758Z"
     },
     {
       "from": "bot",
-      "text": "La consulta incluye valoración médica y seguimiento para control de peso; el tratamiento con GLP-1 se indica de acuerdo con la valoración del Dr. Valdivia.",
-      "at": "2026-08-29T22:44:22.438Z",
-      "turn": 2
-    },
-    {
-      "from": "bot",
-      "text": "Tengo lunes, 31 de agosto, 11:30 a.m. o lunes, 31 de agosto, 12:00 p.m., ¿cuál te queda mejor?",
-      "at": "2026-08-29T22:44:27.938Z",
+      "text": "Tengo el lunes, 31 de agosto, 11:30 a.m. o el lunes, 31 de agosto, 12:00 p.m. ¿Cuál te queda mejor?",
+      "at": "2026-08-30T00:24:25.758Z",
       "turn": 2
     },
     {
       "from": "lead",
-      "text": "lunes, 31 de agosto, 11:30 a.m. me queda bien.",
-      "at": "2026-08-29T22:47:18.938Z"
+      "text": "El lunes, 31 de agosto, 11:30 a.m. me queda bien.",
+      "at": "2026-08-30T00:27:16.758Z"
     },
     {
       "from": "bot",
-      "text": "Perfecto, te aparto el lunes, 31 de agosto, a las 11:30 a.m. ¿A nombre de quién agendo la cita?",
-      "at": "2026-08-29T22:48:02.938Z",
+      "text": "Perfecto. ¿A nombre de quién agendo la cita?",
+      "at": "2026-08-30T00:28:00.758Z",
       "turn": 3
     },
     {
       "from": "lead",
-      "text": "A nombre de Jorge Luis.",
-      "at": "2026-08-29T22:49:30.938Z"
+      "text": "Jorge Luis.",
+      "at": "2026-08-30T00:29:28.758Z"
     },
     {
       "from": "bot",
-      "text": "¡Listo, Jorge Luis! Tu cita de Consulta de Bariatría quedó para el lunes, 31 de agosto, 11:30 a.m. Te llegará la confirmación y los recordatorios por WhatsApp.",
-      "at": "2026-08-29T22:50:27.938Z",
+      "text": "¡Listo, Jorge Luis! Tu cita de bariatría quedó para el lunes, 31 de agosto, 11:30 a.m. Te llegará la confirmación y los recordatorios por WhatsApp.",
+      "at": "2026-08-30T00:30:25.758Z",
       "turn": 4
     },
     {
       "from": "lead",
       "text": "Gracias, ahí estaré.",
-      "at": "2026-08-29T22:52:32.938Z"
+      "at": "2026-08-30T00:32:30.758Z"
     },
     {
       "from": "bot",
-      "text": "¡Con gusto, Jorge Luis! Te esperamos el lunes.",
-      "at": "2026-08-29T22:53:12.938Z",
+      "text": "¡Con gusto, Jorge Luis! Te esperamos el lunes, 31 de agosto, a las 11:30 a.m.",
+      "at": "2026-08-30T00:33:10.758Z",
       "turn": 5
     }
   ],
@@ -87,14 +81,7 @@
       "turn": 1,
       "name": "lookupFaq",
       "args": {
-        "question": "¿Manejan semaglutida para bajar de peso? ¿Cómo funciona la consulta de bariatría y qué incluye?"
-      }
-    },
-    {
-      "turn": 2,
-      "name": "lookupFaq",
-      "args": {
-        "question": "¿Qué incluye exactamente la consulta de bariatría para control de peso?"
+        "question": "¿Manejan semaglutida para bajar de peso y cómo funciona la consulta de bariatría?"
       }
     },
     {
@@ -102,7 +89,7 @@
       "name": "getAvailability",
       "args": {
         "serviceName": "Consulta de Bariatría",
-        "fromDate": "2026-08-29T16:40:26-06:00",
+        "fromDate": "2026-08-29T18:20:32-06:00",
         "toDate": "2026-09-05T23:59:59-06:00"
       }
     },
@@ -135,22 +122,6 @@
     },
     {
       "turn": 4,
-      "name": "updateConversationStatus",
-      "args": {
-        "status": "completed",
-        "reason": "Cita de bariatría agendada"
-      }
-    },
-    {
-      "turn": 5,
-      "name": "updateConversationStatus",
-      "args": {
-        "status": "completed",
-        "reason": ""
-      }
-    },
-    {
-      "turn": 5,
       "name": "updateConversationStatus",
       "args": {
         "status": "completed",

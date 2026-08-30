@@ -18,133 +18,134 @@
   },
   "model": "gpt-5.6-luna",
   "leadModel": "gpt-5.6-luna",
-  "generatedAt": "2026-08-29T23:01:32.818Z",
+  "generatedAt": "2026-08-30T00:22:59.335Z",
   "messages": [
     {
       "from": "lead",
       "text": "🤔Me interesa el Láser CO2 Fraccionado, pero tengo dudas",
-      "at": "2026-08-29T23:00:08.823Z"
+      "at": "2026-08-30T00:21:49.864Z"
     },
     {
       "from": "bot",
-      "text": "¡Hola! Soy Sofía, del consultorio del Dr. Heriberto Valdivia. El Láser CO₂ Fraccionado mejora textura, poros, manchas y cicatrices. ¿Tu duda es sobre recuperación o resultados?",
-      "at": "2026-08-29T23:00:56.823Z",
+      "text": "¡Hola! Soy Sofía, del consultorio del Dr. Heriberto Valdivia. El Láser CO₂ Fraccionado ayuda a mejorar textura, poros, manchas y cicatrices; cuesta $3,000 por sesión. En consulta, el Dr. Valdivia revisa tu piel y define lo más conveniente. ¿Tu duda es sobre las sesiones o los cuidados?",
+      "at": "2026-08-30T00:22:37.864Z",
       "turn": 1
     },
     {
       "from": "lead",
-      "text": "sí, más que nada quisiera saber exactamente qué es y qué hace en la piel",
-      "at": "2026-08-29T23:03:10.823Z"
+      "text": "¿me podrían explicar qué es exactamente el láser CO2 y qué hace en la piel?",
+      "at": "2026-08-30T00:24:51.864Z"
     },
     {
       "from": "bot",
-      "text": "Es un tratamiento que hace una quemadura controlada para regenerar la piel del rostro. Ayuda a atenuar líneas de expresión, marcas y cicatrices, unifica el tono, mejora la hidratación y estimula la producción de colágeno.",
-      "at": "2026-08-29T23:04:11.823Z",
+      "text": "El Láser CO₂ Fraccionado realiza una quemadura controlada que estimula la regeneración de la piel y la producción de colágeno. Ayuda a atenuar líneas, manchas, marcas y cicatrices, además de mejorar el tono y la textura.",
+      "at": "2026-08-30T00:25:52.864Z",
       "turn": 2
     },
     {
       "from": "bot",
-      "text": "¿Qué prefieres conocer ahora: recuperación o precio?",
-      "at": "2026-08-29T23:04:17.323Z",
+      "text": "¿Te interesa más mejorar manchas o cicatrices?",
+      "at": "2026-08-30T00:25:58.364Z",
       "turn": 2
     },
     {
       "from": "lead",
-      "text": "me gustaría saber si duele el tratamiento",
-      "at": "2026-08-29T23:07:08.323Z"
+      "text": "me interesa más mejorar los poros abiertos y la textura irregular de mis mejillas, ¿duele?",
+      "at": "2026-08-30T00:28:49.364Z"
     },
     {
       "from": "bot",
-      "text": "La molestia puede variar de una persona a otra; déjame confirmarte con el equipo cómo se maneja durante el Láser CO₂. El doctor también lo revisa contigo en la consulta de valoración. ¿Te interesa que revisemos horarios?",
-      "at": "2026-08-29T23:07:52.323Z",
+      "text": "Sí puede sentirse un poco molesto, pero se aplica anestesia tópica para hacerlo más cómodo. Para poros y textura, el Dr. Valdivia revisa tu piel en consulta y define la intensidad adecuada. ¿Es tu primera vez con este tratamiento?",
+      "at": "2026-08-30T00:29:33.364Z",
       "turn": 3
     },
     {
       "from": "lead",
-      "text": "sí, pero antes quisiera saber si normalmente duele o qué usan para que sea más cómodo",
-      "at": "2026-08-29T23:09:20.323Z"
+      "text": "sí, sería mi primera vez. ¿cuántas sesiones se necesitan normalmente?",
+      "at": "2026-08-30T00:31:01.364Z"
     },
     {
       "from": "bot",
-      "text": "La molestia puede variar de una persona a otra; aún estoy confirmando con el equipo qué utilizan para hacerlo más cómodo. El Dr. Valdivia también lo revisa contigo en consulta.",
-      "at": "2026-08-29T23:10:17.323Z",
+      "text": "Normalmente se recomiendan al menos 2 o 3 sesiones, cada 21 días. Desde la primera suele notarse un cambio importante, pero el número exacto lo define el Dr. Valdivia al valorar tu piel.",
+      "at": "2026-08-30T00:31:58.364Z",
       "turn": 4
     },
     {
       "from": "bot",
-      "text": "Tengo lunes, 31 de agosto, 11:30 a.m. o lunes, 31 de agosto, 4:15 p.m., ¿cuál te queda mejor?",
-      "at": "2026-08-29T23:10:22.823Z",
+      "text": "Para revisar tus poros y textura, ¿te acomoda más venir por la mañana o por la tarde?",
+      "at": "2026-08-30T00:32:03.864Z",
       "turn": 4
     },
     {
       "from": "lead",
-      "text": "antes de agendar, ¿cuántas sesiones se necesitan normalmente?",
-      "at": "2026-08-29T23:12:27.823Z"
+      "text": "¿y cuál es el precio por sesión?",
+      "at": "2026-08-30T00:34:08.864Z"
     },
     {
       "from": "bot",
-      "text": "Para el Láser CO₂ se recomiendan al menos 2 o 3 sesiones, realizadas cada 21 días. El número exacto lo define el Dr. Valdivia en consulta.",
-      "at": "2026-08-29T23:13:07.823Z",
+      "text": "La sesión de Láser CO₂ Fraccionado cuesta $3,000. Como sería tu primera vez, el Dr. Valdivia revisa tu piel y define lo más conveniente para poros y textura.",
+      "at": "2026-08-30T00:34:48.864Z",
       "turn": 5
     },
     {
       "from": "bot",
-      "text": "¿Te aparto uno de los horarios que te compartí?",
-      "at": "2026-08-29T23:13:13.323Z",
+      "text": "¿Te acomoda más venir por la mañana o por la tarde?",
+      "at": "2026-08-30T00:34:54.364Z",
       "turn": 5
     },
     {
       "from": "lead",
-      "text": "y también quisiera saber cuál es el precio del tratamiento",
-      "at": "2026-08-29T23:15:55.323Z"
+      "text": "por la tarde me acomoda, ¿qué horarios tienen disponibles?",
+      "at": "2026-08-30T00:37:36.364Z"
     },
     {
       "from": "bot",
-      "text": "El Láser CO₂ Fraccionado cuesta $3,000 por sesión. La cantidad que necesitas la define el Dr. Valdivia en consulta.",
-      "at": "2026-08-29T23:16:48.323Z",
-      "turn": 6
-    },
-    {
-      "from": "bot",
-      "text": "¿Te aparto el lunes 31 de agosto a las 11:30 a.m. o a las 4:15 p.m.?",
-      "at": "2026-08-29T23:16:53.823Z",
+      "text": "Tengo el lunes, 31 de agosto, 4:15 p.m. o el martes, 1 de septiembre, 3:45 p.m. ¿Cuál te queda mejor?",
+      "at": "2026-08-30T00:38:29.364Z",
       "turn": 6
     },
     {
       "from": "lead",
-      "text": "sí, por favor aparta el lunes, 31 de agosto, a las 4:15 p.m.",
-      "at": "2026-08-29T23:18:12.823Z"
+      "text": "el martes, 1 de septiembre, 3:45 p.m. me queda mejor.",
+      "at": "2026-08-30T00:39:48.364Z"
     },
     {
       "from": "bot",
-      "text": "Perfecto, la consulta sería el lunes, 31 de agosto, a las 4:15 p.m. ¿A nombre de quién la registro?",
-      "at": "2026-08-29T23:18:48.823Z",
+      "text": "Perfecto, el martes, 1 de septiembre, 3:45 p.m. está disponible. ¿A nombre de quién agendo la cita?",
+      "at": "2026-08-30T00:40:24.364Z",
       "turn": 7
     },
     {
       "from": "lead",
-      "text": "Rocío.",
-      "at": "2026-08-29T23:20:44.823Z"
+      "text": "a nombre de Rocío, por favor.",
+      "at": "2026-08-30T00:42:20.364Z"
     },
     {
       "from": "bot",
-      "text": "¡Listo, Rocío! Tu consulta quedó agendada para el lunes, 31 de agosto, 4:15 p.m. Te llegará la confirmación y los recordatorios por WhatsApp.",
-      "at": "2026-08-29T23:21:33.823Z",
+      "text": "¡Listo, Rocío! Tu consulta quedó agendada para el martes, 1 de septiembre, 3:45 p.m. Te llegará la confirmación y los recordatorios por WhatsApp.",
+      "at": "2026-08-30T00:43:09.364Z",
       "turn": 8
     },
     {
       "from": "lead",
-      "text": "gracias!",
-      "at": "2026-08-29T23:24:06.823Z"
+      "text": "Muchas gracias, estaré pendiente.",
+      "at": "2026-08-30T00:45:42.364Z"
     },
     {
       "from": "bot",
-      "text": "¡Gracias a ti, Rocío! Nos vemos el lunes.",
-      "at": "2026-08-29T23:25:08.823Z",
+      "text": "¡Claro, Rocío! Te esperamos el martes. 😊",
+      "at": "2026-08-30T00:46:44.364Z",
       "turn": 9
     }
   ],
   "toolCalls": [
+    {
+      "turn": 1,
+      "name": "lookupFaq",
+      "args": {
+        "question": "Láser CO₂ fraccionado: información general, precio, cómo funciona, dolor, recuperación, resultados, sesiones y cuidados"
+      }
+    },
     {
       "turn": 2,
       "name": "lookupFaq",
@@ -156,60 +157,30 @@
       "turn": 3,
       "name": "lookupFaq",
       "args": {
-        "question": "¿Duele el tratamiento de Láser CO₂ Fraccionado?"
-      }
-    },
-    {
-      "turn": 3,
-      "name": "flagPendingInfo",
-      "args": {
-        "question": "me gustaría saber si duele el tratamiento",
-        "topic": "dolor del láser"
+        "question": "¿El Láser CO₂ Fraccionado duele? ¿Qué se siente durante el tratamiento para poros abiertos y textura irregular?"
       }
     },
     {
       "turn": 4,
       "name": "lookupFaq",
       "args": {
-        "question": "En el tratamiento de Láser CO₂ Fraccionado, ¿normalmente duele y qué usan para hacerlo más cómodo?"
-      }
-    },
-    {
-      "turn": 4,
-      "name": "lookupFaq",
-      "args": {
-        "question": "En el tratamiento de Láser CO₂ Fraccionado, ¿normalmente duele y qué usan para hacerlo más cómodo?"
-      }
-    },
-    {
-      "turn": 4,
-      "name": "flagPendingInfo",
-      "args": {
-        "question": "sí, pero antes quisiera saber si normalmente duele o qué usan para que sea más cómodo",
-        "topic": "molestia y comodidad"
-      }
-    },
-    {
-      "turn": 4,
-      "name": "getAvailability",
-      "args": {
-        "serviceName": "Consulta",
-        "fromDate": "2026-08-29T17:00:29-06:00",
-        "toDate": "2026-09-05T23:59:59-06:00"
+        "question": "¿Cuántas sesiones se necesitan normalmente de Láser CO₂ Fraccionado para mejorar poros abiertos y textura irregular?"
       }
     },
     {
       "turn": 5,
       "name": "lookupFaq",
       "args": {
-        "question": "¿Cuántas sesiones se necesitan normalmente para el Láser CO₂ Fraccionado?"
+        "question": "¿Cuál es el precio por sesión del Láser CO₂ Fraccionado?"
       }
     },
     {
       "turn": 6,
-      "name": "lookupFaq",
+      "name": "getAvailability",
       "args": {
-        "question": "Precio del tratamiento de Láser CO₂ Fraccionado"
+        "serviceName": "Consulta",
+        "fromDate": "2026-08-29T18:22:27-06:00",
+        "toDate": "2026-09-05T23:59:59-06:00"
       }
     },
     {
@@ -217,8 +188,8 @@
       "name": "getAvailability",
       "args": {
         "serviceName": "Consulta",
-        "fromDate": "2026-08-31T00:00:00-06:00",
-        "toDate": "2026-09-01T00:00:00-06:00"
+        "fromDate": "2026-09-01T00:00:00-06:00",
+        "toDate": "2026-09-01T23:59:59-06:00"
       }
     },
     {
@@ -226,8 +197,8 @@
       "name": "getAvailability",
       "args": {
         "serviceName": "Consulta",
-        "fromDate": "2026-08-31T00:00:00-06:00",
-        "toDate": "2026-09-01T00:00:00-06:00"
+        "fromDate": "2026-08-29T18:22:40-06:00",
+        "toDate": "2026-09-05T23:59:59-06:00"
       }
     },
     {
@@ -235,7 +206,7 @@
       "name": "bookAppointment",
       "args": {
         "serviceName": "Consulta",
-        "startTime": "2026-08-31T16:15:00-06:00",
+        "startTime": "2026-09-01T15:45:00-06:00",
         "whatsappPhone": null,
         "contactName": "Rocío"
       }
@@ -279,12 +250,11 @@
         "id": "appt_1",
         "calendarId": "qh8yxxSnb4DAo72obVmG",
         "serviceName": "Consulta",
-        "startTime": "2026-08-31T16:15:00-06:00",
+        "startTime": "2026-09-01T15:45:00-06:00",
         "status": "confirmed"
       }
     ],
     "tags": [
-      "dato-pendiente",
       "bot-completed"
     ],
     "contactName": "Rocío"

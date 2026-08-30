@@ -18,56 +18,50 @@
   },
   "model": "gpt-5.6-luna",
   "leadModel": "gpt-5.6-luna",
-  "generatedAt": "2026-08-29T23:00:08.528Z",
+  "generatedAt": "2026-08-30T00:21:49.554Z",
   "messages": [
     {
       "from": "lead",
       "text": "👌Sí, quiero una valoración para Láser CO2 Fraccionado",
-      "at": "2026-08-29T22:59:35.804Z"
+      "at": "2026-08-30T00:21:24.307Z"
     },
     {
       "from": "bot",
-      "text": "Perfecto, la valoración para Láser CO₂ Fraccionado es con el Dr. Valdivia. Tengo lunes, 31 de agosto, 11:30 a.m. o lunes, 31 de agosto, 4:15 p.m., ¿cuál te queda mejor?",
-      "at": "2026-08-29T23:00:23.804Z",
+      "text": "Para la valoración de Láser CO₂ Fraccionado tengo lunes, 31 de agosto, 11:30 a.m. o lunes, 31 de agosto, 4:15 p.m. ¿Cuál te queda mejor?",
+      "at": "2026-08-30T00:22:12.307Z",
       "turn": 1
     },
     {
       "from": "lead",
-      "text": "lunes, 31 de agosto, 11:30 a.m. me queda perfecto, ¿cuántos días queda la piel roja o pelándose?",
-      "at": "2026-08-29T23:02:37.804Z"
+      "text": "lunes, 31 de agosto, 11:30 a.m.",
+      "at": "2026-08-30T00:24:26.307Z"
     },
     {
       "from": "bot",
-      "text": "El primer día la piel queda roja y con ardor; el segundo y tercer día puede tomar un tono marrón, y a partir del cuarto empieza la descamación. La recuperación exacta la revisa el Dr. Valdivia según tu piel.",
-      "at": "2026-08-29T23:03:38.804Z",
-      "turn": 2
-    },
-    {
-      "from": "bot",
-      "text": "Para apartar el lunes 31 de agosto a las 11:30 a.m., ¿a nombre de quién agendo la cita?",
-      "at": "2026-08-29T23:03:44.304Z",
+      "text": "Perfecto, te aparto la consulta del lunes 31 de agosto a las 11:30 a.m. ¿A nombre de quién agendo la cita?",
+      "at": "2026-08-30T00:25:27.307Z",
       "turn": 2
     },
     {
       "from": "lead",
-      "text": "a nombre de Claudia.",
-      "at": "2026-08-29T23:06:35.304Z"
+      "text": "Claudia.",
+      "at": "2026-08-30T00:28:18.307Z"
     },
     {
       "from": "bot",
-      "text": "¡Listo, Claudia! Tu cita quedó agendada para el lunes, 31 de agosto, 11:30 a.m. Te llegará la confirmación y los recordatorios por WhatsApp.",
-      "at": "2026-08-29T23:07:19.304Z",
+      "text": "¡Listo, Claudia! Tu consulta quedó agendada para el lunes, 31 de agosto, 11:30 a.m. Te llegará la confirmación y los recordatorios por WhatsApp.",
+      "at": "2026-08-30T00:29:02.307Z",
       "turn": 3
     },
     {
       "from": "lead",
-      "text": "gracias, quedo pendiente de la confirmación.",
-      "at": "2026-08-29T23:08:47.304Z"
+      "text": "gracias, ahí estaré.",
+      "at": "2026-08-30T00:30:30.307Z"
     },
     {
       "from": "bot",
-      "text": "¡Claro, Claudia! Te llegará la confirmación y los recordatorios por WhatsApp. Nos vemos el lunes.",
-      "at": "2026-08-29T23:09:44.304Z",
+      "text": "¡Gracias, Claudia! Te esperamos el lunes.",
+      "at": "2026-08-30T00:31:27.307Z",
       "turn": 4
     }
   ],
@@ -77,15 +71,8 @@
       "name": "getAvailability",
       "args": {
         "serviceName": "Consulta",
-        "fromDate": "2026-08-29T16:59:35-06:00",
+        "fromDate": "2026-08-29T18:21:24-06:00",
         "toDate": "2026-09-05T23:59:59-06:00"
-      }
-    },
-    {
-      "turn": 2,
-      "name": "lookupFaq",
-      "args": {
-        "question": "Para el Láser CO₂ Fraccionado, ¿cuántos días queda la piel roja o pelándose?"
       }
     },
     {

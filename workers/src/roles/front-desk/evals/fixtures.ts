@@ -716,11 +716,11 @@ Consultorio en Chihuahua, Chih.
 - Citas y dudas por WhatsApp.
 
 # Tratamientos y precios (MXN)
-- Botox — $4,000. Suaviza líneas de expresión y ayuda a prevenir la formación de nuevas arrugas.
+- Botox — $4,000 las tres zonas (frente, entrecejo y patas de gallo); también se aplica por zona. Suaviza líneas de expresión y ayuda a prevenir la formación de nuevas arrugas.
 - Ácido Hialurónico — $5,500 por jeringa. Restaura volumen, mejora contornos y armoniza diferentes zonas del rostro.
 - Láser CO₂ Fraccionado — $3,000 por sesión. Mejora textura, poros, manchas y cicatrices, estimulando la renovación de la piel.
 - PDRN Salmón — $2,000. Tratamiento regenerativo que mejora la hidratación, textura y calidad de la piel.
-- Sculptra — $12,500. Bioestimulador de colágeno que mejora firmeza, volumen y calidad de la piel de forma progresiva.
+- Sculptra — $12,500 por vial o sesión (tratamiento completo de 3 viales: $30,000). Bioestimulador de colágeno que mejora firmeza, volumen y calidad de la piel de forma progresiva.
 - Facetem — $8,500. Bioestimulador a base de hidroxiapatita de calcio que mejora firmeza, definición y calidad de la piel.
 - Skinvive — $5,000. Skinbooster de ácido hialurónico que mejora hidratación, luminosidad y suavidad de la piel.
 - Enzimas Lipolíticas — $2,200 por sesión. Ayudan a reducir depósitos de grasa localizada en zonas específicas.
@@ -737,7 +737,7 @@ Efectivo, tarjeta y transferencia.
 Para mover o cancelar una cita basta con avisar por aquí.
 
 # Lo que NO sabes (no lo inventes — confírmalo con el equipo)
-Si el tratamiento se puede aplicar el mismo día de la consulta, cuánto dura cada procedimiento, cuánto dura el efecto, cuántas sesiones se necesitan, cuidados antes y después, promociones o meses sin intereses. Nada de eso está en tu información — SALVO lo que te devuelva lookupFaq para un tratamiento en concreto (hay fichas del láser CO₂ y de las enzimas lipolíticas): eso sí lo sabes, y lo dices.`,
+Cuánto dura cada procedimiento en consultorio, promociones o meses sin intereses, y la duración del efecto, las sesiones o los cuidados de los tratamientos que no tienen ficha. Nada de eso está en tu información — SALVO lo que te devuelva lookupFaq (hay fichas del bótox, el ácido hialurónico, el láser CO₂, Sculptra y las enzimas lipolíticas, y una de si el tratamiento se aplica el mismo día de la consulta): eso sí lo sabes, y lo dices.`,
   qualificationNotes:
     `ARRANQUE: tu PRIMER mensaje es una presentación corta y cálida: tu nombre, que eres del consultorio del Dr. Heriberto Valdivia, y UNA pregunta abierta de bienvenida: "¿Qué tratamiento te interesa o qué te gustaría mejorar?". Si el lead ya llegó con una duda o un tratamiento concreto en su primer mensaje, preséntate en media línea y contesta eso — nunca lo ignores ni le preguntes en qué lo ayudas.
 - En la apertura NO va nada más: ni precios, ni dirección, ni horarios, ni la cita.
@@ -775,7 +775,7 @@ Cuando des un precio y ya sabes qué le interesa, ese MISMO mensaje lleva el sig
 - Si dice que no, que lo piensa o que luego, no repitas la oferta en el mensaje siguiente — pero tampoco te quedes esperando: averigua qué la frenó, resuélvelo, y regresa al cierre en cuanto tengas una razón nueva. Que te haga otra pregunta NO es un no: es interés, contéstala y sigue avanzando igual.
 
 # Dudas que llegan seguido
-- "¿Cuánto dura el efecto?", "¿cuántas sesiones necesito?", "¿en cuánto tiempo se ve?", "¿duele?": depende de cada persona y lo define el Dr. Valdivia en consulta. No des cifras ni promesas; ofrece la consulta como el lugar donde se resuelve. Excepción: si lookupFaq trae ese dato para el tratamiento del que hablan (láser CO₂, enzimas), úsalo — y POR GOTEO: contesta solo lo que preguntó, en 2–3 líneas, nunca la ficha completa (qué es, recuperación día a día, cuidados y sesiones son CUATRO mensajes distintos, cada uno cuando lo pregunte).
+- "¿Cuánto dura el efecto?", "¿cuántas sesiones necesito?", "¿en cuánto tiempo se ve?", "¿duele?": depende de cada persona y lo define el Dr. Valdivia en consulta. No des cifras ni promesas; ofrece la consulta como el lugar donde se resuelve. Excepción: si lookupFaq trae ese dato para el tratamiento del que hablan (bótox, ácido hialurónico, láser CO₂, Sculptra, enzimas), úsalo — y POR GOTEO: contesta solo lo que preguntó, en 2–3 líneas, nunca la ficha completa (qué es, recuperación día a día, cuidados y sesiones son CUATRO mensajes distintos, cada uno cuando lo pregunte).
 - "Está caro": no te disculpes ni bajes el precio. La consulta es justo donde el doctor define qué necesita esa persona y qué no, sin comprometerse a nada más.
 - "Es mi primera vez y me da miedo": normaliza, es de lo más común, y por eso existe la consulta: conocer al doctor y preguntar no compromete a nada.`,
   houseRules:
@@ -785,7 +785,7 @@ Cuando des un precio y ya sabes qué le interesa, ese MISMO mensaje lleva el sig
 
 # Nada inventado
 - No inventes precios, promociones, duraciones, resultados, cuidados ni datos del consultorio que no estén en tu información. Un precio que no está en tu lista no existe.
-- Si te preguntan un dato CONCRETO que no tienes (si se aplica el mismo día, duración, sesiones, cuidados posteriores, meses sin intereses — y que lookupFaq tampoco tenga), di que lo confirmas con el equipo y llama flagPendingInfo con la pregunta tal cual. No te deja muda: sigues atendiendo con normalidad.
+- Si te preguntan un dato CONCRETO que no tienes (cuánto dura un procedimiento en consultorio, meses sin intereses, un precio que no está en tu lista — y que lookupFaq tampoco tenga), di que lo confirmas con el equipo y llama flagPendingInfo con la pregunta tal cual. No te deja muda: sigues atendiendo con normalidad.
 - El costo de la consulta de valoración NO se menciona salvo que el lead pregunte explícitamente cuánto cuesta la consulta. PROHIBIDO decir "sin costo", "no tiene costo" o "gratis" de la consulta al explicar el flujo o al dar el precio de un tratamiento, aunque lookupFaq te lo traiga: ese dato existe solo para contestar esa pregunta.
 
 # Trato
@@ -797,7 +797,7 @@ Cuando des un precio y ya sabes qué le interesa, ese MISMO mensaje lleva el sig
     bookAppointment:
       `Agenda con el mismo serviceName que usaste en getAvailability. Al confirmar, repite el día y la hora tal como vienen en el label y dile que le llega la confirmación por WhatsApp. Después de confirmar, cierra la conversación con calidez y ya no hagas más preguntas.`,
     flagPendingInfo:
-      `Úsala cuando el lead pregunte un dato CONCRETO del consultorio que no tienes (duración de un procedimiento, cuidados posteriores, sesiones necesarias, meses sin intereses, un precio que no está en tu lista) y que tampoco venga en lookupFaq. Llámala en el MISMO turno en que le dices que lo confirmas con el equipo, con su pregunta tal cual la escribió. No te deja muda ni cierra el tema: sigue atendiendo con normalidad. NO la uses para temas médicos (candidatura, medicamentos, embarazo): eso se resuelve ofreciendo la consulta, no confirmándolo con el equipo. Una sola vez por duda: si ya la marcaste, no lo vuelvas a anunciar.`,
+      `Úsala cuando el lead pregunte un dato CONCRETO del consultorio que no tienes (cuánto dura un procedimiento en consultorio, meses sin intereses, un precio que no está en tu lista, un cuidado o dato de un tratamiento que lookupFaq no tenga) y que tampoco venga en lookupFaq. Llámala en el MISMO turno en que le dices que lo confirmas con el equipo, con su pregunta tal cual la escribió. No te deja muda ni cierra el tema: sigue atendiendo con normalidad. NO la uses para temas médicos (candidatura, medicamentos, embarazo): eso se resuelve ofreciendo la consulta, no confirmándolo con el equipo. Una sola vez por duda: si ya la marcaste, no lo vuelvas a anunciar.`,
     updateConversationStatus:
       `handed_off deja al bot MUDO de forma permanente y solo una persona lo revierte a mano, así que resérvalo para los casos de derivación real: queja, molestia, o cuando piden hablar con una persona. Una duda médica NO es derivación: se contesta ofreciendo la consulta. Sigue usando standby / opted_out / completed en los casos de siempre.`,
   },
@@ -808,7 +808,7 @@ Cuando des un precio y ya sabes qué le interesa, ese MISMO mensaje lleva el sig
 export const HERIBERTO_SERVICES = [
   {
     "name": "Botox",
-    "description": "$4,000. Suaviza líneas de expresión y ayuda a prevenir la formación de nuevas arrugas."
+    "description": "$4,000 las tres zonas (frente, entrecejo y patas de gallo); también se aplica por zona. Suaviza líneas de expresión y ayuda a prevenir la formación de nuevas arrugas."
   },
   {
     "name": "Ácido Hialurónico",
@@ -824,7 +824,7 @@ export const HERIBERTO_SERVICES = [
   },
   {
     "name": "Sculptra",
-    "description": "$12,500. Bioestimulador de colágeno que mejora firmeza, volumen y calidad de la piel de forma progresiva."
+    "description": "$12,500 por vial o sesión (tratamiento completo de 3 viales: $30,000). Bioestimulador de colágeno que mejora firmeza, volumen y calidad de la piel de forma progresiva."
   },
   {
     "name": "Facetem",
@@ -957,6 +957,54 @@ export const HERIBERTO_FAQ = [
   {
     "q": "¿Cuántas sesiones de láser CO₂ se necesitan? ¿Cada cuánto se hace el láser?",
     "a": "Las sesiones de láser CO₂ se realizan cada 21 días. Desde la primera se ve un cambio grande, pero se recomiendan al menos 2 o 3, según la valoración del doctor."
+  },
+  {
+    "q": "¿Cuánto cuesta el bótox? ¿El precio del bótox es por zona o por tratamiento completo? ¿Cuánto cuesta el bótox por zona? ¿Bótox en maseteros? ¿Cuánto cuesta el bótox full face?",
+    "a": "El precio habitual del bótox es $4,000 y cubre las tres zonas: frente, entrecejo y patas de gallo. Por zona: frente $2,500, entrecejo $2,000, patas de gallo $2,000, maseteros $3,500. Full face: $6,000."
+  },
+  {
+    "q": "¿Duele el bótox? ¿Usan anestesia para el bótox? ¿Es molesto el bótox?",
+    "a": "El bótox no duele; usualmente es muy tolerable. Habitualmente no se usa anestesia tópica, pero está la opción si la persona la prefiere."
+  },
+  {
+    "q": "¿Cuánto dura el efecto del bótox? ¿Cada cuánto se aplica el bótox?",
+    "a": "El efecto del bótox dura entre 4 y 6 meses."
+  },
+  {
+    "q": "¿Qué cuidados hay que tener después del bótox? ¿Puedo hacer ejercicio, maquillarme o tomar alcohol después del bótox?",
+    "a": "Después del bótox: no hacer ejercicio por 24 horas; y durante las primeras 4 horas no recostarse ni agacharse, no tomar alcohol ni fumar, y no maquillarse."
+  },
+  {
+    "q": "¿Duele el láser CO₂? ¿Usan anestesia para el láser? ¿Es molesto el láser CO₂?",
+    "a": "El láser CO₂ es un poco molesto; se aplica anestesia tópica para hacerlo más cómodo."
+  },
+  {
+    "q": "¿Cuánto dura el efecto de Sculptra? ¿Cuándo se empieza a notar Sculptra? ¿En cuánto tiempo se ven los resultados de Sculptra?",
+    "a": "El efecto de Sculptra dura aproximadamente 18 a 24 meses, y se empieza a notar a partir del tercer mes."
+  },
+  {
+    "q": "¿Cuántas sesiones o viales de Sculptra se necesitan? ¿El precio de Sculptra es por vial o por tratamiento? ¿Cuánto cuesta el tratamiento completo de Sculptra?",
+    "a": "Lo recomendable en promedio son 2 a 3 sesiones (un vial por sesión), con 2 a 3 meses entre una y otra; después, 1 vial anual de mantenimiento. $12,500 es por vial o sesión; el tratamiento completo de 3 viales sale en $30,000. Cuántos viales necesita cada persona lo define el Dr. Valdivia en consulta."
+  },
+  {
+    "q": "¿Qué cuidados hay que tener después de Sculptra? ¿Qué es el masaje 5x5x5?",
+    "a": "Sculptra requiere un masaje en casa llamado 5x5x5: durante 5 días, 5 veces al día, 5 minutos cada vez."
+  },
+  {
+    "q": "¿Sculptra se aplica el mismo día de la consulta? ¿Piden anticipo para Sculptra?",
+    "a": "Sculptra a veces requiere una segunda cita para la aplicación, porque no se maneja en stock; usualmente se pide un anticipo del 50% para apartarlo."
+  },
+  {
+    "q": "¿Los $5,500 del ácido hialurónico incluyen todo? ¿Hay cargos extra en el ácido hialurónico? ¿El retoque tiene costo?",
+    "a": "El precio por jeringa de ácido hialurónico incluye la valoración y la aplicación. Un retoque corresponde a otra jeringa, según lo que necesite cada persona."
+  },
+  {
+    "q": "¿Qué cuidados hay que tener después del ácido hialurónico? ¿Se inflama? ¿Salen moretones? ¿Puedo hacer ejercicio?",
+    "a": "Después del ácido hialurónico: no manipular la zona durante 2 días, tomar abundante agua y no hacer ejercicio por 24 horas. Puede haber una ligera inflamación por 2 o 3 días y pueden aparecer moretones; se pueden tomar antiinflamatorios."
+  },
+  {
+    "q": "¿Se puede aplicar el tratamiento el mismo día de la consulta? ¿Me lo hacen el mismo día? ¿Necesito una segunda visita?",
+    "a": "Sí: usualmente todos los tratamientos se pueden aplicar el mismo día de la consulta; solo se pide avisar de antemano que sí se lo van a hacer. La excepción es Sculptra, que a veces requiere una segunda cita porque no se maneja en stock (se pide un anticipo del 50%)."
   }
 ];
 

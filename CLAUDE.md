@@ -368,7 +368,10 @@ for the retry cron.
   Supabase without updating it and every golden case keeps passing against text nobody runs —
   green tests that prove nothing. **So: whenever you change a tenant's prompt, update the
   fixture in the same change, by pasting the live text back, verbatim** (no reflowing, no
-  "small" wording fixes). `prompt-drift.eval.ts` is the alarm: the only case that talks to the
+  "small" wording fixes). For Heriberto that is a script, not a paste:
+  `node workers/scripts/sync-heriberto-fixture.mjs` regenerates `HERIBERTO_PERSONA/_SERVICES/
+  _HOURS/_FAQ` from prod (jsonb reorders keys — the script restores `q` before `a` and the
+  weekday order so the diff shows only real changes). `prompt-drift.eval.ts` is the alarm: the only case that talks to the
   DB, it asserts prod still CONTAINS each mirrored section byte-for-byte and self-skips without
   Supabase env vars. When it fails, decide which side is right — usually prod is (Leo edits the
   tenant) and the fixture must be re-copied.
