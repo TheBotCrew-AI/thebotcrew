@@ -18,84 +18,84 @@
   },
   "model": "gpt-5.6-luna",
   "leadModel": "gpt-5.6-luna",
-  "generatedAt": "2026-08-30T00:24:57.265Z",
+  "generatedAt": "2026-08-30T00:35:04.154Z",
   "messages": [
     {
       "from": "lead",
       "text": "Hola, cuánto cobran el bótox? es por zona?",
-      "at": "2026-08-30T00:24:05.692Z"
+      "at": "2026-08-30T00:34:20.386Z"
     },
     {
       "from": "bot",
       "text": "¡Hola! Soy Sofía, del consultorio del Dr. Heriberto Valdivia.",
-      "at": "2026-08-30T00:24:53.692Z",
+      "at": "2026-08-30T00:35:08.386Z",
       "turn": 1
     },
     {
       "from": "bot",
       "text": "El bótox cuesta $4,000 por las tres zonas: frente, entrecejo y patas de gallo. También se aplica por zona: frente $2,500, entrecejo $2,000 y patas de gallo $2,000.",
-      "at": "2026-08-30T00:24:59.192Z",
+      "at": "2026-08-30T00:35:13.886Z",
       "turn": 1
     },
     {
       "from": "bot",
-      "text": "La primera vez se agenda una consulta con el Dr. Valdivia para valorar qué necesitas. ¿Te aparto un espacio?",
-      "at": "2026-08-30T00:25:04.692Z",
+      "text": "En consulta, el Dr. Valdivia revisa qué zonas necesitas y te orienta. ¿Te aparto un espacio?",
+      "at": "2026-08-30T00:35:19.386Z",
       "turn": 1
     },
     {
       "from": "lead",
-      "text": "¿tienen alguna promoción, descuento o meses sin intereses?",
-      "at": "2026-08-30T00:27:18.692Z"
+      "text": "tienen alguna promoción, descuento o meses sin intereses?",
+      "at": "2026-08-30T00:37:33.386Z"
     },
     {
       "from": "bot",
-      "text": "Déjame confirmarlo con el equipo y te aviso. Si te interesa el bótox, también puedo revisar horarios para tu consulta con el Dr. Valdivia.",
-      "at": "2026-08-30T00:28:19.692Z",
+      "text": "Por ahora no hay promociones ni descuentos, pero con tarjeta siempre tienes 3 meses sin intereses. Para el bótox, el Dr. Valdivia lo define en consulta según las zonas que necesites. ¿Te acomoda más venir por la mañana o por la tarde?",
+      "at": "2026-08-30T00:38:34.386Z",
       "turn": 2
     },
     {
       "from": "lead",
-      "text": "sí me interesa, podría ser por la tarde por favor",
-      "at": "2026-08-30T00:31:10.692Z"
+      "text": "está bien, me acomoda por la tarde.",
+      "at": "2026-08-30T00:41:25.386Z"
     },
     {
       "from": "bot",
-      "text": "Perfecto. Para tu consulta de valoración de bótox tengo el lunes, 31 de agosto, 4:15 p.m. o el lunes, 31 de agosto, 4:45 p.m. ¿Cuál te queda mejor?",
-      "at": "2026-08-30T00:31:54.692Z",
+      "text": "Perfecto. Tengo el lunes, 31 de agosto, 4:15 p.m. o el lunes, 31 de agosto, 4:45 p.m., ¿cuál te queda mejor?",
+      "at": "2026-08-30T00:42:09.386Z",
       "turn": 3
     },
     {
       "from": "lead",
-      "text": "el lunes, 31 de agosto, 4:15 p.m. me queda bien",
-      "at": "2026-08-30T00:33:22.692Z"
+      "text": "el lunes, 31 de agosto, 4:15 p.m. me queda bien.",
+      "at": "2026-08-30T00:43:37.386Z"
     },
     {
       "from": "bot",
-      "text": "Perfecto, te aparto el lunes, 31 de agosto, 4:15 p.m. ¿A nombre de quién agendo la cita?",
-      "at": "2026-08-30T00:34:19.692Z",
+      "text": "¿A nombre de quién agendo la cita?",
+      "at": "2026-08-30T00:44:34.386Z",
       "turn": 4
     },
     {
       "from": "lead",
       "text": "Karla.",
-      "at": "2026-08-30T00:36:24.692Z"
+      "at": "2026-08-30T00:46:39.386Z"
     },
     {
       "from": "bot",
-      "text": "¡Listo, Karla! Tu consulta quedó agendada el lunes, 31 de agosto, 4:15 p.m. Te llegará la confirmación y los recordatorios por WhatsApp.",
-      "at": "2026-08-30T00:37:04.692Z",
+      "text": "¡Listo, Karla! Tu cita quedó para el lunes, 31 de agosto, 4:15 p.m. Te llegará la confirmación y los recordatorios por WhatsApp.",
+      "at": "2026-08-30T00:47:19.386Z",
       "turn": 5
     },
     {
       "from": "lead",
-      "text": "gracias!",
-      "at": "2026-08-30T00:39:46.692Z"
+      "text": "Gracias!",
+      "at": "2026-08-30T00:50:01.386Z"
     },
     {
       "from": "bot",
-      "text": "¡De nada, Karla! Nos vemos el lunes a las 4:15 p.m.",
-      "at": "2026-08-30T00:40:39.692Z",
+      "text": "¡De nada, Karla! Nos vemos el lunes.",
+      "at": "2026-08-30T00:50:54.386Z",
       "turn": 6
     }
   ],
@@ -104,7 +104,7 @@
       "turn": 1,
       "name": "lookupFaq",
       "args": {
-        "question": "Precio del bótox y si se cobra por zona o por las tres zonas"
+        "question": "Precio del bótox y si se cobra por zona"
       }
     },
     {
@@ -115,35 +115,12 @@
       }
     },
     {
-      "turn": 2,
-      "name": "flagPendingInfo",
-      "args": {
-        "question": "¿tienen alguna promoción, descuento o meses sin intereses?",
-        "topic": "promociones y pagos"
-      }
-    },
-    {
-      "turn": 3,
-      "name": "lookupFaq",
-      "args": {
-        "question": "¿Tienen promociones, descuentos o meses sin intereses para el bótox?"
-      }
-    },
-    {
       "turn": 3,
       "name": "getAvailability",
       "args": {
         "serviceName": "Consulta",
-        "fromDate": "2026-08-29T18:24:23-06:00",
+        "fromDate": "2026-08-29T18:34:34-06:00",
         "toDate": "2026-09-05T23:59:59-06:00"
-      }
-    },
-    {
-      "turn": 3,
-      "name": "flagPendingInfo",
-      "args": {
-        "question": "¿tienen alguna promoción, descuento o meses sin intereses?",
-        "topic": "promociones y pagos"
       }
     },
     {
@@ -152,7 +129,7 @@
       "args": {
         "serviceName": "Consulta",
         "fromDate": "2026-08-31T00:00:00-06:00",
-        "toDate": "2026-08-31T23:59:59-06:00"
+        "toDate": "2026-09-01T00:00:00-06:00"
       }
     },
     {
@@ -209,7 +186,6 @@
       }
     ],
     "tags": [
-      "dato-pendiente",
       "bot-completed"
     ],
     "contactName": "Karla"
