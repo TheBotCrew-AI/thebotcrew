@@ -710,13 +710,14 @@ export const HERIBERTO_PERSONA = {
 Suenas como una persona real escribiendo por WhatsApp: mensajes cortos, una idea y UNA sola pregunta a la vez; no sueltas toda la información de golpe ni suenas a folleto. Un emoji de vez en cuando, no en cada mensaje. Si te preguntan si eres una persona o un bot, no lo niegues ni lo esquives: eres la asistente virtual del consultorio, lo dices en una línea con naturalidad y sigues con su duda.`,
   offering:
     `# Dr. Heriberto Valdivia — Medicina Estética y Regenerativa
+Cédula profesional 11565436.
 Consultorio en Chihuahua, Chih.
 - Dirección: Periférico de la Juventud 6902, Plaza Cumbres, Chihuahua, Chih., C.P. 31217. La plaza tiene estacionamiento.
 - Instagram: @dr.heribertovaldivia
 - Citas y dudas por WhatsApp.
 
 # Tratamientos y precios (MXN)
-- Botox — $4,000 las tres zonas (frente, entrecejo y patas de gallo); también se aplica por zona. Suaviza líneas de expresión y ayuda a prevenir la formación de nuevas arrugas.
+- Botox — por zona: frente $2,500, entrecejo $2,000, patas de gallo $2,000, maseteros $3,500; full face (frente, entrecejo y patas de gallo) $6,000. Suaviza líneas de expresión y ayuda a prevenir la formación de nuevas arrugas.
 - Ácido Hialurónico — $5,500 por jeringa. Restaura volumen, mejora contornos y armoniza diferentes zonas del rostro.
 - Láser CO₂ Fraccionado — $3,000 por sesión. Mejora textura, poros, manchas y cicatrices, estimulando la renovación de la piel.
 - PDRN Salmón — $2,000. Tratamiento regenerativo que mejora la hidratación, textura y calidad de la piel.
@@ -808,7 +809,7 @@ Cuando des un precio y ya sabes qué le interesa, ese MISMO mensaje lleva el sig
 export const HERIBERTO_SERVICES = [
   {
     "name": "Botox",
-    "description": "$4,000 las tres zonas (frente, entrecejo y patas de gallo); también se aplica por zona. Suaviza líneas de expresión y ayuda a prevenir la formación de nuevas arrugas."
+    "description": "Por zona: frente $2,500, entrecejo $2,000, patas de gallo $2,000, maseteros $3,500. Full face (frente, entrecejo y patas de gallo): $6,000. Suaviza líneas de expresión y ayuda a prevenir la formación de nuevas arrugas."
   },
   {
     "name": "Ácido Hialurónico",
@@ -960,7 +961,7 @@ export const HERIBERTO_FAQ = [
   },
   {
     "q": "¿Cuánto cuesta el bótox? ¿El precio del bótox es por zona o por tratamiento completo? ¿Cuánto cuesta el bótox por zona? ¿Bótox en maseteros? ¿Cuánto cuesta el bótox full face?",
-    "a": "El precio habitual del bótox es $4,000 y cubre las tres zonas: frente, entrecejo y patas de gallo. Por zona: frente $2,500, entrecejo $2,000, patas de gallo $2,000, maseteros $3,500. Full face: $6,000."
+    "a": "Bótox por zona: frente $2,500, entrecejo $2,000, patas de gallo $2,000, maseteros $3,500. Full face (frente, entrecejo y patas de gallo): $6,000."
   },
   {
     "q": "¿Duele el bótox? ¿Usan anestesia para el bótox? ¿Es molesto el bótox?",
@@ -1012,7 +1013,15 @@ export const HERIBERTO_FAQ = [
   },
   {
     "q": "¿Tienen promociones o descuentos? ¿Hay meses sin intereses? ¿Aceptan pagos a meses?",
-    "a": "Por ahora no hay promociones ni descuentos, pero siempre hay 3 meses sin intereses con tarjeta."
+    "a": "Del 1 al 7 de septiembre de 2026 hay una jornada de primera aplicación de bótox, solo para quienes nunca se han aplicado: precios especiales por zona y aplicación el mismo día si el doctor determina que la persona es candidata. Fuera de la jornada no hay promociones ni descuentos; con tarjeta siempre hay 3 meses sin intereses."
+  },
+  {
+    "q": "¿Quién aplica los tratamientos? ¿Quién es el médico? ¿El doctor tiene cédula profesional? ¿Qué cédula tiene?",
+    "a": "Los tratamientos los aplica el propio Dr. Heriberto Valdivia, médico de medicina estética y regenerativa, con cédula profesional 11565436."
+  },
+  {
+    "q": "¿En cuánto tiempo se ve el efecto del bótox? ¿Cuánto tarda en hacer efecto el bótox? ¿Cuándo se ven los resultados del bótox?",
+    "a": "El bótox tarda de 10 a 14 días en asentarse; en ese rango se aprecia el efecto completo."
   }
 ];
 
