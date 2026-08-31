@@ -449,6 +449,11 @@ cualquier Chrome headless recibe SIGTERM a los ~2 s (ver cabecera de `render-bat
   book/reschedule): GHL's own confirmation/reminder workflows render `{{appointment.start_time}}`
   in that field, and the booking API carries no timezone — it's the only lever. See
   docs/business-logic.md §5d.
+- Calendar event titles (2026-08-31): `bookAppointment` titles the GHL event
+  `"Nombre — Tratamiento — Campaña"` (`tools/appointment-title.ts`), degrading to the bare
+  service name. Name = tool param → CRM contact name; treatment = new optional model-filled
+  `treatment` param (display-only); campaign = the pinned variant's `calendarLabel`
+  (`promptVariantSchema`, config-owned, e.g. Heriberto's jornada = "Jornada Bótox").
 - Name at booking (2026-08-29): the booking sequence asks "¿A nombre de quién agendo la cita?" only
   when the lead hasn't said their name in the conversation (the CRM name doesn't count — IG/FB
   leads arrive as their handle), and passes it as `contactName` to `bookAppointment`, which writes

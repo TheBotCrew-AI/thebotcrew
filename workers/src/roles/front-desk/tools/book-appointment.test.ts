@@ -188,6 +188,36 @@ describe('bookAppointment', () => {
     expect(q.resetReactivationRound).toHaveBeenCalledWith('conv1');
   });
 
+  it('calendar title carries name — treatment — campaign label when pinned to a variant', async () => {
+    const t = {
+      ...tenant,
+      config: {
+        ...(tenant.config as object),
+        promptVariants: { a02: { calendarLabel: 'Jornada Bótox' } },
+      },
+    } as unknown as TenantContext;
+    const tn = { ...turn, promptVariant: 'a02' } as TurnContext;
+    const c = { requestContext: { get: (k: string) => (k === 'tenant' ? t : k === 'turn' ? tn : undefined) } };
+    const res = await (bookAppointmentTool.execute as (i: unknown, cx: typeof c) => Promise<{ booked: boolean }>)(
+      { serviceName: 'Consulta', startTime: START, contactName: 'Karla Mendoza', treatment: 'Bótox frente y entrecejo' },
+      c,
+    );
+    expect(res.booked).toBe(true);
+    expect(ghl.bookAppointment).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Karla Mendoza — Bótox frente y entrecejo — Jornada Bótox' }),
+    );
+  });
+
+  it('a pinned variant with no calendarLabel adds no campaign suffix', async () => {
+    const tn = { ...turn, promptVariant: 'a02', contactName: 'Karla' } as TurnContext;
+    const c = { requestContext: { get: (k: string) => (k === 'tenant' ? tenant : k === 'turn' ? tn : undefined) } };
+    await (bookAppointmentTool.execute as (i: unknown, cx: typeof c) => Promise<unknown>)(
+      { serviceName: 'Consulta', startTime: START },
+      c,
+    );
+    expect(ghl.bookAppointment).toHaveBeenCalledWith(expect.objectContaining({ title: 'Karla — Consulta' }));
+  });
+
   it('a failed round reset is non-blocking → booking still succeeds', async () => {
     vi.mocked(q.resetReactivationRound).mockRejectedValue(new Error('db down'));
     const res = await run({ serviceName: 'Consulta', startTime: START });

@@ -12,6 +12,7 @@ import { CANCELLED_APPOINTMENT_TAG } from '../../../ghl/tags.js';
 import { getActiveDemoSession, logAppointment, logBotEvent, logEvent, resetReactivationRound, setSimulatedBooking } from '../../../db/queries.js';
 import { queueCapiEvent } from '../../../meta/capi.js';
 import { resolveAgentContext } from './agent-context.js';
+import { buildAppointmentTitle } from './appointment-title.js';
 import { bookingQueryWindow, resolveBookableSlot } from './booking-time.js';
 import { simSlotLabel, simulatedSlots } from './demo-sim.js';
 import { slotLabel } from './slot-label.js';
@@ -44,13 +45,21 @@ export const bookAppointmentTool = createTool({
           'nombre registrado suele ser el de su red social o su negocio. Si el lead no ha dicho su nombre, ' +
           'pregúntaselo antes de agendar; no lo inventes ni uses el que está registrado.',
       ),
+    treatment: z
+      .string()
+      .optional()
+      .describe(
+        'Tratamiento o zona de interés tal como se habló en la conversación (ej. "Bótox frente y ' +
+          'entrecejo", "Láser CO₂"). Se usa solo para el título del evento que ve el equipo en el ' +
+          'calendario. Omítelo si no se habló de un tratamiento concreto.',
+      ),
   }),
   outputSchema: z.object({
     booked: z.boolean(),
     ghlAppointmentId: z.string().optional(),
     message: z.string(),
   }),
-  execute: async ({ serviceName, startTime, whatsappPhone, contactName }, ctx) => {
+  execute: async ({ serviceName, startTime, whatsappPhone, contactName, treatment }, ctx) => {
     const { config, tenant, turn, frameTz } = resolveAgentContext(ctx);
 
     // Demo mode: SIMULATED booking — same anti-hallucination guard as the real path
@@ -206,6 +215,16 @@ export const bookAppointmentTool = createTool({
       await syncContactTimezone(ghl, turn.ghlContactId, turn.leadTimezone, 'bookAppointment');
     }
 
+    // Calendar event title for staff: "Nombre — Tratamiento — Jornada". The campaign
+    // label is deterministic (the pinned variant's calendarLabel, config-owned); the
+    // name/treatment are display-only strings. Falls back to the bare service name.
+    const title = buildAppointmentTitle({
+      contactName: contactName ?? turn.contactName,
+      treatment,
+      serviceName,
+      campaignLabel: turn.promptVariant ? config.promptVariants?.[turn.promptVariant]?.calendarLabel : undefined,
+    });
+
     let ghlAppointmentId: string | undefined;
     try {
       ({ ghlAppointmentId } = await ghl.bookAppointment({
@@ -213,7 +232,7 @@ export const bookAppointmentTool = createTool({
         locationId: tenant.ghlLocationId,
         contactId: turn.ghlContactId,
         startTime: canonicalStart,
-        title: serviceName,
+        title,
       }));
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);

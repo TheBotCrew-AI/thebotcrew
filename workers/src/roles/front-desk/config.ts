@@ -92,6 +92,14 @@ export const promptVariantSchema = z.object({
    * positions within one pool). See roles/reactivation/angle-select.ts.
    */
   followUpAngles: z.array(z.string()).optional(),
+  /**
+   * Campaign tag appended to the GHL calendar event title when a conversation
+   * pinned to this variant books (e.g. "Jornada Bótox" → "Karla — Bótox — Jornada
+   * Bótox"), so staff see which promo brought the lead. Variant metadata read
+   * directly by bookAppointment (tools/appointment-title.ts) — NOT a prompt field;
+   * the merge in resolveEffectiveOverrides copies it harmlessly but nothing renders it.
+   */
+  calendarLabel: z.string().optional(),
 });
 
 export const frontDeskConfigSchema = z.object({
