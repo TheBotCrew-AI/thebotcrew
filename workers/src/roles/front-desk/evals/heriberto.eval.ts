@@ -55,6 +55,14 @@
  *   - agenda "Consulta":  con regla 3/3 · sin regla (toolInstructions.getAvailability fuera) 0/3
  *     — sin la instrucción inventa serviceName="Consulta de Medicina Estética", que no es
  *     llave de `calendars`, y la herramienta contesta "No hay un calendario configurado".
+ *   MEDIDO 2026-09-01 (regla "Zona o tratamiento fuera de tu lista"):
+ *   - "paoada" bajo la variante a05: con regla 5/5 · sin regla 5/10 fallas (contesta patas
+ *     de gallo con precio de bótox — el incidente). El mensaje LITERAL del incidente
+ *     ("Necesito saber como es el tratamiento de la paoada y los costos") NO reprodujo:
+ *     15/15 verdes sin la regla (prompt base, hilo real y variante a05 por igual) — la
+ *     falla de prod fue cola de probabilidad con esa frase. Lo que sí discrimina es la
+ *     respuesta seca "La paoada" al menú de zonas del opener de campaña: el modelo la
+ *     encaja en la opción más parecida en la mitad de las corridas.
  *
  * Live cases need an API key (`pnpm eval`); excluded from the CI gate.
  */
@@ -79,6 +87,7 @@ import { slotLabel } from '../tools/slot-label.js';
 import { buildAgentRequestContext } from '../../../core/runtime-context.js';
 import type { TenantContext, TurnContext } from '../../../core/types.js';
 import { HERIBERTO_FAQ, HERIBERTO_PERSONA, heribertoTenant } from './fixtures.js';
+import { INCIDENT_A05_OFFERING, INCIDENT_A05_QUALIFICATION_NOTES } from './heriberto-a05-incident.js';
 import { evalApiKey, evalModel, evalProvider } from './eval-model.js';
 
 const TZ = 'America/Chihuahua';
@@ -101,10 +110,16 @@ const OLD_GOLDEN_RULE =
  * discriminates — the numbers in the header come from running with RULE_OFF=1.
  */
 const tenantWithout = (
-  rule: 'medical' | 'faq-consulta' | 'drip' | 'service-name' | 'next-step' | 'consulta-hook',
+  rule: 'medical' | 'faq-consulta' | 'drip' | 'service-name' | 'next-step' | 'consulta-hook' | 'zone-list',
 ): TenantContext => {
   const p = HERIBERTO_PERSONA;
   const cfg = heribertoTenant.config;
+  if (rule === 'zone-list') {
+    return {
+      ...heribertoTenant,
+      config: { ...cfg, promptOverrides: { ...p, houseRules: withoutSection(p.houseRules, '# Zona o tratamiento fuera de tu lista') } },
+    };
+  }
   if (rule === 'next-step') {
     const overrides = {
       ...p,
@@ -384,5 +399,58 @@ describe.skipIf(!evalApiKey)('Dr. Heriberto Valdivia — siguiente paso', () => 
     // message and returns the WHOLE FAQ, so the "sin costo" entry is in front of the model
     // on almost every treatment question — the rule is what keeps it out of the reply.
     expect(text, text).not.toMatch(/sin costo|gratis|gratuita|no tiene costo|sin cargo/);
+  }, 120_000);
+});
+
+// ── Zona fuera de la lista: la "paoada" no es patas de gallo (2026-09-01) ──
+// Hilo real (campaña a05, Facebook): el lead escribió "paoada" (papada) y el bot contestó
+// como si fuera patas de gallo — precio de bótox incluido. La zona correcta ni siquiera
+// faltaba en la config: las Enzimas Lipolíticas ($2,200) son el tratamiento de grasa
+// localizada. La regla nueva de houseRules ("# Zona o tratamiento fuera de tu lista")
+// prohíbe encajar una zona ausente de la lista en la más parecida; lo aceptable es
+// contestar papada (enzimas) o aclarar en una línea qué zona quiso decir.
+//
+// El caso corre bajo la variante a05 CONGELADA al día del incidente
+// (heriberto-a05-incident.ts, no sincronizada a propósito — la jornada se borra de prod
+// el 8 de sep) y por el merge real (turn.promptVariant → resolveEffectiveOverrides), que
+// además prueba de paso que houseRules de la base sobrevive a la variante. El mensaje
+// literal del incidente no reprodujo la falla (ver MEDIDO en el header); lo que sí es la
+// respuesta seca "La paoada" al menú de zonas — realista (los leads contestan menús con
+// una palabra) y roja en la mitad de las corridas sin la regla.
+const A05_VARIANT = { offering: INCIDENT_A05_OFFERING, qualificationNotes: INCIDENT_A05_QUALIFICATION_NOTES };
+const withA05 = (t: TenantContext): TenantContext => ({
+  ...t,
+  config: { ...t.config, promptVariants: { a05: A05_VARIANT } },
+});
+// El incidente fue un lead de Facebook: sin teléfono, variante pineada first-touch.
+const a05Turn: TurnContext = {
+  ghlConversationId: 'conv_eval_heriberto_a05',
+  ghlContactId: 'contact_eval_heriberto_a05',
+  channel: 'facebook',
+  promptVariant: 'a05',
+};
+const rcA05 = (tenant: TenantContext) =>
+  buildAgentRequestContext({ tenant: withA05(tenant), turn: a05Turn, provider: evalProvider, model: evalModel, llmApiKey: evalApiKey });
+
+describe.skipIf(!evalApiKey)('Dr. Heriberto Valdivia — zona fuera de la lista', () => {
+  it('"tratamiento de la paoada" → papada (enzimas o aclaración), nunca la zona más parecida', async () => {
+    const res = await buildFrontDeskAgent().generate(
+      [
+        { role: 'user', content: 'OCTUBRE' },
+        {
+          role: 'assistant',
+          content:
+            '¡Hola! Soy Sofía, del consultorio del Dr. Heriberto Valdivia. Si tienes un evento en octubre, el bótox tarda de 10 a 14 días en asentarse, así que aplicándolo entre el 1 y el 7 de septiembre vas con buen margen. ¿Qué zona te interesa: frente, entrecejo, patas de gallo o todo el rostro?',
+        },
+        { role: 'user', content: 'La paoada' },
+      ],
+      { requestContext: rcA05(tenantFor('zone-list')) },
+    );
+    const text = reply(res);
+    expect(text, text).toMatch(/papada/);
+    expect(text, text).not.toMatch(/patas de gallo/);
+    // $2,000 es el precio de bótox de entrecejo/patas de gallo — pegárselo a la papada
+    // es exactamente el incidente. El precio correcto, si lo da, es $2,200 (enzimas).
+    expect(text, text).not.toMatch(/\$\s?2[,.]?000\b/);
   }, 120_000);
 });
