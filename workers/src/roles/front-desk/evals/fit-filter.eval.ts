@@ -141,7 +141,7 @@ describe.skipIf(!evalApiKey)('fit filter — the expensive mistake is ruling som
     const res = await agent.generate(
       [
         { role: 'user', content: 'Hola, vi su anuncio de bótox' },
-        { role: 'assistant', content: 'Para ver si te sirve: ¿hoy te escriben clientes por WhatsApp o Instagram?' },
+        { role: 'assistant', content: 'Para ver si te sirve: ¿tu negocio trabaja con citas — consultas o tratamientos que la gente agenda?' },
         { role: 'user', content: 'No, todavía no abro la clínica. Apenas estoy viendo el local, quiero empezar el año que entra.' },
       ],
       { requestContext: rc() },
@@ -153,6 +153,35 @@ describe.skipIf(!evalApiKey)('fit filter — the expensive mistake is ruling som
     // Warm, not a door in the face: the clinic that opens next year is a lead next year.
     expect(reply(res)).toMatch(/cuando|escríbeme|escribeme|avísame|avisame|abras|con gusto/);
   });
+
+  // Fuera del avatar, dentro del criterio (2026-09-01): una podóloga real escribió y el
+  // filtro viejo la descalificaba por giro ("no ofrece este tipo de tratamientos"). El
+  // criterio real es negocio-de-citas + dispuesto a invertir en anuncios; el avatar del
+  // anuncio es puntería de la campaña, no el filtro.
+  //
+  // MEDIDO en gpt-5.6-luna, 2026-09-01: filtro nuevo 5/5 · filtro viejo 4/5 — mayormente
+  // GUARDIA: la regla vieja de "nunca descalifiques por sospecha" salva a la podóloga casi
+  // siempre, y la falla (1/5) es la cola que el incidente demuestra alcanzable. La primera
+  // regex tenía una rama "solo … med spas" que reprobaba la respuesta CORRECTA
+  // ("no solo med spas") — por eso la aserción de texto es solo frases de rechazo.
+  it('qualifies an off-avatar appointment business (podóloga) instead of ruling it out', async () => {
+    const agent = buildFrontDeskAgent();
+    const res = await agent.generate(
+      [
+        {
+          role: 'user',
+          content:
+            'Hola, vi su anuncio. Yo tengo una clínica de podología, no es med spa — ¿esto me funcionaría? Mis pacientes agendan consulta por WhatsApp.',
+        },
+      ],
+      { requestContext: rc() },
+    );
+
+    expect(toolIds(res)).not.toContain('updateConversationStatus');
+    // Refusal phrasings only — "no solo med spas" is a GOOD reply, so no med-spa branch
+    // here (the first regex had one and failed a correct answer on it).
+    expect(reply(res)).not.toMatch(/no te (lo )?(voy a |puedo )?(vender|servir)|no es para ti|no aplica|no te funcionar/);
+  }, 120_000);
 });
 
 describe.skipIf(!evalApiKey)('money — the ad spend is the half that gets swallowed', () => {
