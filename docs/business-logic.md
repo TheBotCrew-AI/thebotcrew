@@ -1234,6 +1234,26 @@ Short log of *why* certain rules exist, so they aren't "simplified away" later.
   `getAvailability` can't tell "taken by someone else" from "taken because I just booked it."
   Fix: the **already-booked guard** (§5) — inject the contact's active future appointment at
   turn start and forbid re-checking/re-offering. Conversation `8pfXVxb3mTjh9j49RCXE`.
+- **2026-09-02 — double-run guard dropped a second message sent mid-generation.** Heriberto
+  lead (conv `d9fb8d8f`, FB, variant a05): "3 45" fired turn A at the debounce alarm; **24 s
+  later** "¿Puede ser valoración sin costo?" landed while A was still calling the model. The DO
+  keeps accepting `scheduleTurn` while an alarm awaits the network, so turn B was stored and
+  its own 15 s alarm armed. A's reply (which never saw the question) was logged 1 s AFTER B's
+  inbound. When B's alarm fired, the guard shipped on 2026-08-27 (`hasReplyAfter`: "any outbound
+  after this inbound → another run already answered") read A's reply as B's answer and skipped B
+  with `run_superseded {reason:'already_answered'}`. The question was never answered; Leo
+  replied by hand from Business Suite (invisible to the platform — only GHL `source:'app'`
+  counts as a human). Not rare: **22 events in the guard's six days**, every one with the same
+  shape (previous inbound < 60 s before, bot reply 1–3 s after the dropped message), none a
+  genuine double-run; the dropped message only surfaces if the lead writes again (it's in the
+  next turn's history), so the real losses were the threads that went quiet — a name+phone for
+  a booking, "Me pueden enviar dirección", "el costo de la aplicación en entrecejo". Root cause:
+  the guard's premise ("nothing legitimate replies after an inbound before its turn") ignores
+  the in-flight previous turn. Fix (0060): a run writes `turn_answered {messageId}` right before
+  its first send and the guard asks `wasAnsweredByRun(conversationId, messageId)` — "did a run
+  that HAD this message in its history reply?" — which is exactly what a genuine double-run
+  (same messageId) still trips. `hasReplyAfter` stays only in the resume gate (§3), where the
+  bot is paused and the only reply that can follow the inbound is a human's.
 
 ## 8. Info gaps — what the bot could not answer, per tenant (0054)
 

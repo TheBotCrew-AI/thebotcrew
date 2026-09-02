@@ -280,7 +280,9 @@ export type BotEventType =
   | 'reactivation_exhausted'
   // Interest tag written on the GHL contact ({service, tag}, 0058). Repeats when the
   // lead names the same treatment again — adding an existing tag in GHL is a no-op.
-  | 'interest_tagged';
+  | 'interest_tagged'
+  /** A run that had this inbound in its history logged its reply (0060). The double-run guard's key. */
+  | 'turn_answered';
 
 export interface LogAppointmentParams {
   p_client_id: string;

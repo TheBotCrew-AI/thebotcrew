@@ -68,8 +68,12 @@ Turn durability: **turns now run through a per-conversation Durable Object** (`C
 then hands the turn to `ConversationDO.scheduleTurn()` **inside `ctx.waitUntil`, after answering GHL** (since
 2026-08-27: awaiting the DO in the request put its latency on GHL's ~10 s timeout — a stalled
 `scheduleTurn` got the request canceled and the turn lost). A failed RPC is retried once before the in-request fallback, and `runAgentTurn` stands down
-if an outbound already exists after its inbound (`run_superseded {reason:'already_answered'}`) — the
-double-run guard for the one case two schedulers can reach the same message. `scheduleTurn` stores the turn and arms a **durable 15s Alarm**
+if a run already answered **this** message (`run_superseded {reason:'already_answered'}`) — the
+double-run guard for the one case two schedulers can reach the same message. Its key is the
+`turn_answered {messageId}` event a run writes right before its first send (0060, `wasAnsweredByRun`),
+**not** "any outbound after the inbound": the previous message's turn keeps generating while a new
+inbound lands, so its reply sits after that inbound without having seen it — that reading dropped
+22 lead messages in six days (2026-08-28 → 09-02; see business-logic §7 incidents). `scheduleTurn` stores the turn and arms a **durable 15s Alarm**
 (each new inbound resets it → debounce/coalescing). On the alarm the DO runs `runAgentTurn`.
 Because a DO instance is single-threaded, all processing for a conversation is **serialized**
 (kills the double-run / self-block-on-booking class), and the Alarm is **durable** (kills the
@@ -261,7 +265,12 @@ supabase/
                                #      arranca en la medianoche local de mañana (zona del tenant), un rango que termina antes
                                #      devuelve nota `too_soon` sin tocar GHL, book/reschedule rechazan el slot resuelto con
                                #      `booking_failed` too_soon aunque GHL lo tenga libre, y el prompt nombra el primer día
-                               #      disponible pre-calculado. Heriberto = 1. Ver business-logic §5)
+                               #      disponible pre-calculado. Heriberto = 1. Ver business-logic §5),
+                               # 0060 turn_answered_event (el double-run guard ya no tira mensajes: el turno emite
+                               #      `turn_answered {messageId}` antes del primer envío y el guard busca ESE evento por
+                               #      messageId, no "cualquier outbound después del inbound" — el turno del mensaje
+                               #      anterior seguía generando y su respuesta caía después del nuevo. Migración PRIMERO,
+                               #      Worker después: al revés el CHECK rechaza el evento en silencio)
   clients.sql, seed-tenants.sql# seeds (run by `supabase db reset` per config.toml)
 sites/                         # client marketing sites: static HTML, no build step, no deps
   _template/                   # starting point for a new client

@@ -1434,6 +1434,29 @@ export async function hasReplyAfter(conversationId: string, messageId: string): 
 }
 
 /**
+ * True once a run that had `messageId` in its history logged a reply — the `turn_answered`
+ * event `runAgentTurn` writes right before sending (0060). This is the double-run guard's
+ * key, and deliberately NOT "any outbound after the inbound" (`hasReplyAfter`): the previous
+ * message's turn keeps generating while a new inbound lands, so its reply sits after the new
+ * inbound without having seen it. That false positive dropped 22 lead messages in six days
+ * (2026-08-28 → 09-02) as `run_superseded {reason:'already_answered'}`. A genuine double-run
+ * (DO alarm + fallback, or DO + GHL-retry recovery) carries the SAME messageId, so the second
+ * run still sees the first one's event. `hasReplyAfter` stays correct for the resume gate,
+ * where the bot is paused and the only possible reply after the inbound is a human's.
+ */
+export async function wasAnsweredByRun(conversationId: string, messageId: string): Promise<boolean> {
+  const supabase = getSupabase();
+  const { count, error } = await supabase
+    .from('bot_events')
+    .select('id', { count: 'exact', head: true })
+    .eq('conversation_id', conversationId)
+    .eq('event_type', 'turn_answered')
+    .eq('metadata->>messageId', messageId);
+  fail('wasAnsweredByRun', error);
+  return (count ?? 0) > 0;
+}
+
+/**
  * Check if a GHL message ID belongs to a bot message in our DB.
  * Belt-and-suspenders guard in the outbound handler — primary filter is source==='api'.
  */

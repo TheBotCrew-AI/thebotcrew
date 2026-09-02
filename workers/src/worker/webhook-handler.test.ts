@@ -66,6 +66,8 @@ beforeEach(() => {
   vi.mocked(q.isBotSuppressed).mockResolvedValue(false);
   vi.mocked(q.isHumanActive).mockResolvedValue(false);
   vi.mocked(q.isLatestInboundMessage).mockResolvedValue(true);
+  vi.mocked(q.wasAnsweredByRun).mockResolvedValue(false);
+  vi.mocked(q.hasReplyAfter).mockResolvedValue(false);
   vi.mocked(q.loadRecentMessages).mockResolvedValue([]);
   vi.mocked(q.logBotEvent).mockResolvedValue(undefined);
   vi.mocked(q.cancelFollowUps).mockResolvedValue(undefined);
@@ -689,27 +691,53 @@ describe('handleInboundWebhook — Durable Object scheduling is off the request 
 
 describe('runAgentTurn — double-run guard', () => {
   // The DO alarm and the in-request fallback (or a GHL-retry recovery) can both reach the
-  // same message. Whichever runs second must see the first one's reply and stand down.
-  it('skips generation when an outbound already exists after this inbound', async () => {
-    vi.mocked(q.hasReplyAfter).mockResolvedValue(true);
+  // same message. Whichever runs second must see the first one's `turn_answered` and stand
+  // down. The key is that event, keyed by messageId — NOT "any outbound after the inbound".
+  const turn = (agent: Agent) => runAgentTurn({
+    agent, conversationId: 'cv-uuid', messageId: 'msg-uuid', tenant: tenant(),
+    parsed: parseInboundWebhook(inbound as never)!, phone: '+521', debounced: true,
+  });
+
+  it('skips generation when a run already answered THIS message', async () => {
+    vi.mocked(q.wasAnsweredByRun).mockResolvedValue(true);
     const agent = agentReplying();
-    const res = await runAgentTurn({
-      agent, conversationId: 'cv-uuid', messageId: 'msg-uuid', tenant: tenant(),
-      parsed: parseInboundWebhook(inbound as never)!, phone: '+521', debounced: true,
-    });
+    const res = await turn(agent);
     expect(res.body).toMatchObject({ skipped: 'already_answered' });
     expect(agent.generate).not.toHaveBeenCalled();
     expect(ghl.sendMessage).not.toHaveBeenCalled();
+    expect(q.wasAnsweredByRun).toHaveBeenCalledWith('cv-uuid', 'msg-uuid');
     expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'run_superseded', expect.objectContaining({ reason: 'already_answered' }));
   });
 
-  it('runs normally when nothing replied after the inbound', async () => {
-    vi.mocked(q.hasReplyAfter).mockResolvedValue(false);
+  // Heriberto 2026-09-02 (conv d9fb8d8f): "3 45" fired turn A; 24 s later "¿Puede ser
+  // valoración sin costo?" landed while A was still generating. A's reply — which never saw
+  // the question — was logged AFTER the question's inbound, and the old guard
+  // (`hasReplyAfter`: any outbound after this inbound) read that as "already answered".
+  // The question's turn never ran. 22 messages dropped this way in six days.
+  it('runs when an outbound exists after the inbound but no run answered this message (in-flight previous turn)', async () => {
+    vi.mocked(q.hasReplyAfter).mockResolvedValue(true);
+    vi.mocked(q.wasAnsweredByRun).mockResolvedValue(false);
     const agent = agentReplying();
-    const res = await runAgentTurn({
-      agent, conversationId: 'cv-uuid', messageId: 'msg-uuid', tenant: tenant(),
-      parsed: parseInboundWebhook(inbound as never)!, phone: '+521', debounced: true,
-    });
+    const res = await turn(agent);
+    expect(res.body).toMatchObject({ replied: true });
+    expect(agent.generate).toHaveBeenCalledTimes(1);
+    expect(ghl.sendMessage).toHaveBeenCalled();
+    expect(q.hasReplyAfter).not.toHaveBeenCalled();
+    expect(q.logBotEvent).not.toHaveBeenCalledWith('client1', 'conv1', 'run_superseded', expect.anything());
+  });
+
+  it('a run that replies claims its message with turn_answered {messageId} BEFORE the first send', async () => {
+    const order: string[] = [];
+    vi.mocked(q.logBotEvent).mockImplementation(async (_c, _cv, type) => { order.push(`event:${type}`); });
+    vi.mocked(ghl.sendMessage).mockImplementation(async () => { order.push('send'); return { ghlMessageId: 'g1' } as never; });
+    await turn(agentReplying());
+    expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'turn_answered', { messageId: 'msg-uuid' });
+    expect(order.indexOf('event:turn_answered')).toBeLessThan(order.indexOf('send'));
+  });
+
+  it('runs normally when nothing answered the inbound', async () => {
+    const agent = agentReplying();
+    const res = await turn(agent);
     expect(res.body).toMatchObject({ replied: true });
     expect(agent.generate).toHaveBeenCalledTimes(1);
   });

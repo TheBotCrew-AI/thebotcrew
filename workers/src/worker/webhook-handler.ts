@@ -40,6 +40,7 @@ import {
   setActiveRole,
   getHumanActiveUntil,
   hasReplyAfter,
+  wasAnsweredByRun,
   isBotSuppressed,
   isHumanActive,
   isLatestInboundMessage,
@@ -553,10 +554,12 @@ export async function runAgentTurn({
     // Double-run guard. Two schedulers can converge on one message — the DO alarm and the
     // in-request fallback (when the DO RPC fails AFTER the DO committed), or the DO alarm
     // and a GHL-retry recovery (when only the turn_scheduled write failed). Both pass the
-    // latest-message check above, since it IS the same message. Nothing legitimate replies
-    // after an inbound before its turn (follow-ups are cancelled on inbound; a human reply
-    // opens the pause), so an outbound after it means the other run already answered.
-    if (await hasReplyAfter(conversationId, messageId)) {
+    // latest-message check above, since it IS the same message. The key is the
+    // `turn_answered` event a run writes for ITS messageId before sending — not "any outbound
+    // after this inbound": the previous message's turn keeps generating while this inbound
+    // lands, and its reply (which never saw this message) sits after it in `messages`.
+    // That reading dropped 22 lead messages in six days (2026-08-28 → 09-02).
+    if (await wasAnsweredByRun(conversationId, messageId)) {
       console.log(`[debounce] skip conv=${parsed.conversationId} — already answered by another run`);
       await logBotEvent(tenant.clientId, parsed.conversationId, 'run_superseded', { messageId, reason: 'already_answered' });
       return { status: 200, body: { skipped: 'already_answered', conversationId } };
@@ -1113,6 +1116,10 @@ export async function runAgentTurn({
   // Split into separate messages on paragraph breaks; send each with a short
   // human-like gap. Each part is its own logged + tracked outbound message.
   const parts = splitIntoMessages(reply);
+  // Claim this inbound as answered BEFORE the first send, so a concurrent run for the same
+  // messageId (double-run guard above) stands down as early as possible. Awaited: a
+  // fire-and-forget write can lose the race it exists to settle.
+  await logBotEvent(tenant.clientId, parsed.conversationId, 'turn_answered', { messageId });
   // May be corrected mid-loop if GHL merged the webhook contactId away (see resolvedContactId).
   let sendContactId = parsed.contactId;
   for (const [i, part] of parts.entries()) {
