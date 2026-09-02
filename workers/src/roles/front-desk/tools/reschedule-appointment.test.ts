@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { TenantContext, TurnContext } from '../../../core/types.js';
 
 const ghl = { getAvailability: vi.fn(), rescheduleAppointment: vi.fn(), getContactAppointments: vi.fn(), updateContactTimezone: vi.fn() };
@@ -209,5 +209,39 @@ describe('rescheduleAppointment — dropped timezone offset (2026-07-30 regressi
     expect(ghl.rescheduleAppointment).not.toHaveBeenCalled();
     expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'booking_failed',
       expect.objectContaining({ reason: 'slot_unavailable' }));
+  });
+});
+
+// 0059: minimum notice on a move, same guard as booking — a move to today is refused.
+describe('rescheduleAppointment — minimum notice (0059)', () => {
+  const NOW = Date.parse('2026-09-02T15:00:00Z'); // 09:00 Wed CDMX
+  const TODAY_SLOT = '2026-09-02T17:00:00.000Z'; // 11:00 a.m. today
+  const TOMORROW_SLOT = '2026-09-03T17:00:00.000Z';
+  const noticeCtx = (bookingMinNoticeDays: number | null) => {
+    const base = makeCtx();
+    const tenant = base.requestContext.get('tenant') as TenantContext;
+    const t = { ...tenant, config: { ...(tenant.config as object), bookingMinNoticeDays } } as unknown as TenantContext;
+    return { requestContext: { get: (k: string) => (k === 'tenant' ? t : base.requestContext.get(k)) } };
+  };
+  let nowSpy: ReturnType<typeof vi.spyOn>;
+  beforeEach(() => {
+    nowSpy = vi.spyOn(Date, 'now').mockReturnValue(NOW);
+    vi.mocked(q.loadAppointmentLog).mockResolvedValue([appt({ appointmentDatetime: '2026-09-05T17:00:00.000Z' })] as never);
+  });
+  afterEach(() => nowSpy.mockRestore());
+
+  it('moving to a free slot today → refused with too_soon, never moved', async () => {
+    ghl.getAvailability.mockResolvedValue([{ start: TODAY_SLOT, end: TODAY_SLOT }]);
+    const res = await run(TODAY_SLOT, noticeCtx(1));
+    expect(res.rescheduled).toBe(false);
+    expect(res.message).toContain('demasiado pronto');
+    expect(ghl.rescheduleAppointment).not.toHaveBeenCalled();
+    expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'booking_failed', expect.objectContaining({ stage: 'reschedule', reason: 'too_soon' }));
+  });
+
+  it('moving to tomorrow → allowed', async () => {
+    ghl.getAvailability.mockResolvedValue([{ start: TOMORROW_SLOT, end: TOMORROW_SLOT }]);
+    const res = await run(TOMORROW_SLOT, noticeCtx(1));
+    expect(res.rescheduled).toBe(true);
   });
 });

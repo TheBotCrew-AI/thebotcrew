@@ -15,6 +15,7 @@ import { getActiveDemoSession, logAppointment, logBotEvent, setSimulatedBooking 
 import { resolveAgentContext } from './agent-context.js';
 import { resolveActiveAppointment } from './resolve-appointment.js';
 import { bookingQueryWindow, resolveBookableSlot } from './booking-time.js';
+import { earliestBookableMs } from './booking-window.js';
 import { simSlotLabel, simulatedSlots } from './demo-sim.js';
 import { slotLabel } from './slot-label.js';
 
@@ -121,6 +122,23 @@ export const rescheduleAppointmentTool = createTool({
         error: msg,
       });
       return { rescheduled: false, message: 'No pude verificar la disponibilidad en este momento. Intenta de nuevo.' };
+    }
+
+    // Minimum notice on the RESOLVED instant (same as booking): a move to today is refused.
+    const minMs = earliestBookableMs(now, config.bookingMinNoticeDays, config.timezone);
+    if (minMs != null && Date.parse(canonicalStart) < minMs) {
+      await logBotEvent(tenant.clientId, turn.ghlConversationId, 'booking_failed', {
+        stage: 'reschedule',
+        serviceName,
+        calendarId,
+        startTime: canonicalStart,
+        reason: 'too_soon',
+        minNoticeDays: config.bookingMinNoticeDays,
+      });
+      return {
+        rescheduled: false,
+        message: `Ese horario es demasiado pronto: se agenda con mínimo ${config.bookingMinNoticeDays} día(s) de anticipación. Ofrece un horario a partir del primer día disponible.`,
+      };
     }
 
     // Horizon is enforced on the RESOLVED instant, not the model's string (same as booking).

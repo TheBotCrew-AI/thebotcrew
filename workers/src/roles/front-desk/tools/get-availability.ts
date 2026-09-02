@@ -76,8 +76,30 @@ export const getAvailabilityTool = createTool({
     // clamped here, or (if it starts entirely beyond the horizon) we return that fact so
     // the agent redirects the lead to the valid window.
     const horizon = config.bookingHorizonDays ?? null;
+    // Minimum notice (near side, same idea): with 1 day nothing before local midnight of
+    // tomorrow is queried, so a same-day slot is never on the board. The day boundary is the
+    // TENANT's calendar day — it is the business that opens tomorrow, not the lead.
+    const minNotice = config.bookingMinNoticeDays ?? null;
     // The model types fromDate/toDate in the clock it reads, so they're interpreted in frameTz.
-    const window = resolveBookingWindow(Date.now(), fromDate, toDate, horizon, frameTz);
+    const window = resolveBookingWindow(Date.now(), fromDate, toDate, horizon, frameTz, minNotice);
+
+    if (window.tooSoon && window.minMs != null) {
+      const minLabel = label(new Date(window.minMs).toISOString());
+      await logBotEvent(tenant.clientId, turn.ghlConversationId, 'availability_checked', {
+        serviceName,
+        calendarId,
+        from: new Date(window.fromMs).toISOString(),
+        to: new Date(window.toMs).toISOString(),
+        outcome: 'too_soon',
+        minNoticeDays: minNotice,
+      });
+      return {
+        slots: [],
+        note:
+          `No se agenda con menos de ${minNotice} día(s) de anticipación: el primer horario posible es a partir del ${minLabel}. ` +
+          'El rango que pediste queda antes de eso; dile al lead que para hoy no hay y ofrécele un horario a partir de ese día.',
+      };
+    }
 
     if (window.outOfHorizon && window.maxMs != null) {
       const maxLabel = label(new Date(window.maxMs).toISOString());
@@ -101,6 +123,10 @@ export const getAvailabilityTool = createTool({
       window.clamped && window.maxMs != null
         ? ` IMPORTANTE: el rango pedido excede la ventana de agendado. Solo hay cupo hasta ${label(new Date(window.maxMs).toISOString())} (próximos ${horizon} días). Si el lead pidió una fecha posterior, díselo explícitamente y ofrécele ÚNICAMENTE estos horarios.`
         : undefined;
+    const noticeNote =
+      window.liftedFrom && window.minMs != null
+        ? ` IMPORTANTE: no se agenda para hoy (mínimo ${minNotice} día(s) de anticipación): estos horarios empiezan el ${label(new Date(window.minMs).toISOString())}. Si el lead pidió hoy, díselo con claridad y ofrécele ÚNICAMENTE estos.`
+        : '';
 
     const from = new Date(window.fromMs).toISOString();
     const to = new Date(window.toMs).toISOString();
@@ -125,7 +151,7 @@ export const getAvailabilityTool = createTool({
           : 'Ofrece estos horarios al lead usando EXACTAMENTE el texto del campo "label" (ya trae el día de la semana correcto). No recalcules ni traduzcas fechas.';
       return {
         slots: labeled,
-        note: horizonNote ? baseNote + horizonNote : baseNote,
+        note: baseNote + (horizonNote ?? '') + noticeNote,
       };
     } catch (err) {
       await logBotEvent(tenant.clientId, turn.ghlConversationId, 'availability_checked', {

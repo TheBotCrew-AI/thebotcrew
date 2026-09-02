@@ -54,7 +54,7 @@ export async function loadTenantConfig(ghlLocationId: string): Promise<TenantCon
   const { data, error } = await supabase
     .from('tenant_config')
     .select(
-      'business_name, timezone, tone, services, hours, calendars, faq, enabled_roles, prompt_overrides, ai_provider, ai_model, ai_key_ref, awaiting_human_tag, pending_info_tag, follow_up_tiers, follow_up_cadence, follow_up_angles, follow_up_rounds, quiet_hours, booking_horizon_days, human_pause_minutes, enabled_channels, test_contact_ids, trigger_keywords, demo_on_keywords, demo_off_keywords, demo_prompt_overrides, keyword_variants, prompt_variants, demo_sessions_enabled, meta_capi, lead_timezone_enabled, interest_tags,' +
+      'business_name, timezone, tone, services, hours, calendars, faq, enabled_roles, prompt_overrides, ai_provider, ai_model, ai_key_ref, awaiting_human_tag, pending_info_tag, follow_up_tiers, follow_up_cadence, follow_up_angles, follow_up_rounds, quiet_hours, booking_horizon_days, booking_min_notice_days, human_pause_minutes, enabled_channels, test_contact_ids, trigger_keywords, demo_on_keywords, demo_off_keywords, demo_prompt_overrides, keyword_variants, prompt_variants, demo_sessions_enabled, meta_capi, lead_timezone_enabled, interest_tags,' +
         'tenants!inner(id, client_id, ghl_location_id, is_active)',
     )
     .eq('tenants.ghl_location_id', ghlLocationId)
@@ -108,6 +108,10 @@ export async function loadTenantConfig(ghlLocationId: string): Promise<TenantCon
       bookingHorizonDays:
         typeof row.booking_horizon_days === 'number' && row.booking_horizon_days > 0
           ? row.booking_horizon_days
+          : null,
+      bookingMinNoticeDays:
+        typeof row.booking_min_notice_days === 'number' && row.booking_min_notice_days > 0
+          ? row.booking_min_notice_days
           : null,
       humanPauseMinutes:
         typeof row.human_pause_minutes === 'number' && row.human_pause_minutes > 0

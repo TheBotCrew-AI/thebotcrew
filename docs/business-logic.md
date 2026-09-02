@@ -388,6 +388,16 @@ slots. Rules (also reinforced in the front-desk prompt):
   horizon date is also **surfaced in the prompt** (`# Fecha y hora actuales`, pre-computed — no
   model date math), so the agent sets expectations up front instead of silently offering
   near-term slots when a lead asks for a later date.
+- **Minimum notice (deterministic, per-tenant, 0059):** `tenant_config.booking_min_notice_days`
+  (int, NULL = same-day allowed) is the near-side twin of the horizon. With `1` the bot never
+  offers or books **today**: `resolveBookingWindow` lifts the queried range to **local midnight
+  of today + N in the tenant's timezone** (a calendar-day floor, not a 24-hour one — tomorrow's
+  first slot is fine even when it is 10 hours away), a range ending before that returns a
+  `too_soon` note without querying GHL, and `bookAppointment` / `rescheduleAppointment` refuse a
+  resolved slot before that instant (`booking_failed` reason `too_soon`) even if GHL has it free
+  and the lead insists. The prompt states the first bookable day as a pre-computed date, next to
+  the horizon line. The day boundary is the **tenant's** calendar day, not the lead's (§5d): it
+  is the business that opens tomorrow. Dr. Valdivia = 1 (2026-09-02, "solo a partir de mañana").
 - **Timezone:** slot labels are formatted in `tenant_config.timezone`, which **must match the
   GHL calendar's timezone** (else labels are offset — e.g. a Pacific calendar shown in CDMX is
   +1h wrong). The Bot Crew's calendar is `America/Tijuana`.

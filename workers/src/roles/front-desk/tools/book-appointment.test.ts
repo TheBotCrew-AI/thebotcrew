@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { TenantContext, TurnContext } from '../../../core/types.js';
 
 const ghl = {
@@ -413,5 +413,39 @@ describe('bookAppointment — clears the `cita-cancelada` tag', () => {
     const res = await run({ serviceName: 'Consulta', startTime: START });
     expect(res.booked).toBe(false);
     expect(ghl.removeContactTags).not.toHaveBeenCalled();
+  });
+});
+
+// 0059: minimum notice. The guard runs on the RESOLVED slot (the one GHL returned), so a
+// free same-day slot is refused with `too_soon` even though availability says it is open.
+// START is 17:00Z = 11:00 a.m. CDMX on 2026-07-10.
+describe('bookAppointment — minimum notice (0059)', () => {
+  const noticeCtx = (bookingMinNoticeDays: number | null) => {
+    const t = { ...tenant, config: { ...(tenant.config as object), bookingMinNoticeDays } } as unknown as TenantContext;
+    return { requestContext: { get: (k: string) => (k === 'tenant' ? t : k === 'turn' ? turn : undefined) } };
+  };
+  let nowSpy: ReturnType<typeof vi.spyOn>;
+  afterEach(() => nowSpy?.mockRestore());
+
+  it('a same-day slot GHL still offers → refused, booking_failed too_soon, nothing booked', async () => {
+    nowSpy = vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-07-10T15:00:00Z')); // 09:00 CDMX, same day as START
+    const res = await runWith({ serviceName: 'Consulta', startTime: START }, noticeCtx(1));
+    expect(res.booked).toBe(false);
+    expect(res.message).toContain('demasiado pronto');
+    expect(ghl.bookAppointment).not.toHaveBeenCalled();
+    expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'booking_failed', expect.objectContaining({ reason: 'too_soon', minNoticeDays: 1 }));
+  });
+
+  it('the same slot the day before → books (tomorrow is fine, even fewer than 24 h away)', async () => {
+    nowSpy = vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-07-10T04:00:00Z')); // 22:00 CDMX the previous evening
+    const res = await runWith({ serviceName: 'Consulta', startTime: START }, noticeCtx(1));
+    expect(res.booked).toBe(true);
+    expect(ghl.bookAppointment).toHaveBeenCalledWith(expect.objectContaining({ startTime: START }));
+  });
+
+  it('NULL notice → a same-day slot books as before', async () => {
+    nowSpy = vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-07-10T15:00:00Z'));
+    const res = await runWith({ serviceName: 'Consulta', startTime: START }, noticeCtx(null));
+    expect(res.booked).toBe(true);
   });
 });

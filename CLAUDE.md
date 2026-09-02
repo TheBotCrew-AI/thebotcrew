@@ -114,7 +114,8 @@ uses the service-role key, which bypasses RLS. Three rules to keep it shut:
   timing ladder + `follow_up_angles` content pool — decoupled, see docs/business-logic.md §4),
   follow-up quiet hours (`quiet_hours` jsonb `{start,end}` local, NULL = platform default
   21:00–08:00), booking horizon (`booking_horizon_days` int, NULL = no cap — deterministically
-  clamps getAvailability), the reply gates (`enabled_channels`, `test_contact_ids`,
+  clamps getAvailability) and minimum notice (`booking_min_notice_days` int, NULL = same-day
+  allowed; 1 = never today, 0059), the reply gates (`enabled_channels`, `test_contact_ids`,
   `trigger_keywords` — see GHL notes), and the **demo persona** (`demo_on_keywords` /
   `demo_off_keywords` control words + `demo_prompt_overrides` jsonb — see docs/business-logic.md)
   live in Supabase. **`demo_off_keywords[0]` is lead-facing** — the demo start announcement and
@@ -254,7 +255,13 @@ supabase/
                                #      —la misma llamada aux— devuelve además `interest` = UN nombre de services[].name, validado
                                #      en core/interest.ts, y el contacto recibe el tag `interes-<slug>` + evento interest_tagged.
                                #      Con el flag, el clasificador corre en CADA turno contestado; sin él, byte-idéntico a antes.
-                               #      Ver business-logic §9)
+                               #      Ver business-logic §9),
+                               # 0059 booking_min_notice (tenant_config.booking_min_notice_days, NULL = hoy permitido: el
+                               #      gemelo cercano del horizonte. Con 1 el bot nunca ofrece ni agenda HOY — getAvailability
+                               #      arranca en la medianoche local de mañana (zona del tenant), un rango que termina antes
+                               #      devuelve nota `too_soon` sin tocar GHL, book/reschedule rechazan el slot resuelto con
+                               #      `booking_failed` too_soon aunque GHL lo tenga libre, y el prompt nombra el primer día
+                               #      disponible pre-calculado. Heriberto = 1. Ver business-logic §5)
   clients.sql, seed-tenants.sql# seeds (run by `supabase db reset` per config.toml)
 sites/                         # client marketing sites: static HTML, no build step, no deps
   _template/                   # starting point for a new client

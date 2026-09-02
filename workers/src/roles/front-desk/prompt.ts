@@ -11,6 +11,7 @@ import { HUMAN_REPLY_PREFIX } from '../../core/model-messages.js';
 import type { DemoHandoff } from '../../core/types.js';
 import { frameTimeZone, zoneLabel, zoneSuffix } from '../../core/lead-timezone.js';
 import { zonedWallClockToMs } from './tools/booking-time.js';
+import { earliestBookableMs } from './tools/booking-window.js';
 import { slotLabel } from './tools/slot-label.js';
 import { resolveEffectiveOverrides, type FrontDeskConfig } from './config.js';
 
@@ -382,6 +383,24 @@ Hay ${config.faq.length} respuestas oficiales cargadas y NO están en este promp
       `\nSolo puedes agendar dentro de los próximos ${config.bookingHorizonDays} días` +
       (maxReadable ? ` (hasta el ${maxReadable})` : '') +
       `. Si el lead pide una fecha posterior (p. ej. "la próxima semana"), díselo con claridad —que solo hay cupo hasta esa fecha— y ofrécele el horario más pronto disponible; nunca agendes ni ofrezcas nada fuera de esa ventana.`;
+  }
+  // Minimum notice, same treatment: the first bookable day is pre-computed here (tenant
+  // calendar day) so the agent never offers "hoy" and never does the date math itself.
+  // The tool floors the query either way — this makes the agent say so up front.
+  if (config.bookingMinNoticeDays != null && config.bookingMinNoticeDays > 0 && bookingEnabled && !usingDemo) {
+    let firstReadable = '';
+    try {
+      const firstMs = earliestBookableMs(new Date(nowIso).getTime(), config.bookingMinNoticeDays, config.timezone);
+      if (firstMs != null) {
+        firstReadable = new Intl.DateTimeFormat('es-MX', { weekday: 'long', day: 'numeric', month: 'long', timeZone: config.timezone }).format(new Date(firstMs));
+      }
+    } catch {
+      /* fall back to the day count without a date */
+    }
+    horizonLine +=
+      `\nNo ofrezcas ni agendes nada para hoy: se agenda con mínimo ${config.bookingMinNoticeDays} día(s) de anticipación` +
+      (firstReadable ? `, así que el primer día disponible es el ${firstReadable}` : '') +
+      '. Si el lead pide hoy, díselo con claridad y ofrécele el horario más pronto a partir de ese día.';
   }
 
   // Reminder-number handling: GHL sends confirmation/reminder templates to the contact's

@@ -733,3 +733,31 @@ describe('buildFrontDeskInstructions — demo on FB/IG (no phone on the contact)
     expect(out).toContain('No tenemos número de WhatsApp');
   });
 });
+
+// 0059: the first bookable day is pre-computed into the prompt (tenant calendar day), so
+// the agent says "no hoy" up front and never does the date math. NOW is 2026-07-02 (a
+// Thursday) 10:00 in Mexico City → the first day is Friday July 3.
+describe('buildFrontDeskInstructions — minimum notice (0059)', () => {
+  it('adds the no-same-day line with the first bookable day', () => {
+    const out = buildFrontDeskInstructions(cfg({ bookingMinNoticeDays: 1 }), NOW);
+    expect(out).toContain('No ofrezcas ni agendes nada para hoy');
+    expect(out).toContain('el primer día disponible es el viernes, 3 de julio');
+  });
+
+  it('composes with the horizon line', () => {
+    const out = buildFrontDeskInstructions(cfg({ bookingMinNoticeDays: 1, bookingHorizonDays: 7 }), NOW);
+    expect(out).toContain('Solo puedes agendar dentro de los próximos 7 días');
+    expect(out).toContain('No ofrezcas ni agendes nada para hoy');
+  });
+
+  it('absent by default and suppressed in demo mode', () => {
+    expect(buildFrontDeskInstructions(cfg(), NOW)).not.toContain('No ofrezcas ni agendes nada para hoy');
+    const demo = buildFrontDeskInstructions(
+      cfg({ bookingMinNoticeDays: 1, demoPromptOverrides: { identity: 'Otra clínica' } }),
+      NOW,
+      undefined,
+      'demo',
+    );
+    expect(demo).not.toContain('No ofrezcas ni agendes nada para hoy');
+  });
+});

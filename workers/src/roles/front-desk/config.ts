@@ -118,6 +118,9 @@ export const frontDeskConfigSchema = z.object({
   promptVariants: z.record(z.string(), promptVariantSchema).nullable().default(null),
   /** Max days ahead the bot may look for / offer slots. null = no cap. Enforced in getAvailability. */
   bookingHorizonDays: z.number().int().positive().nullable().default(null),
+  /** Min calendar days of notice: 1 = never today, first slot from local midnight of tomorrow.
+   *  null = same-day allowed. Enforced in getAvailability / bookAppointment / rescheduleAppointment. */
+  bookingMinNoticeDays: z.number().int().positive().nullable().default(null),
   /** Show times in the lead's zone (remote-service tenants only). See core/lead-timezone.ts. */
   leadTimezoneEnabled: z.boolean().default(false),
 });
@@ -175,6 +178,7 @@ export function parseFrontDeskConfig(raw: RawTenantConfig): FrontDeskConfig {
     demoPromptOverrides: raw.demoPromptOverrides ?? null,
     promptVariants: raw.promptVariants ?? null,
     bookingHorizonDays: raw.bookingHorizonDays ?? null,
+    bookingMinNoticeDays: raw.bookingMinNoticeDays ?? null,
     leadTimezoneEnabled: raw.leadTimezoneEnabled === true,
   });
 }

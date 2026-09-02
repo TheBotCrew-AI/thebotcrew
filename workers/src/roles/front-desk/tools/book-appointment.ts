@@ -14,6 +14,7 @@ import { queueCapiEvent } from '../../../meta/capi.js';
 import { resolveAgentContext } from './agent-context.js';
 import { buildAppointmentTitle } from './appointment-title.js';
 import { bookingQueryWindow, resolveBookableSlot } from './booking-time.js';
+import { earliestBookableMs } from './booking-window.js';
 import { simSlotLabel, simulatedSlots } from './demo-sim.js';
 import { slotLabel } from './slot-label.js';
 
@@ -141,6 +142,25 @@ export const bookAppointmentTool = createTool({
       return {
         booked: false,
         message: 'No pude verificar la disponibilidad en este momento. Intenta de nuevo en un momento.',
+      };
+    }
+
+    // Minimum notice (business rule, per-tenant): never book before local midnight of
+    // today + N, even if GHL has the slot free and the lead insists. Mirrors getAvailability.
+    const minMs = earliestBookableMs(now, config.bookingMinNoticeDays, config.timezone);
+    if (minMs != null && Date.parse(canonicalStart) < minMs) {
+      await logBotEvent(tenant.clientId, turn.ghlConversationId, 'booking_failed', {
+        serviceName,
+        calendarId,
+        startTime: canonicalStart,
+        reason: 'too_soon',
+        minNoticeDays: config.bookingMinNoticeDays,
+      });
+      return {
+        booked: false,
+        message:
+          `Ese horario es demasiado pronto: se agenda con mínimo ${config.bookingMinNoticeDays} día(s) de anticipación. ` +
+          'Consulta getAvailability y ofrécele al lead un horario a partir del primer día disponible.',
       };
     }
 

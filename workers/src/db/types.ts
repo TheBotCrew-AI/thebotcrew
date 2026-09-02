@@ -32,6 +32,8 @@ export interface TenantConfigRow {
   quiet_hours: unknown;
   /** Max days ahead the bot may offer appointment slots. NULL = no cap. */
   booking_horizon_days: number | null;
+  /** Min calendar days of notice before a slot may be offered/booked (0059). NULL = today allowed. */
+  booking_min_notice_days?: number | null;
   /** Sliding human-takeover pause in minutes. NULL = platform default (5). */
   human_pause_minutes: number | null;
   lead_timezone_enabled: boolean | null;

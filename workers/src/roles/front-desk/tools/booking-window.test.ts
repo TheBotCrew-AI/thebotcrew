@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolveBookingWindow, SEVEN_DAYS_MS } from './booking-window.js';
+import { earliestBookableMs, resolveBookingWindow, SEVEN_DAYS_MS } from './booking-window.js';
 
 const NOW = Date.parse('2026-07-01T00:00:00Z');
 const DAY = 24 * 60 * 60 * 1000;
@@ -13,6 +13,9 @@ describe('resolveBookingWindow', () => {
       outOfHorizon: false,
       maxMs: null,
       clamped: false,
+      tooSoon: false,
+      minMs: null,
+      liftedFrom: false,
     });
   });
 
@@ -84,5 +87,70 @@ describe('resolveBookingWindow — tenant-local interpretation of model dates', 
   it('defaults to UTC when no timezone is passed (back-compat)', () => {
     const w = resolveBookingWindow(NOW, '2026-08-01T00:00:00', undefined, null);
     expect(w.fromMs).toBe(Date.parse('2026-08-01T00:00:00Z'));
+  });
+});
+
+// 0059: minimum notice — the near-side twin of the horizon. Same-day slots are never
+// queried: `from` is lifted to LOCAL midnight of today + N in the tenant zone.
+describe('resolveBookingWindow — minimum notice (0059)', () => {
+  const CDMX = 'America/Mexico_City'; // UTC-6, no DST
+  const NOW = Date.parse('2026-09-02T15:00:00Z'); // 09:00 Wednesday in CDMX
+  const TOMORROW_MIDNIGHT = Date.parse('2026-09-03T06:00:00Z'); // 00:00 Thursday CDMX
+
+  it('earliestBookableMs: 1 day = local midnight of tomorrow, not now + 24h', () => {
+    expect(earliestBookableMs(NOW, 1, CDMX)).toBe(TOMORROW_MIDNIGHT);
+    expect(earliestBookableMs(NOW, 1, CDMX)).not.toBe(NOW + DAY);
+  });
+
+  it('earliestBookableMs: null / 0 → no floor', () => {
+    expect(earliestBookableMs(NOW, null, CDMX)).toBeNull();
+    expect(earliestBookableMs(NOW, 0, CDMX)).toBeNull();
+  });
+
+  it('earliestBookableMs: the local day is what counts, even late at night', () => {
+    // 23:30 Wednesday CDMX is already Thursday in UTC — the floor must still be Thursday 00:00 local.
+    const late = Date.parse('2026-09-03T05:30:00Z');
+    expect(earliestBookableMs(late, 1, CDMX)).toBe(TOMORROW_MIDNIGHT);
+  });
+
+  it('earliestBookableMs: crosses a month end', () => {
+    const sep30 = Date.parse('2026-09-30T15:00:00Z');
+    expect(earliestBookableMs(sep30, 1, CDMX)).toBe(Date.parse('2026-10-01T06:00:00Z'));
+  });
+
+  it('lifts a same-day `from` to the floor and counts the default 7 days from there', () => {
+    const w = resolveBookingWindow(NOW, undefined, undefined, null, CDMX, 1);
+    expect(w.fromMs).toBe(TOMORROW_MIDNIGHT);
+    expect(w.liftedFrom).toBe(true);
+    expect(w.minMs).toBe(TOMORROW_MIDNIGHT);
+    expect(w.toMs).toBe(TOMORROW_MIDNIGHT + SEVEN_DAYS_MS);
+    expect(w.tooSoon).toBe(false);
+  });
+
+  it('a range that ends before the floor (the model asked for today) is tooSoon', () => {
+    const w = resolveBookingWindow(NOW, '2026-09-02T09:00:00', '2026-09-02T18:00:00', null, CDMX, 1);
+    expect(w.tooSoon).toBe(true);
+    expect(w.minMs).toBe(TOMORROW_MIDNIGHT);
+  });
+
+  it('a range starting tomorrow is untouched', () => {
+    const w = resolveBookingWindow(NOW, '2026-09-03T00:00:00', '2026-09-05T00:00:00', null, CDMX, 1);
+    expect(w.liftedFrom).toBe(false);
+    expect(w.tooSoon).toBe(false);
+    expect(w.fromMs).toBe(TOMORROW_MIDNIGHT);
+  });
+
+  it('composes with the horizon: floor on the near side, cap on the far side', () => {
+    const w = resolveBookingWindow(NOW, undefined, undefined, 3, CDMX, 1);
+    expect(w.fromMs).toBe(TOMORROW_MIDNIGHT);
+    expect(w.toMs).toBe(NOW + 3 * DAY);
+    expect(w.clamped).toBe(true);
+  });
+
+  it('no minimum notice → same behaviour as before (from = now)', () => {
+    const w = resolveBookingWindow(NOW, undefined, undefined, null, CDMX, null);
+    expect(w.fromMs).toBe(NOW);
+    expect(w.minMs).toBeNull();
+    expect(w.liftedFrom).toBe(false);
   });
 });

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { TenantContext, TurnContext } from '../../../core/types.js';
 
 const ghl = { getAvailability: vi.fn() };
@@ -154,5 +154,73 @@ describe('getAvailability — demo mode (simulated slots)', () => {
     });
     const res = await run({ serviceName: 'X' }, demoCtx() as ReturnType<typeof makeCtx>);
     expect(res.slots.map((s) => s.start)).not.toContain(booked);
+  });
+});
+
+// 0059: minimum notice. With 1 day the tool never queries today: the range is lifted to
+// local midnight of tomorrow, and a today-only request returns a `too_soon` note without
+// touching GHL. Clock pinned to 09:00 CDMX so "today" is unambiguous.
+describe('getAvailability — minimum notice (0059)', () => {
+  const NOW = Date.parse('2026-09-02T15:00:00Z'); // 09:00 Wed, America/Mexico_City
+  const TOMORROW_MIDNIGHT = Date.parse('2026-09-03T06:00:00Z');
+  let nowSpy: ReturnType<typeof vi.spyOn>;
+  beforeEach(() => {
+    nowSpy = vi.spyOn(Date, 'now').mockReturnValue(NOW);
+  });
+  afterEach(() => nowSpy.mockRestore());
+
+  const noticeCtx = (bookingMinNoticeDays: number | null) => {
+    const tenant = {
+      tenantId: 't1',
+      clientId: 'client1',
+      ghlLocationId: 'loc1',
+      config: {
+        businessName: 'Demo',
+        timezone: 'America/Mexico_City',
+        tone: null,
+        services: [{ name: 'Consulta', durationMin: 30 }],
+        hours: {},
+        calendars: { Consulta: 'cal1' },
+        faq: [],
+        promptOverrides: {},
+        bookingHorizonDays: null,
+        bookingMinNoticeDays,
+        leadTimezoneEnabled: false,
+      },
+    } as unknown as TenantContext;
+    const turn = { ghlContactId: 'c1', ghlConversationId: 'conv1', channel: 'whatsapp' } as TurnContext;
+    return { requestContext: { get: (k: string) => (k === 'tenant' ? tenant : k === 'turn' ? turn : undefined) } };
+  };
+
+  it('default range → GHL is asked from tomorrow 00:00 local, never from now', async () => {
+    ghl.getAvailability.mockResolvedValue([{ start: '2026-09-03T16:30:00.000Z', end: '2026-09-03T17:00:00.000Z' }]);
+    const res = await run({ serviceName: 'Consulta' }, noticeCtx(1));
+    const fromArg = new Date(ghl.getAvailability.mock.calls[0]![1] as string).getTime();
+    expect(fromArg).toBe(TOMORROW_MIDNIGHT);
+    expect(res.slots).toHaveLength(1);
+    expect(res.note).toContain('no se agenda para hoy');
+  });
+
+  it('a today-only request → too_soon note, GHL not called, event logged', async () => {
+    const res = await run({ serviceName: 'Consulta', fromDate: '2026-09-02T09:00:00', toDate: '2026-09-02T19:00:00' }, noticeCtx(1));
+    expect(res.slots).toEqual([]);
+    expect(res.note).toContain('primer horario posible');
+    expect(ghl.getAvailability).not.toHaveBeenCalled();
+    expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'availability_checked', expect.objectContaining({ outcome: 'too_soon', minNoticeDays: 1 }));
+  });
+
+  it('a request already starting tomorrow → no note, range untouched', async () => {
+    ghl.getAvailability.mockResolvedValue([]);
+    const res = await run({ serviceName: 'Consulta', fromDate: '2026-09-03T00:00:00', toDate: '2026-09-04T00:00:00' }, noticeCtx(1));
+    expect(res.note).not.toContain('no se agenda para hoy');
+    const fromArg = new Date(ghl.getAvailability.mock.calls[0]![1] as string).getTime();
+    expect(fromArg).toBe(TOMORROW_MIDNIGHT);
+  });
+
+  it('NULL notice → queries from now, as before', async () => {
+    ghl.getAvailability.mockResolvedValue([]);
+    await run({ serviceName: 'Consulta' }, noticeCtx(null));
+    const fromArg = new Date(ghl.getAvailability.mock.calls[0]![1] as string).getTime();
+    expect(fromArg).toBe(NOW);
   });
 });

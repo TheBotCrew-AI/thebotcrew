@@ -82,6 +82,8 @@ export interface RawTenantConfig {
   quietHours?: QuietHours | null;
   /** Max days ahead the bot may look for / offer appointment slots; null = no cap. */
   bookingHorizonDays?: number | null;
+  /** Min calendar days of notice before a slot may be offered/booked (0059); null = today allowed. */
+  bookingMinNoticeDays?: number | null;
   /** Sliding pause (minutes) opened by a human agent's reply; null = platform default (5). */
   humanPauseMinutes?: number | null;
   /** Render appointment times in the LEAD's timezone (0057). Off by default: right for a
