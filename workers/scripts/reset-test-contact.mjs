@@ -27,7 +27,10 @@ const TAGS = [
   'demo-completada',
   'demo-incompleta',
   'marketing-opt-out',
+  'cita-cancelada',
 ];
+// Interest tags (0058) are per service, so they are matched by prefix, not listed.
+const TAG_PREFIXES = ['interes-'];
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 const { data, error } = await supabase
@@ -81,7 +84,7 @@ const body = await got.json();
 const tagsNow = body?.contact?.tags ?? [];
 console.log(`contacto ${contactId}: vivo. etiquetas actuales: ${JSON.stringify(tagsNow)}`);
 
-const toRemove = TAGS.filter((t) => tagsNow.includes(t));
+const toRemove = tagsNow.filter((t) => TAGS.includes(t) || TAG_PREFIXES.some((p) => t.startsWith(p)));
 if (toRemove.length === 0) {
   console.log('no hay etiquetas del bot que quitar');
   process.exit(0);
