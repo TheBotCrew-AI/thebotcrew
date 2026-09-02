@@ -67,7 +67,7 @@ Run it once per channel the client uses:
 |---|---|---|
 | **Messenger** | the Facebook **Page** (check the id — not the IG lookalike) | attaches to this dataset |
 | **Instagram** | the IG business account | attaches to this dataset |
-| **WhatsApp** | the WABA / phone number GHL uses | Meta **creates a new dataset** for the WABA. Note its id → `datasets.whatsapp` |
+| **WhatsApp** | the WABA / phone number GHL uses | Meta **creates a new dataset** for the WABA. Note its id → `datasets.whatsapp`. **The wizard may not offer WhatsApp at all** — when it doesn't, create the dataset by API (§2.1b) |
 
 On the wizard's event/parameter screens pick exactly what we send:
 
@@ -75,6 +75,35 @@ On the wizard's event/parameter screens pick exactly what we send:
   Ignore that `QualifiedLead` isn't listed; the API accepts it.
 - **Parameters:** **Event ID** and **Phone**. Nothing else (email, names, city, LTV… we
   never send them and unchecked-but-sent is fine, checked-but-never-sent hurts match quality).
+
+### 2.1b The WABA dataset by API (when the wizard has no WhatsApp option)
+
+Both times we've done this (The Bot Crew 2026-08-27, Heriberto 2026-09-01) the WABA
+dataset ended up being created with a Graph call, not the wizard:
+
+```bash
+curl -s -X POST "https://graph.facebook.com/v21.0/<WABA_ID>/dataset" -d "access_token=$TOKEN"
+# → {"id":"<waba dataset id>"}  ← this goes in datasets.whatsapp
+# (a GET on the same path retrieves it if it already exists)
+```
+
+**The token that works here is NOT the Events Manager CAPI token** — that one's scopes
+are frozen at mint without WhatsApp permissions, so it 400s `(#200)`. You need a
+**system-user token minted through an app in the client's Business portfolio**:
+
+1. Business Settings → (Accounts →) **Apps** → create an app in the portfolio, with
+   access to the messaging platforms (WhatsApp).
+2. **Assign the app to the system user** (the same Conversions API System User).
+3. System users → the system user → **Generate token** → pick that app → select the
+   **three WhatsApp permissions** (`whatsapp_business_management`,
+   `whatsapp_business_messaging`, `business_management` — confirm the exact names in
+   the dialog; they're the WhatsApp-related set).
+4. Use that token in the `curl` above. The system user must also hold the WABA (§2.3).
+
+This app exists only to mint that token — no App Review, no code, and the event *sends*
+keep using the Events Manager CAPI token as before. After creating the dataset, don't
+skip its two follow-ups: assign the **new dataset** to the system user (§2.3) and grab
+its **test code** (§2.4).
 
 ### 2.2 The token (once per client)
 
@@ -225,7 +254,7 @@ row (`stage: rejected`) in `bot_events`. Match on the `error_subcode` / title.
 | `2804079` *Missing IG Account ID* | Instagram payload lacks `ig_account_id` | config lacks `instagram_business_account_id` — or a Worker older than `fcf4395` |
 | `2804132` *No WhatsApp Business Account Linked to This Dataset* | WhatsApp event sent to the page dataset | set `datasets.whatsapp` to the WABA's own dataset (§2.1) |
 | `Object with ID '<dataset>' does not exist … missing permissions` | the token's system user doesn't hold that dataset | assign the dataset to the system user (§2.3) |
-| `(#200) App does not have page_events permission` / `(#200) You do not have permission to access this field` | you called `/{page}/dataset` or `/{waba}/dataset` with the CAPI token | don't — the wizard does it without page scopes |
+| `(#200) App does not have page_events permission` / `(#200) You do not have permission to access this field` | you called `/{page}/dataset` or `/{waba}/dataset` with the Events Manager CAPI token | for `/{waba}/dataset`, mint a system-user token through a portfolio app with the WhatsApp permissions (§2.1b); for `/{page}/dataset`, don't — the Messenger/IG wizard does it without page scopes |
 | `2xx` but `eventsReceived: 0` or `messages[]` present | Meta received but didn't count / warned | read `messages` in the `capi_event_sent` row; usually a user_data problem |
 | `capi_error` stage `missing_token_secret` | no `META_CAPI_TOKEN__<SLUG>` secret | §3.1; rows stay pending and send once the secret lands |
 | `capi_error` stage `config_missing` | `meta_capi` malformed (needs `dataset_id`, `page_id`, `token_ref`) | fix the row |
@@ -233,9 +262,10 @@ row (`stage: rejected`) in `bot_events`. Match on the `error_subcode` / title.
 
 ### Things that look like fixes and aren't
 
-- **Creating a Meta app** to get page scopes. Not needed; the Events Manager wizard links
-  assets without any of that. A partner-app model is a real project (App Review) — only
-  worth it at 10+ clients.
+- **Creating a Meta app** to get **page** scopes. Not needed; the Messenger/IG wizard links
+  those assets without any of that. A partner-app model is a real project (App Review) — only
+  worth it at 10+ clients. (Distinct from the bare portfolio app of §2.1b, which mints the
+  system-user token for the WABA dataset — that one IS the working route, and needs no review.)
 - **Picking `Schedule` for bookings.** Website-only. `QualifiedLead` is the right event and
   the API accepts it even if the ads UI doesn't list it yet.
 - **Sending `page_id` "for good measure" on WhatsApp.** It triggers the page check on a
@@ -299,6 +329,11 @@ row (`stage: rejected`) in `bot_events`. Match on the `error_subcode` / title.
 `17841475598106121` on dataset `28711302635123183` (test `TEST96971`); WABA
 `1629186164979352` on its own dataset `4439936336229922` (test `TEST43188`);
 `token_ref: BOTCREW`.
+
+**Worked example — Dr. Heriberto Valdivia (2026-09-01):** Page `828779564166792` + IG
+`17841433291725132` on dataset `806185442008107` (test `TEST47637`); WABA
+`1099942989048757` on its own dataset `869033682843893` (test `TEST80036`, created via
+§2.1b — the wizard offered no WhatsApp); `token_ref: HERIBERTO`, `lead_replies_required: 1`.
 
 **Monitoring:** `[cron] run-capi: {tried,sent,failed,skipped}` once a minute in the
 Worker logs; `bot_events` `capi_error` for anything that went wrong; rows unsent after
