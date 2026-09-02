@@ -17,6 +17,17 @@ export type ChatMessage = { role: 'user'; content: string } | { role: 'assistant
  *  by the front-desk prompt — change both or the rule points at nothing. */
 export const HUMAN_REPLY_PREFIX = '[Respuesta de una persona del equipo]';
 
+/** Opens the line that stands in for a photo the lead sent: the vision description written
+ *  over the "[imagen]" placeholder (`core/describe-image.ts`). Referenced verbatim by the
+ *  front-desk prompt, which teaches it as "a picture you DID see" — change both together. */
+export const PHOTO_DESCRIPTION_PREFIX = '[Foto que mandó:';
+
+/** The stored form of a described photo, kept after the lead's caption when there was one. */
+export function photoDescriptionLine(description: string, caption = ''): string {
+  const line = `${PHOTO_DESCRIPTION_PREFIX} ${description.trim()}]`;
+  return caption.trim() ? `${caption.trim()}\n${line}` : line;
+}
+
 export function toModelMessages(history: ConversationMessage[]): ChatMessage[] {
   return history.map((m): ChatMessage => {
     if (m.senderType === 'lead') return { role: 'user', content: m.content };

@@ -1254,6 +1254,37 @@ Short log of *why* certain rules exist, so they aren't "simplified away" later.
   that HAD this message in its history reply?" — which is exactly what a genuine double-run
   (same messageId) still trips. `hasReplyAfter` stays only in the resume gate (§3), where the
   bot is paused and the only reply that can follow the inbound is a human's.
+- **2026-09-02 — the bot could not "see" a photo (media, 0046 → image descriptions).**
+  Background: until 0046 (2026-08-01) a media-only inbound (voice note, photo) was DROPPED at
+  parse — `text` was empty, the parser returned null, nothing was stored, no turn ran, and the
+  follow-up cadence kept nudging a lead who had in fact answered. 0046 stores the media URL
+  (`messages.attachments`), writes a placeholder as the content (`[nota de voz]` / `[imagen]` /
+  `[archivo adjunto]`) and, for audio, transcribes it in the turn and writes the text back over
+  the placeholder (`core/transcribe.ts`, `app_set_message_content`). Images were left as the
+  bare placeholder "so the agent could acknowledge and ask". The incident: a Heriberto lead
+  (conv `0c36fd75`, WhatsApp, a01) asked for bótox "en la parte baja de la cara como los lados
+  por la barbilla", the bot asked whether she meant the maseteros, and she answered with two
+  photos of her marionette lines. The model saw "[imagen]" twice and answered twice "no alcanzo
+  a distinguir la zona"; Leo switched the bot off and wrote the answer by hand (líneas de
+  marioneta → se valora ácido hialurónico, $5,500 → el doctor la evalúa sin costo). Fix: images
+  are now **described at ingest**, in mirror of the voice notes (`core/describe-image.ts`): one
+  vision call (fixed `gpt-5-mini`, `reasoning_effort: low`, billed as `call_kind='describe-image'`)
+  returns one to three neutral sentences — which zone, framed how, pointing at what, in the
+  trade's plain names — under a prompt that forbids the step every tenant's medical limit
+  forbids (diagnosing, recommending, judging the person). The line
+  `[Foto que mandó: …]` replaces the placeholder (the caption stays ahead of it), so every
+  later turn, the classifier, the reactivation prompt and the resume gate read text; the
+  front-desk prompt teaches the marker ("# Fotos del lead": a picture you DID see; a zone, not a
+  diagnosis; never "no puedo ver imágenes") and what a bare "[imagen]" means (unresolved: thank
+  and ask). Why describe rather than hand the image to the agent: no re-sending pixels on every
+  turn of a 20-message window, no dependence on the GHL asset URL staying alive, one place for
+  the describe-don't-diagnose rule. Failure degrades to the placeholder (`attachment_failed
+  {kind:'image', stage:'description'}`); HEIC never reaches the API. Same change closed a
+  second gap: the DO coalesces a burst into ONE turn for the LAST message and the turn resolved
+  only that message's media, so the first two of three photos sent ten seconds apart stayed
+  "[imagen]" forever (a voice note, "[nota de voz]") — the turn now also resolves the other
+  unresolved media rows of the last 30 minutes (`recentInboundAttachments` + `isUnresolvedMedia`).
+  Golden cases: `evals/photo-description.eval.ts`.
 
 ## 8. Info gaps — what the bot could not answer, per tenant (0054)
 

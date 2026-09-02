@@ -7,7 +7,7 @@
  */
 
 import { CLOSED_QUESTION_RULE, WARM_NO_RULE } from '../../core/prompt-rules.js';
-import { HUMAN_REPLY_PREFIX } from '../../core/model-messages.js';
+import { HUMAN_REPLY_PREFIX, PHOTO_DESCRIPTION_PREFIX } from '../../core/model-messages.js';
 import type { DemoHandoff } from '../../core/types.js';
 import { frameTimeZone, zoneLabel, zoneSuffix } from '../../core/lead-timezone.js';
 import { zonedWallClockToMs } from './tools/booking-time.js';
@@ -551,6 +551,19 @@ Tu papel con este contacto es de ASISTENCIA, no de venta: ya agendó.
   // very thing the team just confirmed (MADI, 2026-08-26: the 17-year-old daughter). The
   // messages are prefix-marked by `toModelMessages`; this section teaches the prefix.
   // Suppressed in demo mode: nobody from the team speaks inside a roleplay.
+  // A lead's photo reaches the model as a description line (`core/describe-image.ts`),
+  // never as pixels. Without this section the model, seeing "[Foto que mandó: …]", either
+  // apologised for not being able to see images (Heriberto, 2026-09-02: two photos of the
+  // marionette lines, two "no alcanzo a distinguir la zona") or took the description as a
+  // diagnosis. It is short and always on: a photo can arrive in any conversation.
+  const photoSection = `
+
+# Fotos del lead
+- Un mensaje del lead que empieza con "${PHOTO_DESCRIPTION_PREFIX}" es la descripción de una foto que SÍ recibiste y viste: trátala como lo que te mostró. Habla de lo que muestra como zona o rasgo ("los surcos que bajan de las comisuras hacia la barbilla"), nunca como diagnóstico ni como lo que "necesita"; qué tratamiento le conviene lo define la valoración. Si la descripción no deja clara la zona o el rasgo, confírmalo en una línea antes de dar un precio.
+- Si la descripción dice que la foto está borrosa o no se distingue, agradécela y pídele en corto que te diga con palabras qué zona es.
+- Un mensaje que dice solo "[imagen]" es una foto que no se pudo procesar: agradécela y pregunta en una línea qué te quiso mostrar.
+- PROHIBIDO decir que no puedes ver imágenes, que no alcanzas a ver la foto o pedir que la vuelva a mandar cuando ya tienes la descripción.`;
+
   const humanRepliesSection =
     hasHumanReplies && !usingDemo
       ? `\n\n# Una persona del equipo ya intervino en esta conversación — manda sobre todo lo anterior
@@ -620,7 +633,7 @@ En vez de eso AFIRMA que lo vas a confirmar, en UNA línea corta y natural — "
 - No prometas un tiempo concreto ("en 5 minutos", "hoy mismo") ni des el dato después por tu cuenta: si no lo tienes, no lo tienes.
 - No lo repitas en cada mensaje ni lo conviertas en el tema. Una vez que dijiste que lo confirmas, ya quedó: no lo vuelvas a anunciar ni a marcar por lo mismo.`}
 
-${offeringSection}${hoursSection}${flowSection}${faqSection}${houseRulesSection}${toolInstructionsSection}${reminderSection}${contactNameSection}${demoHandoffSection}${existingAppointmentSection}${humanRepliesSection}
+${offeringSection}${hoursSection}${flowSection}${faqSection}${houseRulesSection}${toolInstructionsSection}${reminderSection}${contactNameSection}${demoHandoffSection}${existingAppointmentSection}${photoSection}${humanRepliesSection}
 
 # Uso de herramientas
 Cuando necesites llamar una herramienta, NO generes texto antes de la llamada. Llama la herramienta en silencio y escribe tu respuesta al lead ÚNICAMENTE después de tener el resultado final. Un solo mensaje, sin intermedios.

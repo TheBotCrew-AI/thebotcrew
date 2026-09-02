@@ -23,7 +23,7 @@ import * as q from '../db/queries.js';
 import { findUpcomingAppointment } from '../db/upcoming-appointment.js';
 import { getAiApiKey, resolveAiApiKey } from '../core/env.js';
 import { queueCapiEvent, queueCapiStatusEvent } from '../meta/capi.js';
-import { handleInboundWebhook, runAgentTurn, splitIntoMessages, calledTool } from './webhook-handler.js';
+import { handleInboundWebhook, isUnresolvedMedia, runAgentTurn, splitIntoMessages, calledTool } from './webhook-handler.js';
 import { parseInboundWebhook } from '../ghl/webhook.js';
 
 function tenant(overrides: Partial<TenantContext> = {}): TenantContext {
@@ -69,6 +69,7 @@ beforeEach(() => {
   vi.mocked(q.wasAnsweredByRun).mockResolvedValue(false);
   vi.mocked(q.hasReplyAfter).mockResolvedValue(false);
   vi.mocked(q.loadRecentMessages).mockResolvedValue([]);
+  vi.mocked(q.recentInboundAttachments).mockResolvedValue([]);
   vi.mocked(q.logBotEvent).mockResolvedValue(undefined);
   vi.mocked(q.cancelFollowUps).mockResolvedValue(undefined);
   vi.mocked(q.reactivateConversation).mockResolvedValue(undefined);
@@ -1715,6 +1716,24 @@ describe('handleInboundWebhook — a transient failure must not silence a lead',
   });
 });
 
+describe('isUnresolvedMedia — which rows of a burst still need resolving', () => {
+  const img = [{ url: 'https://x/p.jpg', kind: 'image' as const }];
+  const aud = [{ url: 'https://x/a.ogg', kind: 'audio' as const }];
+  const file = [{ url: 'https://x/d.pdf', kind: 'file' as const }];
+  it('a bare placeholder with resolvable media', () => {
+    expect(isUnresolvedMedia('[imagen]', img)).toBe(true);
+    expect(isUnresolvedMedia('[nota de voz]', aud)).toBe(true);
+    expect(isUnresolvedMedia('[archivo adjunto]', file)).toBe(false);   // nothing we could do with it
+  });
+  it('an image row without the description line, caption or not', () => {
+    expect(isUnresolvedMedia('mira esta zona', img)).toBe(true);
+    expect(isUnresolvedMedia('mira\n[Foto que mandó: parte baja del rostro]', img)).toBe(false);
+  });
+  it('a transcribed voice note reads as ordinary text and is left alone', () => {
+    expect(isUnresolvedMedia('sí agendan citas', aud)).toBe(false);
+  });
+});
+
 describe('handleInboundWebhook — voice notes and images (0046)', () => {
   const voice = { ...inbound, body: '', attachments: ['https://x.test/a/44bbff3b.ogg'], messageId: 'gm-1' };
   const photo = { ...inbound, body: '', attachments: ['https://x.test/p.jpg'], messageId: 'gm-2' };
@@ -1763,14 +1782,91 @@ describe('handleInboundWebhook — voice notes and images (0046)', () => {
     expect(res.body).toMatchObject({ replied: true });
   });
 
-  it('an image is stored and flagged, without pretending we read it', async () => {
+  // Image mocks: fetch #1 is the GHL asset, fetch #2 the vision call.
+  const assetOk = { ok: true, headers: { get: (h: string) => (h === 'content-type' ? 'image/jpeg' : '2048') }, arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer };
+  const visionOk = (text: string) => ({
+    ok: true,
+    json: async () => ({ choices: [{ message: { content: text } }], usage: { prompt_tokens: 900, completion_tokens: 60 } }),
+  });
+  const DESC = 'Primer plano de la parte baja del rostro; se ven los surcos que bajan de las comisuras hacia la barbilla (líneas de marioneta).';
+
+  it('an image is STORED with its placeholder before anything else happens', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 500, text: async () => 'x' }));
     await handleInboundWebhook(photo, agentReplying());
     expect(q.logMessage).toHaveBeenCalledWith(expect.objectContaining({
       p_content: '[imagen]', p_attachments: ['https://x.test/p.jpg'],
     }));
+  });
+
+  it('describes the image and writes the description over the placeholder, billed as describe-image', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(assetOk).mockResolvedValueOnce(visionOk(DESC)));
+    await handleInboundWebhook(photo, agentReplying());
+
+    expect(q.setMessageContent).toHaveBeenCalledWith('msg-uuid', `[Foto que mandó: ${DESC}]`);
     expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'attachment_received',
-      expect.objectContaining({ kind: 'image', transcribed: false }));
+      expect.objectContaining({ kind: 'image', described: true, images: 1 }));
+    expect(q.logLlmUsage).toHaveBeenCalledWith(expect.objectContaining({
+      callKind: 'describe-image', provider: 'openai', keySource: 'platform',
+      usage: expect.objectContaining({ inputTokens: 900, outputTokens: 60 }),
+    }));
+  });
+
+  it('a caption sent with the photo stays ahead of the description', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(assetOk).mockResolvedValueOnce(visionOk(DESC)));
+    await handleInboundWebhook({ ...photo, body: 'esta zona' }, agentReplying());
+    expect(q.setMessageContent).toHaveBeenCalledWith('msg-uuid', `esta zona\n[Foto que mandó: ${DESC}]`);
+  });
+
+  it('a failed description keeps the placeholder, says so in the events, and still answers', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(assetOk).mockResolvedValueOnce({ ok: false, status: 502, text: async () => 'bad' }));
+    const agent = agentReplying();
+    const res = await handleInboundWebhook(photo, agent);
+
     expect(q.setMessageContent).not.toHaveBeenCalled();
+    expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'attachment_failed',
+      expect.objectContaining({ kind: 'image', stage: 'description' }));
+    expect(agent.generate).toHaveBeenCalled();
+    expect(res.body).toMatchObject({ replied: true });
+  });
+
+  it('an unsupported format (HEIC) never reaches the vision API and degrades to the placeholder', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, headers: { get: (h: string) => (h === 'content-type' ? 'image/heic' : '2048') }, arrayBuffer: async () => new Uint8Array([1]).buffer });
+    vi.stubGlobal('fetch', fetchMock);
+    await handleInboundWebhook({ ...photo, attachments: ['https://x.test/p.heic'] }, agentReplying());
+    expect(fetchMock).toHaveBeenCalledTimes(1);            // the asset only
+    expect(q.setMessageContent).not.toHaveBeenCalled();
+    expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'attachment_failed',
+      expect.objectContaining({ kind: 'image' }));
+  });
+
+  it('the earlier photos of a burst get described too (the DO only ran the turn for the last one)', async () => {
+    // Three photos ten seconds apart → one coalesced turn for gm-2. The first two rows were
+    // stored as "[imagen]" and, before this, stayed that way forever.
+    vi.mocked(q.recentInboundAttachments).mockResolvedValue([
+      { id: 'msg-earlier-1', content: '[imagen]', attachments: ['https://x.test/p1.jpg'] },
+      { id: 'msg-earlier-2', content: 'mira\n[Foto que mandó: ya descrita]', attachments: ['https://x.test/p2.jpg'] },   // resolved: skipped
+      { id: 'msg-earlier-3', content: 'y esta', attachments: ['https://x.test/p3.jpg'] },                            // caption, undescribed
+    ]);
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(assetOk).mockResolvedValueOnce(visionOk('foto actual'))
+      .mockResolvedValueOnce(assetOk).mockResolvedValueOnce(visionOk('primera foto'))
+      .mockResolvedValueOnce(assetOk).mockResolvedValueOnce(visionOk('tercera foto')));
+    await handleInboundWebhook(photo, agentReplying());
+
+    expect(q.setMessageContent).toHaveBeenCalledWith('msg-uuid', '[Foto que mandó: foto actual]');
+    expect(q.setMessageContent).toHaveBeenCalledWith('msg-earlier-1', '[Foto que mandó: primera foto]');
+    expect(q.setMessageContent).toHaveBeenCalledWith('msg-earlier-3', 'y esta\n[Foto que mandó: tercera foto]');
+    expect(q.setMessageContent).not.toHaveBeenCalledWith('msg-earlier-2', expect.anything());
+    expect(q.recentInboundAttachments).toHaveBeenCalledWith('conv1', 'msg-uuid');
+  });
+
+  it('a burst-resolve failure never blocks the turn', async () => {
+    vi.mocked(q.recentInboundAttachments).mockRejectedValue(new Error('db down'));
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(assetOk).mockResolvedValueOnce(visionOk(DESC)));
+    const agent = agentReplying();
+    const res = await handleInboundWebhook(photo, agent);
+    expect(agent.generate).toHaveBeenCalled();
+    expect(res.body).toMatchObject({ replied: true });
   });
 
   it('media cancels the follow-up cadence like any other inbound', async () => {

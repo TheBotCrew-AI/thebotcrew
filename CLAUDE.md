@@ -146,7 +146,7 @@ The agent runtime is a pnpm workspace package in `workers/` (the monorepo also h
 workers/                       # Mastra + Cloudflare Worker package (@thebotcrew/workers)
   src/
     mastra/index.ts            # Mastra instance: agents + GHL webhook route + CloudflareDeployer
-    core/                      # role interface + registry, tenant resolver, request-context, env (incl. per-tenant AI key resolution), llm-usage (token normalization), prompt-rules (wording bans shared by every role — see business-logic §6c), types
+    core/                      # role interface + registry, tenant resolver, request-context, env (incl. per-tenant AI key resolution), llm-usage (token normalization), prompt-rules (wording bans shared by every role — see business-logic §6c), transcribe + describe-image (a lead's voice note / photo → text at ingest, business-logic §7), types
     roles/
       front-desk/              # config (zod), prompt (es template), agent, tools/, evals/
       reactivation/            # text-only follow-up/reactivation agent (no tools)
@@ -200,7 +200,10 @@ supabase/
                                #      farewell still sends, the mute starts at the NEXT inbound — plus the undo:
                                #      removing the `bot-opted-out` tag clears it, one-directionally. See business-logic §2a),
                                # 0046 message_attachments (messages.attachments + app_log_message p_attachments +
-                               #      app_set_message_content: voice notes/images were DROPPED at parse — see business-logic §7),
+                               #      app_set_message_content: voice notes/images were DROPPED at parse. Audio is
+                               #      transcribed and, since 2026-09-02, images are DESCRIBED at ingest
+                               #      (core/describe-image.ts, fixed gpt-5-mini, `[Foto que mandó: …]` replaces
+                               #      "[imagen]"; the front-desk prompt teaches the marker) — see business-logic §7),
                                # 0047 local_prod_parity (no-op on prod; repairs the schema drift left by the silently
                                #      skipped 0014a–d — see "Migration numbering" below),
                                # 0048 meta_capi (per-tenant Meta Conversions API: tenant_config.meta_capi jsonb,

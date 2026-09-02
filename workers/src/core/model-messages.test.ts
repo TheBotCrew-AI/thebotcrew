@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { HUMAN_REPLY_PREFIX, hasHumanReplies, toModelMessages } from './model-messages.js';
+import { HUMAN_REPLY_PREFIX, PHOTO_DESCRIPTION_PREFIX, hasHumanReplies, photoDescriptionLine, toModelMessages } from './model-messages.js';
 import type { ConversationMessage } from './types.js';
 
 const msg = (senderType: ConversationMessage['senderType'], content: string): ConversationMessage => ({
@@ -41,5 +41,15 @@ describe('hasHumanReplies', () => {
     expect(hasHumanReplies([msg('lead', 'a'), msg('bot', 'b')])).toBe(false);
     expect(hasHumanReplies([msg('lead', 'a'), msg('human_agent', 'b')])).toBe(true);
     expect(hasHumanReplies([])).toBe(false);
+  });
+});
+
+describe('photoDescriptionLine', () => {
+  it('wraps the description in the marker the prompt teaches', () => {
+    expect(photoDescriptionLine('  parte baja del rostro  ')).toBe(`${PHOTO_DESCRIPTION_PREFIX} parte baja del rostro]`);
+  });
+  it("keeps the lead's caption first, as their own words", () => {
+    expect(photoDescriptionLine('surcos', 'esta zona')).toBe(`esta zona\n${PHOTO_DESCRIPTION_PREFIX} surcos]`);
+    expect(photoDescriptionLine('surcos', '   ')).toBe(`${PHOTO_DESCRIPTION_PREFIX} surcos]`);
   });
 });

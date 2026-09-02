@@ -651,6 +651,40 @@ export async function setMessageContent(messageId: string, content: string): Pro
   fail('setMessageContent', error);
 }
 
+/**
+ * The other inbound media rows of the last half hour — the earlier messages of a burst.
+ *
+ * The DO coalesces a rapid burst into ONE turn for the LAST message, and the turn used to
+ * resolve only that message's media, so the first two of three photos sent ten seconds
+ * apart stayed "[imagen]" for good (a voice note, "[nota de voz]"). The caller decides
+ * which rows are still unresolved — that reading needs the attachment classifier, which
+ * lives with the webhook parser, not here.
+ */
+export async function recentInboundAttachments(
+  conversationId: string,
+  excludeMessageId: string,
+  limit = 5,
+): Promise<Array<{ id: string; content: string; attachments: string[] }>> {
+  const supabase = getSupabase();
+  const since = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+  const { data, error } = await supabase
+    .from('messages')
+    .select('id, content, attachments')
+    .eq('conversation_id', conversationId)
+    .eq('direction', 'inbound')
+    .not('attachments', 'is', null)
+    .gte('sent_at', since)
+    .order('sent_at', { ascending: false })
+    .limit(limit + 1);
+  fail('recentInboundAttachments', error);
+  const rows = (data ?? []) as Array<{ id: string; content: string | null; attachments: string[] | null }>;
+  return rows
+    .filter((r) => r.id !== excludeMessageId && Array.isArray(r.attachments) && r.attachments.length > 0)
+    .map((r) => ({ id: r.id, content: r.content ?? '', attachments: r.attachments as string[] }))
+    .slice(0, limit)
+    .reverse();
+}
+
 /** Mark an outbound bot message as permanently failed (retries exhausted). */
 export async function markDeliveryFailed(messageId: string): Promise<void> {
   const supabase = getSupabase();

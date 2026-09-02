@@ -17,7 +17,7 @@ import { resolveAiApiKey } from '../core/env.js';
 import { usageFromAgentResult } from '../core/llm-usage.js';
 import { channelEnabled, hasTriggerKeywords, inTestMode, matchesDemoOff, matchesDemoOn, matchVariantKeyword, messageMatchesTrigger, resolveTenant, roleEnabled } from '../core/tenant.js';
 import { buildAgentRequestContext } from '../core/runtime-context.js';
-import { hasHumanReplies, toModelMessages } from '../core/model-messages.js';
+import { PHOTO_DESCRIPTION_PREFIX, hasHumanReplies, photoDescriptionLine, toModelMessages } from '../core/model-messages.js';
 import { cadenceForRound, totalRounds } from '../core/reactivation-rounds.js';
 import { auxReasoningEffort } from '../core/reasoning.js';
 import { timezoneFromPhone } from '../core/lead-timezone.js';
@@ -55,6 +55,7 @@ import {
   scheduleFollowUp,
   setGhlMessageId,
   setMessageContent,
+  recentInboundAttachments,
   setPromptVariant,
   updateConversationContact,
   updateConversationStatus,
@@ -66,8 +67,9 @@ import { findUpcomingAppointment } from '../db/upcoming-appointment.js';
 import { queueCapiEvent, queueCapiStatusEvent } from '../meta/capi.js';
 import { extractCapiIdentity, leadStartedDue, type CapiIdentity } from '../meta/capi-config.js';
 import { GhlClient } from '../ghl/client.js';
-import { parseInboundWebhook } from '../ghl/webhook.js';
+import { parseAttachments, parseInboundWebhook } from '../ghl/webhook.js';
 import { transcribeAudio } from '../core/transcribe.js';
+import { describeImages } from '../core/describe-image.js';
 import { demoEndTag, interestTag, STATUS_TAGS } from '../ghl/tags.js';
 import { interestPromptAddendum, matchInterest, serviceNames } from '../core/interest.js';
 import type { GhlInboundWebhook, InboundAttachment, ParsedInbound } from '../ghl/types.js';
@@ -449,67 +451,142 @@ function placeholderFor(attachments: InboundAttachment[]): string {
   return '[archivo adjunto]';
 }
 
+/** Everything the resolver needs to bill a description and name the tenant. */
+interface MediaLlm {
+  apiKey: string;
+  /** 'platform' or the tenant's ai_key_ref — recorded on the usage row. */
+  keySource: string;
+}
+
+/** One stored inbound whose media still has to become text. */
+interface MediaMessage {
+  messageId: string;
+  /** The lead's caption; empty when the message was media-only. */
+  text: string;
+  attachments: InboundAttachment[];
+}
+
+const PLACEHOLDERS = new Set(['[nota de voz]', '[imagen]', '[archivo adjunto]']);
+
+/**
+ * Whether a stored inbound's media was never resolved — read off the content, the only
+ * signal the store carries: still the bare placeholder, or an image whose row lacks the
+ * description line. A voice note that came with a caption can't be told apart once
+ * transcribed, so it counts as resolved — the rare case, and the safe reading.
+ */
+export function isUnresolvedMedia(content: string, attachments: InboundAttachment[]): boolean {
+  if (PLACEHOLDERS.has(content)) return attachments.some((a) => a.kind !== 'file');
+  return attachments.some((a) => a.kind === 'image') && !content.includes(PHOTO_DESCRIPTION_PREFIX);
+}
+
 /**
  * Turn a media-only inbound into something the agent can actually answer.
  *
- * Audio is transcribed and the transcription REPLACES the placeholder in the store, so
- * every later turn reads plain text instead of "[nota de voz]". Images are not
- * interpreted yet — the agent is told one arrived so it can acknowledge and ask,
- * which beats both silence and a guess. Never throws: media that can't be resolved
- * degrades to the placeholder.
+ * Audio is transcribed and images are described; the text REPLACES the placeholder in
+ * the store, so every later turn reads plain text instead of "[nota de voz]" / "[imagen]".
+ * Then the same is done for the earlier media of a burst (the DO coalesces a burst into
+ * one turn for the LAST message, which used to leave the others as placeholders forever).
+ * Never throws: media that can't be resolved degrades to the placeholder, and the prompt
+ * tells the agent what a bare "[imagen]" means.
  */
 async function resolveAttachments(
   parsed: ParsedInbound,
   messageId: string,
   tenant: TenantContext,
-  apiKey: string,
-): Promise<string | null> {
-  const clientId = tenant.clientId;
-  const audio = parsed.attachments.find((a) => a.kind === 'audio');
-  if (audio) {
-    // Feed the tenant's own vocabulary to the transcriber — service names are the
-    // proper nouns a generic model mangles, and a voice note is often ~1 second.
-    const services = Array.isArray(tenant.config.services)
-      ? (tenant.config.services as Array<{ name?: unknown }>)
-          .map((s) => (typeof s?.name === 'string' ? s.name : null))
-          .filter((s): s is string => !!s)
-      : [];
-    const result = await transcribeAudio(audio.url, apiKey, {
-      businessName: tenant.config.businessName,
-      terms: services,
-    });
-    if (!result) {
-      await logBotEvent(clientId, parsed.conversationId, 'attachment_failed', {
-        kind: 'audio',
-        stage: 'transcription',
-      });
-      return null;
+  llm: MediaLlm,
+): Promise<void> {
+  await resolveMediaMessage({ messageId, text: parsed.text, attachments: parsed.attachments }, parsed.conversationId, tenant, llm);
+  try {
+    const earlier = await recentInboundAttachments(parsed.conversationId, messageId);
+    for (const row of earlier) {
+      const attachments = parseAttachments(row.attachments);
+      if (!isUnresolvedMedia(row.content, attachments)) continue;
+      const text = PLACEHOLDERS.has(row.content) ? '' : row.content;
+      await resolveMediaMessage({ messageId: row.id, text, attachments }, parsed.conversationId, tenant, llm);
     }
-    // Keep the lead's words as the message; the marker tells the agent it was spoken
-    // (people are terser and less punctuated by voice) without editorializing.
-    const text = parsed.text ? `${parsed.text}\n${result.text}` : result.text;
+  } catch (e) {
+    console.error('[attachments] burst resolve failed (non-blocking):', e instanceof Error ? e.message : String(e));
+  }
+}
+
+async function resolveMediaMessage(
+  msg: MediaMessage,
+  ghlConversationId: string,
+  tenant: TenantContext,
+  llm: MediaLlm,
+): Promise<void> {
+  const clientId = tenant.clientId;
+  // Feed the tenant's own vocabulary to the model — service names are the proper nouns
+  // a generic transcriber mangles, and the zones a description should name.
+  const services = Array.isArray(tenant.config.services)
+    ? (tenant.config.services as Array<{ name?: unknown }>)
+        .map((s) => (typeof s?.name === 'string' ? s.name : null))
+        .filter((s): s is string => !!s)
+    : [];
+  const context = { businessName: tenant.config.businessName, terms: services };
+
+  const writeBack = async (text: string): Promise<void> => {
     try {
-      await setMessageContent(messageId, text);
+      await setMessageContent(msg.messageId, text);
     } catch (e) {
       console.error('[attachments] write-back failed:', e instanceof Error ? e.message : String(e));
     }
-    await logBotEvent(clientId, parsed.conversationId, 'attachment_received', {
+  };
+
+  const audio = msg.attachments.find((a) => a.kind === 'audio');
+  if (audio) {
+    // A voice note is often ~1 second — the worst case for a transcriber; the context
+    // hint is what keeps it anchored to the language and vocabulary of the business.
+    const result = await transcribeAudio(audio.url, llm.apiKey, context);
+    if (!result) {
+      await logBotEvent(clientId, ghlConversationId, 'attachment_failed', { kind: 'audio', stage: 'transcription' });
+      return;
+    }
+    // Keep the lead's words as the message; the caption (if any) stays ahead of them.
+    await writeBack(msg.text ? `${msg.text}\n${result.text}` : result.text);
+    await logBotEvent(clientId, ghlConversationId, 'attachment_received', {
       kind: 'audio',
       transcribed: true,
       durationSec: result.durationSec,
       chars: result.text.length,
     });
-    return text;
+    return;
   }
 
-  const other = parsed.attachments[0];
-  if (other) {
-    await logBotEvent(clientId, parsed.conversationId, 'attachment_received', {
-      kind: other.kind,
-      transcribed: false,
+  const images = msg.attachments.filter((a) => a.kind === 'image');
+  if (images.length > 0) {
+    const result = await describeImages(images.map((a) => a.url), llm.apiKey, context);
+    if (!result) {
+      await logBotEvent(clientId, ghlConversationId, 'attachment_failed', { kind: 'image', stage: 'description' });
+      return;
+    }
+    if (result.usage) {
+      void logLlmUsage({
+        clientId,
+        ghlConversationId,
+        callKind: 'describe-image',
+        provider: 'openai',
+        model: result.model,
+        usage: result.usage,
+        keySource: llm.keySource,
+      });
+    }
+    // The description stands in for the photo; the marker tells the agent it is a picture
+    // it DID see (the prompt teaches the prefix), and the caption stays as the lead's words.
+    await writeBack(photoDescriptionLine(result.text, msg.text));
+    await logBotEvent(clientId, ghlConversationId, 'attachment_received', {
+      kind: 'image',
+      described: true,
+      images: images.length,
+      chars: result.text.length,
     });
+    return;
   }
-  return null;
+
+  const other = msg.attachments[0];
+  if (other) {
+    await logBotEvent(clientId, ghlConversationId, 'attachment_received', { kind: other.kind, transcribed: false });
+  }
 }
 
 /** Build the closer's context from a demo session's stored lead data. */
@@ -703,7 +780,8 @@ export async function runAgentTurn({
   // than in the webhook because the webhook must ack GHL fast; the DO owns the slow work.
   if (parsed.attachments?.length && messageId) {
     try {
-      await resolveAttachments(parsed, messageId, tenant, resolveAiApiKey('openai', tenant.config.aiKeyRef).apiKey);
+      const mediaKey = resolveAiApiKey('openai', tenant.config.aiKeyRef);
+      await resolveAttachments(parsed, messageId, tenant, { apiKey: mediaKey.apiKey, keySource: mediaKey.source });
     } catch (e) {
       console.error('[attachments] resolve failed (non-blocking):', e instanceof Error ? e.message : String(e));
     }

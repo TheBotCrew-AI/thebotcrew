@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { CLOSED_QUESTION_RULE, WARM_NO_RULE } from '../../core/prompt-rules.js';
+import { PHOTO_DESCRIPTION_PREFIX } from '../../core/model-messages.js';
 import type { DemoHandoff } from '../../core/types.js';
 import { parseFrontDeskConfig } from './config.js';
 import { buildDemoEndAnnouncement, buildDemoStartAnnouncement, buildFrontDeskInstructions } from './prompt.js';
@@ -47,6 +48,15 @@ describe('buildFrontDeskInstructions', () => {
     expect(out).toContain('Lunes a Viernes: 10:30–12:30, 15:45–18:45');
     expect(out).not.toContain('Todos los días');
     expect(out).not.toContain('Sábado');
+  });
+
+  it('always teaches the photo marker: a described photo was SEEN, and is a zone, not a diagnosis', () => {
+    const out = buildFrontDeskInstructions(cfg(), NOW);
+    expect(out).toContain('# Fotos del lead');
+    expect(out).toContain(`"${PHOTO_DESCRIPTION_PREFIX}"`);
+    expect(out).toContain('nunca como diagnóstico');
+    expect(out).toContain('PROHIBIDO decir que no puedes ver imágenes');
+    expect(out).toContain('"[imagen]"');      // the unresolved placeholder has its own instruction
   });
 
   it('booking horizon → adds the clamp line', () => {
