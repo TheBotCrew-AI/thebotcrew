@@ -109,11 +109,34 @@ const OLD_GOLDEN_RULE =
  * The fixture with ONE defending rule removed, per case. Only used to prove the case
  * discriminates — the numbers in the header come from running with RULE_OFF=1.
  */
+/** The pre-2026-09-01 getAvailability instruction — the red side of the slot-contrast case. */
+const OLD_GETAVAILABILITY_WORDING = [
+  'Ofrece exactamente DOS horarios que contrasten: uno de la mañana y uno de la tarde del día más próximo que tenga ambos; si ese día solo tiene un turno, el segundo sácalo del día siguiente. Dos horarios pegados (como 10:30 y 11:00) no son una opción real. Van en un solo mensaje corto y sin lista con viñetas',
+  'Ofrece exactamente DOS horarios, en un solo mensaje corto y sin lista con viñetas',
+] as const;
+
 const tenantWithout = (
-  rule: 'medical' | 'faq-consulta' | 'drip' | 'service-name' | 'next-step' | 'consulta-hook' | 'zone-list',
+  rule: 'medical' | 'faq-consulta' | 'drip' | 'service-name' | 'next-step' | 'consulta-hook' | 'zone-list' | 'slot-contrast',
 ): TenantContext => {
   const p = HERIBERTO_PERSONA;
   const cfg = heribertoTenant.config;
+  if (rule === 'slot-contrast') {
+    const current = p.toolInstructions.getAvailability;
+    if (!current.includes(OLD_GETAVAILABILITY_WORDING[0])) throw new Error('contrast wording not found');
+    return {
+      ...heribertoTenant,
+      config: {
+        ...cfg,
+        promptOverrides: {
+          ...p,
+          toolInstructions: {
+            ...p.toolInstructions,
+            getAvailability: current.replace(OLD_GETAVAILABILITY_WORDING[0], OLD_GETAVAILABILITY_WORDING[1]),
+          },
+        },
+      },
+    };
+  }
   if (rule === 'zone-list') {
     return {
       ...heribertoTenant,
@@ -329,6 +352,41 @@ describe.skipIf(!evalApiKey)('Dr. Heriberto Valdivia — agenda la consulta, con
     expect(toolIds(res)).toContain('getAvailability');
     expect(toolArgs(res, 'getAvailability')?.serviceName).toBe('Consulta');
     expect(usesRealLabel(reply(res))).toBe(true);
+  }, 120_000);
+
+  // Contraste (2026-09-01, visto en vivo como 8:00 y 8:30): la instrucción exige un slot
+  // de la mañana y uno de la tarde; dos pegados no son una opción real.
+  //
+  // MEDIDO en gpt-5.6-luna, 2026-09-01: con regla 5/5 · sin regla 14/15 (1 falla con la
+  // pregunta del incidente; con pregunta genérica y bajo la variante a05, 10/10 verdes).
+  // Mayormente GUARDIA, y la razón importa: el ingrediente real del incidente era la LISTA
+  // de slots — el calendario de GHL no tenía disponibilidad configurada y servía un bloque
+  // continuo desde las 8:00 (sin partición mañana/tarde), donde "los dos más próximos" era
+  // la lectura natural. Con el horario partido real (arreglado en GHL ese día) el modelo
+  // contrasta casi siempre solo; la regla asegura el caso de cola y documenta la intención.
+  it('offers one morning and one afternoon slot, never two adjacent ones', async () => {
+    getAvailability.mockResolvedValue(
+      ['10:30', '11:00', '11:30', '12:00', '15:45', '16:15', '16:45', '17:15', '17:45', '18:15'].map((t) => ({
+        start: `${DAY}T${t}:00-06:00`,
+        end: `${DAY}T${t}:00-06:00`,
+      })),
+    );
+    const res = await buildFrontDeskAgent().generate(
+      [
+        { role: 'user', content: 'Hola, me interesa el botox' },
+        { role: 'assistant', content: OPENER },
+        // La pregunta del incidente (Elena, 2026-09-02 01:36): el framing de "lo más
+        // pronto" es el que empuja al modelo a los dos PRIMEROS slots del día.
+        { role: 'user', content: 'Botox en el entrecejo, ya me lo he puesto antes. Para cuando tendria lugar disponible?' },
+      ],
+      { requestContext: rc(tenantFor('slot-contrast')) },
+    );
+    const text = reply(res);
+    const MORNING = ['10:30', '11:00', '11:30', '12:00'];
+    const AFTERNOON = ['3:45', '4:15', '4:45', '5:15', '5:45', '6:15'];
+    const mentioned = [...MORNING, ...AFTERNOON].filter((t) => text.includes(t));
+    expect(mentioned.length, text).toBe(2);
+    expect(mentioned.filter((t) => MORNING.includes(t)).length, text).toBe(1);
   }, 120_000);
 });
 
