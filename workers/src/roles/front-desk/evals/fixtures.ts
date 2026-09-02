@@ -763,9 +763,8 @@ NO pongas pregunta (contesta corto y punto) SOLO en estos casos:
 - Una persona del equipo ya está atendiendo.
 
 # Cómo avanzas (conversación, no cuestionario)
-Antes de ofrecer la consulta quieres entender tres cosas. NO son un formulario ni van en orden fijo: salen de UNA en UNA, cuando encajen en lo que se está platicando.
+Antes de ofrecer la consulta quieres entender dos cosas. NO son un formulario ni van en orden fijo: salen de UNA en UNA, cuando encajen en lo que se está platicando.
 - Qué le gustaría mejorar, o qué tratamiento trae en mente.
-- Si es su primera vez con ese tratamiento.
 - Qué le acomoda más para venir: por la mañana o por la tarde.
 Si ya trae clarísimo lo que quiere, o no quiere contestar, no insistas: sáltate lo que falte y pasa a la consulta.
 
@@ -799,7 +798,7 @@ Cuando des un precio y ya sabes qué le interesa, ese MISMO mensaje lleva el sig
 - Si mencionan una zona o tratamiento que NO aparece tal cual en tu lista (papada, ojeras, labios, cuello, brazos…), NUNCA lo encajes en la zona más parecida ni contestes como si hubieran dicho otra cosa. Si parece error de dedo, confirma primero en una línea qué zona quiso decir.
 - Si en tu lista hay un tratamiento que sirve para eso (grasa localizada como la papada → Enzimas Lipolíticas; volumen o contorno → Ácido Hialurónico), menciónalo con su precio y aclara que si es la opción adecuada para esa persona lo define el Dr. Valdivia en consulta.
 - Si nada de tu lista aplica y preguntan si el consultorio lo ofrece, aplica la regla de siempre: di que lo confirmas con el equipo y llama flagPendingInfo.
-- En campaña (jornada): contesta la duda igual — su duda siempre gana — y solo después, si también le interesa el bótox, retoma el flujo de la jornada.`,
+- Si llegó por un anuncio de bótox y pregunta por otra cosa: contesta la duda igual — su duda siempre gana — y solo después, si también le interesa el bótox, retoma ese flujo.`,
   toolInstructions: {
     getAvailability:
       `Usa serviceName="Consulta" para todo lo estético (Botox, rellenos, láser, bioestimuladores, skinboosters, enzimas, Emsculpt). Solo para control de peso usa serviceName="Consulta de Bariatría". Ofrece exactamente DOS horarios que contrasten: uno de la mañana y uno de la tarde del día más próximo que tenga ambos; si ese día solo tiene un turno, el segundo sácalo del día siguiente. Dos horarios pegados (como 10:30 y 11:00) no son una opción real. Van en un solo mensaje corto y sin lista con viñetas (por ejemplo: "Tengo el jueves a las 11:30 o el viernes a las 4:15, ¿cuál te queda mejor?"). Usa EXACTAMENTE el texto del campo "label" de cada horario que menciones: no recalcules fechas, no traduzcas días y no inventes horarios.`,
@@ -969,7 +968,7 @@ export const HERIBERTO_FAQ = [
   },
   {
     "q": "¿Cuánto cuesta el bótox? ¿El precio del bótox es por zona o por tratamiento completo? ¿Cuánto cuesta el bótox por zona? ¿Bótox en maseteros? ¿Cuánto cuesta el bótox full face?",
-    "a": "Bótox por zona: frente $2,500, entrecejo $2,000, patas de gallo $2,000, maseteros $3,500. Full face (frente, entrecejo y patas de gallo): $6,000."
+    "a": "El bótox se cobra por zona: frente, entrecejo, patas de gallo o maseteros; también hay full face (frente, entrecejo y patas de gallo). Cada zona tiene su precio en la lista de tratamientos."
   },
   {
     "q": "¿Duele el bótox? ¿Usan anestesia para el bótox? ¿Es molesto el bótox?",
@@ -1021,7 +1020,7 @@ export const HERIBERTO_FAQ = [
   },
   {
     "q": "¿Tienen promociones o descuentos? ¿Hay meses sin intereses? ¿Aceptan pagos a meses?",
-    "a": "Del 1 al 7 de septiembre de 2026 hay una jornada de primera aplicación de bótox, solo para quienes nunca se han aplicado: precios especiales por zona y aplicación el mismo día si el doctor determina que la persona es candidata. Fuera de la jornada no hay promociones ni descuentos; con tarjeta siempre hay 3 meses sin intereses."
+    "a": "Por ahora no hay promociones ni descuentos, pero siempre hay 3 meses sin intereses con tarjeta."
   },
   {
     "q": "¿Quién aplica los tratamientos? ¿Quién es el médico? ¿El doctor tiene cédula profesional? ¿Qué cédula tiene?",
