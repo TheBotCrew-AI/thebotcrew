@@ -1,4 +1,4 @@
-import { CLOSED_QUESTION_RULE } from '../../core/prompt-rules.js';
+import { CLOSED_QUESTION_RULE, WARM_NO_RULE } from '../../core/prompt-rules.js';
 import { HUMAN_REPLY_PREFIX } from '../../core/model-messages.js';
 
 export interface DemoContext {
@@ -54,9 +54,10 @@ Este lead ya dejó pasar una ronda completa de seguimientos sin responder.
   // The farewell is the ONE nudge whose job is to close, not to bait a reply —
   // so the question-mandate rules and the angle machinery are swapped out, not
   // contradicted. The angle pool is bypassed by the runner (candidates = []).
-  const shapeRule = isFinalTouch
+  const shapeRule = (isFinalTouch
     ? '- Escribe exactamente UN mensaje corto y natural: máximo 2-3 oraciones. Sin párrafos largos.'
-    : '- Escribe exactamente UN mensaje corto y natural: máximo 2 oraciones + la pregunta final. Sin párrafos largos.';
+    : '- Escribe exactamente UN mensaje corto y natural: máximo 2 oraciones + la pregunta final. Sin párrafos largos.') +
+    `\n${WARM_NO_RULE}`;
   const closingRules = isFinalTouch
     ? `- NO termines con una pregunta y NO pidas respuesta. Es una despedida: cero presión y cero reproche.`
     : `- SIEMPRE termina con una pregunta directa y fácil de responder.

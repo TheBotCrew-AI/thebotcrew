@@ -431,7 +431,7 @@ describe('bookAppointment — minimum notice (0059)', () => {
     nowSpy = vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-07-10T15:00:00Z')); // 09:00 CDMX, same day as START
     const res = await runWith({ serviceName: 'Consulta', startTime: START }, noticeCtx(1));
     expect(res.booked).toBe(false);
-    expect(res.message).toContain('demasiado pronto');
+    expect(res.message).toContain('para hoy ya no hay espacio');
     expect(ghl.bookAppointment).not.toHaveBeenCalled();
     expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'booking_failed', expect.objectContaining({ reason: 'too_soon', minNoticeDays: 1 }));
   });

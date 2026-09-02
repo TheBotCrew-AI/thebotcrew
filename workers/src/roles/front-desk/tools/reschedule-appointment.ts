@@ -137,7 +137,7 @@ export const rescheduleAppointmentTool = createTool({
       });
       return {
         rescheduled: false,
-        message: `Ese horario es demasiado pronto: se agenda con mínimo ${config.bookingMinNoticeDays} día(s) de anticipación. Ofrece un horario a partir del primer día disponible.`,
+        message: `Ese horario queda antes del aviso mínimo (${config.bookingMinNoticeDays} día(s) de anticipación), así que para hoy ya no hay espacio. Díselo al lead con calidez y ofrece un horario a partir del primer día disponible.`,
       };
     }
 

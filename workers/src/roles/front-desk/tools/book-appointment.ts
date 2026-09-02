@@ -159,8 +159,8 @@ export const bookAppointmentTool = createTool({
       return {
         booked: false,
         message:
-          `Ese horario es demasiado pronto: se agenda con mínimo ${config.bookingMinNoticeDays} día(s) de anticipación. ` +
-          'Consulta getAvailability y ofrécele al lead un horario a partir del primer día disponible.',
+          `Ese horario queda antes del aviso mínimo (${config.bookingMinNoticeDays} día(s) de anticipación), así que para hoy ya no hay espacio. ` +
+          'Díselo al lead con calidez y en positivo, consulta getAvailability y ofrécele un horario a partir del primer día disponible.',
       };
     }
 

@@ -96,8 +96,8 @@ export const getAvailabilityTool = createTool({
       return {
         slots: [],
         note:
-          `No se agenda con menos de ${minNotice} día(s) de anticipación: el primer horario posible es a partir del ${minLabel}. ` +
-          'El rango que pediste queda antes de eso; dile al lead que para hoy no hay y ofrécele un horario a partir de ese día.',
+          `Para hoy ya no hay espacio: las citas se abren con mínimo ${minNotice} día(s) de anticipación, a partir del ${minLabel}. ` +
+          'El rango que pediste queda antes de eso. Díselo al lead en positivo y con calidez —que para hoy ya no le puedes apartar espacio, pero a partir de ese día sí— y consulta de nuevo desde ese día para ofrecerle horarios concretos.',
       };
     }
 
@@ -125,7 +125,7 @@ export const getAvailabilityTool = createTool({
         : undefined;
     const noticeNote =
       window.liftedFrom && window.minMs != null
-        ? ` IMPORTANTE: no se agenda para hoy (mínimo ${minNotice} día(s) de anticipación): estos horarios empiezan el ${label(new Date(window.minMs).toISOString())}. Si el lead pidió hoy, díselo con claridad y ofrécele ÚNICAMENTE estos.`
+        ? ` IMPORTANTE: para hoy ya no hay espacio (las citas se abren con mínimo ${minNotice} día(s) de anticipación): estos horarios empiezan el ${label(new Date(window.minMs).toISOString())}. Si el lead pidió hoy, díselo en positivo y con calidez —para hoy ya no te queda espacio, pero sí le tienes estos— y ofrécele ÚNICAMENTE estos.`
         : '';
 
     const from = new Date(window.fromMs).toISOString();

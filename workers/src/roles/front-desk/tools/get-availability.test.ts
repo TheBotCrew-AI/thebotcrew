@@ -198,13 +198,13 @@ describe('getAvailability — minimum notice (0059)', () => {
     const fromArg = new Date(ghl.getAvailability.mock.calls[0]![1] as string).getTime();
     expect(fromArg).toBe(TOMORROW_MIDNIGHT);
     expect(res.slots).toHaveLength(1);
-    expect(res.note).toContain('no se agenda para hoy');
+    expect(res.note).toContain('para hoy ya no hay espacio');
   });
 
   it('a today-only request → too_soon note, GHL not called, event logged', async () => {
     const res = await run({ serviceName: 'Consulta', fromDate: '2026-09-02T09:00:00', toDate: '2026-09-02T19:00:00' }, noticeCtx(1));
     expect(res.slots).toEqual([]);
-    expect(res.note).toContain('primer horario posible');
+    expect(res.note).toContain('Para hoy ya no hay espacio');
     expect(ghl.getAvailability).not.toHaveBeenCalled();
     expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'availability_checked', expect.objectContaining({ outcome: 'too_soon', minNoticeDays: 1 }));
   });
@@ -212,7 +212,7 @@ describe('getAvailability — minimum notice (0059)', () => {
   it('a request already starting tomorrow → no note, range untouched', async () => {
     ghl.getAvailability.mockResolvedValue([]);
     const res = await run({ serviceName: 'Consulta', fromDate: '2026-09-03T00:00:00', toDate: '2026-09-04T00:00:00' }, noticeCtx(1));
-    expect(res.note).not.toContain('no se agenda para hoy');
+    expect(res.note).not.toContain('para hoy ya no hay espacio');
     const fromArg = new Date(ghl.getAvailability.mock.calls[0]![1] as string).getTime();
     expect(fromArg).toBe(TOMORROW_MIDNIGHT);
   });

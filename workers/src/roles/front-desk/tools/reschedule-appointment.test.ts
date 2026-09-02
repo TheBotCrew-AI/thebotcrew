@@ -234,7 +234,7 @@ describe('rescheduleAppointment — minimum notice (0059)', () => {
     ghl.getAvailability.mockResolvedValue([{ start: TODAY_SLOT, end: TODAY_SLOT }]);
     const res = await run(TODAY_SLOT, noticeCtx(1));
     expect(res.rescheduled).toBe(false);
-    expect(res.message).toContain('demasiado pronto');
+    expect(res.message).toContain('para hoy ya no hay espacio');
     expect(ghl.rescheduleAppointment).not.toHaveBeenCalled();
     expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'booking_failed', expect.objectContaining({ stage: 'reschedule', reason: 'too_soon' }));
   });

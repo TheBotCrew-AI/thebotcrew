@@ -6,7 +6,7 @@
  * sections are suppressed — the tenant's custom flow takes over entirely.
  */
 
-import { CLOSED_QUESTION_RULE } from '../../core/prompt-rules.js';
+import { CLOSED_QUESTION_RULE, WARM_NO_RULE } from '../../core/prompt-rules.js';
 import { HUMAN_REPLY_PREFIX } from '../../core/model-messages.js';
 import type { DemoHandoff } from '../../core/types.js';
 import { frameTimeZone, zoneLabel, zoneSuffix } from '../../core/lead-timezone.js';
@@ -398,9 +398,9 @@ Hay ${config.faq.length} respuestas oficiales cargadas y NO están en este promp
       /* fall back to the day count without a date */
     }
     horizonLine +=
-      `\nNo ofrezcas ni agendes nada para hoy: se agenda con mínimo ${config.bookingMinNoticeDays} día(s) de anticipación` +
-      (firstReadable ? `, así que el primer día disponible es el ${firstReadable}` : '') +
-      '. Si el lead pide hoy, díselo con claridad y ofrécele el horario más pronto a partir de ese día.';
+      `\nLas citas se abren con mínimo ${config.bookingMinNoticeDays} día(s) de anticipación` +
+      (firstReadable ? `: el primer día que puedes ofrecer es el ${firstReadable}` : '') +
+      '. Nunca ofrezcas ni agendes un horario de hoy. Si el lead pide hoy, dilo en positivo y con calidez —para hoy ya no te queda espacio, pero a partir de ese día sí— y ofrécele los horarios más próximos; nunca un "no" seco.';
   }
 
   // Reminder-number handling: GHL sends confirmation/reminder templates to the contact's
@@ -604,6 +604,7 @@ ${usingDemo
 - Máximo 1 emoji, y no en todos los mensajes. URLs como texto plano.`
   : 'Mensajes breves, una idea a la vez. Sin listas. Sin negritas. Sin emojis (a menos que el lead los use). WhatsApp no renderiza markdown — manda URLs como texto plano.'}
 ${CLOSED_QUESTION_RULE}
+${WARM_NO_RULE}
 
 ${usingDemo
   ? `# Regla de oro (modo demo)

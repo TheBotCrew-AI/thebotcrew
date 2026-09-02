@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { CLOSED_QUESTION_RULE } from '../../core/prompt-rules.js';
+import { CLOSED_QUESTION_RULE, WARM_NO_RULE } from '../../core/prompt-rules.js';
 import type { DemoHandoff } from '../../core/types.js';
 import { parseFrontDeskConfig } from './config.js';
 import { buildDemoEndAnnouncement, buildDemoStartAnnouncement, buildFrontDeskInstructions } from './prompt.js';
@@ -401,6 +401,15 @@ describe('buildFrontDeskInstructions', () => {
       buildFrontDeskInstructions(cfg({ demoPromptOverrides: { identity: 'Demo persona' } }), NOW, undefined, 'demo'),
     ).toContain(CLOSED_QUESTION_RULE);
   });
+
+  // 2026-09-02: "Hoy ya no se agenda; …" — correct and cold. The warm-refusal rule is a
+  // product rule too, so it rides in both personas.
+  it('bans the bare "no" in both personas', () => {
+    expect(buildFrontDeskInstructions(cfg(), NOW)).toContain(WARM_NO_RULE);
+    expect(
+      buildFrontDeskInstructions(cfg({ demoPromptOverrides: { identity: 'Demo persona' } }), NOW, undefined, 'demo'),
+    ).toContain(WARM_NO_RULE);
+  });
 });
 
 describe('buildFrontDeskInstructions — campaign prompt variants', () => {
@@ -740,24 +749,26 @@ describe('buildFrontDeskInstructions — demo on FB/IG (no phone on the contact)
 describe('buildFrontDeskInstructions — minimum notice (0059)', () => {
   it('adds the no-same-day line with the first bookable day', () => {
     const out = buildFrontDeskInstructions(cfg({ bookingMinNoticeDays: 1 }), NOW);
-    expect(out).toContain('No ofrezcas ni agendes nada para hoy');
-    expect(out).toContain('el primer día disponible es el viernes, 3 de julio');
+    expect(out).toContain('Nunca ofrezcas ni agendes un horario de hoy');
+    expect(out).toContain('el primer día que puedes ofrecer es el viernes, 3 de julio');
+    // The line itself must not read as a bare ban — the model renders what it reads.
+    expect(out).not.toContain('No ofrezcas ni agendes nada para hoy');
   });
 
   it('composes with the horizon line', () => {
     const out = buildFrontDeskInstructions(cfg({ bookingMinNoticeDays: 1, bookingHorizonDays: 7 }), NOW);
     expect(out).toContain('Solo puedes agendar dentro de los próximos 7 días');
-    expect(out).toContain('No ofrezcas ni agendes nada para hoy');
+    expect(out).toContain('Nunca ofrezcas ni agendes un horario de hoy');
   });
 
   it('absent by default and suppressed in demo mode', () => {
-    expect(buildFrontDeskInstructions(cfg(), NOW)).not.toContain('No ofrezcas ni agendes nada para hoy');
+    expect(buildFrontDeskInstructions(cfg(), NOW)).not.toContain('Nunca ofrezcas ni agendes un horario de hoy');
     const demo = buildFrontDeskInstructions(
       cfg({ bookingMinNoticeDays: 1, demoPromptOverrides: { identity: 'Otra clínica' } }),
       NOW,
       undefined,
       'demo',
     );
-    expect(demo).not.toContain('No ofrezcas ni agendes nada para hoy');
+    expect(demo).not.toContain('Nunca ofrezcas ni agendes un horario de hoy');
   });
 });
