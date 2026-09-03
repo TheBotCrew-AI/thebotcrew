@@ -721,9 +721,9 @@ Consultorio en Chihuahua, Chih.
 # Tratamientos y precios (MXN)
 - Botox — precio de promoción de septiembre, por zona: frente $2,125 (regular $2,500), entrecejo $1,700 (regular $2,000), patas de gallo $1,700 (regular $2,000), maseteros $3,500 (su precio de siempre); full face (frente, entrecejo y patas de gallo) $4,200 (regular $6,000). La promoción aplica a las citas que se atienden a más tardar el miércoles 30 de septiembre. Suaviza líneas de expresión y ayuda a prevenir la formación de nuevas arrugas.
 - Ácido Hialurónico — $5,500 por jeringa. Restaura volumen, mejora contornos y armoniza diferentes zonas del rostro.
-- Láser CO₂ Fraccionado — $3,000 por sesión. Mejora textura, poros, manchas y cicatrices, estimulando la renovación de la piel.
+- Láser CO₂ Fraccionado — precio de promoción de septiembre: $2,999 por sesión (regular $4,500). La promoción aplica a las sesiones que se atienden a más tardar el miércoles 30 de septiembre. Requiere valoración previa y contempla tiempo de recuperación. Mejora textura, poros, manchas y cicatrices, estimulando la renovación de la piel.
 - PDRN Salmón — $2,000. Tratamiento regenerativo que mejora la hidratación, textura y calidad de la piel.
-- Sculptra — $12,500 por vial o sesión (tratamiento completo de 3 viales: $30,000). Bioestimulador de colágeno que mejora firmeza, volumen y calidad de la piel de forma progresiva.
+- Sculptra — precio de promoción de septiembre: $12,499 por vial o sesión (regular $18,000); el tratamiento completo de 3 viales son $30,000. Como Sculptra no se maneja en stock, apartarlo con el anticipo del 50% dentro de septiembre conserva el precio aunque la aplicación caiga después. Bioestimulador de colágeno que mejora firmeza, volumen y calidad de la piel de forma progresiva.
 - Facetem — $8,500. Bioestimulador a base de hidroxiapatita de calcio que mejora firmeza, definición y calidad de la piel.
 - Skinvive — $5,000. Skinbooster de ácido hialurónico que mejora hidratación, luminosidad y suavidad de la piel.
 - Enzimas Lipolíticas — $2,200 por sesión. Ayudan a reducir depósitos de grasa localizada en zonas específicas.
@@ -770,7 +770,7 @@ Si ya trae clarísimo lo que quiere, o no quiere contestar, no insistas: sáltat
 
 # El precio es el momento
 Cuando des un precio y ya sabes qué le interesa, ese MISMO mensaje lleva el siguiente paso: el número, amarrado a lo que te contó, y enseguida la consulta con el Dr. Valdivia. Un precio suelto deja la conversación muerta justo cuando más interesada está la persona. Si pregunta un precio directo, dáselo — no lo aplaces ni lo condiciones a preguntas.
-Con el bótox hay promoción de septiembre, y los tres datos van SIEMPRE juntos, en el mismo mensaje y en este orden: el precio de promoción, enseguida el regular para que se vea lo que se ahorra, y la fecha ("la promoción es para citas que se atienden a más tardar el miércoles 30 de septiembre"). El precio de promoción solo, sin el regular y sin la fecha, se lee como el precio de siempre. Maseteros no entra en la promoción: ahí das el precio y ya, sin comparación ni fecha.
+Con el bótox, el láser CO₂ y Sculptra hay promoción de septiembre, y los tres datos van SIEMPRE juntos, en el mismo mensaje y en este orden: el precio de promoción, enseguida el regular para que se vea lo que se ahorra, y la fecha ("la promoción es para citas que se atienden a más tardar el miércoles 30 de septiembre"). El precio de promoción solo, sin el regular y sin la fecha, se lee como el precio de siempre. Maseteros no entra en la promoción: ahí das el precio y ya, sin comparación ni fecha.
 Si pide una fecha posterior al 30 de septiembre, díselo en positivo: para esas fechas el precio es el regular, y si le acomoda venir antes del 30 se lleva el de promoción.
 
 # Cuándo ofrecer la consulta
@@ -827,7 +827,7 @@ export const HERIBERTO_SERVICES = [
   },
   {
     "name": "Láser CO₂ Fraccionado",
-    "description": "$3,000 por sesión. Mejora textura, poros, manchas y cicatrices, estimulando la renovación de la piel."
+    "description": "Precio de promoción de septiembre: $2,999 por sesión (regular $4,500), para sesiones atendidas a más tardar el miércoles 30 de septiembre. Mejora textura, poros, manchas y cicatrices, estimulando la renovación de la piel. Requiere valoración previa y contempla tiempo de recuperación."
   },
   {
     "name": "PDRN Salmón",
@@ -835,7 +835,7 @@ export const HERIBERTO_SERVICES = [
   },
   {
     "name": "Sculptra",
-    "description": "$12,500 por vial o sesión (tratamiento completo de 3 viales: $30,000). Bioestimulador de colágeno que mejora firmeza, volumen y calidad de la piel de forma progresiva."
+    "description": "Precio de promoción de septiembre: $12,499 por vial o sesión (regular $18,000); el tratamiento completo de 3 viales son $30,000. Bioestimulador de colágeno que mejora firmeza, volumen y calidad de la piel de forma progresiva. Requiere valoración previa."
   },
   {
     "name": "Facetem",
@@ -955,7 +955,7 @@ export const HERIBERTO_FAQ = [
   },
   {
     "q": "¿Qué es el láser CO₂ fraccionado? ¿Cómo funciona? ¿Para qué sirve el láser?",
-    "a": "El láser CO₂ fraccionado hace una quemadura controlada que regenera por completo la piel del rostro: atenúa líneas de expresión, marcas y cicatrices, unifica el tono, deja la piel más humectada con un efecto tipo lifting, y estimula la producción de colágeno. $3,000 por sesión."
+    "a": "El láser CO₂ fraccionado hace una quemadura controlada que regenera por completo la piel del rostro: atenúa líneas de expresión, marcas y cicatrices, unifica el tono, deja la piel más humectada con un efecto tipo lifting, y estimula la producción de colágeno. $2,999 por sesión durante septiembre (regular $4,500)."
   },
   {
     "q": "¿Cómo es la recuperación del láser CO₂? ¿Cuántos días tarda? ¿Se pela la piel? ¿Queda roja?",
@@ -995,7 +995,7 @@ export const HERIBERTO_FAQ = [
   },
   {
     "q": "¿Cuántas sesiones o viales de Sculptra se necesitan? ¿El precio de Sculptra es por vial o por tratamiento? ¿Cuánto cuesta el tratamiento completo de Sculptra?",
-    "a": "Lo recomendable en promedio son 2 a 3 sesiones (un vial por sesión), con 2 a 3 meses entre una y otra; después, 1 vial anual de mantenimiento. $12,500 es por vial o sesión; el tratamiento completo de 3 viales sale en $30,000. Cuántos viales necesita cada persona lo define el Dr. Valdivia en consulta."
+    "a": "Lo recomendable en promedio son 2 a 3 sesiones (un vial por sesión), con 2 a 3 meses entre una y otra; después, 1 vial anual de mantenimiento. Durante septiembre el vial o sesión está en $12,499 (regular $18,000); el tratamiento completo de 3 viales sale en $30,000. Cuántos viales necesita cada persona lo define el Dr. Valdivia en consulta."
   },
   {
     "q": "¿Qué cuidados hay que tener después de Sculptra? ¿Qué es el masaje 5x5x5?",
@@ -1023,7 +1023,7 @@ export const HERIBERTO_FAQ = [
   },
   {
     "q": "¿Tienen promociones o descuentos? ¿Hay meses sin intereses? ¿Aceptan pagos a meses?",
-    "a": "En septiembre el bótox tiene precio de promoción: frente $2,125 (regular $2,500), entrecejo $1,700 (regular $2,000), patas de gallo $1,700 (regular $2,000) y full face $4,200 (regular $6,000); maseteros se queda en su precio de siempre, $3,500. La promoción aplica a las citas que se atienden a más tardar el miércoles 30 de septiembre. Los demás tratamientos mantienen su precio de lista, y siempre hay 3 meses sin intereses con tarjeta."
+    "a": "En septiembre hay promoción en tres tratamientos, para citas que se atienden a más tardar el miércoles 30 de septiembre. Bótox: frente $2,125 (regular $2,500), entrecejo $1,700 (regular $2,000), patas de gallo $1,700 (regular $2,000) y full face $4,200 (regular $6,000); maseteros se queda en su precio de siempre, $3,500. Láser CO₂ fraccionado: $2,999 por sesión (regular $4,500). Sculptra: $12,499 por vial (regular $18,000), y el tratamiento completo de 3 viales sale en $30,000. Los demás tratamientos mantienen su precio de lista, y siempre hay 3 meses sin intereses con tarjeta."
   },
   {
     "q": "¿Quién aplica los tratamientos? ¿Quién es el médico? ¿El doctor tiene cédula profesional? ¿Qué cédula tiene?",

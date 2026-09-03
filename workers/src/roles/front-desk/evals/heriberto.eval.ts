@@ -74,6 +74,20 @@
  *     sin el dato en la lista el modelo no tiene de dónde sacar el $2,500.
  *   - maseteros: 3/3 sin RULE_OFF (no tiene lado rojo — es la guardia de que la promoción
  *     no se derrame a la única zona sin descuento, inventándole un "regular").
+ *   MEDIDO 2026-09-03 (campañas de Sculptra y láser CO₂):
+ *   - láser: con regla 3/3 · sin regla 5/6. La corrida roja que pasa es informativa: RULE_OFF
+ *     revierte la LISTA de tratamientos, no el banco de FAQ, y la ficha del láser también trae
+ *     el precio de promoción — así que lookupFaq puede filtrarlo. Se deja así a propósito: un
+ *     rojo total exigiría desarmar la FAQ, que no es el estado que se está defendiendo.
+ *   - Sculptra: con regla 3/3 · sin regla 0/3.
+ *   - El lado rojo de este bloque estuvo ROTO unos minutos: la regla de precio pasó de "Con el
+ *     bótox…" a "Con el bótox, el láser CO₂ y Sculptra…" y la constante del eval siguió
+ *     apuntando al texto viejo, así que RULE_OFF lanzaba en vez de generar (fallo en 3 ms,
+ *     no en 6 s). Si un lado rojo falla instantáneo, sospecha del ancla antes que del modelo.
+ *   - El caso de candidatura de Sculptra ("¿tú crees que yo sí soy candidata?") se escribió y
+ *     se TIRÓ: pasa igual con y sin el bullet de la variante, porque houseRules ya prohíbe
+ *     calificar a nadie y sobrevive a la variante por diseño. El bullet se queda en prod como
+ *     refuerzo; un caso que pasa de los dos lados no prueba nada.
  *   MEDIDO 2026-09-03 (las tres del repaso de prompt):
  *   - la consulta con su razón: con regla 3/3 · sin regla 0/3. El origen es una cuenta sobre
  *     prod, no una corazonada: en 4 días 69 mensajes del bot mencionaron la consulta y solo
@@ -148,7 +162,14 @@ const PROMO_BOTOX_LINE =
   '- Botox — precio de promoción de septiembre, por zona: frente $2,125 (regular $2,500), entrecejo $1,700 (regular $2,000), patas de gallo $1,700 (regular $2,000), maseteros $3,500 (su precio de siempre); full face (frente, entrecejo y patas de gallo) $4,200 (regular $6,000). La promoción aplica a las citas que se atienden a más tardar el miércoles 30 de septiembre.';
 const PLAIN_BOTOX_LINE =
   '- Botox — por zona: frente $2,125, entrecejo $1,700, patas de gallo $1,700, maseteros $3,500; full face (frente, entrecejo y patas de gallo) $4,200.';
-const PROMO_PRICE_RULE_START = 'Con el bótox hay promoción de septiembre, y los tres datos van SIEMPRE juntos';
+const PROMO_LASER_LINE =
+  '- Láser CO₂ Fraccionado — precio de promoción de septiembre: $2,999 por sesión (regular $4,500).';
+const PLAIN_LASER_LINE = '- Láser CO₂ Fraccionado — $3,000 por sesión.';
+const PROMO_SCULPTRA_LINE =
+  '- Sculptra — precio de promoción de septiembre: $12,499 por vial o sesión (regular $18,000); el tratamiento completo de 3 viales son $30,000.';
+const PLAIN_SCULPTRA_LINE = '- Sculptra — $12,500 por vial o sesión (tratamiento completo de 3 viales: $30,000).';
+const PROMO_PRICE_RULE_START =
+  'Con el bótox, el láser CO₂ y Sculptra hay promoción de septiembre, y los tres datos van SIEMPRE juntos';
 
 /** El bullet que explica PARA QUÉ sirve la consulta (prod, 2026-09-03). */
 const CONSULTA_WHY_RULE =
@@ -208,8 +229,14 @@ const tenantWithout = (
   if (rule === 'promo-price') {
     // Both halves go: the comparison in the price list AND the rule that orders the three
     // data points. What's left is exactly what prod said before 2026-09-03.
-    const offering = p.offering.replace(PROMO_BOTOX_LINE, PLAIN_BOTOX_LINE);
+    const offering = p.offering
+      .replace(PROMO_BOTOX_LINE, PLAIN_BOTOX_LINE)
+      .replace(PROMO_LASER_LINE, PLAIN_LASER_LINE)
+      .replace(PROMO_SCULPTRA_LINE, PLAIN_SCULPTRA_LINE);
     if (offering === p.offering) throw new Error('promo botox line not found');
+    for (const promo of [PROMO_BOTOX_LINE, PROMO_LASER_LINE, PROMO_SCULPTRA_LINE]) {
+      if (offering.includes(promo)) throw new Error(`promo line not reverted: ${promo.slice(0, 40)}`);
+    }
     const start = p.qualificationNotes.indexOf(PROMO_PRICE_RULE_START);
     if (start < 0) throw new Error('promo price rule not found');
     const end = p.qualificationNotes.indexOf('\n\n', start);
@@ -614,6 +641,36 @@ describe.skipIf(!evalApiKey)('Dr. Heriberto Valdivia — la promoción se dice c
     expect(text, text).toMatch(/30 de septiembre/);
   }, 120_000);
 
+  it('láser CO₂ → promoción, regular y fecha', async () => {
+    const res = await buildFrontDeskAgent().generate(
+      [
+        { role: 'user', content: 'Hola, me interesa el láser CO2' },
+        { role: 'assistant', content: OPENER },
+        { role: 'user', content: '¿Cuánto cuesta una sesión?' },
+      ],
+      { requestContext: rc(tenantFor('promo-price')) },
+    );
+    const text = reply(res);
+    expect(text, text).toMatch(/\$\s?2[,.]?999\b/);
+    expect(text, text).toMatch(/\$\s?4[,.]?500\b/);
+    expect(text, text).toMatch(/30 de septiembre/);
+  }, 120_000);
+
+  it('Sculptra → promoción, regular y fecha', async () => {
+    const res = await buildFrontDeskAgent().generate(
+      [
+        { role: 'user', content: 'Hola, me interesa Sculptra' },
+        { role: 'assistant', content: OPENER },
+        { role: 'user', content: '¿Cuánto cuesta?' },
+      ],
+      { requestContext: rc(tenantFor('promo-price')) },
+    );
+    const text = reply(res);
+    expect(text, text).toMatch(/\$\s?12[,.]?499\b/);
+    expect(text, text).toMatch(/\$\s?18[,.]?000\b/);
+    expect(text, text).toMatch(/30 de septiembre/);
+  }, 120_000);
+
   it('maseteros no tiene descuento: da el precio, sin comparación inventada', async () => {
     const res = await buildFrontDeskAgent().generate(
       [
@@ -716,3 +773,4 @@ describe.skipIf(!evalApiKey)('Dr. Heriberto Valdivia — los pagos se dicen en p
     expect(text, text).not.toMatch(/^\s*no se (pide|piden|venden|vende|maneja|manejan|hace|realiza|acepta)/);
   }, 120_000);
 });
+
