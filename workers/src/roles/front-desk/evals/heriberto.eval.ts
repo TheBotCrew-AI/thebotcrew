@@ -43,6 +43,9 @@
  *   - "¿facturan?" sin cita:  con regla 5/5 · con la REGLA DE ORO vieja 3/5 — y la falla es la frase
  *     exacta de prod ("¡hola! sí, se factura sin problema."). Con historia corta no reproducía (5/5
  *     ambos lados); hizo falta la historia real (agendó → canceló → "¿facturan?").
+ *     Re-medido 2026-09-03 tras los cambios de prompt de ese día: 9/10 con la fixture nueva y
+ *     4/4 con la previa. La única falla es un lookupFaq que no se llama ("déjame confirmarlo
+ *     con el equipo"), no el gancho que el caso defiende: ruido, no regresión.
  *   - estacionamiento con cita: 5/5 ambos lados — la sección de modo asistencia del prompt base ya
  *     lo cubre; queda como guardia de "sin pregunta cuando no se necesita".
  *   - gancho "sin costo":  con regla 5/5 · sin regla 3/5. Primera versión (una línea en
@@ -71,6 +74,19 @@
  *     sin el dato en la lista el modelo no tiene de dónde sacar el $2,500.
  *   - maseteros: 3/3 sin RULE_OFF (no tiene lado rojo — es la guardia de que la promoción
  *     no se derrame a la única zona sin descuento, inventándole un "regular").
+ *   MEDIDO 2026-09-03 (las tres del repaso de prompt):
+ *   - la consulta con su razón: con regla 3/3 · sin regla 0/3. El origen es una cuenta sobre
+ *     prod, no una corazonada: en 4 días 69 mensajes del bot mencionaron la consulta y solo
+ *     2 dijeron para qué le sirve al lead. La primera versión del caso medía 2/3 en VERDE, y
+ *     las dos fallas eran de la aserción, no del bot — "para que el Dr. valore la zona" (el
+ *     regex pedía indicativo) y un turno donde dio precio en vez de horarios. El caso ahora
+ *     pide horarios explícitamente y acepta el subjuntivo.
+ *   - primera vez con miedo: con regla 3/3 · sin regla 0/3. Normalizar el miedo ya estaba;
+ *     lo que faltaba era el dato que lo desarma (no se aplica nada sin que ella lo autorice).
+ *   - anticipo: con el dato en la BASE 3/3 · sin él 0/3 — las 3 corridas rojas contestan
+ *     "déjame confirmarlo con el equipo" por un dato que sí tenemos, porque hasta hoy vivía
+ *     solo en las variantes. La otra mitad del cambio (redacción en positivo) NO quedó bajo
+ *     prueba: ver la nota del propio caso.
  *
  * Live cases need an API key (`pnpm eval`); excluded from the CI gate.
  */
@@ -134,8 +150,26 @@ const PLAIN_BOTOX_LINE =
   '- Botox — por zona: frente $2,125, entrecejo $1,700, patas de gallo $1,700, maseteros $3,500; full face (frente, entrecejo y patas de gallo) $4,200.';
 const PROMO_PRICE_RULE_START = 'Con el bótox hay promoción de septiembre, y los tres datos van SIEMPRE juntos';
 
+/** El bullet que explica PARA QUÉ sirve la consulta (prod, 2026-09-03). */
+const CONSULTA_WHY_RULE =
+  '- La consulta no se anuncia como trámite ("primero pasas a valoración"): así se lee como un peaje que hay que pagar para llegar al tratamiento. En el MISMO mensaje en que ofreces los horarios, dile en media línea para qué le sirve a ELLA — que el Dr. Valdivia le valora la zona en persona, que ahí se confirma qué tratamiento le corresponde, o que le da el precio exacto antes de aplicar nada. UNA razón, la que encaje con lo que te contó, nunca las tres.';
+/** La frase que tranquiliza a quien va por primera vez (prod, 2026-09-03). */
+const NO_PROCEDURE_WITHOUT_CONSENT =
+  ' Y dilo explícito, que es lo que de verdad tranquiliza: no se le aplica ningún procedimiento sin que ella lo autorice.';
+/**
+ * El lado rojo de los pagos NO es una regla removida: es config escrita en negativo,
+ * pegada al bloque de pagos de la base. Es el texto literal que las 6 variantes tenían
+ * hasta hoy, y que produjo 3 mensajes de prod abriendo con "No se pide anticipo…"
+ * (2026-09-01 → 09-02) pese a WARM_NO_RULE.
+ */
+const POSITIVE_PAYMENTS_LINE =
+  'El pago es en el consultorio el día de la cita: efectivo, tarjeta o transferencia, y con tarjeta siempre hay 3 meses sin intereses. Si pregunta por anticipos, paquetes o membresías, contéstalo desde lo que sí hay — aquí se paga completo ese día y ya.';
+/** El bloque de pagos de la base tal como estaba hasta hoy: SIN el dato del anticipo,
+ *  que vivía solo en las 6 variantes. Un lead sin keyword se quedaba sin respuesta. */
+const PAYMENTS_WITHOUT_THE_FACT = 'Efectivo, tarjeta y transferencia. Con tarjeta siempre hay 3 meses sin intereses.';
+
 const tenantWithout = (
-  rule: 'medical' | 'faq-consulta' | 'drip' | 'service-name' | 'next-step' | 'consulta-hook' | 'zone-list' | 'slot-contrast' | 'promo-price',
+  rule: 'medical' | 'faq-consulta' | 'drip' | 'service-name' | 'next-step' | 'consulta-hook' | 'zone-list' | 'slot-contrast' | 'promo-price' | 'consulta-why' | 'first-time-fear' | 'negative-payments',
 ): TenantContext => {
   const p = HERIBERTO_PERSONA;
   const cfg = heribertoTenant.config;
@@ -155,6 +189,21 @@ const tenantWithout = (
         },
       },
     };
+  }
+  if (rule === 'consulta-why') {
+    const qualificationNotes = p.qualificationNotes.replace(`\n${CONSULTA_WHY_RULE}`, '');
+    if (qualificationNotes === p.qualificationNotes) throw new Error('consulta-why rule not found');
+    return { ...heribertoTenant, config: { ...cfg, promptOverrides: { ...p, qualificationNotes } } };
+  }
+  if (rule === 'first-time-fear') {
+    const qualificationNotes = p.qualificationNotes.replace(NO_PROCEDURE_WITHOUT_CONSENT, '');
+    if (qualificationNotes === p.qualificationNotes) throw new Error('consent sentence not found');
+    return { ...heribertoTenant, config: { ...cfg, promptOverrides: { ...p, qualificationNotes } } };
+  }
+  if (rule === 'negative-payments') {
+    const offering = p.offering.replace(POSITIVE_PAYMENTS_LINE, PAYMENTS_WITHOUT_THE_FACT);
+    if (offering === p.offering) throw new Error('pagos anchor not found');
+    return { ...heribertoTenant, config: { ...cfg, promptOverrides: { ...p, offering } } };
   }
   if (rule === 'promo-price') {
     // Both halves go: the comparison in the price list AND the rule that orders the three
@@ -579,5 +628,91 @@ describe.skipIf(!evalApiKey)('Dr. Heriberto Valdivia — la promoción se dice c
     // No hay precio regular de maseteros distinto de $3,500: cualquier otro número
     // presentado como "regular" o "antes" sería inventado.
     expect(text, text).not.toMatch(/regular\s*\$?\s?(?!3[,.]?500)\d/);
+  }, 120_000);
+});
+
+/**
+ * La consulta se ofrecía como peaje. En 4 días de prod (2026-08-30 → 09-03) 69 mensajes
+ * del bot mencionaron la consulta o la valoración y solo 2 dijeron para qué le sirve al
+ * lead — 3%. El bullet nuevo pide UNA razón, en el mismo mensaje que los horarios.
+ *
+ * La aserción usa el MISMO patrón con el que se midió prod, para que el número del eval
+ * y el de la conversación real signifiquen lo mismo.
+ */
+const CONSULTA_REASON =
+  /valor[ae] (personalmente|la zona|las zonas|tu zona)|(revis|valor)[ae][^.]{0,40}(en persona|personalmente)|precio exacto|confirm[ae][^.]{0,40}tratamiento|defin[ae][^.]{0,40}(tratamiento|qué te corresponde)|antes de aplicar/;
+
+describe.skipIf(!evalApiKey)('Dr. Heriberto Valdivia — la consulta se ofrece con su razón', () => {
+  it('lead lista para agendar → los horarios llevan PARA QUÉ sirve la consulta', async () => {
+    const res = await buildFrontDeskAgent().generate(
+      [
+        { role: 'user', content: 'Hola, me interesa el botox' },
+        { role: 'assistant', content: OPENER },
+        { role: 'user', content: 'Quiero el entrecejo. Sí quiero ir, ¿qué horarios tienes?' },
+      ],
+      { requestContext: rc(tenantFor('consulta-why')) },
+    );
+    const text = reply(res);
+    expect(usesRealLabel(text), text).toBe(true);
+    expect(text, text).toMatch(CONSULTA_REASON);
+  }, 120_000);
+});
+
+/**
+ * "Es mi primera vez y me da miedo" es la objeción número uno de esta campaña (la variante
+ * a01 es literalmente "PRIMERA VEZ"). Normalizar el miedo ya estaba; lo que faltaba es el
+ * dato que de verdad lo desarma — que no se le aplica nada sin que ella lo autorice.
+ */
+const CONSENT_REASSURANCE =
+  /sin que (lo |la |te )?autorices|sin tu autorizaci|no se (te )?(aplica|realiza|hace)[^.]{0,70}sin (que|tu)|nada se (aplica|hace)[^.]{0,40}sin/;
+
+describe.skipIf(!evalApiKey)('Dr. Heriberto Valdivia — primera vez con miedo', () => {
+  it('dice explícito que no se le aplica nada sin su autorización', async () => {
+    const res = await buildFrontDeskAgent().generate(
+      [
+        { role: 'user', content: 'Hola, me interesa el botox' },
+        { role: 'assistant', content: OPENER },
+        { role: 'user', content: 'Es mi primera vez y la verdad me da miedo, ¿y si me queda mal?' },
+      ],
+      { requestContext: rc(tenantFor('first-time-fear')) },
+    );
+    const text = reply(res);
+    expect(text, text).toMatch(CONSENT_REASSURANCE);
+  }, 120_000);
+});
+
+/**
+ * Dos cambios en el bloque de pagos, y solo uno es medible aquí.
+ *
+ * MEDIBLE — el dato subió a la BASE. Hasta hoy "no se pide anticipo" vivía solo en las 6
+ * variantes, así que un lead sin keyword preguntaba y se llevaba "te lo confirmo con el
+ * equipo" + flagPendingInfo por un dato que sí tenemos. Eso es lo que este caso defiende.
+ *
+ * NO MEDIBLE con 3 corridas — la redacción. El texto viejo era una lista de negativos
+ * ("Sin anticipo, sin transferencias por adelantado, sin paquetes…") y el modelo rendía la
+ * FORMA: 3 mensajes de prod abrieron con "No se pide anticipo ni se venden paquetes; …"
+ * (2026-09-01 → 09-02) pese a WARM_NO_RULE. Pero es ~1% de los mensajes: con la lista de
+ * negativos puesta de vuelta el caso pasa 3/3, así que la aserción de forma quedó solo
+ * como guardia de la variante impersonal, no como prueba. Para medir eso haría falta
+ * contar sobre prod, no 3 generaciones.
+ */
+describe.skipIf(!evalApiKey)('Dr. Heriberto Valdivia — los pagos se dicen en positivo', () => {
+  it('"¿tengo que dar anticipo?" → contesta con el dato, sin mandarlo a la cola del equipo', async () => {
+    const res = await buildFrontDeskAgent().generate(
+      [
+        { role: 'user', content: 'Hola, me interesa el botox' },
+        { role: 'assistant', content: OPENER },
+        { role: 'user', content: '¿Tengo que dar anticipo o comprar un paquete?' },
+      ],
+      { requestContext: rc(tenantFor('negative-payments')) },
+    );
+    const text = reply(res);
+    // El dato tiene que llegar solo: en el lado rojo ni siquiera está en la config, así
+    // que el bot lo manda a flagPendingInfo ("te lo confirmo con el equipo").
+    expect(text, text).toMatch(/consultorio|el día de (la|tu) cita/);
+    expect(toolIds(res), text).not.toContain('flagPendingInfo');
+    // Y no la forma impersonal de rechazo que salió en prod ("No se pide anticipo ni se
+    // venden paquetes…"). Un "no necesitas dar anticipo" es buena noticia, no un no seco.
+    expect(text, text).not.toMatch(/^\s*no se (pide|piden|venden|vende|maneja|manejan|hace|realiza|acepta)/);
   }, 120_000);
 });

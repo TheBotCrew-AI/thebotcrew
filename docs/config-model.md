@@ -110,6 +110,13 @@ a campaign that isn't this one?* If yes, it belongs in `houseRules` or `offering
 from the closer too — which is how The Bot Crew's closer went without the pricing answers
 and the absolute rules until this split moved them out.
 
+**And a second one, for anyone asked to improve "the base prompt":** the built-in flow in
+`prompt.ts` (`# Tu objetivo` / `# Flujo de calificación`) renders ONLY when a tenant has no
+`qualificationNotes` — and every live tenant has one. Editing it changes nothing for anybody.
+A platform-wide rule has to land either in a section the code always renders (`Regla de oro`,
+`Tono y formato`, the shared rules in `core/prompt-rules.ts`, `BOOKING_SECTIONS`,
+`STATE_SECTIONS`, the FAQ block) or in each tenant's `houseRules`.
+
 ---
 
 ## 4. Prompt assembly order
