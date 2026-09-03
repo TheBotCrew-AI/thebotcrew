@@ -47,9 +47,27 @@ export function matchesDemoOff(tenant: TenantContext, text: string): boolean {
   return messageMatchesTrigger(text, tenant.demoOffKeywords ?? []);
 }
 
-/** Shared keyword normalizer: lowercase, punctuation flattened to spaces, space-padded. */
+/**
+ * Shared keyword normalizer: lowercase, accents folded, punctuation flattened to spaces,
+ * space-padded.
+ *
+ * The accent fold was missing until 2026-09-03, though this file and CLAUDE.md both
+ * claimed the match was accent-insensitive: `toLowerCase()` leaves "o" with its accent
+ * alone, so the keyword "valoracion" never matched a lead who typed the accented form
+ * (or the reverse). The fingerprint was already sitting in prod config — Heriberto's
+ * `trigger_keywords` carried BOTH "medico" and its accented twin, registered by hand.
+ *
+ * The tilde of "n-with-tilde" is kept: in Spanish that is a distinct letter, not an
+ * accented n, and folding it would make the keyword "ano" match the word "anio".
+ */
 function normKeyword(s: string): string {
-  return ' ' + s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim() + ' ';
+  const folded = s
+    .normalize('NFD')
+    .replace(/\p{M}+/gu, (mark, offset: number, str: string) =>
+      mark.includes('\u0303') && str[offset - 1]?.toLowerCase() === 'n' ? mark : '',
+    )
+    .normalize('NFC');
+  return ' ' + folded.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim() + ' ';
 }
 
 /**

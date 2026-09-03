@@ -80,6 +80,23 @@ describe('messageMatchesTrigger', () => {
     expect(messageMatchesTrigger('hola buenos dias', kw)).toBe(false);
     expect(messageMatchesTrigger('agente', [])).toBe(false);
   });
+
+  // Hasta 2026-09-03 el normalizador NO quitaba acentos, aunque el contrato decía que sí:
+  // un lead que escribe sin acentos (o el anuncio que los trae y la keyword que no) se
+  // caía del gate en silencio. Va en las dos direcciones a propósito.
+  it('matches with or without accents, in both directions', () => {
+    expect(messageMatchesTrigger('quiero una valoración de mi piel', ['valoracion de mi piel'])).toBe(true);
+    expect(messageMatchesTrigger('quiero una valoracion de mi piel', ['valoración de mi piel'])).toBe(true);
+    expect(messageMatchesTrigger('la promoción de láser CO2', ['promocion de laser'])).toBe(true);
+    expect(messageMatchesTrigger('el médico tiene cédula', ['medico'])).toBe(true);
+  });
+
+  // La eñe es otra letra, no una n con acento: plegarla haría que "ano" pegue con "año".
+  it('keeps the tilde of ñ (a distinct letter, not an accent)', () => {
+    expect(messageMatchesTrigger('tengo un año con esto', ['ano'])).toBe(false);
+    expect(messageMatchesTrigger('tengo un año con esto', ['año'])).toBe(true);
+    expect(messageMatchesTrigger('mañana paso', ['manana'])).toBe(false);
+  });
 });
 
 describe('matchVariantKeyword', () => {
