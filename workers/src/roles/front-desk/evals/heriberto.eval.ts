@@ -63,6 +63,14 @@
  *     falla de prod fue cola de probabilidad con esa frase. Lo que sí discrimina es la
  *     respuesta seca "La paoada" al menú de zonas del opener de campaña: el modelo la
  *     encaja en la opción más parecida en la mitad de las corridas.
+ *   MEDIDO 2026-09-03 (la promoción se dice completa):
+ *   - precio de frente: con regla 3/3 · sin regla 0/3. RULE_OFF restaura el texto de prod de
+ *     antes de hoy (la línea de bótox con los números de promoción a secas, sin el regular ni
+ *     la fecha, y sin el párrafo que ordena los tres datos): las 3 corridas dan $2,125 y ya —
+ *     el lead lee el precio de siempre y la promoción no existe para él. No discrimina "poco":
+ *     sin el dato en la lista el modelo no tiene de dónde sacar el $2,500.
+ *   - maseteros: 3/3 sin RULE_OFF (no tiene lado rojo — es la guardia de que la promoción
+ *     no se derrame a la única zona sin descuento, inventándole un "regular").
  *
  * Live cases need an API key (`pnpm eval`); excluded from the CI gate.
  */
@@ -115,8 +123,19 @@ const OLD_GETAVAILABILITY_WORDING = [
   'Ofrece exactamente DOS horarios, en un solo mensaje corto y sin lista con viñetas',
 ] as const;
 
+/**
+ * The pre-2026-09-03 bótox pricing — the red side of the promo case. Back then the promo
+ * numbers WERE the price: no regular to compare against, no deadline, and the campaign
+ * variants were told not to call it a promotion at all.
+ */
+const PROMO_BOTOX_LINE =
+  '- Botox — precio de promoción de septiembre, por zona: frente $2,125 (regular $2,500), entrecejo $1,700 (regular $2,000), patas de gallo $1,700 (regular $2,000), maseteros $3,500 (su precio de siempre); full face (frente, entrecejo y patas de gallo) $4,200 (regular $6,000). La promoción aplica a las citas que se atienden a más tardar el miércoles 30 de septiembre.';
+const PLAIN_BOTOX_LINE =
+  '- Botox — por zona: frente $2,125, entrecejo $1,700, patas de gallo $1,700, maseteros $3,500; full face (frente, entrecejo y patas de gallo) $4,200.';
+const PROMO_PRICE_RULE_START = 'Con el bótox hay promoción de septiembre, y los tres datos van SIEMPRE juntos';
+
 const tenantWithout = (
-  rule: 'medical' | 'faq-consulta' | 'drip' | 'service-name' | 'next-step' | 'consulta-hook' | 'zone-list' | 'slot-contrast',
+  rule: 'medical' | 'faq-consulta' | 'drip' | 'service-name' | 'next-step' | 'consulta-hook' | 'zone-list' | 'slot-contrast' | 'promo-price',
 ): TenantContext => {
   const p = HERIBERTO_PERSONA;
   const cfg = heribertoTenant.config;
@@ -136,6 +155,18 @@ const tenantWithout = (
         },
       },
     };
+  }
+  if (rule === 'promo-price') {
+    // Both halves go: the comparison in the price list AND the rule that orders the three
+    // data points. What's left is exactly what prod said before 2026-09-03.
+    const offering = p.offering.replace(PROMO_BOTOX_LINE, PLAIN_BOTOX_LINE);
+    if (offering === p.offering) throw new Error('promo botox line not found');
+    const start = p.qualificationNotes.indexOf(PROMO_PRICE_RULE_START);
+    if (start < 0) throw new Error('promo price rule not found');
+    const end = p.qualificationNotes.indexOf('\n\n', start);
+    const qualificationNotes = (p.qualificationNotes.slice(0, start).trimEnd() + p.qualificationNotes.slice(end)).trim();
+    if (qualificationNotes.includes('promoción')) throw new Error('promo rule not fully stripped');
+    return { ...heribertoTenant, config: { ...cfg, promptOverrides: { ...p, offering, qualificationNotes } } };
   }
   if (rule === 'zone-list') {
     return {
@@ -510,5 +541,43 @@ describe.skipIf(!evalApiKey)('Dr. Heriberto Valdivia — zona fuera de la lista'
     // $2,000 es el precio de bótox de entrecejo/patas de gallo — pegárselo a la papada
     // es exactamente el incidente. El precio correcto, si lo da, es $2,200 (enzimas).
     expect(text, text).not.toMatch(/\$\s?2[,.]?000\b/);
+  }, 120_000);
+});
+
+/**
+ * Un precio de bótox sin su precio regular al lado y sin la fecha se lee como el precio de
+ * siempre: la promoción no existe para quien la lee. Los tres datos van juntos (prod,
+ * 2026-09-03). Maseteros queda fuera a propósito — ahí no hay descuento que comparar.
+ */
+describe.skipIf(!evalApiKey)('Dr. Heriberto Valdivia — la promoción se dice completa', () => {
+  it('precio de frente → promoción, regular y fecha, los tres en el mismo mensaje', async () => {
+    const res = await buildFrontDeskAgent().generate(
+      [
+        { role: 'user', content: 'Hola, me interesa el botox' },
+        { role: 'assistant', content: OPENER },
+        { role: 'user', content: '¿Cuánto sale el de la frente?' },
+      ],
+      { requestContext: rc(tenantFor('promo-price')) },
+    );
+    const text = reply(res);
+    expect(text, text).toMatch(/\$\s?2[,.]?125\b/);
+    expect(text, text).toMatch(/\$\s?2[,.]?500\b/);
+    expect(text, text).toMatch(/30 de septiembre/);
+  }, 120_000);
+
+  it('maseteros no tiene descuento: da el precio, sin comparación inventada', async () => {
+    const res = await buildFrontDeskAgent().generate(
+      [
+        { role: 'user', content: 'Hola, me interesa el botox' },
+        { role: 'assistant', content: OPENER },
+        { role: 'user', content: '¿Cuánto cuesta el de maseteros?' },
+      ],
+      { requestContext: rc(heribertoTenant) },
+    );
+    const text = reply(res);
+    expect(text, text).toMatch(/\$\s?3[,.]?500\b/);
+    // No hay precio regular de maseteros distinto de $3,500: cualquier otro número
+    // presentado como "regular" o "antes" sería inventado.
+    expect(text, text).not.toMatch(/regular\s*\$?\s?(?!3[,.]?500)\d/);
   }, 120_000);
 });

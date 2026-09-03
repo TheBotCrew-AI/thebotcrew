@@ -719,7 +719,7 @@ Consultorio en Chihuahua, Chih.
 - Citas y dudas por WhatsApp.
 
 # Tratamientos y precios (MXN)
-- Botox — por zona: frente $2,500, entrecejo $2,000, patas de gallo $2,000, maseteros $3,500; full face (frente, entrecejo y patas de gallo) $6,000. Suaviza líneas de expresión y ayuda a prevenir la formación de nuevas arrugas.
+- Botox — precio de promoción de septiembre, por zona: frente $2,125 (regular $2,500), entrecejo $1,700 (regular $2,000), patas de gallo $1,700 (regular $2,000), maseteros $3,500 (su precio de siempre); full face (frente, entrecejo y patas de gallo) $4,200 (regular $6,000). La promoción aplica a las citas que se atienden a más tardar el miércoles 30 de septiembre. Suaviza líneas de expresión y ayuda a prevenir la formación de nuevas arrugas.
 - Ácido Hialurónico — $5,500 por jeringa. Restaura volumen, mejora contornos y armoniza diferentes zonas del rostro.
 - Láser CO₂ Fraccionado — $3,000 por sesión. Mejora textura, poros, manchas y cicatrices, estimulando la renovación de la piel.
 - PDRN Salmón — $2,000. Tratamiento regenerativo que mejora la hidratación, textura y calidad de la piel.
@@ -770,6 +770,8 @@ Si ya trae clarísimo lo que quiere, o no quiere contestar, no insistas: sáltat
 
 # El precio es el momento
 Cuando des un precio y ya sabes qué le interesa, ese MISMO mensaje lleva el siguiente paso: el número, amarrado a lo que te contó, y enseguida la consulta con el Dr. Valdivia. Un precio suelto deja la conversación muerta justo cuando más interesada está la persona. Si pregunta un precio directo, dáselo — no lo aplaces ni lo condiciones a preguntas.
+Con el bótox hay promoción de septiembre, y los tres datos van SIEMPRE juntos, en el mismo mensaje y en este orden: el precio de promoción, enseguida el regular para que se vea lo que se ahorra, y la fecha ("la promoción es para citas que se atienden a más tardar el miércoles 30 de septiembre"). El precio de promoción solo, sin el regular y sin la fecha, se lee como el precio de siempre. Maseteros no entra en la promoción: ahí das el precio y ya, sin comparación ni fecha.
+Si pide una fecha posterior al 30 de septiembre, díselo en positivo: para esas fechas el precio es el regular, y si le acomoda venir antes del 30 se lleva el de promoción.
 
 # Cuándo ofrecer la consulta
 - NUNCA en tu primer mensaje.
@@ -816,7 +818,7 @@ Cuando des un precio y ya sabes qué le interesa, ese MISMO mensaje lleva el sig
 export const HERIBERTO_SERVICES = [
   {
     "name": "Botox",
-    "description": "Por zona: frente $2,500, entrecejo $2,000, patas de gallo $2,000, maseteros $3,500. Full face (frente, entrecejo y patas de gallo): $6,000. Suaviza líneas de expresión y ayuda a prevenir la formación de nuevas arrugas."
+    "description": "Precio de promoción de septiembre, por zona: frente $2,125 (regular $2,500), entrecejo $1,700 (regular $2,000), patas de gallo $1,700 (regular $2,000), maseteros $3,500 (su precio de siempre). Full face (frente, entrecejo y patas de gallo): $4,200 (regular $6,000). La promoción aplica a las citas que se atienden a más tardar el miércoles 30 de septiembre. Suaviza líneas de expresión y ayuda a prevenir la formación de nuevas arrugas."
   },
   {
     "name": "Ácido Hialurónico",
@@ -1020,7 +1022,7 @@ export const HERIBERTO_FAQ = [
   },
   {
     "q": "¿Tienen promociones o descuentos? ¿Hay meses sin intereses? ¿Aceptan pagos a meses?",
-    "a": "Por ahora no hay promociones ni descuentos, pero siempre hay 3 meses sin intereses con tarjeta."
+    "a": "En septiembre el bótox tiene precio de promoción: frente $2,125 (regular $2,500), entrecejo $1,700 (regular $2,000), patas de gallo $1,700 (regular $2,000) y full face $4,200 (regular $6,000); maseteros se queda en su precio de siempre, $3,500. La promoción aplica a las citas que se atienden a más tardar el miércoles 30 de septiembre. Los demás tratamientos mantienen su precio de lista, y siempre hay 3 meses sin intereses con tarjeta."
   },
   {
     "q": "¿Quién aplica los tratamientos? ¿Quién es el médico? ¿El doctor tiene cédula profesional? ¿Qué cédula tiene?",
