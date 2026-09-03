@@ -74,6 +74,19 @@
  *     sin el dato en la lista el modelo no tiene de dónde sacar el $2,500.
  *   - maseteros: 3/3 sin RULE_OFF (no tiene lado rojo — es la guardia de que la promoción
  *     no se derrame a la única zona sin descuento, inventándole un "regular").
+ *   MEDIDO 2026-09-03 (conocer al paciente antes de la logística):
+ *   - con regla 11/12 · sin regla (el texto de ayer: la hora catalogada como una de las "dos
+ *     cosas", y "ni van en orden fijo") 1/4. Origen: una cuenta sobre prod — de 255 mensajes
+ *     del bot, 30 preguntan "¿mañana o tarde?" y 7 caen en sus DOS primeros mensajes.
+ *   - La PRIMERA versión de la regla medía 6/10 en VERDE, y las 4 fallas eran idénticas:
+ *     contestaba la dirección y no preguntaba NADA. Estaba escrita como prohibición ("no la
+ *     haces hasta que…", "no la hora") y el modelo obedeció dejando de preguntar — la misma
+ *     falla que documentan CLOSED_QUESTION_RULE y WARM_NO_RULE. Reescrita diciendo qué SÍ
+ *     preguntar ("ESA es tu pregunta por defecto… cierra ese MISMO mensaje preguntándole"),
+ *     6/6. El lado rojo falla igual por no preguntar nada, no por preguntar la hora.
+ *   - El probe usa dos mensajes (headline + "dónde se ubican"). Con el hilo real de tres
+ *     ("¿y trabajan los sábados?" encima) baja a 2/4, pero por la regla de GOTEO: el bot
+ *     contesta una duda y se para. Ese caso mide el goteo, no esta regla.
  *   MEDIDO 2026-09-03 (campañas de Sculptra y láser CO₂):
  *   - láser: con regla 3/3 · sin regla 5/6. La corrida roja que pasa es informativa: RULE_OFF
  *     revierte la LISTA de tratamientos, no el banco de FAQ, y la ficha del láser también trae
@@ -189,8 +202,17 @@ const POSITIVE_PAYMENTS_LINE =
  *  que vivía solo en las 6 variantes. Un lead sin keyword se quedaba sin respuesta. */
 const PAYMENTS_WITHOUT_THE_FACT = 'Efectivo, tarjeta y transferencia. Con tarjeta siempre hay 3 meses sin intereses.';
 
+/** La regla que ordena descubrimiento antes de logística (prod, 2026-09-03). */
+const DISCOVERY_FIRST_RULE = `Antes de ofrecer la consulta quieres entender UNA cosa: qué le gustaría mejorar, o qué tratamiento trae en mente. Sale cuando encaje en lo que se está platicando, nunca como formulario.
+Mientras no lo sepas, ESA es tu pregunta por defecto: cada vez que le contestes una duda suya (dirección, horario, formas de pago, estacionamiento), cierra ese MISMO mensaje preguntándole qué le gustaría mejorar. Nunca dejes el dato solo. "¿Por la mañana o por la tarde?" es el primer paso de agendar, no de conocerla: esa pregunta llega después, cuando ya sabes qué le interesa.`;
+/** Lo que decía hasta hoy: la hora catalogada como pregunta de descubrimiento, y permiso
+ *  explícito para hacerla primero ("ni van en orden fijo"). */
+const BOTH_THINGS_ANY_ORDER = `Antes de ofrecer la consulta quieres entender dos cosas. NO son un formulario ni van en orden fijo: salen de UNA en UNA, cuando encajen en lo que se está platicando.
+- Qué le gustaría mejorar, o qué tratamiento trae en mente.
+- Qué le acomoda más para venir: por la mañana o por la tarde.`;
+
 const tenantWithout = (
-  rule: 'medical' | 'faq-consulta' | 'drip' | 'service-name' | 'next-step' | 'consulta-hook' | 'zone-list' | 'slot-contrast' | 'promo-price' | 'consulta-why' | 'first-time-fear' | 'negative-payments',
+  rule: 'medical' | 'faq-consulta' | 'drip' | 'service-name' | 'next-step' | 'consulta-hook' | 'zone-list' | 'slot-contrast' | 'promo-price' | 'consulta-why' | 'first-time-fear' | 'negative-payments' | 'discovery-first',
 ): TenantContext => {
   const p = HERIBERTO_PERSONA;
   const cfg = heribertoTenant.config;
@@ -210,6 +232,11 @@ const tenantWithout = (
         },
       },
     };
+  }
+  if (rule === 'discovery-first') {
+    const qualificationNotes = p.qualificationNotes.replace(DISCOVERY_FIRST_RULE, BOTH_THINGS_ANY_ORDER);
+    if (qualificationNotes === p.qualificationNotes) throw new Error('discovery-first rule not found');
+    return { ...heribertoTenant, config: { ...cfg, promptOverrides: { ...p, qualificationNotes } } };
   }
   if (rule === 'consulta-why') {
     const qualificationNotes = p.qualificationNotes.replace(`\n${CONSULTA_WHY_RULE}`, '');
@@ -774,3 +801,34 @@ describe.skipIf(!evalApiKey)('Dr. Heriberto Valdivia — los pagos se dicen en p
   }, 120_000);
 });
 
+
+
+/**
+ * El bot corría a la logística antes de conocer al paciente. Medido sobre prod
+ * (2026-08-30 → 09-03): de 255 mensajes del bot, 30 preguntan "¿mañana o tarde?" y 7 de
+ * esos caen en sus DOS PRIMEROS mensajes — antes de saber qué busca la persona.
+ *
+ * La causa estaba escrita: la hora venía catalogada como una de las "dos cosas" que hay
+ * que entender antes de la consulta, con permiso explícito de hacerla en cualquier orden.
+ * Es logística de agenda, no descubrimiento.
+ *
+ * El caso reproduce el hilo real: lead del anuncio de láser que escribe su propio saludo
+ * y pregunta la ubicación. Contestar la ubicación está bien; rematar con la hora, no.
+ */
+describe.skipIf(!evalApiKey)('Dr. Heriberto Valdivia — conocer al paciente antes de la logística', () => {
+  it('duda de ubicación sin saber qué busca → pregunta qué le interesa, no la hora', async () => {
+    const res = await buildFrontDeskAgent().generate(
+      [
+        { role: 'user', content: '*Headline:* 🔥 33.3% de descuento — Septiembre\n*Source URL:* https://fb.me/6DRgQM3ZB\n\nHola que tal' },
+        { role: 'user', content: 'Donde se ubican' },
+      ],
+      { requestContext: rc(tenantFor('discovery-first')) },
+    );
+    const text = reply(res);
+    // El dato sí se contesta.
+    expect(text, text).toMatch(/periférico|plaza cumbres|chihuahua/);
+    // Pero el siguiente paso es conocerla, no agendarla.
+    expect(text, text).not.toMatch(/ma(ñ|n)ana o (por la )?tarde|por la ma(ñ|n)ana o por la tarde/);
+    expect(text, text).toMatch(/qué (te )?(gustar[ií]a|interesa|buscas|quieres)|qué tratamiento|en qué (zona|te gustar[ií]a)/);
+  }, 120_000);
+});
