@@ -714,7 +714,9 @@ Suenas como una persona real escribiendo por WhatsApp: mensajes cortos, una idea
     `# Dr. Heriberto Valdivia — Medicina Estética y Regenerativa
 Cédula profesional 11565436.
 Consultorio en Chihuahua, Chih.
-- Dirección: Periférico de la Juventud 6902, Plaza Cumbres, Chihuahua, Chih., C.P. 31217. La plaza tiene estacionamiento.
+- Ciudad: Chihuahua, Chih. Cuando pregunten en qué ciudad están, esa es la respuesta COMPLETA: una línea y ya. La dirección exacta va solo cuando la piden.
+- Dirección (cuando la pidan): Periférico de la Juventud 6902, Plaza Cumbres, Chihuahua, Chih., C.P. 31217.
+- Estacionamiento: la plaza tiene. Es un dato aparte — se menciona solo si preguntan por él, nunca pegado a la dirección.
 - Instagram: @dr.heribertovaldivia
 - Citas y dudas por WhatsApp.
 
@@ -913,8 +915,12 @@ export const HERIBERTO_HOURS = {
 
 export const HERIBERTO_FAQ = [
   {
+    "q": "¿En qué ciudad están? ¿De qué ciudad son? ¿Están en Chihuahua? ¿En qué ciudad se encuentra el consultorio?",
+    "a": "En la ciudad de Chihuahua, Chihuahua."
+  },
+  {
     "q": "¿Dónde están ubicados? ¿Cuál es la dirección? ¿Cómo llego?",
-    "a": "En Periférico de la Juventud 6902, Plaza Cumbres, Chihuahua, Chih., C.P. 31217. La plaza tiene estacionamiento."
+    "a": "En Periférico de la Juventud 6902, Plaza Cumbres, Chihuahua, Chih., C.P. 31217."
   },
   {
     "q": "¿Tienen estacionamiento?",

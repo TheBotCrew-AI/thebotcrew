@@ -59,7 +59,7 @@
  *     — sin la instrucción inventa serviceName="Consulta de Medicina Estética", que no es
  *     llave de `calendars`, y la herramienta contesta "No hay un calendario configurado".
  *   MEDIDO 2026-09-01 (regla "Zona o tratamiento fuera de tu lista"):
- *   - "paoada" bajo la variante a05: con regla 5/5 · sin regla 5/10 fallas (contesta patas
+ *   - "paoada" bajo la variante a05: con regla 9/10 (re-medido 2026-09-04) · sin regla 5/10 fallas (contesta patas
  *     de gallo con precio de bótox — el incidente). El mensaje LITERAL del incidente
  *     ("Necesito saber como es el tratamiento de la paoada y los costos") NO reprodujo:
  *     15/15 verdes sin la regla (prompt base, hilo real y variante a05 por igual) — la
@@ -74,8 +74,14 @@
  *     sin el dato en la lista el modelo no tiene de dónde sacar el $2,500.
  *   - maseteros: 3/3 sin RULE_OFF (no tiene lado rojo — es la guardia de que la promoción
  *     no se derrame a la única zona sin descuento, inventándole un "regular").
+ *   MEDIDO 2026-09-04 (ciudad / dirección / estacionamiento):
+ *   - los dos casos: con la separación 3/3 · sin ella 0/3. El lado rojo devuelve la plaza,
+ *     el código postal y el estacionamiento a una pregunta de ciudad — que es la queja que
+ *     lo originó (un lead preguntó la ciudad varias veces y recibió la ficha completa).
+ *   - Hay que revertir LAS DOS mitades (la línea del offering y la ficha de FAQ): con una
+ *     sola el modelo saca la dirección de la otra y el caso no discrimina.
  *   MEDIDO 2026-09-03 (conocer al paciente antes de la logística):
- *   - con regla 11/12 · sin regla (el texto de ayer: la hora catalogada como una de las "dos
+ *   - con regla 16/18 · sin regla (el texto de ayer: la hora catalogada como una de las "dos
  *     cosas", y "ni van en orden fijo") 1/4. Origen: una cuenta sobre prod — de 255 mensajes
  *     del bot, 30 preguntan "¿mañana o tarde?" y 7 caen en sus DOS primeros mensajes.
  *   - La PRIMERA versión de la regla medía 6/10 en VERDE, y las 4 fallas eran idénticas:
@@ -211,8 +217,20 @@ const BOTH_THINGS_ANY_ORDER = `Antes de ofrecer la consulta quieres entender dos
 - Qué le gustaría mejorar, o qué tratamiento trae en mente.
 - Qué le acomoda más para venir: por la mañana o por la tarde.`;
 
+/** Ciudad, dirección y estacionamiento como tres datos distintos (prod, 2026-09-04). */
+const CITY_SPLIT_LINES = `- Ciudad: Chihuahua, Chih. Cuando pregunten en qué ciudad están, esa es la respuesta COMPLETA: una línea y ya. La dirección exacta va solo cuando la piden.
+- Dirección (cuando la pidan): Periférico de la Juventud 6902, Plaza Cumbres, Chihuahua, Chih., C.P. 31217.
+- Estacionamiento: la plaza tiene. Es un dato aparte — se menciona solo si preguntan por él, nunca pegado a la dirección.`;
+/** Lo que había hasta hoy: los tres datos en una sola línea, y la ficha de dirección
+ *  arrastrando el estacionamiento. Por eso una pregunta de ciudad devolvía la plaza entera. */
+const BUNDLED_ADDRESS_LINE =
+  '- Dirección: Periférico de la Juventud 6902, Plaza Cumbres, Chihuahua, Chih., C.P. 31217. La plaza tiene estacionamiento.';
+const ADDRESS_FAQ_SPLIT = 'En Periférico de la Juventud 6902, Plaza Cumbres, Chihuahua, Chih., C.P. 31217.';
+const ADDRESS_FAQ_BUNDLED =
+  'En Periférico de la Juventud 6902, Plaza Cumbres, Chihuahua, Chih., C.P. 31217. La plaza tiene estacionamiento.';
+
 const tenantWithout = (
-  rule: 'medical' | 'faq-consulta' | 'drip' | 'service-name' | 'next-step' | 'consulta-hook' | 'zone-list' | 'slot-contrast' | 'promo-price' | 'consulta-why' | 'first-time-fear' | 'negative-payments' | 'discovery-first',
+  rule: 'medical' | 'faq-consulta' | 'drip' | 'service-name' | 'next-step' | 'consulta-hook' | 'zone-list' | 'slot-contrast' | 'promo-price' | 'consulta-why' | 'first-time-fear' | 'negative-payments' | 'discovery-first' | 'city-split',
 ): TenantContext => {
   const p = HERIBERTO_PERSONA;
   const cfg = heribertoTenant.config;
@@ -232,6 +250,17 @@ const tenantWithout = (
         },
       },
     };
+  }
+  if (rule === 'city-split') {
+    // Se revierten LAS DOS mitades: la línea del offering y la ficha de FAQ. Con solo una
+    // el caso no probaría nada — el modelo saca la dirección de cualquiera de las dos.
+    const offering = p.offering.replace(CITY_SPLIT_LINES, BUNDLED_ADDRESS_LINE);
+    if (offering === p.offering) throw new Error('city split lines not found');
+    const faq = HERIBERTO_FAQ.filter((f) => !/En qué ciudad están/i.test(f.q)).map((f) =>
+      f.a === ADDRESS_FAQ_SPLIT ? { ...f, a: ADDRESS_FAQ_BUNDLED } : f,
+    );
+    if (faq.length === HERIBERTO_FAQ.length) throw new Error('city FAQ entry not found');
+    return { ...heribertoTenant, config: { ...cfg, faq, promptOverrides: { ...p, offering } } };
   }
   if (rule === 'discovery-first') {
     const qualificationNotes = p.qualificationNotes.replace(DISCOVERY_FIRST_RULE, BOTH_THINGS_ANY_ORDER);
@@ -830,5 +859,44 @@ describe.skipIf(!evalApiKey)('Dr. Heriberto Valdivia — conocer al paciente ant
     // Pero el siguiente paso es conocerla, no agendarla.
     expect(text, text).not.toMatch(/ma(ñ|n)ana o (por la )?tarde|por la ma(ñ|n)ana o por la tarde/);
     expect(text, text).toMatch(/qué (te )?(gustar[ií]a|interesa|buscas|quieres)|qué tratamiento|en qué (zona|te gustar[ií]a)/);
+  }, 120_000);
+});
+
+
+/**
+ * Un lead preguntó varias veces en qué ciudad estaban y cada vez recibió la plaza, el
+ * código postal y el estacionamiento. La causa eran DOS bundles: la línea del `offering`
+ * ("Dirección: … C.P. 31217. La plaza tiene estacionamiento.") y la ficha de FAQ de
+ * dirección, que arrastraba el estacionamiento en la misma respuesta. Ahora son tres
+ * datos separados, y la ficha de ciudad existe aparte.
+ *
+ * Ojo con `lookupFaq`: puntúa por palabras compartidas y devuelve el TOP 3, así que la
+ * ficha de dirección igual le llega al modelo cuando preguntan la ciudad. Lo que decide
+ * es el offering, que va en cada turno — por eso el lado rojo revierte las dos mitades.
+ */
+describe.skipIf(!evalApiKey)('Dr. Heriberto Valdivia — ciudad, dirección y estacionamiento son tres datos', () => {
+  const preguntar = async (pregunta: string) =>
+    reply(
+      await buildFrontDeskAgent().generate(
+        [
+          { role: 'user', content: 'Hola' },
+          { role: 'assistant', content: OPENER },
+          { role: 'user', content: pregunta },
+        ],
+        { requestContext: rc(tenantFor('city-split')) },
+      ),
+    );
+
+  it('"¿en qué ciudad están?" → la ciudad, sin dirección ni estacionamiento', async () => {
+    const text = await preguntar('¿En qué ciudad están?');
+    expect(text, text).toMatch(/chihuahua/);
+    expect(text, text).not.toMatch(/periférico|6902|31217|plaza cumbres/);
+    expect(text, text).not.toMatch(/estacionamiento/);
+  }, 120_000);
+
+  it('"¿dónde están ubicados?" → la dirección, y el estacionamiento NO va de pilón', async () => {
+    const text = await preguntar('¿Dónde están ubicados?');
+    expect(text, text).toMatch(/periférico|6902|31217/);
+    expect(text, text).not.toMatch(/estacionamiento/);
   }, 120_000);
 });
