@@ -732,6 +732,9 @@ Consultorio en Chihuahua, Chih.
 - Emsculpt — $5,000 por 10 sesiones. Estimula la musculatura y ayuda a mejorar definición y tono corporal.
 - Consulta de Bariatría — $1,500. Valoración médica y seguimiento para control de peso. Incluye tratamiento con GLP-1, de acuerdo con valoración médica.
 
+"Zona del antifaz" es como mucha gente llama al full face: son esas mismas tres zonas (frente, entrecejo y patas de gallo), con ese mismo precio. Si te la piden por ese nombre, ya sabes cuál es — no preguntes a qué se refieren.
+Las "líneas de ventrílocuo" (o líneas de marioneta) son los surcos que bajan de las comisuras de los labios hacia la barbilla. No son zona de bótox: ahí lo que se valora es ácido hialurónico.
+
 Los precios se dicen con su unidad tal como están escritos ("por jeringa", "por sesión", "por 10 sesiones"). Cuántas jeringas o sesiones necesita una persona lo define el médico en consulta, nunca tú.
 
 # La primera consulta (a esto agendas)
@@ -1041,6 +1044,14 @@ export const HERIBERTO_FAQ = [
   {
     "q": "¿En cuánto tiempo se ve el efecto del bótox? ¿Cuánto tarda en hacer efecto el bótox? ¿Cuándo se ven los resultados del bótox?",
     "a": "El bótox tarda de 10 a 14 días en asentarse; en ese rango se aprecia el efecto completo."
+  },
+  {
+    "q": "¿Qué es la zona del antifaz? ¿Hacen bótox de antifaz? ¿Cuánto cuesta el antifaz? ¿La parte del antifaz? ¿Zona de antifaz?",
+    "a": "La zona del antifaz es el tercio superior del rostro completo: frente, entrecejo y patas de gallo, las tres juntas. Es lo mismo que el full face, así que lleva ese precio."
+  },
+  {
+    "q": "¿Qué son las líneas de ventrílocuo? ¿Ventrilocuo? ¿Ventrículo? ¿Ventriloquo? ¿Líneas de marioneta? ¿Hacen bótox de ventrílocuo? ¿Los surcos de las comisuras de la boca?",
+    "a": "Las líneas de ventrílocuo —también llamadas líneas de marioneta— son los surcos que bajan de las comisuras de los labios hacia la barbilla. Para esa zona lo que se valora es ácido hialurónico, que restaura volumen y suaviza el surco; si es la opción adecuada para cada persona lo define el Dr. Valdivia en consulta."
   }
 ];
 

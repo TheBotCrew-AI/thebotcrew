@@ -74,6 +74,16 @@
  *     sin el dato en la lista el modelo no tiene de dónde sacar el $2,500.
  *   - maseteros: 3/3 sin RULE_OFF (no tiene lado rojo — es la guardia de que la promoción
  *     no se derrame a la única zona sin descuento, inventándole un "regular").
+ *   MEDIDO 2026-09-04 (zonas por su nombre de calle):
+ *   - antifaz: con el vocabulario 3/3 · sin él 0/3 — pregunta "¿te refieres a patas de
+ *     gallo?" las tres veces, que es lo que le pasó a tres leads reales (uno contestó
+ *     "me sorprende que no sepa el término" y se fue).
+ *   - ventrílocuo: 3/3 · sin él 1/3. Discrimina menos a propósito: houseRules ya rutea
+ *     "volumen o contorno → ácido hialurónico", así que a veces llega solo. Se queda como
+ *     guardia de que no le peguen un precio de bótox a esa zona.
+ *   - El FAQ solo NO alcanza: houseRules manda confirmar cualquier zona que no aparezca
+ *     "tal cual" en la lista de tratamientos, y esa regla le gana al banco de FAQ. Con las
+ *     fichas cargadas pero sin el término en la lista, "antifaz" seguía fallando 4/4.
  *   MEDIDO 2026-09-04 (lada 619):
  *   - con la ficha 3/3 · sin ella 0/3, y el lado rojo reproduce el mensaje de prod casi
  *     palabra por palabra ("la lada 619 corresponde a san diego, california, estados
@@ -234,8 +244,14 @@ const ADDRESS_FAQ_SPLIT = 'En Periférico de la Juventud 6902, Plaza Cumbres, Ch
 const ADDRESS_FAQ_BUNDLED =
   'En Periférico de la Juventud 6902, Plaza Cumbres, Chihuahua, Chih., C.P. 31217. La plaza tiene estacionamiento.';
 
+/** El vocabulario de zonas que los leads usan y la lista no tenía (prod, 2026-09-04). */
+const ZONE_VOCABULARY = `"Zona del antifaz" es como mucha gente llama al full face: son esas mismas tres zonas (frente, entrecejo y patas de gallo), con ese mismo precio. Si te la piden por ese nombre, ya sabes cuál es — no preguntes a qué se refieren.
+Las "líneas de ventrílocuo" (o líneas de marioneta) son los surcos que bajan de las comisuras de los labios hacia la barbilla. No son zona de bótox: ahí lo que se valora es ácido hialurónico.
+
+`;
+
 const tenantWithout = (
-  rule: 'medical' | 'faq-consulta' | 'drip' | 'service-name' | 'next-step' | 'consulta-hook' | 'zone-list' | 'slot-contrast' | 'promo-price' | 'consulta-why' | 'first-time-fear' | 'negative-payments' | 'discovery-first' | 'city-split' | 'lada-faq',
+  rule: 'medical' | 'faq-consulta' | 'drip' | 'service-name' | 'next-step' | 'consulta-hook' | 'zone-list' | 'slot-contrast' | 'promo-price' | 'consulta-why' | 'first-time-fear' | 'negative-payments' | 'discovery-first' | 'city-split' | 'lada-faq' | 'zone-vocabulary',
 ): TenantContext => {
   const p = HERIBERTO_PERSONA;
   const cfg = heribertoTenant.config;
@@ -255,6 +271,16 @@ const tenantWithout = (
         },
       },
     };
+  }
+  if (rule === 'zone-vocabulary') {
+    // Las dos mitades: el vocabulario en la lista de tratamientos Y las fichas de FAQ. La
+    // que decide es la lista — houseRules manda confirmar cualquier zona que "no aparece
+    // tal cual" ahí, y esa regla le gana al FAQ.
+    const offering = p.offering.replace(ZONE_VOCABULARY, '');
+    if (offering === p.offering) throw new Error('zone vocabulary not found');
+    const faq = HERIBERTO_FAQ.filter((f) => !/antifaz|ventr[íi]locuo/i.test(f.q));
+    if (faq.length === HERIBERTO_FAQ.length) throw new Error('zone FAQ entries not found');
+    return { ...heribertoTenant, config: { ...cfg, faq, promptOverrides: { ...p, offering } } };
   }
   if (rule === 'lada-faq') {
     // El DATO, no una regla: sin la ficha el bot contesta de conocimiento general (San
@@ -937,5 +963,49 @@ describe.skipIf(!evalApiKey)('Dr. Heriberto Valdivia — la lada 619 no es dónd
     expect(text, text).toMatch(/san diego/);
     // Lo que faltaba: dejarle claro dónde la atenderían.
     expect(text, text).toMatch(/chihuahua/);
+  }, 120_000);
+});
+
+
+/**
+ * Los leads piden las zonas por su nombre de calle. "Zona del antifaz" es como llaman al
+ * full face (dos leads lo dijeron y acto seguido escribieron "frente, entrecejo y patas de
+ * gallo"), y "líneas de ventrílocuo" son las de marioneta. La lista de tratamientos no
+ * traía ninguno de los dos términos, así que Sofía preguntaba "¿a qué te refieres?" — y uno
+ * de esos leads contestó "me sorprende que no sepa el término" y se fue.
+ *
+ * El arreglo NO es sólo el FAQ: houseRules manda confirmar cualquier zona que no aparezca
+ * "tal cual" en la lista, y esa regla le gana al banco de FAQ. El vocabulario tiene que
+ * vivir en la lista de tratamientos. Por eso el lado rojo quita las dos mitades.
+ */
+describe.skipIf(!evalApiKey)('Dr. Heriberto Valdivia — las zonas por su nombre de calle', () => {
+  const preguntarZona = async (zona: string) =>
+    reply(
+      await buildFrontDeskAgent().generate(
+        [
+          { role: 'user', content: 'PRECIO' },
+          {
+            role: 'assistant',
+            content:
+              '¡Hola! Soy Sofía, del consultorio del Dr. Heriberto Valdivia. El precio de bótox es cerrado por zona y te lo damos por aquí antes de agendar. ¿Qué zona te interesa?',
+          },
+          { role: 'user', content: zona },
+        ],
+        { requestContext: rc(tenantFor('zone-vocabulary')) },
+      ),
+    );
+
+  it('"Zona de antifaz" → es el full face, con su precio, sin preguntar a qué se refiere', async () => {
+    const text = await preguntarZona('Zona de antifaz');
+    expect(text, text).toMatch(/\$\s?4[,.]?200\b/);
+    expect(text, text).not.toMatch(/te refieres|a qué zona|cuál zona/);
+  }, 120_000);
+
+  it('"líneas de ventrílocuo" → ácido hialurónico, nunca un precio de bótox', async () => {
+    const text = await preguntarZona('y las líneas de ventrilocuo?');
+    expect(text, text).toMatch(/hialur/);
+    expect(text, text).toMatch(/\$\s?5[,.]?500\b/);
+    // $1,700 y $2,000 son precios de zonas de bótox: pegárselos a esta zona es el error.
+    expect(text, text).not.toMatch(/\$\s?1[,.]?700\b|\$\s?2[,.]?000\b/);
   }, 120_000);
 });
