@@ -74,6 +74,11 @@
  *     sin el dato en la lista el modelo no tiene de dónde sacar el $2,500.
  *   - maseteros: 3/3 sin RULE_OFF (no tiene lado rojo — es la guardia de que la promoción
  *     no se derrame a la única zona sin descuento, inventándole un "regular").
+ *   MEDIDO 2026-09-04 (lada 619):
+ *   - con la ficha 3/3 · sin ella 0/3, y el lado rojo reproduce el mensaje de prod casi
+ *     palabra por palabra ("la lada 619 corresponde a san diego, california, estados
+ *     unidos" + siguiente paso, sin decir dónde está el consultorio). Es el mejor lado
+ *     rojo posible: no es una simulación del fallo, es el fallo.
  *   MEDIDO 2026-09-04 (ciudad / dirección / estacionamiento):
  *   - los dos casos: con la separación 3/3 · sin ella 0/3. El lado rojo devuelve la plaza,
  *     el código postal y el estacionamiento a una pregunta de ciudad — que es la queja que
@@ -230,7 +235,7 @@ const ADDRESS_FAQ_BUNDLED =
   'En Periférico de la Juventud 6902, Plaza Cumbres, Chihuahua, Chih., C.P. 31217. La plaza tiene estacionamiento.';
 
 const tenantWithout = (
-  rule: 'medical' | 'faq-consulta' | 'drip' | 'service-name' | 'next-step' | 'consulta-hook' | 'zone-list' | 'slot-contrast' | 'promo-price' | 'consulta-why' | 'first-time-fear' | 'negative-payments' | 'discovery-first' | 'city-split',
+  rule: 'medical' | 'faq-consulta' | 'drip' | 'service-name' | 'next-step' | 'consulta-hook' | 'zone-list' | 'slot-contrast' | 'promo-price' | 'consulta-why' | 'first-time-fear' | 'negative-payments' | 'discovery-first' | 'city-split' | 'lada-faq',
 ): TenantContext => {
   const p = HERIBERTO_PERSONA;
   const cfg = heribertoTenant.config;
@@ -250,6 +255,14 @@ const tenantWithout = (
         },
       },
     };
+  }
+  if (rule === 'lada-faq') {
+    // El DATO, no una regla: sin la ficha el bot contesta de conocimiento general (San
+    // Diego) y deja al lead con la duda de dónde está el consultorio — que es lo que pasó
+    // en prod el 2026-09-04 antes de cargarla.
+    const faq = HERIBERTO_FAQ.filter((f) => !/lada 619/i.test(f.q));
+    if (faq.length === HERIBERTO_FAQ.length) throw new Error('lada FAQ entry not found');
+    return { ...heribertoTenant, config: { ...cfg, faq } };
   }
   if (rule === 'city-split') {
     // Se revierten LAS DOS mitades: la línea del offering y la ficha de FAQ. Con solo una
@@ -898,5 +911,31 @@ describe.skipIf(!evalApiKey)('Dr. Heriberto Valdivia — ciudad, dirección y es
     const text = await preguntar('¿Dónde están ubicados?');
     expect(text, text).toMatch(/periférico|6902|31217/);
     expect(text, text).not.toMatch(/estacionamiento/);
+  }, 120_000);
+});
+
+
+/**
+ * El WhatsApp de negocios tiene lada 619 (San Diego) y el consultorio está en Chihuahua.
+ * Un lead preguntó de dónde era la lada — no por curiosidad, sino porque le preocupaba
+ * dónde estaban. El bot contestó el dato de conocimiento general ("San Diego, California,
+ * Estados Unidos") y ahí lo dejó: contestó la pregunta y no la preocupación.
+ *
+ * La ficha ahora trae las dos mitades, y en ese orden. El lado rojo la quita.
+ */
+describe.skipIf(!evalApiKey)('Dr. Heriberto Valdivia — la lada 619 no es dónde está el consultorio', () => {
+  it('"¿de dónde es la lada 619?" → San Diego Y Chihuahua, en el mismo mensaje', async () => {
+    const res = await buildFrontDeskAgent().generate(
+      [
+        { role: 'user', content: 'Hola, me interesa el botox' },
+        { role: 'assistant', content: OPENER },
+        { role: 'user', content: 'De dónde es la lada 619?' },
+      ],
+      { requestContext: rc(tenantFor('lada-faq')) },
+    );
+    const text = reply(res);
+    expect(text, text).toMatch(/san diego/);
+    // Lo que faltaba: dejarle claro dónde la atenderían.
+    expect(text, text).toMatch(/chihuahua/);
   }, 120_000);
 });

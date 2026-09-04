@@ -919,6 +919,10 @@ export const HERIBERTO_FAQ = [
     "a": "En la ciudad de Chihuahua, Chihuahua."
   },
   {
+    "q": "¿De dónde es la lada 619? ¿Por qué su número es de Estados Unidos? ¿Su lada no es de México? ¿De dónde me escriben? ¿Es un número extranjero?",
+    "a": "La lada 619 es de San Diego, California: es el número de WhatsApp de negocios desde el que te escribimos. El consultorio del Dr. Valdivia está en la ciudad de Chihuahua, Chihuahua."
+  },
+  {
     "q": "¿Dónde están ubicados? ¿Cuál es la dirección? ¿Cómo llego?",
     "a": "En Periférico de la Juventud 6902, Plaza Cumbres, Chihuahua, Chih., C.P. 31217."
   },
