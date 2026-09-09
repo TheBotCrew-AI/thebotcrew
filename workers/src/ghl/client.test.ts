@@ -235,6 +235,46 @@ describe('GhlClient — sendMessage', () => {
   });
 });
 
+describe('GhlClient — bookAppointment / rescheduleAppointment status (0061)', () => {
+  const book = (appointmentStatus?: 'new' | 'confirmed') =>
+    new GhlClient('t1').bookAppointment({
+      calendarId: 'cal', locationId: 'loc', contactId: 'c1', startTime: '2026-09-10T17:15:00-07:00',
+      ...(appointmentStatus ? { appointmentStatus } : {}),
+    });
+
+  it('defaults to confirmed when the tenant does not book unconfirmed', async () => {
+    const f = stubFetch();
+    f.mockResolvedValue(ok({ id: 'appt1' }));
+    expect(await book()).toEqual({ ghlAppointmentId: 'appt1' });
+    expect(bodyOf(f).appointmentStatus).toBe('confirmed');
+  });
+
+  it("books 'new' (No confirmada) when asked to", async () => {
+    const f = stubFetch();
+    f.mockResolvedValue(ok({ id: 'appt2' }));
+    await book('new');
+    expect(bodyOf(f).appointmentStatus).toBe('new');
+    // The rest of the payload is unchanged — the status is the only difference.
+    expect(bodyOf(f)).toMatchObject({ calendarId: 'cal', contactId: 'c1', toNotify: true });
+  });
+
+  it('reschedule carries the same status, so moving a cita does not confirm it', async () => {
+    const f = stubFetch();
+    f.mockResolvedValue(ok({}));
+    await new GhlClient('t1').rescheduleAppointment({
+      appointmentId: 'a1', calendarId: 'cal', startTime: '2026-09-11T17:15:00-07:00', appointmentStatus: 'new',
+    });
+    expect(bodyOf(f).appointmentStatus).toBe('new');
+  });
+
+  it('reschedule with no status given stays confirmed', async () => {
+    const f = stubFetch();
+    f.mockResolvedValue(ok({}));
+    await new GhlClient('t1').rescheduleAppointment({ appointmentId: 'a1', calendarId: 'cal', startTime: 'S' });
+    expect(bodyOf(f).appointmentStatus).toBe('confirmed');
+  });
+});
+
 describe('GhlClient — getAppointment', () => {
   it('unwraps a nested appointment and normalizes status', async () => {
     stubFetch().mockResolvedValue(ok({ appointment: { startTime: 'S', appointmentStatus: 'confirmed', title: 'T' } }));

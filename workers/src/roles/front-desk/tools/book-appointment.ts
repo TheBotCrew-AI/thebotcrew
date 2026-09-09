@@ -253,6 +253,8 @@ export const bookAppointmentTool = createTool({
         contactId: turn.ghlContactId,
         startTime: canonicalStart,
         title,
+        // "No confirmada" for a tenant whose GHL workflow asks the lead to confirm (0061).
+        appointmentStatus: config.bookUnconfirmed ? 'new' : 'confirmed',
       }));
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);

@@ -175,6 +175,8 @@ export const rescheduleAppointmentTool = createTool({
         calendarId,
         startTime: canonicalStart,
         ...(endTime ? { endTime } : {}),
+        // Moving the cita leaves it as unconfirmed as a fresh booking would (0061).
+        appointmentStatus: config.bookUnconfirmed ? 'new' : 'confirmed',
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);

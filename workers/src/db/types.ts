@@ -39,6 +39,8 @@ export interface TenantConfigRow {
   lead_timezone_enabled: boolean | null;
   /** Interest tags on the GHL contact (0058); false/null = off. */
   interest_tags?: boolean | null;
+  /** Book/reschedule as appointmentStatus='new' — "No confirmada" (0061); false/null = confirmed. */
+  book_unconfirmed?: boolean | null;
   /** Channels the bot may reply on. NULL = none (installed but silent). */
   enabled_channels: string[] | null;
   /** Pre-live test allowlist: when non-empty, reply only to these GHL contact ids. */

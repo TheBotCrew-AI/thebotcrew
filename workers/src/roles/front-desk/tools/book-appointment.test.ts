@@ -449,3 +449,31 @@ describe('bookAppointment — minimum notice (0059)', () => {
     expect(res.booked).toBe(true);
   });
 });
+
+describe('bookAppointment — unconfirmed bookings (0061)', () => {
+  const flagCtx = (bookUnconfirmed: boolean) => {
+    const t = { ...tenant, config: { ...(tenant.config as object), bookUnconfirmed } } as unknown as TenantContext;
+    return { requestContext: { get: (k: string) => (k === 'tenant' ? t : k === 'turn' ? turn : undefined) } };
+  };
+
+  it("tenant books unconfirmed → the GHL event is created as 'new' (No confirmada)", async () => {
+    const res = await runWith({ serviceName: 'Consulta', startTime: START }, flagCtx(true));
+    expect(res.booked).toBe(true);
+    expect(ghl.bookAppointment).toHaveBeenCalledWith(expect.objectContaining({ appointmentStatus: 'new' }));
+  });
+
+  it('flag off → confirmed, as every tenant without a confirmation workflow', async () => {
+    await runWith({ serviceName: 'Consulta', startTime: START }, flagCtx(false));
+    expect(ghl.bookAppointment).toHaveBeenCalledWith(expect.objectContaining({ appointmentStatus: 'confirmed' }));
+  });
+
+  it('config missing the field entirely → confirmed', async () => {
+    await run({ serviceName: 'Consulta', startTime: START });
+    expect(ghl.bookAppointment).toHaveBeenCalledWith(expect.objectContaining({ appointmentStatus: 'confirmed' }));
+  });
+
+  it('the lead still gets a normal confirmation message — the status is a GHL-side state', async () => {
+    const res = await runWith({ serviceName: 'Consulta', startTime: START }, flagCtx(true));
+    expect(res.message).toContain('Cita agendada');
+  });
+});

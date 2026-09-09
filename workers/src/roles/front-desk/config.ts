@@ -93,6 +93,13 @@ export const promptVariantSchema = z.object({
    */
   followUpAngles: z.array(z.string()).optional(),
   /**
+   * Whether conversations pinned to this variant may be nudged. Absent = the
+   * tenant's cadence applies as always; `false` opts the campaign out of BOTH
+   * ladders (the arming in webhook-handler and, defensively, the runner). It is
+   * not a prompt field — see core/reactivation-rounds.ts `variantAllowsFollowUps`.
+   */
+  followUpsEnabled: z.boolean().optional(),
+  /**
    * Campaign tag appended to the GHL calendar event title when a conversation
    * pinned to this variant books (e.g. "Jornada Bótox" → "Karla — Bótox — Jornada
    * Bótox"), so staff see which promo brought the lead. Variant metadata read
@@ -123,6 +130,8 @@ export const frontDeskConfigSchema = z.object({
   bookingMinNoticeDays: z.number().int().positive().nullable().default(null),
   /** Show times in the lead's zone (remote-service tenants only). See core/lead-timezone.ts. */
   leadTimezoneEnabled: z.boolean().default(false),
+  /** Book/reschedule as "No confirmada" so a GHL workflow owns the confirmation (0061). */
+  bookUnconfirmed: z.boolean().default(false),
 });
 
 export type FrontDeskConfig = z.infer<typeof frontDeskConfigSchema>;
@@ -180,5 +189,6 @@ export function parseFrontDeskConfig(raw: RawTenantConfig): FrontDeskConfig {
     bookingHorizonDays: raw.bookingHorizonDays ?? null,
     bookingMinNoticeDays: raw.bookingMinNoticeDays ?? null,
     leadTimezoneEnabled: raw.leadTimezoneEnabled === true,
+    bookUnconfirmed: raw.bookUnconfirmed === true,
   });
 }

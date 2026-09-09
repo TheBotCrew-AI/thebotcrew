@@ -92,6 +92,9 @@ export interface RawTenantConfig {
   /** Tag the GHL contact `interes-<servicio>` for each configured service the lead asks
    *  about (0058). Off by default: with it on the classifier runs on every replied turn. */
   interestTags?: boolean;
+  /** Book (and reschedule) GHL appointments as "No confirmada" (0061), leaving the flip to
+   *  confirmed to the tenant's GHL confirmation workflow. Off by default. */
+  bookUnconfirmed?: boolean;
   /** Slug of the Worker secret holding this tenant's own provider key
    *  (`'MADI'` → `OPENAI_API_KEY__MADI`). Never the key itself. null = platform key. */
   aiKeyRef?: string | null;

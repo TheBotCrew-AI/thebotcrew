@@ -13,7 +13,7 @@ import { getGhlEnv } from '../core/env.js';
 import type { Channel } from '../core/types.js';
 import { getOAuthToken, getTenantGhlLocationId, upsertOAuthToken } from '../db/queries.js';
 import { refreshAccessToken } from './oauth.js';
-import type { BookAppointmentInput, BookAppointmentResult, Slot } from './types.js';
+import type { BookAppointmentInput, BookAppointmentResult, GhlAppointmentStatus, Slot } from './types.js';
 
 const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000;
 
@@ -377,7 +377,8 @@ export class GhlClient {
       locationId: input.locationId,
       contactId: input.contactId,
       startTime: input.startTime,
-      appointmentStatus: 'confirmed',
+      // 'confirmed' unless the tenant books unconfirmed (0061); see GhlAppointmentStatus.
+      appointmentStatus: input.appointmentStatus ?? 'confirmed',
       toNotify: true,
     };
     if (input.title) body.title = input.title;
@@ -405,12 +406,15 @@ export class GhlClient {
     calendarId: string;
     startTime: string;
     endTime?: string;
+    appointmentStatus?: GhlAppointmentStatus;
   }): Promise<void> {
     const token = await this.getAccessToken();
     const body: Record<string, unknown> = {
       calendarId: input.calendarId,
       startTime: input.startTime,
-      appointmentStatus: 'confirmed',
+      // A moved cita goes back to the tenant's booking status: for a tenant that books
+      // unconfirmed, reagendar must NOT confirm the appointment on the lead's behalf.
+      appointmentStatus: input.appointmentStatus ?? 'confirmed',
       toNotify: true,
     };
     if (input.endTime) body.endTime = input.endTime;

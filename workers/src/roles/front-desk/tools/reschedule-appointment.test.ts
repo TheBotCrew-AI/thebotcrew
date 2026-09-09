@@ -245,3 +245,29 @@ describe('rescheduleAppointment — minimum notice (0059)', () => {
     expect(res.rescheduled).toBe(true);
   });
 });
+
+describe('rescheduleAppointment — unconfirmed bookings (0061)', () => {
+  const flagCtx = (bookUnconfirmed: boolean) => {
+    const c = makeCtx();
+    const tenant = c.requestContext.get('tenant') as TenantContext;
+    const t = { ...tenant, config: { ...(tenant.config as object), bookUnconfirmed } } as unknown as TenantContext;
+    const turn = c.requestContext.get('turn') as TurnContext;
+    return { requestContext: { get: (k: string) => (k === 'tenant' ? t : k === 'turn' ? turn : undefined) } };
+  };
+
+  it("tenant books unconfirmed → the moved cita goes back to 'new', it is not confirmed for the lead", async () => {
+    const res = await run(START, flagCtx(true));
+    expect(res.rescheduled).toBe(true);
+    expect(ghl.rescheduleAppointment).toHaveBeenCalledWith(expect.objectContaining({ appointmentStatus: 'new' }));
+  });
+
+  it('flag off → the move confirms, as before', async () => {
+    await run(START, flagCtx(false));
+    expect(ghl.rescheduleAppointment).toHaveBeenCalledWith(expect.objectContaining({ appointmentStatus: 'confirmed' }));
+  });
+
+  it('config missing the field entirely → confirmed', async () => {
+    await run(START);
+    expect(ghl.rescheduleAppointment).toHaveBeenCalledWith(expect.objectContaining({ appointmentStatus: 'confirmed' }));
+  });
+});

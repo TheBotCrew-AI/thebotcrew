@@ -139,7 +139,15 @@ export interface BookAppointmentInput {
   /** ISO 8601 start time. */
   startTime: string;
   title?: string;
+  /** GHL status the event is created with. Omitted = 'confirmed'. */
+  appointmentStatus?: GhlAppointmentStatus;
 }
+
+/** The two statuses we ever WRITE on a live appointment: 'new' renders as "No confirmada"
+ *  in the GHL calendar, 'confirmed' as "Confirmada". Per tenant via `book_unconfirmed`
+ *  (0061) — a tenant whose GHL workflow asks the lead to confirm books 'new' and lets the
+ *  workflow flip it. Cancelling is its own method. */
+export type GhlAppointmentStatus = 'new' | 'confirmed';
 
 export interface BookAppointmentResult {
   ghlAppointmentId: string;

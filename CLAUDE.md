@@ -119,7 +119,8 @@ uses the service-role key, which bypasses RLS. Three rules to keep it shut:
   follow-up quiet hours (`quiet_hours` jsonb `{start,end}` local, NULL = platform default
   21:00–08:00), booking horizon (`booking_horizon_days` int, NULL = no cap — deterministically
   clamps getAvailability) and minimum notice (`booking_min_notice_days` int, NULL = same-day
-  allowed; 1 = never today, 0059), the reply gates (`enabled_channels`, `test_contact_ids`,
+  allowed; 1 = never today, 0059), whether bookings are born unconfirmed
+  (`book_unconfirmed` bool, 0061), the reply gates (`enabled_channels`, `test_contact_ids`,
   `trigger_keywords` — see GHL notes), and the **demo persona** (`demo_on_keywords` /
   `demo_off_keywords` control words + `demo_prompt_overrides` jsonb — see docs/business-logic.md)
   live in Supabase. **`demo_off_keywords[0]` is lead-facing** — the demo start announcement and
@@ -273,7 +274,13 @@ supabase/
                                #      `turn_answered {messageId}` antes del primer envío y el guard busca ESE evento por
                                #      messageId, no "cualquier outbound después del inbound" — el turno del mensaje
                                #      anterior seguía generando y su respuesta caía después del nuevo. Migración PRIMERO,
-                               #      Worker después: al revés el CHECK rechaza el evento en silencio)
+                               #      Worker después: al revés el CHECK rechaza el evento en silencio),
+                               # 0061 book_unconfirmed (tenant_config.book_unconfirmed, DEFAULT false: el bot crea —y al
+                               #      reagendar deja— la cita como appointmentStatus='new', que GHL muestra "No confirmada";
+                               #      quien la pasa a confirmada es el workflow de confirmación del cliente (CONFIRMO), no
+                               #      nosotros. Nuestro código nunca filtró por 'confirmed' —sólo excluye 'cancelled'—, así
+                               #      que una cita sin confirmar sigue sirviendo para reagendar, cancelar, apagar nudges y
+                               #      prender modo asistencia. Ver business-logic §5)
   clients.sql, seed-tenants.sql# seeds (run by `supabase db reset` per config.toml)
 sites/                         # client marketing sites: static HTML, no build step, no deps
   _template/                   # starting point for a new client

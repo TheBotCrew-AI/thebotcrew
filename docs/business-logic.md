@@ -398,6 +398,24 @@ slots. Rules (also reinforced in the front-desk prompt):
   and the lead insists. The prompt states the first bookable day as a pre-computed date, next to
   the horizon line. The day boundary is the **tenant's** calendar day, not the lead's (§5d): it
   is the business that opens tomorrow. Dr. Valdivia = 1 (2026-09-02, "solo a partir de mañana").
+- **Unconfirmed bookings (per-tenant, 0061):** with `tenant_config.book_unconfirmed = true` the
+  bot creates the GHL event as `appointmentStatus: 'new'` — **"No confirmada"** in the calendar —
+  and a reschedule puts it back there (moving a cita must not confirm it on the lead's behalf).
+  Who flips it to `confirmed` is **the tenant's GHL confirmation workflow**, not us: the workflow
+  that fires on Appointment Booked waits for the patient's `CONFIRMO` reply and runs *Update
+  Appointment Status → Confirmed* (Heriberto's CONFIRMO sequence). Nothing in the Worker writes
+  `confirmed` after the fact, and nothing reads the field except to exclude `cancelled`
+  (`resolve-appointment`, `lookup-appointment`, `db/upcoming-appointment`) — so an unconfirmed
+  cita still reschedules, cancels, silences nudges and switches the prompt into modo asistencia
+  exactly like a confirmed one. The lead-facing copy is unchanged: from the chat's side the cita
+  is agendada; "confirmada" is a state the clinic tracks, not a promise the bot withholds.
+  Default `false` — a tenant with no confirmation sequence would only pile up citas nobody ever
+  confirms, and any of their GHL workflows filtering on "Confirmed" would quietly stop firing.
+  **Measured, not assumed** (Heriberto's live calendar, 2026-09-08,
+  `workers/src/ops/booking-status-probe.eval.ts`): a `new` appointment reads back as `new` and
+  **does occupy the slot** — `/free-slots` stopped offering that hour and offered it again once
+  the event was deleted. That was the open question: GHL's per-slot capacity is a **calendar**
+  setting, so the probe has to run on the calendar that will carry the flag, not on a spare one.
 - **Timezone:** slot labels are formatted in `tenant_config.timezone`, which **must match the
   GHL calendar's timezone** (else labels are offset — e.g. a Pacific calendar shown in CDMX is
   +1h wrong). The Bot Crew's calendar is `America/Tijuana`.
