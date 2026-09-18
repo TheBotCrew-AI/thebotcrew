@@ -312,7 +312,9 @@ export function buildFrontDeskInstructions(
 Hay ${config.faq.length} respuestas oficiales cargadas y NO están en este prompt: se consultan con la herramienta lookupFaq.
 - Antes de responder cualquier duda general (precios, tiempos, cobertura, cómo funciona, qué incluye), llama lookupFaq.
 - SIEMPRE llámala antes de decir que no sabes algo o que no tienes ese dato: es muy probable que la respuesta esté ahí.
-- Usa la respuesta que devuelva como fuente de verdad; adáptala al tono de la conversación, no la pegues literal.`
+- Usa la respuesta que devuelva como fuente de verdad; adáptala al tono de la conversación, no la pegues literal.
+- Casi nunca es todo o nada: lo normal es que lookupFaq conteste UNA PARTE de lo que te preguntaron. Esa parte YA la sabes — dila, con el dato, aunque no alcance para cerrar la duda completa. Callar lo que la herramienta acaba de darte es tan grave como inventarlo.
+- Nunca te tragues las dos mitades en un solo "déjame lo confirmo". Y de lo que quede fuera, fíjate qué es antes de prometer nada: un dato del negocio que no está cargado se confirma con el equipo; lo que depende de ver a la persona no se confirma con nadie, lo valora el médico en consulta.`
       : '';
 
   // Tenant-wide rules that survive a campaign variant (resolveEffectiveOverrides always
