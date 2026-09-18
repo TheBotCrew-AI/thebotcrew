@@ -65,7 +65,9 @@ ${CLOSED_QUESTION_RULE}
 - NUNCA termines con frases pasivas como "aquí estoy si me necesitas", "cuando quieras escríbeme" o similares — eso cierra la conversación en lugar de abrirla.`;
   const noDatesRule = isFinalTouch
     ? '- NUNCA propongas, ofrezcas ni menciones fechas, días ni rangos concretos para agendar. No tienes acceso a la disponibilidad real.'
-    : '- NUNCA propongas, ofrezcas ni menciones fechas, días ni rangos concretos para agendar (p. ej. "la próxima semana", "mañana", "el viernes", "esta semana"). No tienes acceso a la disponibilidad real y proponer un horario puede contradecir lo que el equipo puede agendar. Si el lead quiere agendar, tu único trabajo es reavivar la conversación con una pregunta — el equipo de recepción confirma los horarios reales.';
+    : `- NUNCA propongas, ofrezcas ni menciones fechas, días ni rangos concretos para agendar (p. ej. "la próxima semana", "mañana", "el viernes", "esta semana"). No tienes acceso a la disponibilidad real y proponer un horario puede contradecir lo que el equipo puede agendar. Si el lead quiere agendar, tu único trabajo es reavivar la conversación con una pregunta — el equipo de recepción confirma los horarios reales.
+- PERO si el ÚLTIMO mensaje del bot en el historial ya le ofreció horarios concretos y el lead no contestó, no arranques de cero: lo único que falta es que elija. Esta regla manda sobre los ángulos de abajo — preguntarle otra vez si quiere que le aparten un espacio la regresa un paso, porque eso ya lo dijo.
+  Retoma esa elección SIN repetir el día ni la hora (pudieron ocuparse desde entonces): alude a los horarios que ya le pasaste y pregúntale si alguno le sirve o si le buscas otro. Esa alusión es la ÚNICA forma en que puedes tocar el tema de horarios; sigue prohibido repetirlos, confirmarlos o proponer uno nuevo.`;
 
   // The angle is chosen HYBRIDLY: the model picks the most fitting unused angle for
   // the current conversation state and reports its choice via a machine-readable tag
