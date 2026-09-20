@@ -11,8 +11,9 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { GhlClient } from '../../../ghl/client.js';
 import { syncContactTimezone } from '../../../ghl/contact-timezone.js';
-import { getActiveDemoSession, logAppointment, logBotEvent, setSimulatedBooking } from '../../../db/queries.js';
+import { getActiveDemoSession, getBookingHold, logAppointment, logBotEvent, moveHold, setSimulatedBooking } from '../../../db/queries.js';
 import { resolveAgentContext } from './agent-context.js';
+import { describeHoldForModel } from './booking-hold.js';
 import { resolveActiveAppointment } from './resolve-appointment.js';
 import { bookingQueryWindow, resolveBookableSlot } from './booking-time.js';
 import { earliestBookableMs } from './booking-window.js';
@@ -169,14 +170,22 @@ export const rescheduleAppointmentTool = createTool({
       await syncContactTimezone(ghl, turn.ghlContactId, turn.leadTimezone, 'rescheduleAppointment');
     }
 
+    // Paid confirmation (0062): the hold follows the cita — same link, same deadline. A paid
+    // hold keeps the cita confirmed through the move; a pending one keeps it `new`.
+    const hold = config.bookingPayment ? ((await getBookingHold(appt.ghlAppointmentId).catch(() => null)) ?? null) : null;
+    const holdPaid = hold?.status === 'paid' || hold?.status === 'paid_late';
+    const appointmentStatus = hold
+      ? holdPaid ? 'confirmed' : 'new'
+      // Moving the cita leaves it as unconfirmed as a fresh booking would (0061).
+      : config.bookUnconfirmed ? 'new' : 'confirmed';
+
     try {
       await ghl.rescheduleAppointment({
         appointmentId: appt.ghlAppointmentId,
         calendarId,
         startTime: canonicalStart,
         ...(endTime ? { endTime } : {}),
-        // Moving the cita leaves it as unconfirmed as a fresh booking would (0061).
-        appointmentStatus: config.bookUnconfirmed ? 'new' : 'confirmed',
+        appointmentStatus,
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -203,12 +212,20 @@ export const rescheduleAppointmentTool = createTool({
       p_ghl_appointment_id: appt.ghlAppointmentId,
     }).catch((e: unknown) => console.error('[rescheduleAppointment] logAppointment failed:', e));
 
+    if (hold) {
+      moveHold(appt.ghlAppointmentId, canonicalStart).catch((e: unknown) =>
+        console.error('[rescheduleAppointment] moveHold failed (non-blocking):', e instanceof Error ? e.message : String(e)),
+      );
+    }
+
     // Hand back a tenant-tz label so the agent confirms the real time instead of
     // re-rendering an ISO string it might mis-state.
     const label = slotLabel(canonicalStart, frameTz, config.timezone);
     return {
       rescheduled: true,
-      message: `Cita reagendada: ${label}. Confírmasela al lead usando EXACTAMENTE ese texto.`,
+      message:
+        `Cita reagendada: ${label}. Confírmasela al lead usando EXACTAMENTE ese texto.` +
+        describeHoldForModel(hold, frameTz, config.timezone),
     };
   },
 });

@@ -95,6 +95,10 @@ export interface RawTenantConfig {
   /** Book (and reschedule) GHL appointments as "No confirmada" (0061), leaving the flip to
    *  confirmed to the tenant's GHL confirmation workflow. Off by default. */
   bookUnconfirmed?: boolean;
+  /** Paid confirmation (0062): a bot booking is born unconfirmed and holds the slot until the
+   *  lead pays a Stripe Checkout link (the money lands on the PLATFORM account). Raw jsonb,
+   *  validated by the front-desk config; null/absent = citas confirm without payment. */
+  bookingPayment?: unknown;
   /** Slug of the Worker secret holding this tenant's own provider key
    *  (`'MADI'` → `OPENAI_API_KEY__MADI`). Never the key itself. null = platform key. */
   aiKeyRef?: string | null;

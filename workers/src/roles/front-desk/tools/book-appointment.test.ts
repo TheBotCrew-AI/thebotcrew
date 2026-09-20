@@ -9,6 +9,7 @@ const ghl = {
   removeContactTags: vi.fn(),
   updateContactTimezone: vi.fn(),
   updateContactName: vi.fn(),
+  cancelAppointment: vi.fn(),
 };
 vi.mock('../../../ghl/client.js', () => ({ GhlClient: vi.fn(() => ghl) }));
 vi.mock('../../../db/queries.js');
@@ -475,5 +476,68 @@ describe('bookAppointment — unconfirmed bookings (0061)', () => {
   it('the lead still gets a normal confirmation message — the status is a GHL-side state', async () => {
     const res = await runWith({ serviceName: 'Consulta', startTime: START }, flagCtx(true));
     expect(res.message).toContain('Cita agendada');
+  });
+});
+
+// Paid confirmation (0062): the booking holds the slot as `new` and comes back with the
+// Stripe link + deadline; without a link there is no hold, so the booking is undone.
+vi.mock('./booking-hold.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./booking-hold.js')>()),
+  openBookingHold: vi.fn(),
+}));
+import { openBookingHold } from './booking-hold.js';
+
+describe('bookAppointment — paid confirmation (0062)', () => {
+  const payCtx = () => {
+    const t = { ...tenant, config: { ...(tenant.config as object), bookingPayment: { amount: 500 } } } as unknown as TenantContext;
+    return { requestContext: { get: (k: string) => (k === 'tenant' ? t : k === 'turn' ? turn : undefined) } };
+  };
+  type PaidOut = { booked: boolean; paymentUrl?: string; paymentAmount?: string; paymentDueLabel?: string; message: string };
+  const runPaid = () =>
+    (bookAppointmentTool.execute as (i: { serviceName: string; startTime: string }, c: LeadCtx) => Promise<PaidOut>)(
+      { serviceName: 'Consulta', startTime: START },
+      payCtx(),
+    );
+
+  beforeEach(() => {
+    vi.mocked(openBookingHold).mockResolvedValue({
+      checkoutUrl: 'https://checkout.stripe.com/c/pay/cs_1',
+      dueAt: '2026-07-11T17:00:00.000Z',
+      amountLabel: '$500 MXN',
+      dueLabel: 'sábado, 11 de julio, 12:00 p.m.',
+    });
+    ghl.cancelAppointment.mockResolvedValue(undefined);
+  });
+
+  it("books as 'new' (the payment confirms) and returns the link, the amount and the deadline for the model to relay", async () => {
+    const res = await runPaid();
+    expect(res.booked).toBe(true);
+    expect(ghl.bookAppointment).toHaveBeenCalledWith(expect.objectContaining({ appointmentStatus: 'new' }));
+    expect(openBookingHold).toHaveBeenCalledWith(expect.objectContaining({ ghlAppointmentId: 'appt1', serviceName: 'Consulta', startTime: START }));
+    expect(res.paymentUrl).toBe('https://checkout.stripe.com/c/pay/cs_1');
+    expect(res.paymentAmount).toBe('$500 MXN');
+    expect(res.message).toContain('APARTADA');
+    expect(res.message).toContain('https://checkout.stripe.com/c/pay/cs_1');
+    expect(res.message).toContain('$500 MXN');
+    expect(res.message).toContain('sábado, 11 de julio');
+    expect(res.message).not.toMatch(/Cita agendada/);
+    // Still a real booking for the stats layer + the round reset.
+    expect(q.logAppointment).toHaveBeenCalledWith(expect.objectContaining({ p_action: 'booked', p_ghl_appointment_id: 'appt1' }));
+  });
+
+  it('no link → the booking is UNDONE (cancelled in GHL), nothing logged as booked, booking_failed payment_link_failed', async () => {
+    vi.mocked(openBookingHold).mockResolvedValue({ error: 'checkout_session_failed' });
+    const res = await runPaid();
+    expect(res.booked).toBe(false);
+    expect(ghl.cancelAppointment).toHaveBeenCalledWith('appt1');
+    expect(q.logAppointment).not.toHaveBeenCalled();
+    expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'booking_failed', expect.objectContaining({ reason: 'payment_link_failed', error: 'checkout_session_failed' }));
+    expect(res.message).toContain('NO quedó apartada');
+  });
+
+  it('a tenant without booking_payment never touches the hold', async () => {
+    await run({ serviceName: 'Consulta', startTime: START });
+    expect(openBookingHold).not.toHaveBeenCalled();
+    expect(ghl.bookAppointment).toHaveBeenCalledWith(expect.objectContaining({ appointmentStatus: 'confirmed' }));
   });
 });

@@ -41,6 +41,8 @@ export interface TenantConfigRow {
   interest_tags?: boolean | null;
   /** Book/reschedule as appointmentStatus='new' — "No confirmada" (0061); false/null = confirmed. */
   book_unconfirmed?: boolean | null;
+  /** Paid confirmation config ({amount, currency, hold_hours, …}, 0062). NULL = off. */
+  booking_payment?: unknown;
   /** Channels the bot may reply on. NULL = none (installed but silent). */
   enabled_channels: string[] | null;
   /** Pre-live test allowlist: when non-empty, reply only to these GHL contact ids. */
@@ -232,6 +234,13 @@ export type BotEventType =
   | 'availability_checked'
   // Booking observability — GHL rejected a bookAppointment call (status/body in metadata)
   | 'booking_failed'
+  // Paid confirmation (0062): the hold's lifecycle, one event per transition
+  | 'hold_created'      // booking + Stripe session + hold row succeeded ({ghlAppointmentId, amountCents, dueAt})
+  | 'hold_released'     // the lead cancelled while the hold was pending or paid ({status})
+  | 'hold_expired'      // the cron released the slot: GHL cancelled, session expired
+  | 'booking_paid'      // Stripe paid a pending hold → GHL event confirmed
+  | 'booking_paid_late' // Stripe paid a hold the cron had already released — a person decides
+  | 'payment_error'     // a Stripe/GHL step failed (metadata.stage); never silent
   // Conversation state changed via app_update_conversation_status ({from,to} in metadata)
   | 'status_changed'
   // Turn handed to the per-conversation Durable Object (Phase 1 durable-turn path)
@@ -386,3 +395,68 @@ export interface UnansweredPendingInfo {
   question: string | null;
   flaggedAt: string;
 }
+
+// ============================================================
+// Paid confirmation — booking holds (0062)
+// ============================================================
+
+/** `booking_holds.status`. Transitions are enforced by the RPCs, not the Worker. */
+export type BookingHoldStatus = 'pending' | 'paid' | 'expiring' | 'expired' | 'cancelled' | 'paid_late';
+
+/** One `booking_holds` row as the tools read it (direct select). */
+export interface BookingHoldRow {
+  id: string;
+  ghlAppointmentId: string;
+  stripeSessionId: string;
+  checkoutUrl: string;
+  amountCents: number;
+  currency: string;
+  status: BookingHoldStatus;
+  dueAt: string;
+  paidAt: string | null;
+}
+
+/** Params for the app_create_booking_hold RPC (0062). */
+export interface CreateBookingHoldParams {
+  p_client_id: string;
+  p_ghl_conversation_id: string;
+  p_ghl_contact_id: string;
+  p_ghl_appointment_id: string;
+  p_service_type: string | null;
+  p_appointment_datetime: string | null;
+  p_amount_cents: number;
+  p_currency: string;
+  p_stripe_session_id: string;
+  p_checkout_url: string;
+  p_due_at: string;
+}
+
+/**
+ * A hold handed to a worker path (the Stripe webhook after settle, the expiry
+ * cron after claim), with everything that path needs to act: whom to message
+ * (channel/phone), which tenant (location id → resolveTenant), what to cancel.
+ */
+export interface ActionableHold {
+  id: string;
+  clientId: string;
+  ghlConversationId: string;
+  ghlContactId: string;
+  ghlAppointmentId: string;
+  serviceType: string | null;
+  appointmentDatetime: string | null;
+  amountCents: number;
+  currency: string;
+  checkoutUrl: string;
+  dueAt: string;
+  /** null when the conversation row is gone (never expected; the caller then can't message). */
+  channel: string | null;
+  contactPhone: string | null;
+  /** null when the tenant is inactive — the caller finishes the hold and skips GHL. */
+  ghlLocationId: string | null;
+}
+
+/** app_settle_hold_payment: which transition the payment produced. */
+export type SettledHold = ActionableHold & { outcome: 'paid' | 'paid_late' };
+
+/** app_claim_expired_holds: a pending hold now in `expiring`, plus its Stripe session to expire. */
+export type ClaimedHold = ActionableHold & { stripeSessionId: string };

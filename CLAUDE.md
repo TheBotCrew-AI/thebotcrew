@@ -153,8 +153,9 @@ workers/                       # Mastra + Cloudflare Worker package (@thebotcrew
       reactivation/            # text-only follow-up/reactivation agent (no tools)
     ghl/                       # webhook parse/verify, OAuth, tags + transport-only API client (live)
     meta/                      # Meta Conversions API (0048/0056): capi-config (pure parse/payload, per-channel identity, lead_replies_required reply-threshold) + capi (enqueue + Graph send)
+    payments/                  # Stripe (0062): stripe.ts (fetch client: Checkout Session create/expire + webhook signature, ONE platform account) + hold-messages (LLM-free lead texts)
     db/                        # service-role Supabase client, queries (config read + RPC writes)
-    worker/                    # webhook-handler (inbound) + conversation-do (per-conversation Durable Object: durable-alarm debounce + serialized turn) + outbound-handler (human takeover) + tag-handler (bot-off) + delivery-retry + followup-runner + capi-runner (Meta CAPI queue drain) + info-gap-runner + info-gaps/ (0054: what the bot couldn't answer — extraction queue, aggregate, report; pending_info escalation)
+    worker/                    # webhook-handler (inbound) + conversation-do (per-conversation Durable Object: durable-alarm debounce + serialized turn) + outbound-handler (human takeover) + tag-handler (bot-off) + delivery-retry + followup-runner + capi-runner (Meta CAPI queue drain) + info-gap-runner + info-gaps/ (0054: what the bot couldn't answer — extraction queue, aggregate, report; pending_info escalation) + stripe-webhook-handler + hold-expiry-runner + system-message (0062 paid confirmation: settle on payment, release on the 5-min cron, one fixed message outside a turn)
   scripts/simulate-webhook.mjs # local dev: fire a fake GHL webhook
   scripts/demo-take.mjs        # arma/cierra una toma del demo de bótox para grabar video (business-logic §5b)
   scripts/battery.mjs          # pnpm battery <slug>: corre la batería de conversaciones de muestra de un tenant
@@ -280,7 +281,14 @@ supabase/
                                #      quien la pasa a confirmada es el workflow de confirmación del cliente (CONFIRMO), no
                                #      nosotros. Nuestro código nunca filtró por 'confirmed' —sólo excluye 'cancelled'—, así
                                #      que una cita sin confirmar sigue sirviendo para reagendar, cancelar, apagar nudges y
-                               #      prender modo asistencia. Ver business-logic §5)
+                               #      prender modo asistencia. Ver business-logic §5),
+                               # 0062 booking_holds (apartado con pago, por tenant: tenant_config.booking_payment jsonb NULL = off.
+                               #      El bot agenda `new`, manda una liga de Stripe Checkout de LA CUENTA DE LA PLATAFORMA (así
+                               #      cobramos la oferta de instalación gratis) y la cita se confirma sólo cuando el lead paga;
+                               #      el cron de 5 min la cancela al vencer hold_hours. Tabla booking_holds + 5 RPCs con las
+                               #      transiciones atómicas (pending→paid | expiring→expired | paid_late = pagó después de que se
+                               #      liberó el lugar → tag pago-revisar, lo decide una persona) + vista paid_bookings_monthly.
+                               #      Sin liga no hay cita: si Stripe falla, bookAppointment deshace la reserva. Ver business-logic §5e)
   clients.sql, seed-tenants.sql# seeds (run by `supabase db reset` per config.toml)
 sites/                         # client marketing sites: static HTML, no build step, no deps
   _template/                   # starting point for a new client
@@ -548,6 +556,16 @@ cualquier Chrome headless recibe SIGTERM a los ~2 s (ver cabecera de `render-bat
   (`ghl/tags.ts`), no config, no LLM, skipped in demo. A smart-list hook for GHL reactivation
   campaigns — it does not change what the bot does after a cancel (still `standby`, no nudges).
   The cancel prompt rule now offers to reschedule first; see docs/business-logic.md §5.
+- Paid confirmation (0062): with `tenant_config.booking_payment` set, `bookAppointment` books `new`,
+  opens a Stripe Checkout Session on the **platform's** account and stores a `booking_holds` row;
+  `POST /webhooks/stripe` (Stripe-Signature over the raw body, fails closed) settles pending → paid
+  and flips the GHL event to `confirmed` (`GhlClient.updateAppointmentStatus`); the 5-min cron
+  releases overdue holds (GHL cancel first, then `expired`). Tags: `pago-pendiente` → `cita-pagada`
+  | `apartado-vencido`; `pago-revisar` = a person decides (paid late, or paid then cancelled).
+  Secrets: `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET`, platform-wide, both or off; `STRIPE_MODE=test`
+  switches to the `*_TEST_MODE` pair (test cards on prod, no real charge — delete the flag to go live). The Checkout
+  success/cancel pages are `/pay/ok` and `/pay/cancel` on the Worker. See docs/business-logic.md §5e,
+  setup in docs/onboarding.md §9.
 - Marketing opt-out (0051) — a date, not a switch. The `marketing-opt-out` tag stamps
   `conversations.marketing_opted_out_at` and changes nothing else: it is consent about the GHL
   **campaigns**, which the bot neither sends nor reads. Do not confuse it with `bot-opted-out`

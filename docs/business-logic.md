@@ -987,6 +987,77 @@ zone is printed even for a contact whose field is empty.
 Evals: `evals/lead-timezone.eval.ts` (label repeated with suffix; tool call instead of
 prose arithmetic; ask-the-city before offering). DB precedence: `supabase/tests/0057_*`.
 
+## 5e. Paid confirmation — a cita counts once the lead pays (0062)
+
+**The offer it serves.** The client gets the system for free; the platform earns a fixed
+amount each time one of the client's leads confirms a cita by paying for it. So the money
+lands on **the platform's own Stripe account** — one account, platform-level secrets
+(`STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET`), every tenant — never on the client's GHL
+payment provider, and the whole flow is owned by the Worker. No GHL workflow sits in the
+critical path (the CAPI and CONFIRMO experiences: per-tenant automations are untestable and
+leave no `bot_events` trail). GHL Invoices were rejected on purpose: they would brand the
+receipt with the client's business while the charge lands on ours, the client could
+disconnect or refund from their own dashboard, and it needs new OAuth scopes on every tenant.
+
+**Per tenant:** `tenant_config.booking_payment` jsonb, NULL = off (every tenant today):
+`{ "amount": 500, "currency": "mxn", "hold_hours": 24, "deposit_note": "se descuenta del
+costo de tu consulta", "statement_suffix": "DR VALDIVIA" }`. `amount` is pesos;
+`services[].deposit` overrides it per service. Malformed → feature off + a loud log, never a
+thrown turn (`parseBookingPayment`).
+
+**The flow, end to end.**
+
+1. `bookAppointment` books the GHL event as `new` ("No confirmada" — the 0061 state, but here
+   the flip belongs to the payment, not to a CONFIRMO workflow), opens a Stripe Checkout
+   Session (card only, `es-419`, `expires_at` = the hold deadline clamped to Stripe's 24 h
+   cap, idempotency key = the appointment id) and inserts a `booking_holds` row (`pending`,
+   `due_at = now + hold_hours`). The contact gets `pago-pendiente`. The tool returns the link,
+   the amount and the deadline as a rendered label; the prompt section `# Apartado con pago`
+   makes the model paste the link verbatim, state the deadline and say **apartada**, never
+   "confirmada". **No link → no cita:** if Stripe or the insert fails, the tool cancels the
+   booking it just made and returns `booked:false` (`booking_failed` reason
+   `payment_link_failed`). A hold without a payment link is a free cita, the one thing the
+   offer forbids.
+2. `POST /webhooks/stripe` (`checkout.session.completed` / `async_payment_succeeded`,
+   `payment_status='paid'`, Stripe-Signature over the raw body, fails closed) →
+   `app_settle_hold_payment`: **pending → paid** in one atomic statement. Then, best-effort
+   and loud (`payment_error` on any failure): the GHL event → `confirmed`, tags `cita-pagada`
+   on / `pago-pendiente` off, `booking_paid`, a CAPI **`Purchase` with the real value**
+   (`appointment_paid`, the only kind that carries money), and one fixed message to the lead
+   ("recibimos tu pago, tu cita quedó confirmada para el …"). Replays find `paid` and get
+   nothing: idempotent by construction.
+3. The **5-minute cron** (`hold-expiry-runner`) claims overdue pending holds
+   (`app_claim_expired_holds`, → `expiring`, SKIP LOCKED) and releases each: GHL cancel
+   **first** (a failure puts the hold back to `pending` and the next tick retries — loud,
+   never stuck), Stripe session expired, `expired`, an `appointments` row `cancelled`
+   (`source='hold-expiry'`), tags `apartado-vencido` + `cita-cancelada` on / `pago-pendiente`
+   off, `hold_expired`, the conversation reopened (`completed → active`) and a fixed message
+   ("se venció el plazo… si todavía la quieres te agendo de nuevo").
+4. **The one overlap** — a payment that lands after the cron claimed the hold — resolves as
+   `paid_late`: the cita is **not** resurrected, the contact gets `pago-revisar`, the lead is
+   told a person will write, and `booking_paid_late` is logged. Same if the lead cancels a
+   cita they already paid (`cancelAppointment` → `hold_released {status:'paid', review:true}`).
+   Refund or rebook is a human decision; the bot never promises either.
+
+**What the other tools do.** `rescheduleAppointment` keeps the hold (same link, same
+deadline, `app_move_hold` mirrors the new time) and keeps a paid cita `confirmed` through the
+move. `cancelAppointment` closes a pending hold (session expired, tag off). `lookupAppointment`
+answers "¿ya quedó?" / "ya pagué" from the hold — pending (link + deadline again), paid,
+paid_late, or released (`found:false`, offer to rebook) — so the model never assumes a
+payment it cannot see.
+
+**Reporting.** `booking_holds` is the platform's revenue ledger; `paid_bookings_monthly`
+(client, month, count, sum, late count) is the monthly read. Stripe's dashboard is the other
+half.
+
+**Deliberately out of v1:** reminders before the deadline ("te quedan 4 horas" — a
+`follow_ups.kind='hold'` ladder later), OXXO/SPEI (a voucher can take 3 days, longer than the
+hold), Stripe Connect payouts to the client (the interface — open / settle / release — is
+ready for it; the account model is not).
+
+Evals: `evals/booking-hold.eval.ts` (the link verbatim, the deadline, "apartada" not
+"confirmada"). DB transitions: `supabase/tests/0062_booking_holds.test.sql`.
+
 ## 6. Models & factual grounding
 
 - **Platform default: `openai` / `gpt-5.6-luna`** (`DEFAULT_PROVIDER` / `DEFAULT_MODEL` in

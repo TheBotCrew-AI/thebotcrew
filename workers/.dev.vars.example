@@ -51,3 +51,19 @@ GHL_WORKFLOW_SECRET="<random-secret>"
 # Optional, local only (never a Worker secret): read Workers Logs with scripts/cf-logs.mjs.
 # Cloudflare API token with the "Workers Observability: Read" permission.
 CF_OBSERVABILITY_TOKEN=
+
+# Paid confirmation (0062) — ONE Stripe account (the platform's) for every tenant: a lead
+# pays a Checkout link to hold their cita and the money lands here, which is how the
+# platform is paid under the free-install offer. Both secrets or the feature is off:
+#   STRIPE_SECRET_KEY     Developers → API keys (sk_test_… locally, sk_live_… in prod)
+#   STRIPE_WEBHOOK_SECRET Developers → Webhooks → the endpoint <WORKER_URL>/webhooks/stripe
+#                         listening to checkout.session.completed + async_payment_succeeded
+# Third-party credentials → Worker secrets (`wrangler secret put`), never the DB.
+STRIPE_SECRET_KEY=
+STRIPE_WEBHOOK_SECRET=
+# STRIPE_MODE=test switches the Worker to the *_TEST_MODE pair below (a test-mode key +
+# the signing secret of a TEST-MODE endpoint at the same URL), so the whole flow can be
+# rehearsed on prod with Stripe's test cards. Delete the flag (or set `live`) to go live.
+# STRIPE_MODE=test
+# STRIPE_SECRET_KEY_TEST_MODE=
+# STRIPE_WEBHOOK_SECRET_TEST_MODE=

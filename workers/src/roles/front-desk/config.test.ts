@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { parseFrontDeskConfig, resolveEffectiveOverrides } from './config.js';
+import { describe, it, expect, vi } from 'vitest';
+import { holdAmountCents, parseFrontDeskConfig, resolveEffectiveOverrides } from './config.js';
 
 describe('parseFrontDeskConfig', () => {
   it('applies defaults for optional fields', () => {
@@ -130,5 +130,41 @@ describe('promptVariants — followUpAngles', () => {
       promptVariants: { 'laser-promo': { followUpAngles: ['¿sigues interesada en la promo?'] } },
     } as never);
     expect(c.promptVariants?.['laser-promo']?.followUpAngles).toEqual(['¿sigues interesada en la promo?']);
+  });
+});
+
+describe('bookingPayment (0062)', () => {
+  const base = { businessName: 'X', timezone: 'America/Mexico_City' };
+
+  it('absent / null → null (citas confirm without payment)', () => {
+    expect(parseFrontDeskConfig(base as never).bookingPayment).toBeNull();
+    expect(parseFrontDeskConfig({ ...base, bookingPayment: null } as never).bookingPayment).toBeNull();
+  });
+
+  it('reads the snake_case jsonb and applies defaults (mxn, 24h)', () => {
+    const c = parseFrontDeskConfig({ ...base, bookingPayment: { amount: 500 } } as never);
+    expect(c.bookingPayment).toEqual({ amount: 500, currency: 'mxn', holdHours: 24 });
+    const full = parseFrontDeskConfig({
+      ...base,
+      bookingPayment: { amount: 350.5, currency: 'MXN', hold_hours: 48, deposit_note: 'se descuenta', statement_suffix: 'DR VALDIVIA' },
+    } as never);
+    expect(full.bookingPayment).toEqual({ amount: 350.5, currency: 'mxn', holdHours: 48, depositNote: 'se descuenta', statementSuffix: 'DR VALDIVIA' });
+  });
+
+  it('malformed → null + a loud log, never a throw (a typo must not kill every turn)', () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    expect(parseFrontDeskConfig({ ...base, bookingPayment: { amount: -5 } } as never).bookingPayment).toBeNull();
+    expect(parseFrontDeskConfig({ ...base, bookingPayment: { amount: 500, statement_suffix: 'x'.repeat(23) } } as never).bookingPayment).toBeNull();
+    expect(parseFrontDeskConfig({ ...base, bookingPayment: 'yes' } as never).bookingPayment).toBeNull();
+    expect(spy).toHaveBeenCalledTimes(3);
+    spy.mockRestore();
+  });
+
+  it('holdAmountCents: per-service deposit wins, cents are rounded, null without the feature', () => {
+    const c = parseFrontDeskConfig({ ...base, services: [{ name: 'A', deposit: 199.995 }, { name: 'B' }], bookingPayment: { amount: 500 } } as never);
+    expect(holdAmountCents(c, 'A')).toBe(20000);
+    expect(holdAmountCents(c, 'B')).toBe(50000);
+    expect(holdAmountCents(c, 'unknown')).toBe(50000);
+    expect(holdAmountCents(parseFrontDeskConfig(base as never), 'A')).toBeNull();
   });
 });

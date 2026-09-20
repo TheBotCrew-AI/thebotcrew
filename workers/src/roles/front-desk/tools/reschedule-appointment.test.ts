@@ -271,3 +271,51 @@ describe('rescheduleAppointment — unconfirmed bookings (0061)', () => {
     expect(ghl.rescheduleAppointment).toHaveBeenCalledWith(expect.objectContaining({ appointmentStatus: 'confirmed' }));
   });
 });
+
+// Paid confirmation (0062): the hold follows the cita; its payment state decides the GHL status.
+describe('rescheduleAppointment — paid confirmation (0062)', () => {
+  const payCtx = () => {
+    const base = makeCtx();
+    const t = { ...(base.requestContext.get('tenant') as TenantContext) };
+    t.config = { ...(t.config as object), bookingPayment: { amount: 500 } } as TenantContext['config'];
+    const turn = base.requestContext.get('turn');
+    return { requestContext: { get: (k: string) => (k === 'tenant' ? t : k === 'turn' ? turn : undefined) } };
+  };
+  const hold = (status: string) => ({
+    id: 'h1', ghlAppointmentId: 'appt1', stripeSessionId: 'cs_1', checkoutUrl: 'https://pay/x', amountCents: 50000, currency: 'mxn', status, dueAt: inDays(1), paidAt: null,
+  });
+
+  beforeEach(() => {
+    vi.mocked(q.moveHold).mockResolvedValue(true);
+  });
+
+  it("pending hold → moved as 'new', the hold's time is updated, the link + deadline are repeated to the model", async () => {
+    vi.mocked(q.getBookingHold).mockResolvedValue(hold('pending') as never);
+    const res = await run(START, payCtx());
+    expect(res.rescheduled).toBe(true);
+    expect(ghl.rescheduleAppointment).toHaveBeenCalledWith(expect.objectContaining({ appointmentStatus: 'new' }));
+    expect(q.moveHold).toHaveBeenCalledWith('appt1', START);
+    expect(res.message).toContain('APARTADA');
+    expect(res.message).toContain('https://pay/x');
+  });
+
+  it("paid hold → stays 'confirmed' through the move", async () => {
+    vi.mocked(q.getBookingHold).mockResolvedValue(hold('paid') as never);
+    const res = await run(START, payCtx());
+    expect(ghl.rescheduleAppointment).toHaveBeenCalledWith(expect.objectContaining({ appointmentStatus: 'confirmed' }));
+    expect(res.message).toContain('PAGADA');
+  });
+
+  it('no hold on a paid-confirmation tenant (staff-booked cita) → the 0061 rule applies, no hold move', async () => {
+    vi.mocked(q.getBookingHold).mockResolvedValue(null);
+    const res = await run(START, payCtx());
+    expect(res.rescheduled).toBe(true);
+    expect(ghl.rescheduleAppointment).toHaveBeenCalledWith(expect.objectContaining({ appointmentStatus: 'confirmed' }));
+    expect(q.moveHold).not.toHaveBeenCalled();
+  });
+
+  it('a tenant without booking_payment never reads the hold', async () => {
+    await run(START);
+    expect(q.getBookingHold).not.toHaveBeenCalled();
+  });
+});

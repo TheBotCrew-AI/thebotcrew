@@ -12,6 +12,7 @@ import { GhlClient } from '../../../ghl/client.js';
 import { CANCELLED_APPOINTMENT_TAG } from '../../../ghl/tags.js';
 import { getActiveDemoSession, logAppointment, logBotEvent, reactivateConversation, setSimulatedBooking } from '../../../db/queries.js';
 import { resolveAgentContext } from './agent-context.js';
+import { releaseBookingHold } from './booking-hold.js';
 import { resolveActiveAppointment } from './resolve-appointment.js';
 
 export const cancelAppointmentTool = createTool({
@@ -25,7 +26,7 @@ export const cancelAppointmentTool = createTool({
     message: z.string(),
   }),
   execute: async (_input, ctx) => {
-    const { tenant, turn } = resolveAgentContext(ctx);
+    const { tenant, turn, config } = resolveAgentContext(ctx);
 
     // Demo mode: clear the session's simulated booking; never touch GHL or the store.
     if (turn.activeRole === 'demo') {
@@ -84,6 +85,24 @@ export const cancelAppointmentTool = createTool({
       console.error('[cancelAppointment] tag add failed (non-blocking):', e instanceof Error ? e.message : String(e)),
     );
 
-    return { cancelled: true, message: 'Cita cancelada.' };
+    // Paid confirmation (0062): close the hold. A paid one is a person's decision (refund
+    // or rebook) — the bot only makes sure it is flagged and says so without promising.
+    let release: Awaited<ReturnType<typeof releaseBookingHold>> = 'none';
+    if (config.bookingPayment) {
+      release = await releaseBookingHold({
+        tenant, ghl, ghlContactId: turn.ghlContactId, ghlConversationId: turn.ghlConversationId, ghlAppointmentId: appt.ghlAppointmentId,
+      }).catch((e: unknown) => {
+        console.error('[cancelAppointment] releaseBookingHold failed:', e instanceof Error ? e.message : String(e));
+        return 'none' as const;
+      });
+    }
+
+    return {
+      cancelled: true,
+      message:
+        release === 'paid'
+          ? 'Cita cancelada. El lead YA había pagado el apartado: una persona del equipo revisa qué procede (devolución o reagendar). Díselo con naturalidad, sin prometer plazos ni montos.'
+          : 'Cita cancelada.',
+    };
   },
 });

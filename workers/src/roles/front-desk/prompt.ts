@@ -13,7 +13,8 @@ import { frameTimeZone, zoneLabel, zoneSuffix } from '../../core/lead-timezone.j
 import { zonedWallClockToMs } from './tools/booking-time.js';
 import { earliestBookableMs } from './tools/booking-window.js';
 import { slotLabel } from './tools/slot-label.js';
-import { resolveEffectiveOverrides, type FrontDeskConfig } from './config.js';
+import { holdAmountCents, resolveEffectiveOverrides, type FrontDeskConfig } from './config.js';
+import { formatHoldAmount } from './tools/booking-hold.js';
 
 /**
  * The booking half of the prompt. Rendered only when the tenant books through the bot
@@ -429,6 +430,24 @@ No tenemos número de WhatsApp del lead en el sistema (típico de leads de Faceb
 - Cuando el lead te lo dé, pásalo como el argumento whatsappPhone al llamar bookAppointment — así se guarda al agendar. No hay otra forma de guardarlo.
 - NUNCA lo saques automáticamente del texto del formulario ni lo uses antes de agendar; pídelo explícitamente al lead cuando vayan a agendar.`;
 
+  // Paid confirmation (0062). Rendered only for a tenant that charges for the hold, outside
+  // demo: the booking tools return the link + deadline, this section is what makes the model
+  // RELAY them and stop saying "confirmada". Deterministic where it matters (the URL and the
+  // deadline come from the tool result verbatim); the model owns only the wording around them.
+  let paidHoldSection = '';
+  if (config.bookingPayment && bookingEnabled && !usingDemo) {
+    const cents = holdAmountCents(config, '') ?? Math.round(config.bookingPayment.amount * 100);
+    const amount = formatHoldAmount(cents, config.bookingPayment.currency);
+    const note = config.bookingPayment.depositNote?.trim();
+    paidHoldSection = `\n\n# Apartado con pago — manda sobre la secuencia de agendar
+En este negocio una cita se CONFIRMA solo cuando la persona paga el apartado de ${amount}${note ? ` (${note})` : ''}. bookAppointment ya no confirma: APARTA el lugar y te devuelve una liga de pago y una fecha límite.
+- Tras agendar con éxito, tu mensaje de cierre lleva TRES cosas: el día y la hora, la liga de pago EXACTA que devolvió la herramienta (pégala tal cual, completa, sin acortarla ni describirla) y hasta cuándo tiene para pagar. Di que el lugar queda apartado y que se confirma en cuanto pague.
+- NUNCA digas "confirmada", "lista", "ya quedó" ni "nos vemos" antes del pago. La palabra es "apartada". Tampoco digas que le llegará una confirmación: le llega cuando pague.
+- Si dice que ya pagó, llama lookupAppointment y contesta con lo que devuelva; no lo des por pagado tú.
+- Si pregunta por qué se paga o si puede pagar después, dilo en positivo y en una línea: así su lugar queda reservado de verdad. No ofrezcas apartar sin pago, pagar en el lugar ni ampliar el plazo.
+- Si te dice que el plazo venció o lookupAppointment dice que el lugar se liberó, la liga anterior ya no sirve: ofrécele agendar de nuevo con getAvailability, sin reproches.`;
+  }
+
   // Neutral datum available to any tenant; only tenants whose flow asks to confirm the name
   // (via qualificationNotes) act on it. Page-form leads often arrive named after their business.
   const contactNameSection = contactName?.trim()
@@ -635,7 +654,7 @@ En vez de eso AFIRMA que lo vas a confirmar, en UNA línea corta y natural — "
 - No prometas un tiempo concreto ("en 5 minutos", "hoy mismo") ni des el dato después por tu cuenta: si no lo tienes, no lo tienes.
 - No lo repitas en cada mensaje ni lo conviertas en el tema. Una vez que dijiste que lo confirmas, ya quedó: no lo vuelvas a anunciar ni a marcar por lo mismo.`}
 
-${offeringSection}${hoursSection}${flowSection}${faqSection}${houseRulesSection}${toolInstructionsSection}${reminderSection}${contactNameSection}${demoHandoffSection}${existingAppointmentSection}${photoSection}${humanRepliesSection}
+${offeringSection}${hoursSection}${flowSection}${faqSection}${houseRulesSection}${toolInstructionsSection}${reminderSection}${paidHoldSection}${contactNameSection}${demoHandoffSection}${existingAppointmentSection}${photoSection}${humanRepliesSection}
 
 # Uso de herramientas
 Cuando necesites llamar una herramienta, NO generes texto antes de la llamada. Llama la herramienta en silencio y escribe tu respuesta al lead ÚNICAMENTE después de tener el resultado final. Un solo mensaje, sin intermedios.

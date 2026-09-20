@@ -782,3 +782,23 @@ describe('buildFrontDeskInstructions — minimum notice (0059)', () => {
     expect(demo).not.toContain('Nunca ofrezcas ni agendes un horario de hoy');
   });
 });
+
+// Paid confirmation (0062): the section exists only for a tenant that charges for the hold.
+describe('buildFrontDeskInstructions — apartado con pago (0062)', () => {
+  it('renders the amount, the deposit note and the "apartada, not confirmada" rules', () => {
+    const out = buildFrontDeskInstructions(cfg({ bookingPayment: { amount: 500, deposit_note: 'se descuenta de tu consulta' } }), NOW);
+    expect(out).toContain('# Apartado con pago');
+    expect(out).toContain('$500 MXN');
+    expect(out).toContain('se descuenta de tu consulta');
+    expect(out).toContain('NUNCA digas "confirmada"');
+    expect(out).toContain('liga de pago EXACTA');
+    expect(out).toContain('lookupAppointment');
+  });
+
+  it('absent without the feature, in demo mode, and when booking is off', () => {
+    expect(buildFrontDeskInstructions(cfg(), NOW)).not.toContain('# Apartado con pago');
+    expect(buildFrontDeskInstructions(cfg({ bookingPayment: { amount: 500 }, promptOverrides: { bookingEnabled: false } }), NOW)).not.toContain('# Apartado con pago');
+    const demo = cfg({ bookingPayment: { amount: 500 }, demoPromptOverrides: { identity: 'demo' } });
+    expect(buildFrontDeskInstructions(demo, NOW, undefined, 'demo')).not.toContain('# Apartado con pago');
+  });
+});

@@ -115,3 +115,53 @@ describe('lookupAppointment — demo mode', () => {
     expect(res.found).toBe(false);
   });
 });
+
+// Paid confirmation (0062): "¿ya quedó?" / "ya pagué" are answered from the hold.
+describe('lookupAppointment — paid confirmation (0062)', () => {
+  const payTenant = { ...tenant, config: { ...(tenant.config as object), bookingPayment: { amount: 500 } } } as unknown as TenantContext;
+  const payCtx = { requestContext: { get: (k: string) => (k === 'tenant' ? payTenant : k === 'turn' ? turn : undefined) } };
+  type PaidOut = Out & { paymentStatus?: string; paymentUrl?: string };
+  const runPaid = () => (lookupAppointmentTool.execute as (i: Record<string, never>, c: typeof payCtx) => Promise<PaidOut>)({}, payCtx);
+  const hold = (status: string) => ({
+    id: 'h1', ghlAppointmentId: 'appt1', stripeSessionId: 'cs_1', checkoutUrl: 'https://pay/x', amountCents: 50000, currency: 'mxn', status, dueAt: '2099-07-09T17:00:00Z', paidAt: null,
+  });
+
+  it('pending → found, with the link, the amount, the deadline and the "don\'t assume paid" rule', async () => {
+    vi.mocked(q.getBookingHold).mockResolvedValue(hold('pending') as never);
+    const res = await runPaid();
+    expect(res.found).toBe(true);
+    expect(res.paymentStatus).toBe('pending');
+    expect(res.paymentUrl).toBe('https://pay/x');
+    expect(res.message).toContain('APARTADA');
+    expect(res.message).toContain('$500 MXN');
+    expect(res.message).toContain('https://pay/x');
+    expect(res.message).toContain('no la des por pagada');
+  });
+
+  it('paid → found and PAGADA', async () => {
+    vi.mocked(q.getBookingHold).mockResolvedValue(hold('paid') as never);
+    const res = await runPaid();
+    expect(res.found).toBe(true);
+    expect(res.message).toContain('PAGADA');
+  });
+
+  it('expired → NOT found: the slot was released, offer to rebook', async () => {
+    vi.mocked(q.getBookingHold).mockResolvedValue(hold('expired') as never);
+    const res = await runPaid();
+    expect(res.found).toBe(false);
+    expect(res.paymentStatus).toBe('expired');
+    expect(res.message).toContain('se liberó');
+  });
+
+  it('no hold (staff-booked cita) → the plain answer', async () => {
+    vi.mocked(q.getBookingHold).mockResolvedValue(null);
+    const res = await runPaid();
+    expect(res.found).toBe(true);
+    expect(res.message).not.toContain('APARTADA');
+  });
+
+  it('a tenant without booking_payment never reads the hold', async () => {
+    await run();
+    expect(q.getBookingHold).not.toHaveBeenCalled();
+  });
+});

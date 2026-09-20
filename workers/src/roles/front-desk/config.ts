@@ -13,7 +13,56 @@ export const serviceSchema = z.object({
   name: z.string(),
   durationMin: z.number().int().positive().optional(),
   description: z.string().optional(),
+  /** Per-service hold amount in pesos (0062); overrides bookingPayment.amount for this service. */
+  deposit: z.number().positive().optional(),
 });
+
+/**
+ * Paid confirmation (0062). Set on a tenant, a bot booking holds the slot as
+ * `new` until the lead pays a Stripe Checkout link; the cron releases it after
+ * `holdHours`. Amounts are pesos (converted to cents at the Stripe boundary).
+ * The money lands on the PLATFORM Stripe account — one account for every
+ * tenant, platform-level secrets — because this is how the platform gets paid.
+ */
+export const bookingPaymentSchema = z.object({
+  amount: z.number().positive(),
+  currency: z.string().length(3).default('mxn'),
+  holdHours: z.number().int().positive().default(24),
+  /** What the deposit is, in the tenant's words (rendered into the prompt): "se descuenta del
+   *  costo de la consulta", "es una cuota de reservación", … Absent = nothing is claimed. */
+  depositNote: z.string().optional(),
+  /** Card-statement suffix so the lead recognizes the charge ("THE BOT CREW* DR VALDIVIA").
+   *  Stripe caps the suffix at 22 characters; letters/digits/spaces only. */
+  statementSuffix: z.string().max(22).regex(/^[A-Za-z0-9 ]*$/).optional(),
+});
+export type BookingPaymentConfig = z.infer<typeof bookingPaymentSchema>;
+
+/**
+ * The stored jsonb is snake_case (like meta_capi); malformed → null + a loud log.
+ * Null means the feature is OFF for the tenant: a bad row makes citas free, which
+ * is visible in `booking_holds` staying empty, whereas throwing here would kill
+ * every turn for the tenant — a silent outage over a typo in a config field.
+ */
+export function parseBookingPayment(raw: unknown): BookingPaymentConfig | null {
+  if (raw == null) return null;
+  if (typeof raw !== 'object' || Array.isArray(raw)) {
+    console.error('[booking-payment] tenant_config.booking_payment is not an object — feature off');
+    return null;
+  }
+  const o = raw as Record<string, unknown>;
+  const parsed = bookingPaymentSchema.safeParse({
+    amount: o.amount,
+    currency: typeof o.currency === 'string' ? o.currency.toLowerCase() : undefined,
+    holdHours: o.hold_hours ?? o.holdHours,
+    depositNote: o.deposit_note ?? o.depositNote,
+    statementSuffix: o.statement_suffix ?? o.statementSuffix,
+  });
+  if (!parsed.success) {
+    console.error('[booking-payment] tenant_config.booking_payment invalid — feature off:', parsed.error.message);
+    return null;
+  }
+  return parsed.data;
+}
 
 export const dayHoursSchema = z.array(
   z.object({ open: z.string(), close: z.string() }),
@@ -132,6 +181,8 @@ export const frontDeskConfigSchema = z.object({
   leadTimezoneEnabled: z.boolean().default(false),
   /** Book/reschedule as "No confirmada" so a GHL workflow owns the confirmation (0061). */
   bookUnconfirmed: z.boolean().default(false),
+  /** Paid confirmation (0062): null = off. Already validated by parseBookingPayment. */
+  bookingPayment: bookingPaymentSchema.nullable().default(null),
 });
 
 export type FrontDeskConfig = z.infer<typeof frontDeskConfigSchema>;
@@ -190,5 +241,15 @@ export function parseFrontDeskConfig(raw: RawTenantConfig): FrontDeskConfig {
     bookingMinNoticeDays: raw.bookingMinNoticeDays ?? null,
     leadTimezoneEnabled: raw.leadTimezoneEnabled === true,
     bookUnconfirmed: raw.bookUnconfirmed === true,
+    bookingPayment: parseBookingPayment(raw.bookingPayment),
   });
+}
+
+/** Hold amount for a service, in cents: the service's own `deposit` wins over the tenant amount. */
+export function holdAmountCents(config: FrontDeskConfig, serviceName: string): number | null {
+  const payment = config.bookingPayment;
+  if (!payment) return null;
+  const perService = config.services.find((s) => s.name === serviceName)?.deposit;
+  const pesos = perService ?? payment.amount;
+  return Math.round(pesos * 100);
 }

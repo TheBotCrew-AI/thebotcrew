@@ -15,8 +15,13 @@ import type { AppointmentLogRow } from './appointment-active.js';
 import { capiChannelFor, parseMetaCapi, type CapiIdentity } from '../meta/capi-config.js';
 import type { GhlTokenResponse } from '../ghl/oauth.js';
 import type {
+  ActionableHold,
+  BookingHoldRow,
   BotEventType,
+  ClaimedHold,
+  CreateBookingHoldParams,
   DueFollowUp,
+  SettledHold,
   EnqueueCapiEventParams,
   LogAppointmentParams,
   LogEventParams,
@@ -54,7 +59,7 @@ export async function loadTenantConfig(ghlLocationId: string): Promise<TenantCon
   const { data, error } = await supabase
     .from('tenant_config')
     .select(
-      'business_name, timezone, tone, services, hours, calendars, faq, enabled_roles, prompt_overrides, ai_provider, ai_model, ai_key_ref, awaiting_human_tag, pending_info_tag, follow_up_tiers, follow_up_cadence, follow_up_angles, follow_up_rounds, quiet_hours, booking_horizon_days, booking_min_notice_days, human_pause_minutes, enabled_channels, test_contact_ids, trigger_keywords, demo_on_keywords, demo_off_keywords, demo_prompt_overrides, keyword_variants, prompt_variants, demo_sessions_enabled, meta_capi, lead_timezone_enabled, interest_tags, book_unconfirmed,' +
+      'business_name, timezone, tone, services, hours, calendars, faq, enabled_roles, prompt_overrides, ai_provider, ai_model, ai_key_ref, awaiting_human_tag, pending_info_tag, follow_up_tiers, follow_up_cadence, follow_up_angles, follow_up_rounds, quiet_hours, booking_horizon_days, booking_min_notice_days, human_pause_minutes, enabled_channels, test_contact_ids, trigger_keywords, demo_on_keywords, demo_off_keywords, demo_prompt_overrides, keyword_variants, prompt_variants, demo_sessions_enabled, meta_capi, lead_timezone_enabled, interest_tags, book_unconfirmed, booking_payment,' +
         'tenants!inner(id, client_id, ghl_location_id, is_active)',
     )
     .eq('tenants.ghl_location_id', ghlLocationId)
@@ -121,6 +126,7 @@ export async function loadTenantConfig(ghlLocationId: string): Promise<TenantCon
       leadTimezoneEnabled: row.lead_timezone_enabled === true,
       interestTags: row.interest_tags === true,
       bookUnconfirmed: row.book_unconfirmed === true,
+      bookingPayment: row.booking_payment ?? null,
     },
   };
 }
@@ -1840,4 +1846,136 @@ export async function loadTenantConfigLastChange(tenantId: string): Promise<stri
     .maybeSingle();
   fail('loadTenantConfigLastChange', error);
   return (data as { changed_at: string } | null)?.changed_at ?? null;
+}
+
+// ============================================================
+// Paid confirmation — booking holds (0062)
+// ============================================================
+
+/** Insert the hold right after the GHL booking + Stripe session succeeded. Returns the hold id. */
+export async function createBookingHold(params: CreateBookingHoldParams): Promise<string> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase.rpc('app_create_booking_hold', params);
+  fail('createBookingHold', error);
+  return data as string;
+}
+
+/** The hold behind a GHL appointment, or null (no hold = the cita was not booked under the feature). */
+export async function getBookingHold(ghlAppointmentId: string): Promise<BookingHoldRow | null> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from('booking_holds')
+    .select('id, ghl_appointment_id, stripe_session_id, checkout_url, amount_cents, currency, status, due_at, paid_at')
+    .eq('ghl_appointment_id', ghlAppointmentId)
+    .maybeSingle();
+  fail('getBookingHold', error);
+  if (!data) return null;
+  const r = data as {
+    id: string;
+    ghl_appointment_id: string;
+    stripe_session_id: string;
+    checkout_url: string;
+    amount_cents: number;
+    currency: string;
+    status: BookingHoldRow['status'];
+    due_at: string;
+    paid_at: string | null;
+  };
+  return {
+    id: r.id,
+    ghlAppointmentId: r.ghl_appointment_id,
+    stripeSessionId: r.stripe_session_id,
+    checkoutUrl: r.checkout_url,
+    amountCents: r.amount_cents,
+    currency: r.currency,
+    status: r.status,
+    dueAt: r.due_at,
+    paidAt: r.paid_at,
+  };
+}
+
+type HoldRpcRow = {
+  outcome?: string;
+  id: string;
+  client_id: string;
+  ghl_conversation_id: string;
+  ghl_contact_id: string;
+  ghl_appointment_id: string;
+  service_type: string | null;
+  appointment_datetime: string | null;
+  amount_cents: number;
+  currency: string;
+  checkout_url: string;
+  stripe_session_id?: string;
+  due_at: string;
+  channel: string | null;
+  contact_phone: string | null;
+  ghl_location_id: string | null;
+};
+
+function mapActionableHold(r: HoldRpcRow): ActionableHold {
+  return {
+    id: r.id,
+    clientId: r.client_id,
+    ghlConversationId: r.ghl_conversation_id,
+    ghlContactId: r.ghl_contact_id,
+    ghlAppointmentId: r.ghl_appointment_id,
+    serviceType: r.service_type,
+    appointmentDatetime: r.appointment_datetime,
+    amountCents: r.amount_cents,
+    currency: r.currency,
+    checkoutUrl: r.checkout_url,
+    dueAt: r.due_at,
+    channel: r.channel,
+    contactPhone: r.contact_phone,
+    ghlLocationId: r.ghl_location_id,
+  };
+}
+
+/**
+ * Settle a Stripe payment against its hold — ONE atomic decision in SQL:
+ * pending → paid, expiring|expired → paid_late, anything else → null (already
+ * settled or cancelled; a replayed webhook lands here and the caller ignores it).
+ */
+export async function settleHoldPayment(stripeSessionId: string, paymentIntent: string | null): Promise<SettledHold | null> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase.rpc('app_settle_hold_payment', {
+    p_stripe_session_id: stripeSessionId,
+    p_payment_intent: paymentIntent,
+  });
+  fail('settleHoldPayment', error);
+  const rows = (data ?? []) as HoldRpcRow[];
+  const r = rows[0];
+  if (!r || (r.outcome !== 'paid' && r.outcome !== 'paid_late')) return null;
+  return { ...mapActionableHold(r), outcome: r.outcome };
+}
+
+/** Claim overdue pending holds (→ expiring, SKIP LOCKED) for the expiry cron. */
+export async function claimExpiredHolds(limit = 20): Promise<ClaimedHold[]> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase.rpc('app_claim_expired_holds', { p_limit: limit });
+  fail('claimExpiredHolds', error);
+  return ((data ?? []) as HoldRpcRow[]).map((r) => ({ ...mapActionableHold(r), stripeSessionId: r.stripe_session_id ?? '' }));
+}
+
+/**
+ * Guarded transition (see 0062 §6). false = the row moved under us — typically a
+ * payment won the race — and the caller must NOT act as if the transition happened.
+ */
+export async function finishHold(holdId: string, status: 'expired' | 'cancelled' | 'pending'): Promise<boolean> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase.rpc('app_finish_hold', { p_id: holdId, p_status: status });
+  fail('finishHold', error);
+  return data === true;
+}
+
+/** A reschedule keeps the hold; only the mirrored appointment time changes. false = no hold. */
+export async function moveHold(ghlAppointmentId: string, appointmentDatetime: string): Promise<boolean> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase.rpc('app_move_hold', {
+    p_ghl_appointment_id: ghlAppointmentId,
+    p_appointment_datetime: appointmentDatetime,
+  });
+  fail('moveHold', error);
+  return data === true;
 }

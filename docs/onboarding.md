@@ -98,6 +98,7 @@ from t;
 | `booking_horizon_days` | Deterministically clamps `getAvailability`, and the prompt states the cutoff as a pre-computed date. `NULL` = no cap. |
 | `booking_min_notice_days` | Near-side twin (0059): `1` = never today — `getAvailability` starts at local midnight of tomorrow, booking/rescheduling a same-day slot is refused (`too_soon`), and the prompt names the first bookable day. `NULL` = same-day allowed. Dr. Valdivia = 1. |
 | `book_unconfirmed` | `false` (default): citas are created `confirmed`. `true` (0061): created — and left, on a reschedule — as `new`, i.e. **"No confirmada"** in the GHL calendar, so the tenant's confirmation workflow owns the flip to Confirmed (CONFIRMO). Only turn it on for a tenant that actually runs that workflow, and check first that their other GHL workflows don't filter on status = Confirmed. Dr. Valdivia = `true` (2026-09-08); everyone else `false`. See business-logic §5. |
+| `booking_payment` | `NULL` (default): citas confirm on the lead's word. Set (0062) = the bot books `new`, sends a **Stripe Checkout link for the platform's account** and the cita confirms only when the lead pays; the 5-min cron cancels it after `hold_hours`. `'{"amount": 500, "hold_hours": 24, "deposit_note": "se descuenta del costo de tu consulta", "statement_suffix": "DR VALDIVIA"}'::jsonb` — `amount` in pesos, `services[].deposit` overrides per service, `statement_suffix` ≤ 22 chars (letters/digits/spaces). Needs the platform Stripe secrets set once (§9). See business-logic §5e. |
 | `quiet_hours` | `NULL` = platform default 21:00–08:00 local. |
 | `lead_timezone_enabled` | `false` (default): times in `timezone`. `true`: times in the **lead's** zone (guessed from the WhatsApp area code, or stated by the lead), suffixed "hora de …" when it differs. **Only for remote services** (a video call) — for a walk-in business it shifts hours for anyone with an out-of-town number. See business-logic §5d. |
 | `follow_up_rounds` | Cadences for reactivation **rounds 1+** (0049) as an array of arrays of minutes, e.g. `'[[360,1080],[960]]'::jsonb` — each time the lead ghosts again the next (shorter, softer) round runs, and past the last one pursuit stops for good. `NULL` = platform default taper (`[[360,1080],[960]]`); `[]` = round 0 only (one ghost cycle, then stop). Round 0 always runs `follow_up_cadence`. See business-logic §4.3. |
@@ -506,6 +507,49 @@ Notes that save debugging time:
   ContactTagUpdate webhook parks her again on purpose (§6b).
 
 ---
+
+## 9. Paid confirmation — the lead pays to hold the cita (0062)
+
+One Stripe account for the whole platform (ours — this is how the platform gets paid under
+the free-install offer), two Worker secrets set **once**, then per tenant it is a DB field.
+
+1. **Stripe, once.** In the platform Stripe account: Developers → API keys → the secret key;
+   Developers → Webhooks → add endpoint `<WORKER_URL>/webhooks/stripe` listening to
+   `checkout.session.completed` and `checkout.session.async_payment_succeeded` → copy its
+   signing secret. Then:
+   ```bash
+   cd workers && pnpm exec wrangler secret put STRIPE_SECRET_KEY
+   cd workers && pnpm exec wrangler secret put STRIPE_WEBHOOK_SECRET
+   ```
+   **Rehearse in test mode first**, without swapping keys: set the test-mode pair as
+   `STRIPE_SECRET_KEY_TEST_MODE` / `STRIPE_WEBHOOK_SECRET_TEST_MODE` (a test-mode key + the
+   signing secret of a *test-mode* endpoint at the same URL) and `STRIPE_MODE=test`; the
+   Worker then uses only that pair — test cards, no real charge. Going live is
+   `wrangler secret delete STRIPE_MODE` (or setting it to `live`). Both secrets of the active
+   mode or the feature is off: a tenant with `booking_payment` set and no secrets gets
+   `booking_failed {reason:'payment_link_failed'}` on every booking and the bot tells the
+   lead to retry — loud, not silent.
+2. **Per tenant.**
+   ```sql
+   update tenant_config
+   set booking_payment = '{"amount": 500, "hold_hours": 24,
+                           "deposit_note": "se descuenta del costo de tu consulta",
+                           "statement_suffix": "DR VALDIVIA"}'::jsonb
+   where tenant_id = '<tenant uuid>';
+   ```
+   `deposit_note` is what the bot says the deposit IS (credited to the service, a booking
+   fee, …) — agree it with the client, it is a promise the clinic honours. Per-service
+   amounts: add `"deposit": 250` to the entry in `services`.
+3. **Verify.** Book through the bot: `bot_events` shows `hold_created`, the contact carries
+   `pago-pendiente`, the GHL event is "No confirmada". Pay the link: `booking_paid`, the
+   event flips to Confirmed, tag `cita-pagada`, the lead gets the fixed confirmation. Let one
+   expire (or `POST /internal/run-hold-expiry` with the cron bearer after backdating
+   `booking_holds.due_at`): `hold_expired`, GHL cancelled, tag `apartado-vencido`.
+4. **Watch for `pago-revisar`** — a person's queue: a payment that arrived after the slot
+   was released, or a paid cita the lead cancelled. Refund or rebook by hand; the bot never
+   promises either.
+
+Revenue: `select * from paid_bookings_monthly order by month desc;`.
 
 ## Costs per client — the pricing table
 

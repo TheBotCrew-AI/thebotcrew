@@ -107,3 +107,16 @@ export function interestTag(serviceName: string): string {
     .replace(/^-+|-+$/g, '');
   return `${INTEREST_TAG_PREFIX}${slug}`;
 }
+
+/**
+ * Paid confirmation (0062) — the hold's state, mirrored on the GHL contact so the
+ * client's inbox and smart lists see it without opening our DB. Platform constants,
+ * no config, no LLM, never written in demo. `pago-pendiente` is added at booking
+ * and removed on every exit (paid, expired, cancelled); `pago-revisar` marks the
+ * two cases a person must resolve (a payment that landed after the slot was
+ * released, or a paid cita the lead then cancelled — refund or rebook).
+ */
+export const PAYMENT_PENDING_TAG = 'pago-pendiente';
+export const PAID_APPOINTMENT_TAG = 'cita-pagada';
+export const HOLD_EXPIRED_TAG = 'apartado-vencido';
+export const PAYMENT_REVIEW_TAG = 'pago-revisar';

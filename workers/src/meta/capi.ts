@@ -34,6 +34,8 @@ export async function queueCapiEvent(args: {
   kind: CapiEventKind;
   phone?: string | null;
   identity?: CapiIdentity;
+  /** The real amount paid (0062 `appointment_paid`) — becomes Meta's custom_data.value. */
+  value?: { amount: number; currency: string };
 }): Promise<void> {
   try {
     const config = args.tenant.metaCapi;
@@ -52,7 +54,7 @@ export async function queueCapiEvent(args: {
       }
     }
 
-    const payload = await buildCapiPayload({ config, spec, identity, phone: args.phone });
+    const payload = await buildCapiPayload({ config, spec, identity, phone: args.phone, value: args.value });
     if (!payload) {
       // Only Instagram gets here (its account id is a config field). Loud: the lead is
       // real and the signal is lost until the operator fills instagram_business_account_id.

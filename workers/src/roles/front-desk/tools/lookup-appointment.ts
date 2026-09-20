@@ -10,8 +10,9 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { GhlClient } from '../../../ghl/client.js';
-import { getActiveDemoSession } from '../../../db/queries.js';
+import { getActiveDemoSession, getBookingHold } from '../../../db/queries.js';
 import { resolveAgentContext } from './agent-context.js';
+import { describeHoldForModel } from './booking-hold.js';
 import { resolveActiveAppointment } from './resolve-appointment.js';
 import { slotLabel } from './slot-label.js';
 
@@ -26,6 +27,9 @@ export const lookupAppointmentTool = createTool({
     startTime: z.string().optional(),
     label: z.string().optional(),
     service: z.string().optional(),
+    /** Paid confirmation (0062): the hold's state, when the tenant charges for it. */
+    paymentStatus: z.string().optional(),
+    paymentUrl: z.string().optional(),
     message: z.string(),
   }),
   execute: async (_input, ctx) => {
@@ -74,12 +78,26 @@ export const lookupAppointmentTool = createTool({
     }
 
     const label = slotLabel(startTime, frameTz, config.timezone);
+
+    // Paid confirmation (0062): "¿ya quedó?" / "ya pagué" are answered from the hold, never
+    // from the model's memory. An expired/cancelled hold means the slot was released.
+    const hold = config.bookingPayment ? ((await getBookingHold(appt.ghlAppointmentId).catch(() => null)) ?? null) : null;
+    if (hold && (hold.status === 'expired' || hold.status === 'cancelled')) {
+      return {
+        found: false,
+        paymentStatus: hold.status,
+        message: `La cita del ${label} ya no está activa: el apartado venció o se canceló y el lugar se liberó. Ofrécele agendar de nuevo; la liga anterior ya no sirve.`,
+      };
+    }
     return {
       found: true,
       startTime,
       label,
       service: appt.serviceType ?? undefined,
-      message: `Tu cita es el ${label}. Preséntasela al lead usando EXACTAMENTE este texto; no recalcules la fecha.`,
+      ...(hold ? { paymentStatus: hold.status, paymentUrl: hold.checkoutUrl } : {}),
+      message:
+        `Tu cita es el ${label}. Preséntasela al lead usando EXACTAMENTE este texto; no recalcules la fecha.` +
+        describeHoldForModel(hold, frameTz, config.timezone),
     };
   },
 });

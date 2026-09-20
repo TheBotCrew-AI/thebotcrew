@@ -145,6 +145,11 @@ describe('resolveEventSpec — defaults and overrides', () => {
     expect(resolveEventSpec(config(), 'appointment_booked')).toEqual({ name: 'QualifiedLead' });
   });
 
+  it('appointment_paid (0062) defaults to Purchase — the one event where money moved', () => {
+    expect(resolveEventSpec(config(), 'appointment_paid')).toEqual({ name: 'Purchase' });
+    expect(resolveEventSpec(config({ events: { appointment_paid: false } }), 'appointment_paid')).toBeNull();
+  });
+
   it('conversation_completed is OFF unless explicitly configured', () => {
     expect(resolveEventSpec(config(), 'conversation_completed')).toBeNull();
     expect(
@@ -290,6 +295,16 @@ describe('sha256Hex', () => {
 
 describe('buildCapiPayload', () => {
   const wa = { channel: 'whatsapp' as const, key: 'AfjMi93Y-example' };
+
+  it('a per-event value (0062: the amount actually paid) becomes custom_data and wins over the spec value', async () => {
+    const payload = await buildCapiPayload({
+      config: config(),
+      spec: { name: 'Purchase', value: 350, currency: 'MXN' },
+      identity: wa,
+      value: { amount: 500, currency: 'mxn' },
+    });
+    expect(payload?.custom_data).toEqual({ value: 500, currency: 'MXN' });
+  });
 
   it('whatsapp WITHOUT a WABA id (legacy): ctwa_clid UNHASHED + page_id; phone hashed into ph[]; channel frozen', async () => {
     const payload = await buildCapiPayload({

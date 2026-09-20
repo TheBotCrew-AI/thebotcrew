@@ -483,6 +483,28 @@ export class GhlClient {
       .filter((e) => e.id);
   }
 
+  /**
+   * Flip an appointment's status without touching its time — the paid-confirmation
+   * webhook's `new` → `confirmed` (0062). `toNotify` stays on so the tenant's
+   * "Appointment Confirmed" workflows fire exactly as if staff had clicked it.
+   */
+  async updateAppointmentStatus(appointmentId: string, status: GhlAppointmentStatus): Promise<void> {
+    const token = await this.getAccessToken();
+    const res = await fetch(`${this.apiBase}/calendars/events/appointments/${appointmentId}`, {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Version: '2021-04-15',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ appointmentStatus: status, toNotify: true }),
+    });
+    if (!res.ok) {
+      const detail = await res.text();
+      throw new Error(`[ghl] updateAppointmentStatus failed ${res.status}: ${detail}`);
+    }
+  }
+
   /** Soft-cancel an appointment (sets appointmentStatus='cancelled'; does not delete the record). */
   async cancelAppointment(appointmentId: string): Promise<void> {
     const token = await this.getAccessToken();

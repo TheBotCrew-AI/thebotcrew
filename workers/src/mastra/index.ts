@@ -20,6 +20,9 @@ import { retryPendingDeliveries } from '../worker/delivery-retry.js';
 import { runPendingFollowUps } from '../worker/followup-runner.js';
 import { runPendingCapiEvents } from '../worker/capi-runner.js';
 import { runInfoGapExtractions, runPendingInfoAlerts } from '../worker/info-gap-runner.js';
+import { runExpiredHolds } from '../worker/hold-expiry-runner.js';
+import { handleStripeWebhook } from '../worker/stripe-webhook-handler.js';
+import { getStripeEnv } from '../payments/stripe.js';
 import { renderReportPage } from '../worker/info-gaps/report-html.js';
 import { exchangeCode, getInstallUrl } from '../ghl/oauth.js';
 import { loadInfoGapReportRuns, loadLatestInfoGapReport, loadTenantReportKey, upsertOAuthToken } from '../db/queries.js';
@@ -33,6 +36,7 @@ export { runPendingFollowUps } from '../worker/followup-runner.js';
 export { retryPendingDeliveries } from '../worker/delivery-retry.js';
 export { runPendingCapiEvents } from '../worker/capi-runner.js';
 export { runInfoGapExtractions, runPendingInfoAlerts } from '../worker/info-gap-runner.js';
+export { runExpiredHolds } from '../worker/hold-expiry-runner.js';
 // The Durable Object class MUST be exported from the built Worker entry (index.mjs) for the
 // runtime to instantiate it. The getEntry() override below re-exports it from '#mastra'.
 export { ConversationDO } from '../worker/conversation-do.js';
@@ -156,6 +160,44 @@ export const mastra = new Mastra({
         },
       }),
 
+      // Stripe — a paid Checkout Session confirms its cita (0062). Verified over the raw
+      // body with the endpoint's signing secret; fails closed while the secret is unset.
+      registerApiRoute('/webhooks/stripe', {
+        method: 'POST',
+        handler: async (c) => {
+          const raw = await c.req.text();
+          // The signing secret of the endpoint for the CURRENT mode (STRIPE_MODE=test → the
+          // test-mode endpoint's). Undefined = fails closed inside the handler.
+          const result = await handleStripeWebhook(raw, c.req.header('stripe-signature') ?? null, getStripeEnv()?.webhookSecret);
+          return c.json(result.body, result.status);
+        },
+      }),
+
+      // Where Stripe Checkout sends the lead afterwards. Static, no state: the webhook is
+      // what confirms the cita, this page only closes the loop and points back to the chat.
+      registerApiRoute('/pay/ok', {
+        method: 'GET',
+        handler: async (c) =>
+          c.html(
+            '<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Pago recibido</title></head>' +
+              '<body style="font-family:sans-serif;padding:2rem;max-width:32rem;margin:auto;text-align:center">' +
+              '<h2>¡Listo, recibimos tu pago! 🎉</h2>' +
+              '<p>Tu cita quedó confirmada. En un momento te llega la confirmación por el mismo chat donde agendaste — ya puedes regresar ahí.</p>' +
+              '</body></html>',
+          ),
+      }),
+      registerApiRoute('/pay/cancel', {
+        method: 'GET',
+        handler: async (c) =>
+          c.html(
+            '<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Pago pendiente</title></head>' +
+              '<body style="font-family:sans-serif;padding:2rem;max-width:32rem;margin:auto;text-align:center">' +
+              '<h2>Tu lugar sigue apartado</h2>' +
+              '<p>No se realizó ningún cargo. Puedes volver a abrir la liga desde el chat cuando quieras, antes de que venza el plazo.</p>' +
+              '</body></html>',
+          ),
+      }),
+
       registerApiRoute('/webhooks/ghl', {
         method: 'POST',
         handler: async (c) => {
@@ -212,6 +254,22 @@ export const mastra = new Mastra({
           }
           const result = await runPendingCapiEvents();
           console.log('[cron] run-capi:', result);
+          return c.json(result);
+        },
+      }),
+
+      // Paid confirmation (0062): release overdue holds. Rides the 5-minute cron; exposed
+      // so a release can be forced by hand while testing the flow.
+      registerApiRoute('/internal/run-hold-expiry', {
+        method: 'POST',
+        handler: async (c) => {
+          const expected = (c.env as Record<string, string | undefined>).INTERNAL_CRON_SECRET;
+          const auth = c.req.header('authorization') ?? '';
+          if (!expected || auth !== `Bearer ${expected}`) {
+            return c.json({ error: 'unauthorized' }, 401);
+          }
+          const result = await runExpiredHolds();
+          console.log('[cron] run-hold-expiry:', result);
           return c.json(result);
         },
       }),
@@ -377,7 +435,7 @@ export const mastra = new Mastra({
 
         scheduled: async (event, _env, ctx) => {
           ctx.waitUntil((async () => {
-            const { mastra, runPendingFollowUps, retryPendingDeliveries, runPendingCapiEvents, runInfoGapExtractions, runPendingInfoAlerts } = await import('#mastra');
+            const { mastra, runPendingFollowUps, retryPendingDeliveries, runPendingCapiEvents, runInfoGapExtractions, runPendingInfoAlerts, runExpiredHolds } = await import('#mastra');
             const _mastra = mastra();
             // Each schedule is its own invocation, and at :00/:05/… the 1-minute and
             // 5-minute crons fire in the SAME second. The minute jobs must run on the
@@ -411,6 +469,12 @@ export const mastra = new Mastra({
                 console.log('[cron] run-info-gaps:', JSON.stringify(result));
               } catch (err) {
                 console.error('[cron] run-info-gaps error:', err instanceof Error ? err.message : String(err));
+              }
+              try {
+                const result = await runExpiredHolds();
+                console.log('[cron] run-hold-expiry:', JSON.stringify(result));
+              } catch (err) {
+                console.error('[cron] run-hold-expiry error:', err instanceof Error ? err.message : String(err));
               }
             }
             if (event.cron === '0 13 * * *') {

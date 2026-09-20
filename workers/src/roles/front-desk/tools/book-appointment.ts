@@ -13,6 +13,7 @@ import { getActiveDemoSession, logAppointment, logBotEvent, logEvent, resetReact
 import { queueCapiEvent } from '../../../meta/capi.js';
 import { resolveAgentContext } from './agent-context.js';
 import { buildAppointmentTitle } from './appointment-title.js';
+import { openBookingHold, type HoldOpened } from './booking-hold.js';
 import { bookingQueryWindow, resolveBookableSlot } from './booking-time.js';
 import { earliestBookableMs } from './booking-window.js';
 import { simSlotLabel, simulatedSlots } from './demo-sim.js';
@@ -58,6 +59,10 @@ export const bookAppointmentTool = createTool({
   outputSchema: z.object({
     booked: z.boolean(),
     ghlAppointmentId: z.string().optional(),
+    /** Paid confirmation (0062): the Stripe link the lead must pay, and by when. */
+    paymentUrl: z.string().optional(),
+    paymentAmount: z.string().optional(),
+    paymentDueLabel: z.string().optional(),
     message: z.string(),
   }),
   execute: async ({ serviceName, startTime, whatsappPhone, contactName, treatment }, ctx) => {
@@ -253,8 +258,9 @@ export const bookAppointmentTool = createTool({
         contactId: turn.ghlContactId,
         startTime: canonicalStart,
         title,
-        // "No confirmada" for a tenant whose GHL workflow asks the lead to confirm (0061).
-        appointmentStatus: config.bookUnconfirmed ? 'new' : 'confirmed',
+        // "No confirmada" for a tenant whose GHL workflow asks the lead to confirm (0061),
+        // or whose citas confirm by PAYMENT (0062): the Stripe webhook flips it.
+        appointmentStatus: config.bookUnconfirmed || config.bookingPayment ? 'new' : 'confirmed',
       }));
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -268,6 +274,37 @@ export const bookAppointmentTool = createTool({
         error: msg,
       });
       return { booked: false, message: 'No se pudo confirmar la cita en este momento. Intenta de nuevo o contacta al equipo.' };
+    }
+
+    // Paid confirmation (0062): the cita holds the slot only with a payment link attached.
+    // No link → no hold: undo the booking rather than leave a free cita in the calendar.
+    let hold: HoldOpened | undefined;
+    if (config.bookingPayment) {
+      const opened = await openBookingHold({
+        tenant, turn, config, ghl, ghlAppointmentId: ghlAppointmentId ?? '', serviceName, startTime: canonicalStart, frameTz,
+      });
+      if ('error' in opened) {
+        if (ghlAppointmentId) {
+          await ghl.cancelAppointment(ghlAppointmentId).catch((e: unknown) =>
+            console.error('[bookAppointment] undo after hold failure failed:', e instanceof Error ? e.message : String(e)),
+          );
+        }
+        await logBotEvent(tenant.clientId, turn.ghlConversationId, 'booking_failed', {
+          serviceName,
+          calendarId,
+          startTime: canonicalStart,
+          reason: 'payment_link_failed',
+          error: opened.error,
+          ghlAppointmentId,
+        });
+        return {
+          booked: false,
+          message:
+            'No pude generar la liga de pago, así que la cita NO quedó apartada. Intenta agendar de nuevo en un momento; ' +
+            'si vuelve a fallar, dile al lead que una persona del equipo le manda la liga y llama flagAwaitingHuman.',
+        };
+      }
+      hold = opened;
     }
 
     // Record to our stats/proof layer — fire-and-forget, don't fail the tool on log errors.
@@ -307,12 +344,26 @@ export const bookAppointmentTool = createTool({
       phone: turn.contactPhone ?? null,
     });
 
+    // A label, not the ISO string: the model would otherwise re-render (and, for a lead
+    // in another zone, re-convert) the instant itself — the one thing it must never do.
+    const label = slotLabel(canonicalStart, frameTz, config.timezone);
+    if (hold) {
+      return {
+        booked: true,
+        ghlAppointmentId,
+        paymentUrl: hold.checkoutUrl,
+        paymentAmount: hold.amountLabel,
+        paymentDueLabel: hold.dueLabel,
+        message:
+          `Cita APARTADA (todavía NO confirmada): ${serviceName} el ${label}. Se confirma cuando el lead pague ${hold.amountLabel} ` +
+          `antes del ${hold.dueLabel} en esta liga: ${hold.checkoutUrl} ` +
+          'Mándale el día y la hora, la liga EXACTA (pégala tal cual) y el plazo. No digas que la cita está confirmada.',
+      };
+    }
     return {
       booked: true,
       ghlAppointmentId,
-      // A label, not the ISO string: the model would otherwise re-render (and, for a lead
-      // in another zone, re-convert) the instant itself — the one thing it must never do.
-      message: `Cita agendada: ${serviceName} el ${slotLabel(canonicalStart, frameTz, config.timezone)}. Confírmasela al lead usando EXACTAMENTE ese texto.`,
+      message: `Cita agendada: ${serviceName} el ${label}. Confírmasela al lead usando EXACTAMENTE ese texto.`,
     };
   },
 });

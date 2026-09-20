@@ -38,7 +38,7 @@ export type MetaEventName = (typeof META_BUSINESS_MESSAGING_EVENTS)[number];
  * `lead_disqualified` is intentionally absent — Meta has no negative event, the
  * ABSENCE of a QualifiedLead is the signal (see docs/business-logic.md).
  */
-export type CapiEventKind = 'lead_started' | 'appointment_booked' | 'conversation_completed';
+export type CapiEventKind = 'lead_started' | 'appointment_booked' | 'conversation_completed' | 'appointment_paid';
 
 /** Meta's `messaging_channel` values. Our `facebook` channel is Meta's `messenger`. */
 export type CapiMessagingChannel = 'whatsapp' | 'messenger' | 'instagram';
@@ -129,6 +129,9 @@ const DEFAULT_EVENT_SPECS: Record<CapiEventKind, CapiEventSpec | false> = {
   lead_started: { name: 'LeadSubmitted' },
   appointment_booked: { name: 'QualifiedLead' },
   conversation_completed: false,
+  // Paid confirmation (0062): money changed hands, so this one IS a Purchase. The value
+  // rides per event (the hold's amount), not from this spec — see queueCapiEvent's `value`.
+  appointment_paid: { name: 'Purchase' },
 };
 
 function isMetaEventName(v: unknown): v is MetaEventName {
@@ -146,7 +149,7 @@ function parseEventSpec(raw: unknown): CapiEventSpec | false | null {
   return spec;
 }
 
-const CAPI_EVENT_KINDS: CapiEventKind[] = ['lead_started', 'appointment_booked', 'conversation_completed'];
+const CAPI_EVENT_KINDS: CapiEventKind[] = ['lead_started', 'appointment_booked', 'conversation_completed', 'appointment_paid'];
 
 /**
  * Validate the stored meta_capi jsonb; anything malformed → null (feature off),
@@ -388,6 +391,8 @@ export async function buildCapiPayload(args: {
   spec: CapiEventSpec;
   identity: CapiIdentity;
   phone?: string | null;
+  /** Per-event monetary value (a real payment); wins over the spec's configured value. */
+  value?: { amount: number; currency: string };
 }): Promise<CapiPayload | null> {
   const { config, identity } = args;
   let user_data: Record<string, unknown>;
@@ -406,7 +411,9 @@ export async function buildCapiPayload(args: {
     if (normalized) user_data.ph = [await sha256Hex(normalized)];
   }
   const payload: CapiPayload = { messaging_channel: identity.channel, user_data };
-  if (args.spec.value != null) {
+  if (args.value) {
+    payload.custom_data = { value: args.value.amount, currency: args.value.currency.toUpperCase() };
+  } else if (args.spec.value != null) {
     payload.custom_data = { value: args.spec.value, currency: args.spec.currency ?? 'MXN' };
   }
   return payload;

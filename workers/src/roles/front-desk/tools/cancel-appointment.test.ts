@@ -105,3 +105,46 @@ describe('cancelAppointment — the `cita-cancelada` tag', () => {
     expect(ghl.addContactTags).not.toHaveBeenCalled();
   });
 });
+
+// Paid confirmation (0062): cancelling releases a pending hold; a paid one goes to review.
+vi.mock('./booking-hold.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./booking-hold.js')>()),
+  releaseBookingHold: vi.fn(),
+}));
+import { releaseBookingHold } from './booking-hold.js';
+
+describe('cancelAppointment — paid confirmation (0062)', () => {
+  const payTenant = { ...tenant, config: { ...(tenant.config as object), bookingPayment: { amount: 500 } } } as unknown as TenantContext;
+  const payCtx = { requestContext: { get: (k: string) => (k === 'tenant' ? payTenant : k === 'turn' ? turn : undefined) } };
+  const runPaid = () =>
+    (cancelAppointmentTool.execute as (i: Record<string, never>, c: typeof payCtx) => Promise<{ cancelled: boolean; message: string }>)({}, payCtx);
+
+  it('pending hold released → plain "Cita cancelada."', async () => {
+    vi.mocked(releaseBookingHold).mockResolvedValue('released');
+    const res = await runPaid();
+    expect(res.cancelled).toBe(true);
+    expect(releaseBookingHold).toHaveBeenCalledWith(expect.objectContaining({ ghlAppointmentId: 'appt1', ghlContactId: 'c1' }));
+    expect(res.message).toBe('Cita cancelada.');
+  });
+
+  it('paid hold → the model is told a person reviews the refund, without promising', async () => {
+    vi.mocked(releaseBookingHold).mockResolvedValue('paid');
+    const res = await runPaid();
+    expect(res.cancelled).toBe(true);
+    expect(res.message).toContain('YA había pagado');
+    expect(res.message).toContain('sin prometer');
+  });
+
+  it('a release failure never turns a cancellation that happened into an error', async () => {
+    vi.mocked(releaseBookingHold).mockRejectedValue(new Error('db'));
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const res = await runPaid();
+    expect(res.cancelled).toBe(true);
+    spy.mockRestore();
+  });
+
+  it('a tenant without booking_payment never touches the hold', async () => {
+    await run();
+    expect(releaseBookingHold).not.toHaveBeenCalled();
+  });
+});
