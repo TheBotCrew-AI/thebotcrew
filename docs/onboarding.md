@@ -546,8 +546,11 @@ the free-install offer), two Worker secrets set **once**, then per tenant it is 
    expire (or `POST /internal/run-hold-expiry` with the cron bearer after backdating
    `booking_holds.due_at`): `hold_expired`, GHL cancelled, tag `apartado-vencido`.
 4. **Watch for `pago-revisar`** — a person's queue: a payment that arrived after the slot
-   was released, or a paid cita the lead cancelled. Refund or rebook by hand; the bot never
-   promises either.
+   was released. Refund or rebook by hand; the bot never promises either. A paid cita the
+   lead wants to cancel never lands here: the bot refuses the cancel and offers to move it.
+5. **What the lead is told, and when.** The first message with slots says the amount and
+   that a paid cita moves but does not cancel. Agree the `deposit_note` wording with the
+   client — it is the one sentence the bot adds to that notice (business-logic §5e).
 
 Revenue: `select * from paid_bookings_monthly order by month desc;`.
 

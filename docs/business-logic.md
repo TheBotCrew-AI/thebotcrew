@@ -1039,9 +1039,20 @@ thrown turn (`parseBookingPayment`).
    cita they already paid (`cancelAppointment` → `hold_released {status:'paid', review:true}`).
    Refund or rebook is a human decision; the bot never promises either.
 
+**Two rules Leo set after the first live run (2026-09-20), both told to the lead up front.**
+(a) **No surprises:** the FIRST message that offers slots states, as information and in one
+line, that the cita is confirmed with the payment and that once paid it can be moved but not
+cancelled — the first version only mentioned money after the slot was picked, which reads as
+a bait. (b) **A paid cita is never cancelled by the bot.** `cancelAppointment` refuses when the
+hold is `paid`/`paid_late` (code, `booking_failed {stage:'cancel', reason:'paid_hold'}`) and
+tells the model to offer two real slots instead; the prompt owns the wording — warm, "se
+reagenda", never "devolución"/"reembolso"/"política". Whether a refund ever happens is a
+person's decision, outside the bot.
+
 **What the other tools do.** `rescheduleAppointment` keeps the hold (same link, same
 deadline, `app_move_hold` mirrors the new time) and keeps a paid cita `confirmed` through the
-move. `cancelAppointment` closes a pending hold (session expired, tag off). `lookupAppointment`
+move. `cancelAppointment` closes a pending hold (session expired, tag off) and refuses a paid
+one (above). `lookupAppointment`
 answers "¿ya quedó?" / "ya pagué" from the hold — pending (link + deadline again), paid,
 paid_late, or released (`found:false`, offer to rebook) — so the model never assumes a
 payment it cannot see.

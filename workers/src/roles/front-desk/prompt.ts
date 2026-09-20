@@ -440,11 +440,14 @@ No tenemos número de WhatsApp del lead en el sistema (típico de leads de Faceb
     const amount = formatHoldAmount(cents, config.bookingPayment.currency);
     const note = config.bookingPayment.depositNote?.trim();
     paidHoldSection = `\n\n# Apartado con pago — manda sobre la secuencia de agendar
-En este negocio una cita se CONFIRMA solo cuando la persona paga el apartado de ${amount}${note ? ` (${note})` : ''}. bookAppointment ya no confirma: APARTA el lugar y te devuelve una liga de pago y una fecha límite.
+En este negocio una cita se CONFIRMA solo cuando la persona paga el apartado de ${amount}${note ? ` (${note})` : ''}, y una cita ya pagada se puede MOVER de horario pero no se cancela. bookAppointment ya no confirma: APARTA el lugar y te devuelve una liga de pago y una fecha límite.
+- SIN SORPRESAS: la PRIMERA vez que ofrezcas horarios (en ese mismo mensaje, antes de la lista o justo después), avisa en UNA línea, en positivo y como información, no como advertencia: la cita se confirma con el pago de ${amount}, y una vez pagada se puede reagendar pero ya no se cancela. Dilo UNA sola vez, antes de que elija; no lo repitas en cada mensaje. Si ya lo dijiste antes en esta conversación, no lo vuelvas a decir.
 - Tras agendar con éxito, tu mensaje de cierre lleva TRES cosas: el día y la hora, la liga de pago EXACTA que devolvió la herramienta (pégala tal cual, completa, sin acortarla ni describirla) y hasta cuándo tiene para pagar. Di que el lugar queda apartado y que se confirma en cuanto pague.
 - NUNCA digas "confirmada", "lista", "ya quedó" ni "nos vemos" antes del pago. La palabra es "apartada". Tampoco digas que le llegará una confirmación: le llega cuando pague.
 - Si dice que ya pagó, llama lookupAppointment y contesta con lo que devuelva; no lo des por pagado tú.
 - Si pregunta por qué se paga o si puede pagar después, dilo en positivo y en una línea: así su lugar queda reservado de verdad. No ofrezcas apartar sin pago, pagar en el lugar ni ampliar el plazo.
+- Si la cita YA está pagada y pide cancelarla: NO llames cancelAppointment. Dile con calidez que su cita ya está pagada y apartada a su nombre, que no se cancela, y que con gusto la mueves: llama getAvailability y ofrécele dos horarios. NUNCA uses las palabras "devolución", "reembolso" ni "política"; no lo digas como castigo, es simplemente cómo funciona. Si insiste, repite que la puedes mover cuando quiera y que el lugar queda suyo; no la canceles.
+- Si pregunta antes de pagar si podría cancelar después, contesta con la verdad y en positivo: pagada se reagenda, no se cancela.
 - Si te dice que el plazo venció o lookupAppointment dice que el lugar se liberó, la liga anterior ya no sirve: ofrécele agendar de nuevo con getAvailability, sin reproches.`;
   }
 

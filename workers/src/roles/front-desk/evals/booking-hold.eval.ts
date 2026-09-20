@@ -17,7 +17,15 @@
  *     eran de las aserciones, no del modelo: "aparté" no casaba con /apartad/, y "te llegará
  *     la confirmación en cuanto pagues" caía en una prohibición pensada para "te llegará la
  *     confirmación" a secas; ambas se corrigieron).
- *   Lectura honesta: la sección del prompt NO discrimina hoy. Lo que sostiene el comportamiento
+ *   MEDIDO 2026-09-20, después de las dos reglas de Leo (aviso previo; pagada no se cancela):
+ *   - primera oferta avisa $500 + "se mueve, no se cancela": con la sección 3/3 · SIN ella 0/3
+ *     (las tres corridas ofrecen horarios sin mencionar el pago — el incidente exacto que
+ *     motivó la regla). Este caso SÍ discrimina y es el que defiende la sección.
+ *   - cita pagada + "cancela mi cita": con la sección 2/3 · sin ella 3/3. La falla con sección
+ *     fue de forma (dijo que no se cancela sin ofrecer horarios en ese mensaje); sin sección
+ *     el historial ya trae la regla y la guardia de cancelAppointment la aplica en código. Es
+ *     guardia de vocabulario (nunca "devolución"), no la prueba de la regla.
+ *   Lectura honesta del primer par de casos: la sección del prompt NO discrimina ahí. Lo que sostiene el comportamiento
  *   es el mensaje que devuelve bookAppointment (la liga, el plazo y "no digas confirmada" viajan
  *   en el resultado del tool, en código) más el historial. La sección se conserva por lo que el
  *   tool no puede decir —por qué se paga, que no hay "pago después", que una liga vencida ya no
@@ -186,5 +194,53 @@ describe.skipIf(!evalApiKey)(`apartado con pago — la liga se manda tal cual y 
     const text = res.text.toLowerCase();
     expect(text).not.toMatch(/confirmad[ao]|ya qued[óo]|est[áa] lista/);
     expect(text).toMatch(/apartad|pag/);
+  }, 120_000);
+
+  // Leo, after the first live run (2026-09-20): "nunca avisa antes, solo cuando la aparta
+  // dice que se necesita pago — mala experiencia". The FIRST message with slots carries the
+  // amount and the moves-but-never-cancels rule, as information, without "devolución".
+  it('la primera oferta de horarios avisa el pago y que pagada se mueve pero no se cancela', async () => {
+    const agent = buildFrontDeskAgent();
+    const res = await agent.generate(
+      [{ role: 'user', content: 'Hola, quiero agendar una consulta general, ¿qué horarios tienes?' }],
+      { requestContext: rc() },
+    );
+    expect(toolIds(res)).toContain('getAvailability');
+    const text = res.text.toLowerCase();
+    expect(text).toMatch(/\$?500/);
+    expect(text).toMatch(/reagend|mover|cambiar|mueve/);
+    expect(text).toMatch(/no se cancela|sin cancelaci|ya no se puede cancelar|no se puede cancelar/);
+    expect(text).not.toMatch(/devoluci|reembols|pol[íi]tica/);
+  }, 120_000);
+
+  // A paid cita: the lead asks to cancel. The tool refuses regardless (guard in code); what
+  // the prompt owns is the wording — offer to move, never "devolución", never claim it's cancelled.
+  it('cita pagada + "cancela mi cita": no se cancela, se ofrece mover, sin hablar de devoluciones', async () => {
+    const start = `${DAY}T11:00:00-06:00`;
+    vi.mocked(q.loadAppointmentLog).mockResolvedValue([
+      { ghlAppointmentId: 'appt_eval_hold', appointmentDatetime: start, serviceType: 'Consulta general', action: 'booked', createdAt: new Date().toISOString() },
+    ] as never);
+    vi.mocked(q.getBookingHold).mockResolvedValue({
+      id: 'h1', ghlAppointmentId: 'appt_eval_hold', stripeSessionId: 'cs_1', checkoutUrl: CHECKOUT_URL,
+      amountCents: 50000, currency: 'mxn', status: 'paid', dueAt: '2026-09-24T18:00:00.000Z', paidAt: '2026-09-21T10:00:00.000Z',
+    });
+    const agent = buildFrontDeskAgent();
+    const res = await agent.generate(
+      [
+        { role: 'user', content: 'Hola, quiero una consulta general' },
+        { role: 'assistant', content: 'Claro. La cita se confirma con el pago de $500 MXN y, una vez pagada, se puede mover de horario pero ya no se cancela. Tengo pasado mañana a las 11:00 a.m. o 4:00 p.m. ¿Cuál te acomoda y a nombre de quién agendo?' },
+        { role: 'user', content: 'A las 11, Karla Mendoza' },
+        { role: 'assistant', content: `Listo, Karla: te aparté la consulta para pasado mañana a las 11:00 a.m. Para confirmarla, paga los $500 MXN antes del ${DUE_LABEL} aquí: ${CHECKOUT_URL}` },
+        { role: 'user', content: 'Ya pagué' },
+        { role: 'assistant', content: '¡Recibimos tu pago! Tu cita quedó confirmada para pasado mañana a las 11:00 a.m.' },
+        { role: 'user', content: 'Oye, me salió algo, cancela mi cita por favor' },
+      ],
+      { requestContext: rc({ ...turn, activeAppointment: { startTime: start, service: 'Consulta general' } }) },
+    );
+    const text = res.text.toLowerCase();
+    expect(toolIds(res)).not.toContain('cancelAppointment');
+    expect(text).toMatch(/mov|reagend|cambi|otro horario|otra fecha/);
+    expect(text).not.toMatch(/devoluci|reembols|pol[íi]tica/);
+    expect(text).not.toMatch(/qued[óo] cancelada|ya cancel[ée]|he cancelado|cita cancelada/);
   }, 120_000);
 });

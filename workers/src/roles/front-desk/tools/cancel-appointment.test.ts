@@ -119,6 +119,10 @@ describe('cancelAppointment — paid confirmation (0062)', () => {
   const runPaid = () =>
     (cancelAppointmentTool.execute as (i: Record<string, never>, c: typeof payCtx) => Promise<{ cancelled: boolean; message: string }>)({}, payCtx);
 
+  beforeEach(() => {
+    vi.mocked(q.getBookingHold).mockResolvedValue({ id: 'h1', status: 'pending' } as never);
+  });
+
   it('pending hold released → plain "Cita cancelada."', async () => {
     vi.mocked(releaseBookingHold).mockResolvedValue('released');
     const res = await runPaid();
@@ -127,12 +131,30 @@ describe('cancelAppointment — paid confirmation (0062)', () => {
     expect(res.message).toBe('Cita cancelada.');
   });
 
-  it('paid hold → the model is told a person reviews the refund, without promising', async () => {
-    vi.mocked(releaseBookingHold).mockResolvedValue('paid');
+  it('paid hold → REFUSED before touching GHL: the model offers to reschedule instead', async () => {
+    vi.mocked(q.getBookingHold).mockResolvedValue({ id: 'h1', status: 'paid' } as never);
+    const res = await runPaid();
+    expect(res.cancelled).toBe(false);
+    expect(ghl.cancelAppointment).not.toHaveBeenCalled();
+    expect(releaseBookingHold).not.toHaveBeenCalled();
+    expect(res.message).toContain('no se cancela');
+    expect(res.message).toContain('getAvailability');
+    expect(res.message).not.toMatch(/devoluci[óo]n(?!es ni)/);
+    expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'booking_failed', expect.objectContaining({ stage: 'cancel', reason: 'paid_hold' }));
+  });
+
+  it('paid_late is paid too → refused', async () => {
+    vi.mocked(q.getBookingHold).mockResolvedValue({ id: 'h1', status: 'paid_late' } as never);
+    const res = await runPaid();
+    expect(res.cancelled).toBe(false);
+    expect(ghl.cancelAppointment).not.toHaveBeenCalled();
+  });
+
+  it('a hold read failure does not block a cancel of an unpaid cita', async () => {
+    vi.mocked(q.getBookingHold).mockRejectedValue(new Error('db'));
+    vi.mocked(releaseBookingHold).mockResolvedValue('released');
     const res = await runPaid();
     expect(res.cancelled).toBe(true);
-    expect(res.message).toContain('YA había pagado');
-    expect(res.message).toContain('sin prometer');
   });
 
   it('a release failure never turns a cancellation that happened into an error', async () => {

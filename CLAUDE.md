@@ -561,7 +561,9 @@ cualquier Chrome headless recibe SIGTERM a los ~2 s (ver cabecera de `render-bat
   `POST /webhooks/stripe` (Stripe-Signature over the raw body, fails closed) settles pending → paid
   and flips the GHL event to `confirmed` (`GhlClient.updateAppointmentStatus`); the 5-min cron
   releases overdue holds (GHL cancel first, then `expired`). Tags: `pago-pendiente` → `cita-pagada`
-  | `apartado-vencido`; `pago-revisar` = a person decides (paid late, or paid then cancelled).
+  | `apartado-vencido`; `pago-revisar` = a person decides (a payment that landed after release).
+  A PAID cita is never cancelled by the bot (`cancelAppointment` refuses; the model offers to
+  move it), and the first slot offer says so plus the amount — no surprises (Leo, 2026-09-20).
   Secrets: `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET`, platform-wide, both or off; `STRIPE_MODE=test`
   switches to the `*_TEST_MODE` pair (test cards on prod, no real charge — delete the flag to go live). The Checkout
   success/cancel pages are `/pay/ok` and `/pay/cancel` on the Worker. See docs/business-logic.md §5e,

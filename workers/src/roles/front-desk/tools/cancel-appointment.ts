@@ -10,7 +10,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { GhlClient } from '../../../ghl/client.js';
 import { CANCELLED_APPOINTMENT_TAG } from '../../../ghl/tags.js';
-import { getActiveDemoSession, logAppointment, logBotEvent, reactivateConversation, setSimulatedBooking } from '../../../db/queries.js';
+import { getActiveDemoSession, getBookingHold, logAppointment, logBotEvent, reactivateConversation, setSimulatedBooking } from '../../../db/queries.js';
 import { resolveAgentContext } from './agent-context.js';
 import { releaseBookingHold } from './booking-hold.js';
 import { resolveActiveAppointment } from './resolve-appointment.js';
@@ -46,6 +46,28 @@ export const cancelAppointmentTool = createTool({
     const appt = await resolveActiveAppointment(ghl, tenant.clientId, turn.ghlContactId, Date.now());
     if (!appt) {
       return { cancelled: false, message: 'No encuentro una cita activa para cancelar.' };
+    }
+
+    // Paid confirmation (0062): a PAID cita is not cancelled by the bot — the platform's
+    // rule, and the lead was told before choosing a slot. It can be moved. Decided here,
+    // not left to the prompt, so a persuasive lead can't talk the model into it; the
+    // refund question is a person's, and only after a reschedule was offered.
+    if (config.bookingPayment) {
+      const hold = (await getBookingHold(appt.ghlAppointmentId).catch(() => null)) ?? null;
+      if (hold && (hold.status === 'paid' || hold.status === 'paid_late')) {
+        await logBotEvent(tenant.clientId, turn.ghlConversationId, 'booking_failed', {
+          stage: 'cancel',
+          reason: 'paid_hold',
+          ghlAppointmentId: appt.ghlAppointmentId,
+        });
+        return {
+          cancelled: false,
+          message:
+            'La cita YA está pagada y una cita pagada no se cancela: sigue apartada a su nombre. Díselo con calidez y en positivo ' +
+            '(sin hablar de devoluciones ni de políticas), y ofrécele moverla a otro horario: llama getAvailability y dale dos opciones reales. ' +
+            'Si insiste en cancelar, dile que con gusto le apoyas a reagendar cuando quiera y que el lugar queda suyo.',
+        };
+      }
     }
 
     try {

@@ -232,7 +232,7 @@ export function describeHoldForModel(
         'Si dice que ya pagó y aquí sigue pendiente, dile que en cuanto se refleje le llega la confirmación; no la des por pagada tú.'
       );
     case 'paid':
-      return ' La cita está PAGADA y confirmada.';
+      return ' La cita está PAGADA y confirmada. Una cita pagada no se cancela: si necesita cambiarla, se reagenda.';
     case 'paid_late':
       return ' El lead pagó después de que venció el apartado: una persona del equipo lo está revisando. Díselo con naturalidad y sin prometer un resultado.';
     default:

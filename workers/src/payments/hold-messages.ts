@@ -9,7 +9,7 @@
  */
 
 export function buildHoldPaidMessage(label: string, businessName: string): string {
-  return `¡Listo, recibimos tu pago! 🎉 Tu cita en ${businessName} quedó confirmada para el ${label}. Ahí nos vemos.`;
+  return `¡Listo, recibimos tu pago! 🎉 Tu cita en ${businessName} quedó confirmada para el ${label}. Si algo cambia, escríbeme y la movemos a otro horario. Ahí nos vemos.`;
 }
 
 export function buildHoldExpiredMessage(label: string): string {

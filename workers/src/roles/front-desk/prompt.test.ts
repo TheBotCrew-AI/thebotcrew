@@ -793,6 +793,11 @@ describe('buildFrontDeskInstructions — apartado con pago (0062)', () => {
     expect(out).toContain('NUNCA digas "confirmada"');
     expect(out).toContain('liga de pago EXACTA');
     expect(out).toContain('lookupAppointment');
+    // The two rules Leo added after the first live test (2026-09-20): told BEFORE choosing,
+    // and a paid cita moves but never cancels — without the word "devolución".
+    expect(out).toContain('SIN SORPRESAS');
+    expect(out).toContain('NO llames cancelAppointment');
+    expect(out).toContain('"devolución"');
   });
 
   it('absent without the feature, in demo mode, and when booking is off', () => {
