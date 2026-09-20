@@ -86,13 +86,20 @@ export async function sendSystemMessage(args: {
     return 'failed';
   }
 
+  // AWAITED, not fire-and-forget: this runs from a webhook route (no waitUntil) and from
+  // the cron's waitUntil, and in both the isolate can be torn down the moment the awaited
+  // chain resolves. Seen live 2026-09-20: two sent messages stayed `pending` because these
+  // writes were detached, and a pending row is exactly what the delivery-retry cron
+  // resends — a double "recibimos tu pago" to the lead.
   if (ghlMessageId && outboundMessageId) {
-    setGhlMessageId(outboundMessageId, ghlMessageId).catch((e: unknown) =>
-      console.error(`[${args.tag}] setGhlMessageId failed:`, e instanceof Error ? e.message : String(e)),
-    );
-    markDelivered(outboundMessageId).catch((e: unknown) =>
-      console.error(`[${args.tag}] markDelivered failed:`, e instanceof Error ? e.message : String(e)),
-    );
+    await Promise.all([
+      setGhlMessageId(outboundMessageId, ghlMessageId).catch((e: unknown) =>
+        console.error(`[${args.tag}] setGhlMessageId failed:`, e instanceof Error ? e.message : String(e)),
+      ),
+      markDelivered(outboundMessageId).catch((e: unknown) =>
+        console.error(`[${args.tag}] markDelivered failed:`, e instanceof Error ? e.message : String(e)),
+      ),
+    ]);
   }
   return 'sent';
 }
