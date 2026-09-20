@@ -147,7 +147,7 @@ The agent runtime is a pnpm workspace package in `workers/` (the monorepo also h
 workers/                       # Mastra + Cloudflare Worker package (@thebotcrew/workers)
   src/
     mastra/index.ts            # Mastra instance: agents + GHL webhook route + CloudflareDeployer
-    core/                      # role interface + registry, tenant resolver, request-context, env (incl. per-tenant AI key resolution), llm-usage (token normalization), prompt-rules (wording bans shared by every role — see business-logic §6c), transcribe + describe-image (a lead's voice note / photo → text at ingest, business-logic §7), types
+    core/                      # role interface + registry, tenant resolver, request-context, env (incl. per-tenant AI key resolution), llm-usage (token normalization), prompt-rules (wording bans shared by every role — see business-logic §6c — and VOICE_RULE, the voice every role speaks in, §6d), transcribe + describe-image (a lead's voice note / photo → text at ingest, business-logic §7), types
     roles/
       front-desk/              # config (zod), prompt (es template), agent, tools/, evals/
       reactivation/            # text-only follow-up/reactivation agent (no tools)

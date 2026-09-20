@@ -1185,6 +1185,30 @@ shelf: stripping the label from the outbound in code, the way booking never trus
 model-typed timestamp (§5). Not implemented — it rewrites what the model wrote, which is its
 own risk — but it is the escalation if this recurs.
 
+## 6d. The voice — how the bot sounds, in every role (2026-09-20)
+
+`core/prompt-rules.ts` `VOICE_RULE`, rendered by the front-desk prompt (demo included) and by
+every reactivation nudge. It describes a PERSON — a Mexican receptionist on WhatsApp, de tú,
+close, helpful, polite — plus three "mal / bien" contrasts, a variation rule (never open two
+messages the same way, never reuse a formula already used in the thread) and a short ban list
+of bot fillers ("Perfecto." as a whole message, "¿En qué más puedo ayudarte?", "Le informo",
+"Quedo atenta"…). Written as principles and contrasts on purpose: a literal phrase repeated
+across messages is exactly what reads as a bot (Leo: "cada que repite la misma frase textual se
+nota que es un sistema"). `tenant_config.tone` still adds the per-tenant nuance on top (a
+clinic may want usted); this is the floor.
+
+Origin: the paid-cancel wording ("Ay, una disculpa, Karla… con muchísimo gusto te la muevo")
+came out of a rule and Leo wanted that register everywhere; the neutral "Perfecto. Tengo estos
+horarios:" was the model's default because nothing described the voice, and openers repeated
+because the bot's own messages sit in the history. Fine-tuning was considered and rejected
+for now: no evidence the prompt can't reach it, it locks to a model, and it can't be nuanced
+per tenant.
+
+Measured with a judge, not a regex: `evals/voice.eval.ts` runs six scenarios and has
+gpt-5-mini score calidez / mexicano / bot / repite; the regex part is only the ban list. The
+fixed, LLM-free messages (paid-confirmation texts in `payments/hold-messages.ts`, demo
+reminders) are written in the same voice by hand.
+
 ## 6a. Meta CAPI — conversion signals back to the ad platform (0048)
 
 **Why it exists:** engagement click-to-WhatsApp ads optimize toward "anyone who

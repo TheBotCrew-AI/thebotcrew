@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { CLOSED_QUESTION_RULE, WARM_NO_RULE } from '../../core/prompt-rules.js';
+import { CLOSED_QUESTION_RULE, VOICE_RULE, WARM_NO_RULE } from '../../core/prompt-rules.js';
 import { PHOTO_DESCRIPTION_PREFIX } from '../../core/model-messages.js';
 import type { DemoHandoff } from '../../core/types.js';
 import { parseFrontDeskConfig } from './config.js';
@@ -805,5 +805,20 @@ describe('buildFrontDeskInstructions — apartado con pago (0062)', () => {
     expect(buildFrontDeskInstructions(cfg({ bookingPayment: { amount: 500 }, promptOverrides: { bookingEnabled: false } }), NOW)).not.toContain('# Apartado con pago');
     const demo = cfg({ bookingPayment: { amount: 500 }, demoPromptOverrides: { identity: 'demo' } });
     expect(buildFrontDeskInstructions(demo, NOW, undefined, 'demo')).not.toContain('# Apartado con pago');
+  });
+});
+
+// The voice is the floor for every tenant, demo included: it describes the person, not a rule
+// a persona could override (tone still adds nuance on top).
+describe('buildFrontDeskInstructions — la voz (VOICE_RULE)', () => {
+  it('rides on every prompt, demo included', () => {
+    expect(buildFrontDeskInstructions(cfg(), NOW)).toContain(VOICE_RULE);
+    const demo = cfg({ demoPromptOverrides: { identity: 'demo' } });
+    expect(buildFrontDeskInstructions(demo, NOW, undefined, 'demo')).toContain(VOICE_RULE);
+  });
+  it('is written as contrasts and bans, never as a phrase to reuse', () => {
+    expect(VOICE_RULE).toContain('No repitas frases');
+    expect(VOICE_RULE).toContain('PROHIBIDO el lenguaje de bot');
+    expect(VOICE_RULE).toMatch(/Mal: .*\n.*Bien: /);
   });
 });

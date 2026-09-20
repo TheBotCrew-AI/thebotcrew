@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { CLOSED_QUESTION_RULE, WARM_NO_RULE } from '../../core/prompt-rules.js';
+import { CLOSED_QUESTION_RULE, VOICE_RULE, WARM_NO_RULE } from '../../core/prompt-rules.js';
 import { buildReactivationInstructions } from './prompt.js';
 
 describe('buildReactivationInstructions', () => {
@@ -51,6 +51,13 @@ describe('buildReactivationInstructions — closed questions, never the "¿sí o
       round: 2, isFinalTouch: true, reentryKeyword: 'CITA',
     });
     expect(out).not.toContain(CLOSED_QUESTION_RULE);
+  });
+
+  it('the voice rides on every nudge and on the farewell', () => {
+    expect(buildReactivationInstructions('Clínica Luz', null, ['angle A'])).toContain(VOICE_RULE);
+    expect(
+      buildReactivationInstructions('Clínica Luz', null, [], undefined, { round: 2, isFinalTouch: true, reentryKeyword: 'CITA' }),
+    ).toContain(VOICE_RULE);
   });
 
   it('the warm-refusal rule rides on every nudge, the farewell included', () => {

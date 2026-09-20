@@ -9,19 +9,22 @@
  */
 
 export function buildHoldPaidMessage(label: string, businessName: string): string {
-  return `¡Listo, recibimos tu pago! 🎉 Tu cita en ${businessName} quedó confirmada para el ${label}. Si algo cambia, escríbeme y la movemos a otro horario. Ahí nos vemos.`;
+  return (
+    `¡Muchas gracias, ya recibimos tu pago! 🎉 Con eso tu cita en ${businessName} quedó confirmada para el ${label}. ` +
+    'Si algo se te atraviesa, escríbeme con confianza y con gusto la movemos a otro horario. ¡Nos vemos!'
+  );
 }
 
 export function buildHoldExpiredMessage(label: string): string {
   return (
-    `Se venció el plazo para apartar tu cita del ${label} y el lugar se liberó. ` +
-    'Si todavía la quieres, escríbeme y te agendo de nuevo con los horarios que haya disponibles.'
+    `Hola, una disculpa por escribirte: se venció el plazo para apartar tu cita del ${label} y el lugar se liberó. ` +
+    'Si todavía la quieres, no te preocupes, mándame un mensaje y con gusto te agendo de nuevo con los horarios que haya.'
   );
 }
 
 export function buildHoldPaidLateMessage(businessName: string): string {
   return (
-    `Recibimos tu pago, gracias. Como llegó después del plazo, el lugar ya se había liberado; ` +
-    `una persona de ${businessName} te escribe en breve para acomodarte o devolverte el pago.`
+    `¡Gracias, ya recibimos tu pago! Una disculpa: como llegó después del plazo, ese lugar ya se había liberado. ` +
+    `Alguien de ${businessName} te escribe en un ratito para acomodarte en otro horario o, si lo prefieres, ver lo de tu pago.`
   );
 }

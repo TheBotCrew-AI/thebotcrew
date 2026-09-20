@@ -6,7 +6,7 @@
  * sections are suppressed — the tenant's custom flow takes over entirely.
  */
 
-import { CLOSED_QUESTION_RULE, WARM_NO_RULE } from '../../core/prompt-rules.js';
+import { CLOSED_QUESTION_RULE, VOICE_RULE, WARM_NO_RULE } from '../../core/prompt-rules.js';
 import { HUMAN_REPLY_PREFIX, PHOTO_DESCRIPTION_PREFIX } from '../../core/model-messages.js';
 import type { DemoHandoff } from '../../core/types.js';
 import { frameTimeZone, zoneLabel, zoneSuffix } from '../../core/lead-timezone.js';
@@ -642,6 +642,8 @@ ${usingDemo
   : 'Mensajes breves, una idea a la vez. Sin listas. Sin negritas. Sin emojis (a menos que el lead los use). WhatsApp no renderiza markdown — manda URLs como texto plano.'}
 ${CLOSED_QUESTION_RULE}
 ${WARM_NO_RULE}
+
+${VOICE_RULE}
 
 ${usingDemo
   ? `# Regla de oro (modo demo)
