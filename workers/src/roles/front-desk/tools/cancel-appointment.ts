@@ -63,9 +63,12 @@ export const cancelAppointmentTool = createTool({
         return {
           cancelled: false,
           message:
-            'La cita YA está pagada y una cita pagada no se cancela: sigue apartada a su nombre. Díselo con calidez y en positivo ' +
-            '(sin hablar de devoluciones ni de políticas), y ofrécele moverla a otro horario: llama getAvailability y dale dos opciones reales. ' +
-            'Si insiste en cancelar, dile que con gusto le apoyas a reagendar cuando quiera y que el lugar queda suyo.',
+            'La cita YA está pagada, así que NO se cancela (sigue apartada a su nombre); lo que sí puedes es moverla. ' +
+            'Contéstale como persona, no como reglamento: empieza con una disculpa sincera ("ay, una disculpa" / "qué pena contigo"), ' +
+            'explica con suavidad que cancelarla tal cual ya no te es posible porque quedó pagada y apartada a su nombre, y de inmediato ' +
+            'ofrécele con muchísimo gusto acomodarla en otro horario que le venga mejor: llama getAvailability y dale dos opciones reales, ' +
+            'o pregúntale qué día le acomoda. PROHIBIDO decir "no se cancela" a secas, "así que", "política", "devolución" o "reembolso". ' +
+            'Si insiste, vuelve a disculparte, repite que con gusto se la mueves cuando quiera y que su lugar queda guardado; no la canceles.',
         };
       }
     }

@@ -137,9 +137,9 @@ describe('cancelAppointment — paid confirmation (0062)', () => {
     expect(res.cancelled).toBe(false);
     expect(ghl.cancelAppointment).not.toHaveBeenCalled();
     expect(releaseBookingHold).not.toHaveBeenCalled();
-    expect(res.message).toContain('no se cancela');
+    expect(res.message).toContain('NO se cancela');
+    expect(res.message).toContain('disculpa');
     expect(res.message).toContain('getAvailability');
-    expect(res.message).not.toMatch(/devoluci[óo]n(?!es ni)/);
     expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'booking_failed', expect.objectContaining({ stage: 'cancel', reason: 'paid_hold' }));
   });
 

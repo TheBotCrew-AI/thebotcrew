@@ -25,6 +25,9 @@
  *     fue de forma (dijo que no se cancela sin ofrecer horarios en ese mensaje); sin sección
  *     el historial ya trae la regla y la guardia de cancelAppointment la aplica en código. Es
  *     guardia de vocabulario (nunca "devolución"), no la prueba de la regla.
+ *     Re-medido el mismo día tras el ajuste de tono (Leo: "ya está pagada y apartada así que
+ *     no se cancela" suena a orden): con las aserciones nuevas —disculpa primero, "gusto",
+ *     nunca "no se cancela" ni "así que"— 4/4 con la sección.
  *   Lectura honesta del primer par de casos: la sección del prompt NO discrimina ahí. Lo que sostiene el comportamiento
  *   es el mensaje que devuelve bookAppointment (la liga, el plazo y "no digas confirmada" viajan
  *   en el resultado del tool, en código) más el historial. La sección se conserva por lo que el
@@ -239,8 +242,13 @@ describe.skipIf(!evalApiKey)(`apartado con pago — la liga se manda tal cual y 
     );
     const text = res.text.toLowerCase();
     expect(toolIds(res)).not.toContain('cancelAppointment');
-    expect(text).toMatch(/mov|reagend|cambi|otro horario|otra fecha/);
+    expect(text).toMatch(/mov|reagend|cambi|otro horario|otra fecha|acomod/);
     expect(text).not.toMatch(/devoluci|reembols|pol[íi]tica/);
     expect(text).not.toMatch(/qued[óo] cancelada|ya cancel[ée]|he cancelado|cita cancelada/);
+    // Leo, live 2026-09-20: "ya está pagada y apartada así que no se cancela" reads as an
+    // order. The answer must open with an apology and never state the rule flat.
+    expect(text).toMatch(/disculpa|pena|lo siento/);
+    expect(text).toMatch(/gusto/);
+    expect(text).not.toMatch(/no se cancela|as[íi] que/);
   }, 120_000);
 });
