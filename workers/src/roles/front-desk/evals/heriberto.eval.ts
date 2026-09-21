@@ -135,6 +135,22 @@
  *     "déjame confirmarlo con el equipo" por un dato que sí tenemos, porque hasta hoy vivía
  *     solo en las variantes. La otra mitad del cambio (redacción en positivo) NO quedó bajo
  *     prueba: ver la nota del propio caso.
+ *   MEDIDO 2026-09-18 (llegar sin cita — el hilo de Irma, a02):
+ *   - "yo después voy para que me digan ahí gracias": con regla 10/10 dicen "cita previa" (dos
+ *     ofrecían "¿te aparto un espacio?" en vez de "agendar"; la aserción acepta ambas) · sin la
+ *     sección 0/5 — el lado rojo es el mensaje de prod ("claro, aquí te esperamos cuando
+ *     gustes"): el "gracias" la mete en el caso "se despidió → sin pregunta" del flujo.
+ *   - "por ahorita no" tras el aviso: 5/5 con y sin regla. Guardia, no prueba: el flujo ya
+ *     se despide solo ante un no con gracias.
+ *   MEDIDO 2026-09-21 (el consultorio agenda solo por la tarde):
+ *   - "por la tarde no puedo ningún día": con la regla 5/5 · sin ella 0/5, y las cinco rojas
+ *     son la misma pérdida — el bot se DESPIDE ("cuando tengas una tarde libre, escríbeme").
+ *     Sin una salida que ofrecer, cierra; con ella, promete preguntarle al doctor y deja la
+ *     solicitud marcada. El caso del cierre (flagAwaitingHuman sin preguntas) mide 4/5 en
+ *     rojo porque su propia historia ya trae el plan: es guardia, no prueba.
+ *   - El horario dejó de tener franja de mañana el 2026-09-21, así que los slots mockeados de
+ *     este archivo son todos de la tarde. Un slot de mañana contradice el `hours` del tenant
+ *     y, desde `closedRange`, el prompt lo dice en voz alta.
  *
  * Live cases need an API key (`pnpm eval`); excluded from the CI gate.
  */
@@ -160,6 +176,7 @@ import { buildAgentRequestContext } from '../../../core/runtime-context.js';
 import type { TenantContext, TurnContext } from '../../../core/types.js';
 import { HERIBERTO_FAQ, HERIBERTO_PERSONA, heribertoTenant } from './fixtures.js';
 import { INCIDENT_A05_OFFERING, INCIDENT_A05_QUALIFICATION_NOTES } from './heriberto-a05-incident.js';
+import { INCIDENT_A02_OFFERING, INCIDENT_A02_QUALIFICATION_NOTES } from './heriberto-a02-incident.js';
 import { evalApiKey, evalModel, evalProvider } from './eval-model.js';
 
 const TZ = 'America/Chihuahua';
@@ -181,9 +198,14 @@ const OLD_GOLDEN_RULE =
  * The fixture with ONE defending rule removed, per case. Only used to prove the case
  * discriminates — the numbers in the header come from running with RULE_OFF=1.
  */
-/** The pre-2026-09-01 getAvailability instruction — the red side of the slot-contrast case. */
+/**
+ * El ancla del caso de contraste: [0] es el texto VIVO en prod (el que RULE_OFF quita) y
+ * [1] la instrucción floja de antes del 2026-09-01. Desde el 2026-09-21 el consultorio
+ * agenda solo por la tarde, así que el contraste ya no es mañana/tarde sino temprano/tarde
+ * DENTRO de la tarde — misma regla, mismo motivo (dos horas pegadas no son dos opciones).
+ */
 const OLD_GETAVAILABILITY_WORDING = [
-  'Ofrece exactamente DOS horarios que contrasten: uno de la mañana y uno de la tarde del día más próximo que tenga ambos; si ese día solo tiene un turno, el segundo sácalo del día siguiente. Dos horarios pegados (como 10:30 y 11:00) no son una opción real. Van en un solo mensaje corto y sin lista con viñetas',
+  'El consultorio agenda ÚNICAMENTE por la tarde: ofrece exactamente DOS horarios de la tarde SEPARADOS entre sí, del día más próximo que tenga dos; si ese día solo tiene uno, el segundo sácalo del día siguiente. Dos horarios pegados (como 3:45 y 4:15) no son una opción real: deja al menos hora y media entre uno y otro. Van en un solo mensaje corto y sin lista con viñetas',
   'Ofrece exactamente DOS horarios, en un solo mensaje corto y sin lista con viñetas',
 ] as const;
 
@@ -225,7 +247,7 @@ const PAYMENTS_WITHOUT_THE_FACT = 'Efectivo, tarjeta y transferencia. Con tarjet
 
 /** La regla que ordena descubrimiento antes de logística (prod, 2026-09-03). */
 const DISCOVERY_FIRST_RULE = `Antes de ofrecer la consulta quieres entender UNA cosa: qué le gustaría mejorar, o qué tratamiento trae en mente. Sale cuando encaje en lo que se está platicando, nunca como formulario.
-Mientras no lo sepas, ESA es tu pregunta por defecto: cada vez que le contestes una duda suya (dirección, horario, formas de pago, estacionamiento), cierra ese MISMO mensaje preguntándole qué le gustaría mejorar. Nunca dejes el dato solo. "¿Por la mañana o por la tarde?" es el primer paso de agendar, no de conocerla: esa pregunta llega después, cuando ya sabes qué le interesa.`;
+Mientras no lo sepas, ESA es tu pregunta por defecto: cada vez que le contestes una duda suya (dirección, horario, formas de pago, estacionamiento), cierra ese MISMO mensaje preguntándole qué le gustaría mejorar. Nunca dejes el dato solo. "¿Qué día te acomoda?" es el primer paso de agendar, no de conocerla: esa pregunta llega después, cuando ya sabes qué le interesa.`;
 /** Lo que decía hasta hoy: la hora catalogada como pregunta de descubrimiento, y permiso
  *  explícito para hacerla primero ("ni van en orden fijo"). */
 const BOTH_THINGS_ANY_ORDER = `Antes de ofrecer la consulta quieres entender dos cosas. NO son un formulario ni van en orden fijo: salen de UNA en UNA, cuando encajen en lo que se está platicando.
@@ -251,10 +273,22 @@ Las "líneas de ventrílocuo" (o líneas de marioneta) son los surcos que bajan 
 `;
 
 const tenantWithout = (
-  rule: 'medical' | 'faq-consulta' | 'drip' | 'service-name' | 'next-step' | 'consulta-hook' | 'zone-list' | 'slot-contrast' | 'promo-price' | 'consulta-why' | 'first-time-fear' | 'negative-payments' | 'discovery-first' | 'city-split' | 'lada-faq' | 'zone-vocabulary',
+  rule: 'afternoon-only' | 'medical' | 'faq-consulta' | 'drip' | 'service-name' | 'next-step' | 'consulta-hook' | 'zone-list' | 'slot-contrast' | 'promo-price' | 'consulta-why' | 'first-time-fear' | 'negative-payments' | 'discovery-first' | 'city-split' | 'lada-faq' | 'zone-vocabulary' | 'walk-in',
 ): TenantContext => {
   const p = HERIBERTO_PERSONA;
   const cfg = heribertoTenant.config;
+  if (rule === 'walk-in') {
+    return {
+      ...heribertoTenant,
+      config: { ...cfg, promptOverrides: { ...p, houseRules: withoutSection(p.houseRules, '# Si piensa llegar sin cita') } },
+    };
+  }
+  if (rule === 'afternoon-only') {
+    return {
+      ...heribertoTenant,
+      config: { ...cfg, promptOverrides: { ...p, houseRules: withoutSection(p.houseRules, '# Solo se agenda por la tarde') } },
+    };
+  }
   if (rule === 'slot-contrast') {
     const current = p.toolInstructions.getAvailability;
     if (!current.includes(OLD_GETAVAILABILITY_WORDING[0])) throw new Error('contrast wording not found');
@@ -421,7 +455,7 @@ const nextWeekday = (): string => {
   return d.toISOString().slice(0, 10);
 };
 const DAY = nextWeekday();
-const SLOTS = [`${DAY}T11:00:00-06:00`, `${DAY}T16:15:00-06:00`].map((start) => ({ start, end: start }));
+const SLOTS = [`${DAY}T16:15:00-06:00`, `${DAY}T18:15:00-06:00`].map((start) => ({ start, end: start }));
 const LABELS = SLOTS.map((s) => slotLabel(s.start, TZ, TZ));
 
 /** Does the reply name a weekday AND a time that belong to the SAME real slot? */
@@ -443,9 +477,25 @@ describe('Dr. Heriberto Valdivia — prompt (offline)', () => {
   const config = parseFrontDeskConfig(heribertoTenant.config);
   const prompt = buildFrontDeskInstructions(config, new Date().toISOString(), turn.contactPhone);
 
-  it('renders the split schedule (two ranges a day) in the tenant zone', () => {
+  // Una sola franja desde el 2026-09-21: el consultorio dejó de agendar por la mañana y la
+  // config lo refleja, que es lo que el modelo lee cuando le preguntan el horario.
+  it('renders the afternoon-only schedule in the tenant zone', () => {
     expect(prompt).toContain(`# Horario (zona horaria: ${TZ})`);
-    expect(prompt).toContain('10:30–12:30, 15:45–18:45');
+    expect(prompt).toContain('15:45–18:45');
+    expect(prompt).not.toContain('10:30');
+  });
+
+  // Cerrado ≠ lleno (2026-09-21): sábado y domingo no están en `hours`, así que el prompt
+  // nombra los días abiertos y prohíbe explícitamente contestarlos como "ya no hay espacio".
+  it('names the open days and forbids answering a closed one as "full"', () => {
+    expect(prompt).toContain('Se atiende de lunes a viernes.');
+    expect(prompt).toContain('que no es lo mismo que lleno');
+  });
+
+  // El flujo de la mañana vive en houseRules (base, sobrevive a las variantes de campaña).
+  it('carries the morning-exception rule, routed to flagAwaitingHuman', () => {
+    expect(prompt).toContain('# Solo se agenda por la tarde');
+    expect(prompt).toContain('flagAwaitingHuman');
   });
 
   // `renderHours` used to collapse ANY set of days sharing one schedule into "Todos los
@@ -453,7 +503,7 @@ describe('Dr. Heriberto Valdivia — prompt (offline)', () => {
   // it and offered weekends. Fixed in prompt.ts the day this tenant was seeded; this pins it.
   it('names the weekday span instead of "Todos los días" for a Monday–Friday schedule', () => {
     expect(prompt).not.toContain('Todos los días');
-    expect(prompt).toContain('- Lunes a Viernes: 10:30–12:30, 15:45–18:45');
+    expect(prompt).toContain('- Lunes a Viernes: 15:45–18:45');
   });
 
   it('renders the house rules and the custom flow instead of the built-in one', () => {
@@ -556,8 +606,10 @@ describe.skipIf(!evalApiKey)('Dr. Heriberto Valdivia — agenda la consulta, con
     expect(usesRealLabel(reply(res))).toBe(true);
   }, 120_000);
 
-  // Contraste (2026-09-01, visto en vivo como 8:00 y 8:30): la instrucción exige un slot
-  // de la mañana y uno de la tarde; dos pegados no son una opción real.
+  // Contraste (2026-09-01, visto en vivo como 8:00 y 8:30): dos horas pegadas no son dos
+  // opciones. Desde el 2026-09-21 el consultorio agenda SOLO por la tarde, así que el
+  // contraste que la instrucción exige es temprano vs. tarde DENTRO de la tarde (hora y
+  // media mínimo). La lista mockeada es la del calendario de GHL de hoy: 15:45 a 18:15.
   //
   // MEDIDO en gpt-5.6-luna, 2026-09-01: con regla 5/5 · sin regla 14/15 (1 falla con la
   // pregunta del incidente; con pregunta genérica y bajo la variante a05, 10/10 verdes).
@@ -566,9 +618,9 @@ describe.skipIf(!evalApiKey)('Dr. Heriberto Valdivia — agenda la consulta, con
   // continuo desde las 8:00 (sin partición mañana/tarde), donde "los dos más próximos" era
   // la lectura natural. Con el horario partido real (arreglado en GHL ese día) el modelo
   // contrasta casi siempre solo; la regla asegura el caso de cola y documenta la intención.
-  it('offers one morning and one afternoon slot, never two adjacent ones', async () => {
+  it('offers two afternoon slots that are apart, never two adjacent ones', async () => {
     getAvailability.mockResolvedValue(
-      ['10:30', '11:00', '11:30', '12:00', '15:45', '16:15', '16:45', '17:15', '17:45', '18:15'].map((t) => ({
+      ['15:45', '16:15', '16:45', '17:15', '17:45', '18:15'].map((t) => ({
         start: `${DAY}T${t}:00-06:00`,
         end: `${DAY}T${t}:00-06:00`,
       })),
@@ -584,11 +636,13 @@ describe.skipIf(!evalApiKey)('Dr. Heriberto Valdivia — agenda la consulta, con
       { requestContext: rc(tenantFor('slot-contrast')) },
     );
     const text = reply(res);
-    const MORNING = ['10:30', '11:00', '11:30', '12:00'];
-    const AFTERNOON = ['3:45', '4:15', '4:45', '5:15', '5:45', '6:15'];
-    const mentioned = [...MORNING, ...AFTERNOON].filter((t) => text.includes(t));
+    // Las mismas horas que el calendario, en el reloj de 12 h con que el label las escribe.
+    const AFTERNOON: Record<string, number> = { '3:45': 945, '4:15': 975, '4:45': 1005, '5:15': 1035, '5:45': 1065, '6:15': 1095 };
+    const mentioned = Object.keys(AFTERNOON).filter((t) => text.includes(t));
     expect(mentioned.length, text).toBe(2);
-    expect(mentioned.filter((t) => MORNING.includes(t)).length, text).toBe(1);
+    // Hora y media entre una y otra: dos slots pegados son una sola opción disfrazada.
+    const [a, b] = mentioned.map((t) => AFTERNOON[t]!).sort((x, y) => x - y) as [number, number];
+    expect(b - a, text).toBeGreaterThanOrEqual(90);
   }, 120_000);
 });
 
@@ -601,7 +655,7 @@ describe.skipIf(!evalApiKey)('Dr. Heriberto Valdivia — agenda la consulta, con
 // answer and stop.
 const BOOKED_TURN: TurnContext = {
   ...turn,
-  activeAppointment: { startTime: `${DAY}T10:30:00-06:00`, service: 'Consulta' },
+  activeAppointment: { startTime: `${DAY}T16:15:00-06:00`, service: 'Consulta' },
 };
 const rcBooked = (tenant: TenantContext) =>
   buildAgentRequestContext({ tenant, turn: BOOKED_TURN, provider: evalProvider, model: evalModel, llmApiKey: evalApiKey });
@@ -615,12 +669,12 @@ describe.skipIf(!evalApiKey)('Dr. Heriberto Valdivia — siguiente paso', () => 
       [
         { role: 'user', content: 'Hola, me interesa valoración de botox pero tengo dudas.' },
         { role: 'assistant', content: OPENER },
-        { role: 'user', content: 'Quiero agendar, por la mañana' },
-        { role: 'assistant', content: '¡Listo! Tu consulta quedó agendada para el lunes, 31 de agosto, 10:30 a.m. Te llegará la confirmación y los recordatorios por WhatsApp.' },
+        { role: 'user', content: 'Quiero agendar, lo más pronto' },
+        { role: 'assistant', content: '¡Listo! Tu consulta quedó agendada para el lunes, 31 de agosto, 4:15 p.m. Te llegará la confirmación y los recordatorios por WhatsApp.' },
         { role: 'user', content: 'Me gustaría cancelar mi cita' },
-        { role: 'assistant', content: 'Entiendo. ¿Confirmo que cancelo tu cita del lunes, 31 de agosto, 10:30 a.m.?' },
+        { role: 'assistant', content: 'Entiendo. ¿Confirmo que cancelo tu cita del lunes, 31 de agosto, 4:15 p.m.?' },
         { role: 'user', content: 'si, por fa' },
-        { role: 'assistant', content: 'Listo, tu cita del lunes, 31 de agosto, a las 10:30 a.m. quedó cancelada. Si después quieres reagendar, escríbenos por aquí.' },
+        { role: 'assistant', content: 'Listo, tu cita del lunes, 31 de agosto, a las 4:15 p.m. quedó cancelada. Si después quieres reagendar, escríbenos por aquí.' },
         { role: 'user', content: 'Hola, si facturan?' },
       ],
       { requestContext: rc(tenantFor('next-step')) },
@@ -1007,5 +1061,169 @@ describe.skipIf(!evalApiKey)('Dr. Heriberto Valdivia — las zonas por su nombre
     expect(text, text).toMatch(/\$\s?5[,.]?500\b/);
     // $1,700 y $2,000 son precios de zonas de bótox: pegárselos a esta zona es el error.
     expect(text, text).not.toMatch(/\$\s?1[,.]?700\b|\$\s?2[,.]?000\b/);
+  }, 120_000);
+});
+
+/**
+ * "Yo después voy para que me digan ahí" (Irma, a02 por WhatsApp, 2026-09-18). El doctor
+ * solo va al consultorio cuando hay citas, y nada en la config lo decía: el mensaje cerraba
+ * con "gracias", cayó en el caso "se despidió → sin pregunta" del flujo, y Sofía contestó
+ * "aquí te esperamos". Leo lo corrigió a mano. La regla vive en houseRules ("# Si piensa
+ * llegar sin cita") para que ninguna variante la tape y para que le gane a esa excepción.
+ * Corre bajo la a02 congelada (heriberto-a02-incident.ts) con el hilo real.
+ */
+const withA02 = (t: TenantContext): TenantContext => ({
+  ...t,
+  config: {
+    ...t.config,
+    promptVariants: { a02: { offering: INCIDENT_A02_OFFERING, qualificationNotes: INCIDENT_A02_QUALIFICATION_NOTES } },
+  },
+});
+const rcA02 = (tenant: TenantContext) =>
+  buildAgentRequestContext({
+    tenant: withA02(tenant),
+    turn: { ...turn, promptVariant: 'a02' },
+    provider: evalProvider,
+    model: evalModel,
+    llmApiKey: evalApiKey,
+  });
+
+const IRMA_THREAD = [
+  { role: 'user' as const, content: '*Headline:* Conoce tu precio\n*Source URL:* https://fb.me/fXt1wfx5g\n\nPRECIO' },
+  {
+    role: 'assistant' as const,
+    content:
+      '¡Hola! Soy Sofía, del consultorio del Dr. Heriberto Valdivia. El bótox de septiembre queda así: frente $2,125 (regular $2,500), entrecejo $1,700 (regular $2,000), patas de gallo $1,700 (regular $2,000), full face $4,200 (regular $6,000) y maseteros $3,500, su precio de siempre. La promoción aplica para citas atendidas a más tardar el miércoles 30 de septiembre. No manejamos paquetes, membresías ni anticipos; se paga completo en el consultorio.\n¿Qué zona te interesa?',
+  },
+  { role: 'user' as const, content: 'Pero también tienen en chihuahua' },
+  { role: 'assistant' as const, content: 'Sí, el consultorio está en Chihuahua, Chihuahua. ¿Te interesa el rostro completo o una zona específica?' },
+  { role: 'user' as const, content: 'En qué parte de chihuahua 🙏 están ubicados gracias 🫂' },
+  {
+    role: 'assistant' as const,
+    content:
+      'Estamos en Periférico de la Juventud 6902, Plaza Cumbres, Local 34, Chihuahua, Chih., C.P. 31217. Es justo enfrente de la tienda de AT&T; afuera dice MedSpa.\n¿Qué zona de bótox te interesa?',
+  },
+  { role: 'user' as const, content: 'Pues yo después voy para que me digan ahí gracias 🫂🙏' },
+];
+
+describe.skipIf(!evalApiKey)('Dr. Heriberto Valdivia — llegar sin cita', () => {
+  it('"yo después voy para que me digan ahí" → solo con cita previa + ofrece agendar', async () => {
+    const res = await buildFrontDeskAgent().generate(IRMA_THREAD, { requestContext: rcA02(tenantFor('walk-in')) });
+    const text = reply(res);
+    expect(text, text).toMatch(/cita previa|con cita|únicamente con cita|solo con cita/);
+    // "¿te aparto un espacio?" es tan oferta como "te ayudo a agendar".
+    expect(text, text).toMatch(/agend|apart|espacio|horario/);
+  }, 120_000);
+
+  // Guardia, sin lado rojo propio: dicho una vez, un "por ahorita no" se despide y ya —
+  // ni horarios, ni "¿qué te frenó?", ni la oferta repetida.
+  it('"por ahorita no" después del aviso → despedida cálida, sin volver a ofrecer', async () => {
+    const res = await buildFrontDeskAgent().generate(
+      [
+        ...IRMA_THREAD,
+        {
+          role: 'assistant',
+          content:
+            'Con mucho gusto te recibimos 😊 Solo te comento que el Dr. Valdivia va al consultorio únicamente con cita previa. Si gustas, te ayudo a agendar la tuya.',
+        },
+        { role: 'user', content: 'Por ahorita no\nYo después les mando mensaje gracias 🫂 que amable 🙏' },
+      ],
+      { requestContext: rcA02(heribertoTenant) },
+    );
+    const text = reply(res);
+    expect(toolIds(res), text).not.toContain('getAvailability');
+    expect(text, text).not.toMatch(/\?/);
+  }, 120_000);
+});
+
+// ── Solo por la tarde: la excepción de la mañana la decide una persona, no el bot ──
+// El consultorio dejó de agendar por la mañana (2026-09-21). El calendario de GHL ya solo
+// sirve tardes, así que la herramienta no puede ofrecer una mañana ni queriendo; lo que se
+// defiende aquí es lo OTRO: que cuando una persona no puede por la tarde, el bot no la
+// pierda ni le invente una mañana, sino que le prometa preguntarle al doctor y deje la
+// solicitud marcada (`flagAwaitingHuman` → status awaiting_human + el tag `esperando-agenda`,
+// que es de donde Leo se notifica en GHL).
+describe.skipIf(!evalApiKey)('Dr. Heriberto Valdivia — solo por la tarde', () => {
+  const AFTERNOON_THREAD = [
+    { role: 'user' as const, content: 'Hola, me interesa el botox' },
+    { role: 'assistant' as const, content: OPENER },
+    { role: 'user' as const, content: 'Botox en el entrecejo, quiero agendar' },
+    {
+      role: 'assistant' as const,
+      content: 'Con mucho gusto. Para que el Dr. Valdivia te valore la zona, tengo el martes a las 4:15 p.m. o el miércoles a las 6:15 p.m.; ¿cuál te acomoda mejor?',
+    },
+  ];
+
+  /**
+   * El primer freno NO es la excepción: "ese día no puedo" se resuelve con otra tarde, y
+   * escalarlo le costaría a Leo un tag por cada lead que solo quería otro día.
+   *
+   * MEDIDO en gpt-5.6-luna, 2026-09-21: con la regla 5/5 · sin ella 5/5. GUARDIA pura —
+   * mide que la regla no se pase de lista, no que exista.
+   */
+  it('"ese día no puedo" → prueba otra tarde, no escala', async () => {
+    const res = await buildFrontDeskAgent().generate(
+      [...AFTERNOON_THREAD, { role: 'user', content: 'Uy, el martes no puedo' }],
+      { requestContext: rc(tenantFor('afternoon-only')) },
+    );
+    const text = reply(res);
+    expect(toolIds(res), text).not.toContain('flagAwaitingHuman');
+    expect(text, text).not.toMatch(/ma(ñ|n)ana/);
+  }, 120_000);
+
+  /**
+   * La excepción: por la tarde no puede ningún día. El bot ofrece preguntarle al doctor —
+   * sin prometerle la mañana — y le pide qué mañanas le acomodan, para que Leo no tenga que
+   * volver a preguntárselo.
+   *
+   * MEDIDO en gpt-5.6-luna, 2026-09-21: con la regla 5/5 · sin ella 0/5. Las cinco corridas
+   * rojas SUELTAN a la lead con una despedida amable ("cuando tengas una tarde libre,
+   * escríbeme y con gusto reviso disponibilidad"): sin la regla, el modelo no tiene ninguna
+   * salida que ofrecerle, así que cierra. Eso es un lead calificado que se va sin que nadie
+   * se entere — ni tag, ni cola, ni evento.
+   */
+  it('"por la tarde no puedo ningún día" → ofrece preguntarle al doctor, sin prometer nada', async () => {
+    const res = await buildFrontDeskAgent().generate(
+      [...AFTERNOON_THREAD, { role: 'user', content: 'La verdad por la tarde no puedo ningún día, yo salgo de trabajar hasta las 8' }],
+      { requestContext: rc(tenantFor('afternoon-only')) },
+    );
+    const text = reply(res);
+    // Le promete PREGUNTAR, y nombra al doctor: es él quien decide, no ella ni el bot.
+    // Raíces, no infinitivos: escribe "le pregunto", "lo consulto", "déjame checarlo".
+    expect(text, text).toMatch(/pregunt|consult|chec|revis|ver con/);
+    expect(text, text).toMatch(/doctor|dr\.|valdivia/);
+    // Nunca una mañana dada por hecha ni apartada.
+    expect(text, text).not.toMatch(/te (aparto|agendo|dejo|guardo) .{0,30}ma(ñ|n)ana/);
+    expect(toolIds(res), text).not.toContain('bookAppointment');
+  }, 120_000);
+
+  /**
+   * Y el cierre: con su disponibilidad en la mano, marca la solicitud y NO pregunta nada
+   * más — un turno que marca y pregunta deja a la persona contestando mientras Leo ya la
+   * está atendiendo (la misma regla dura del flujo sin agenda).
+   *
+   * MEDIDO en gpt-5.6-luna, 2026-09-21: con la regla 5/5 · sin ella 4/5. Discrimina poco y
+   * la razón importa: la historia del caso ya trae al bot ofreciéndole preguntarle al doctor,
+   * así que el modelo hereda el plan aunque la regla no esté. La única corrida roja es la
+   * interesante — se le olvida el plan a media conversación y le vuelve a ofrecer las tardes
+   * que ella acaba de decir que no puede. Se conserva como guardia del CIERRE (marcar sin
+   * preguntar); lo que prueba que la regla hace falta es el caso de arriba.
+   */
+  it('cuando ya dijo qué mañanas le acomodan → llama flagAwaitingHuman y cierra sin preguntas', async () => {
+    const res = await buildFrontDeskAgent().generate(
+      [
+        ...AFTERNOON_THREAD,
+        { role: 'user', content: 'La verdad por la tarde no puedo ningún día, yo salgo de trabajar hasta las 8' },
+        {
+          role: 'assistant',
+          content: 'Claro que sí, con mucho gusto le pregunto al Dr. Valdivia si te puede recibir por la mañana 😊 ¿Qué días te acomodan y más o menos a qué hora?',
+        },
+        { role: 'user', content: 'Martes o jueves como a las 10 de la mañana' },
+      ],
+      { requestContext: rc(tenantFor('afternoon-only')) },
+    );
+    const text = reply(res);
+    expect(toolIds(res), text).toContain('flagAwaitingHuman');
+    expect(text, text).not.toMatch(/\?/);
   }, 120_000);
 });

@@ -67,9 +67,11 @@ const nextWeekday = (): string => {
 const DAY = nextWeekday();
 
 // The lead's existing appointment — and the two slots the bot may offer instead of it.
-const APPT_START = `${DAY}T10:30:00-06:00`;
+// All in the afternoon: since 2026-09-21 the clinic only books then, and a mocked morning
+// would contradict the schedule the prompt renders from the tenant's `hours`.
+const APPT_START = `${DAY}T16:15:00-06:00`;
 const APPT_LABEL = slotLabel(APPT_START, TZ, TZ);
-const SLOTS = [`${DAY}T11:30:00-06:00`, `${DAY}T16:15:00-06:00`].map((start) => ({ start, end: start }));
+const SLOTS = [`${DAY}T15:45:00-06:00`, `${DAY}T18:15:00-06:00`].map((start) => ({ start, end: start }));
 const LABELS = SLOTS.map((s) => slotLabel(s.start, TZ, TZ));
 
 /** Does the reply name a weekday AND a time that belong to the SAME offered slot? */

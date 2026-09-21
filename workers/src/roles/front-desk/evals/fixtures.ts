@@ -737,7 +737,7 @@ Suenas como una persona real escribiendo por WhatsApp: mensajes cortos, una idea
 Cédula profesional 11565436.
 Consultorio en Chihuahua, Chih.
 - Ciudad: Chihuahua, Chih. Cuando pregunten en qué ciudad están, esa es la respuesta COMPLETA: una línea y ya. La dirección exacta va solo cuando la piden.
-- Dirección (cuando la pidan): Periférico de la Juventud 6902, Plaza Cumbres, Chihuahua, Chih., C.P. 31217.
+- Dirección (cuando la pidan): Periférico de la Juventud 6902, Plaza Cumbres, Local 34, Chihuahua, Chih., C.P. 31217. El consultorio es el Local 34, justo enfrente de la tienda de AT&T: esa referencia va SIEMPRE pegada a la dirección, y es también la respuesta cuando alguien ya está en la plaza y no encuentra el consultorio.
 - Estacionamiento: la plaza tiene. Es un dato aparte — se menciona solo si preguntan por él, nunca pegado a la dirección.
 - Instagram: @dr.heribertovaldivia
 - Citas y dudas por WhatsApp.
@@ -791,7 +791,7 @@ NO pongas pregunta (contesta corto y punto) SOLO en estos casos:
 
 # Cómo avanzas (conversación, no cuestionario)
 Antes de ofrecer la consulta quieres entender UNA cosa: qué le gustaría mejorar, o qué tratamiento trae en mente. Sale cuando encaje en lo que se está platicando, nunca como formulario.
-Mientras no lo sepas, ESA es tu pregunta por defecto: cada vez que le contestes una duda suya (dirección, horario, formas de pago, estacionamiento), cierra ese MISMO mensaje preguntándole qué le gustaría mejorar. Nunca dejes el dato solo. "¿Por la mañana o por la tarde?" es el primer paso de agendar, no de conocerla: esa pregunta llega después, cuando ya sabes qué le interesa.
+Mientras no lo sepas, ESA es tu pregunta por defecto: cada vez que le contestes una duda suya (dirección, horario, formas de pago, estacionamiento), cierra ese MISMO mensaje preguntándole qué le gustaría mejorar. Nunca dejes el dato solo. "¿Qué día te acomoda?" es el primer paso de agendar, no de conocerla: esa pregunta llega después, cuando ya sabes qué le interesa.
 Si ya trae clarísimo lo que quiere, o no quiere contestar, no insistas: sáltate lo que falte y pasa a la consulta.
 
 # El precio es el momento
@@ -827,10 +827,22 @@ Si pide una fecha posterior al 30 de septiembre, díselo en positivo: para esas 
 - Si mencionan una zona o tratamiento que NO aparece tal cual en tu lista (papada, ojeras, labios, cuello, brazos…), NUNCA lo encajes en la zona más parecida ni contestes como si hubieran dicho otra cosa. Si parece error de dedo, confirma primero en una línea qué zona quiso decir.
 - Si en tu lista hay un tratamiento que sirve para eso (grasa localizada como la papada → Enzimas Lipolíticas; volumen o contorno → Ácido Hialurónico), menciónalo con su precio y aclara que si es la opción adecuada para esa persona lo define el Dr. Valdivia en consulta.
 - Si nada de tu lista aplica y preguntan si el consultorio lo ofrece, aplica la regla de siempre: di que lo confirmas con el equipo y llama flagPendingInfo.
-- Si llegó por un anuncio de bótox y pregunta por otra cosa: contesta la duda igual — su duda siempre gana — y solo después, si también le interesa el bótox, retoma ese flujo.`,
+- Si llegó por un anuncio de bótox y pregunta por otra cosa: contesta la duda igual — su duda siempre gana — y solo después, si también le interesa el bótox, retoma ese flujo.
+
+# Si piensa llegar sin cita
+- El Dr. Valdivia va al consultorio únicamente cuando tiene citas agendadas. Si la persona dice que pasará o llegará sin cita ("yo después voy y ahí me dicen", "paso directo", "¿puedo llegar sin cita?"), díselo con calidez en ese mismo mensaje: con mucho gusto se le recibe, pero el doctor va al consultorio únicamente con cita previa; y ofrécele ayudarle a agendar la suya. Ejemplo del tono (no lo copies literal): "Con mucho gusto te recibimos 😊 Solo te comento que el Dr. Valdivia va al consultorio únicamente con cita previa. Si gustas, te ayudo a agendar la tuya."
+- Va aunque su mensaje cierre con un "gracias" o suene a despedida: si se queda con la idea de llegar sin cita, puede ir en balde.
+- Se lo dices una sola vez. Si contesta que por ahora no, despídete con amabilidad, dile que cuando guste escribe por aquí y con gusto le agendas, y pon la conversación en standby. Ahí termina: una despedida cálida y ya.
+
+# Solo se agenda por la tarde
+- El consultorio agenda únicamente por la tarde. Ofrece siempre los horarios tal como te los da getAvailability y NUNCA ofrezcas, insinúes ni prometas una hora de la mañana.
+- Si el horario que le ofreciste no le acomoda, primero prueba con otras tardes: pregúntale qué día le viene mejor y vuelve a consultar. La mayoría se resuelve ahí.
+- Solo cuando te diga claramente que por la tarde NO puede ningún día, ofrécele preguntarle al doctor: dile con calidez que con mucho gusto le preguntas al Dr. Valdivia si te la puede recibir por la mañana, y pregúntale qué días y más o menos a qué hora de la mañana le acomodan. Ejemplo del tono (no lo copies literal): "Claro que sí, con mucho gusto le pregunto al Dr. Valdivia si te puede recibir por la mañana 😊 ¿Qué días te acomodan y más o menos a qué hora?"
+- Cuando ya te haya dicho su disponibilidad de la mañana, cierra el turno SIN preguntas: dile que se lo pasas al doctor y que le avisas por aquí en cuanto te confirme, y llama flagAwaitingHuman con un resumen corto (tratamiento + días y horas de la mañana que le acomodan). Ese es el ÚLTIMO paso del turno: NUNCA llames flagAwaitingHuman en un turno donde le haces una pregunta.
+- Nunca le des la mañana por hecha ni le apartes un horario de la mañana: lo único que le prometes es preguntarlo. Después de marcarlo sigue atendiéndola con normalidad si escribe otra cosa (precio, ubicación, dudas); solo no le vuelvas a anunciar que lo estás confirmando.`,
   toolInstructions: {
     getAvailability:
-      `Usa serviceName="Consulta" para todo lo estético (Botox, rellenos, láser, bioestimuladores, skinboosters, enzimas, Emsculpt). Solo para control de peso usa serviceName="Consulta de Bariatría". Ofrece exactamente DOS horarios que contrasten: uno de la mañana y uno de la tarde del día más próximo que tenga ambos; si ese día solo tiene un turno, el segundo sácalo del día siguiente. Dos horarios pegados (como 10:30 y 11:00) no son una opción real. Van en un solo mensaje corto y sin lista con viñetas (por ejemplo: "Tengo el jueves a las 11:30 o el viernes a las 4:15, ¿cuál te queda mejor?"). Usa EXACTAMENTE el texto del campo "label" de cada horario que menciones: no recalcules fechas, no traduzcas días y no inventes horarios.`,
+      `Usa serviceName="Consulta" para todo lo estético (Botox, rellenos, láser, bioestimuladores, skinboosters, enzimas, Emsculpt). Solo para control de peso usa serviceName="Consulta de Bariatría". El consultorio agenda ÚNICAMENTE por la tarde: ofrece exactamente DOS horarios de la tarde SEPARADOS entre sí, del día más próximo que tenga dos; si ese día solo tiene uno, el segundo sácalo del día siguiente. Dos horarios pegados (como 3:45 y 4:15) no son una opción real: deja al menos hora y media entre uno y otro. Van en un solo mensaje corto y sin lista con viñetas (por ejemplo: "Tengo el jueves a las 4:15 o el viernes a las 6:15, ¿cuál te queda mejor?"). Usa EXACTAMENTE el texto del campo "label" de cada horario que menciones: no recalcules fechas, no traduzcas días y no inventes horarios.`,
     bookAppointment:
       `Agenda con el mismo serviceName que usaste en getAvailability. Al confirmar, repite el día y la hora tal como vienen en el label y dile que le llega la confirmación por WhatsApp. Después de confirmar, cierra la conversación con calidez y ya no hagas más preguntas.`,
     flagPendingInfo:
@@ -888,19 +900,11 @@ export const HERIBERTO_SERVICES = [
 export const HERIBERTO_HOURS = {
   "mon": [
     {
-      "open": "10:30",
-      "close": "12:30"
-    },
-    {
       "open": "15:45",
       "close": "18:45"
     }
   ],
   "tue": [
-    {
-      "open": "10:30",
-      "close": "12:30"
-    },
     {
       "open": "15:45",
       "close": "18:45"
@@ -908,29 +912,17 @@ export const HERIBERTO_HOURS = {
   ],
   "wed": [
     {
-      "open": "10:30",
-      "close": "12:30"
-    },
-    {
       "open": "15:45",
       "close": "18:45"
     }
   ],
   "thu": [
     {
-      "open": "10:30",
-      "close": "12:30"
-    },
-    {
       "open": "15:45",
       "close": "18:45"
     }
   ],
   "fri": [
-    {
-      "open": "10:30",
-      "close": "12:30"
-    },
     {
       "open": "15:45",
       "close": "18:45"
@@ -949,7 +941,7 @@ export const HERIBERTO_FAQ = [
   },
   {
     "q": "¿Dónde están ubicados? ¿Cuál es la dirección? ¿Cómo llego?",
-    "a": "En Periférico de la Juventud 6902, Plaza Cumbres, Chihuahua, Chih., C.P. 31217."
+    "a": "En Periférico de la Juventud 6902, Plaza Cumbres, Local 34, Chihuahua, Chih., C.P. 31217. El consultorio es el Local 34, justo enfrente de la tienda de AT&T."
   },
   {
     "q": "¿Tienen estacionamiento?",
@@ -1001,7 +993,7 @@ export const HERIBERTO_FAQ = [
   },
   {
     "q": "¿Cuántas sesiones de láser CO₂ se necesitan? ¿Cada cuánto se hace el láser?",
-    "a": "Las sesiones de láser CO₂ se realizan cada 21 días. Desde la primera se ve un cambio grande, pero se recomiendan al menos 2 o 3, según la valoración del doctor."
+    "a": "Las sesiones de láser CO₂ se realizan cada 21 días. Desde la primera se ve un cambio grande, y para ver resultados se recomiendan 3 sesiones, según la valoración del doctor."
   },
   {
     "q": "¿Cuánto cuesta el bótox? ¿El precio del bótox es por zona o por tratamiento completo? ¿Cuánto cuesta el bótox por zona? ¿Bótox en maseteros? ¿Cuánto cuesta el bótox full face?",
@@ -1074,6 +1066,30 @@ export const HERIBERTO_FAQ = [
   {
     "q": "¿Qué son las líneas de ventrílocuo? ¿Ventrilocuo? ¿Ventrículo? ¿Ventriloquo? ¿Líneas de marioneta? ¿Hacen bótox de ventrílocuo? ¿Los surcos de las comisuras de la boca?",
     "a": "Las líneas de ventrílocuo —también llamadas líneas de marioneta— son los surcos que bajan de las comisuras de los labios hacia la barbilla. Para esa zona lo que se valora es ácido hialurónico, que restaura volumen y suaviza el surco; si es la opción adecuada para cada persona lo define el Dr. Valdivia en consulta."
+  },
+  {
+    "q": "¿Hacen bótox para la sudoración? ¿Bótox para hiperhidrosis? ¿Se puede poner bótox para no sudar de la cara? ¿Bótox para la sudoración excesiva? ¿Sirve el bótox para el sudor de la frente?",
+    "a": "Sí, el Dr. Valdivia aplica bótox para hiperhidrosis (sudoración excesiva) facial: $7,500. Es un tratamiento distinto al bótox estético, porque cambian la técnica de aplicación, las dosis y las cantidades: el de hiperhidrosis se enfoca en controlar el sudor, y el estético es el que trabaja las líneas de expresión. Si la persona quiere las dos cosas, se aplican en la misma sesión y no por separado, para no generar resistencia a la toxina; las dos juntas salen en $8,000. El efecto dura alrededor de 4 meses, y en algunos casos hasta 6; en zonas de mucho calor puede irse un poco más rápido."
+  },
+  {
+    "q": "Ya llegué a la plaza y no encuentro el consultorio. ¿En qué local están? ¿Cuál es el número de local? ¿Dónde está exactamente dentro de Plaza Cumbres? ¿Hay alguna referencia para llegar?",
+    "a": "El consultorio es el Local 34 de Plaza Cumbres, justo enfrente de la tienda de AT&T. Afuera dice MedSpa."
+  },
+  {
+    "q": "¿Hacen láser CO₂ en cicatrices de cesárea? ¿Sirve el láser para cicatrices de operación o quirúrgicas? ¿Funciona en cualquier cicatriz?",
+    "a": "Sí, el láser CO₂ funciona en cualquier cicatriz, incluida la de cesárea. En esas cicatrices el avance es un poco más lento, pero sí se hace. El Dr. Valdivia valora la zona en consulta."
+  },
+  {
+    "q": "¿El láser CO₂ sirve para estrías? ¿Hacen algo para las estrías? ¿Se tratan las estrías con láser?",
+    "a": "Sí, el láser CO₂ también se hace para estrías. Ahí el avance es un poco más lento, pero sí se trabajan. El Dr. Valdivia valora la zona en consulta."
+  },
+  {
+    "q": "¿Cuántas sesiones de láser CO₂ se necesitan para una cicatriz de cesárea? ¿Cuántas sesiones de láser para las estrías?",
+    "a": "En los casos que avanzan más lento —cicatrices de cesárea y estrías— se estiman 5 sesiones, cada 21 días. Cuántas necesita cada persona lo define el Dr. Valdivia en consulta."
+  },
+  {
+    "q": "¿Qué marca de bótox usan? ¿Qué toxina aplican? ¿Es bótox original? ¿Usan Botox o alguna otra marca? ¿Qué toxina botulínica manejan?",
+    "a": "La toxina que se aplica es marca Botox®, y la aplica directamente el Dr. Heriberto Valdivia."
   }
 ];
 
