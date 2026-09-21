@@ -63,3 +63,27 @@ export function isFinalRound(config: RoundsConfig, round: number): boolean {
   const total = totalRounds(config);
   return total > 0 && round === total - 1;
 }
+
+/**
+ * Whether a conversation pinned to a campaign variant may be nudged at all.
+ *
+ * Follow-ups are a TENANT setting (`follow_up_cadence`), but a campaign sometimes
+ * must not chase: The Bot Crew's `demo24` flow is a self-service try-out someone
+ * asked for on their own, and a nudge to a lead who is still typing turns the demo
+ * into exactly the pushiness the product is sold against. `followUpsEnabled: false`
+ * on the variant opts that campaign out without touching the tenant's ladder.
+ *
+ * Absent/malformed reads as ENABLED — the tenant's cadence keeps its meaning, and a
+ * config typo can never silently stop a whole tenant's follow-ups.
+ */
+export function variantAllowsFollowUps(
+  promptVariants: unknown,
+  variantKey: string | null | undefined,
+): boolean {
+  if (!variantKey || !promptVariants || typeof promptVariants !== 'object' || Array.isArray(promptVariants)) {
+    return true;
+  }
+  const variant = (promptVariants as Record<string, unknown>)[variantKey];
+  if (!variant || typeof variant !== 'object') return true;
+  return (variant as { followUpsEnabled?: unknown }).followUpsEnabled !== false;
+}

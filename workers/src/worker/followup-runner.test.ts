@@ -291,6 +291,19 @@ describe('runPendingFollowUps — campaign-aware angle pools', () => {
     expect(await candidatesArg()).toEqual(['promo laser angle']);
   });
 
+  it('a variant that opted out of nudges aborts the row instead of sending', async () => {
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(
+      tenant({ promptVariants: { demo24: { followUpsEnabled: false } } }),
+    );
+    vi.mocked(q.getConversationPersona).mockResolvedValue({ activeRole: null, roleStartedAt: null, demoStartedAt: null, promptVariant: 'demo24', reactivationRound: 0, leadTimezone: null });
+    await runPendingFollowUps(agent);
+    expect(ghl.sendMessage).not.toHaveBeenCalled();
+    expect(q.cancelFollowUps).toHaveBeenCalledWith('cv1');
+    expect(q.logBotEvent).toHaveBeenCalledWith(
+      'client1', 'conv1', 'followup_aborted', expect.objectContaining({ reason: 'variant_no_follow_ups' }),
+    );
+  });
+
   it('no pinned variant → tenant pool', async () => {
     vi.mocked(q.loadTenantConfig).mockResolvedValue(variantTenant());
     vi.mocked(q.getConversationPersona).mockResolvedValue({ activeRole: null, roleStartedAt: null, demoStartedAt: null, promptVariant: null, reactivationRound: 0, leadTimezone: null });

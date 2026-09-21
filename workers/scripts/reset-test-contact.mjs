@@ -28,6 +28,10 @@ const TAGS = [
   'demo-incompleta',
   'marketing-opt-out',
   'cita-cancelada',
+  'pago-pendiente',
+  'cita-pagada',
+  'apartado-vencido',
+  'pago-revisar',
 ];
 // Interest tags (0058) are per service, so they are matched by prefix, not listed.
 const TAG_PREFIXES = ['interes-'];

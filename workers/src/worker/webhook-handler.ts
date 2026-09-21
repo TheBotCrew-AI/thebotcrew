@@ -18,7 +18,7 @@ import { usageFromAgentResult } from '../core/llm-usage.js';
 import { channelEnabled, hasTriggerKeywords, inTestMode, matchesDemoOff, matchesDemoOn, matchVariantKeyword, messageMatchesTrigger, resolveTenant, roleEnabled } from '../core/tenant.js';
 import { buildAgentRequestContext } from '../core/runtime-context.js';
 import { PHOTO_DESCRIPTION_PREFIX, hasHumanReplies, photoDescriptionLine, toModelMessages } from '../core/model-messages.js';
-import { cadenceForRound, totalRounds } from '../core/reactivation-rounds.js';
+import { cadenceForRound, totalRounds, variantAllowsFollowUps } from '../core/reactivation-rounds.js';
 import { auxReasoningEffort } from '../core/reasoning.js';
 import { timezoneFromPhone } from '../core/lead-timezone.js';
 import { syncContactTimezone } from '../ghl/contact-timezone.js';
@@ -1305,6 +1305,10 @@ export async function runAgentTurn({
   } else if (activeAppointment) {
     // Help mode (0049): a lead with an upcoming appointment is a customer being
     // assisted, not a lead being pursued — no nudge is armed. The bot still answers.
+  } else if (!variantAllowsFollowUps(tenant.config.promptVariants, promptVariant)) {
+    // The pinned campaign opts out of nudges (`followUpsEnabled: false`). No event:
+    // this is the configured intent, not an anomaly — the fingerprint is the variant
+    // itself, already on the conversation row and in `variant_assigned`.
   } else if (reactivationRound < totalRounds(tenant.config)) {
     // Rounds (0049): each ghost cycle runs the cadence for the CURRENT round —
     // round 0 is the tenant's own ladder, later rounds taper. A lead past the last

@@ -1126,6 +1126,37 @@ describe('handleInboundWebhook — demo-mode guards (roleplay must not touch rea
     expect(q.scheduleFollowUp).not.toHaveBeenCalled();
   });
 
+  it('a variant with followUpsEnabled:false replies but arms no nudge', async () => {
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(
+      tenant({ config: {
+        ...tenant().config,
+        followUpCadence: [30, 180],
+        promptVariants: { demo24: { followUpsEnabled: false } },
+      } }),
+    );
+    vi.mocked(q.getConversationPersona).mockResolvedValue({
+      activeRole: null, roleStartedAt: null, demoStartedAt: null, promptVariant: 'demo24', reactivationRound: 0, leadTimezone: null,
+    });
+    await handleInboundWebhook(inbound, agentReplying());
+    expect(ghl.sendMessage).toHaveBeenCalled();
+    expect(q.scheduleFollowUp).not.toHaveBeenCalled();
+  });
+
+  it('control: the SAME variant without the flag arms the tenant cadence', async () => {
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(
+      tenant({ config: {
+        ...tenant().config,
+        followUpCadence: [30, 180],
+        promptVariants: { demo24: { identity: 'Sara' } },
+      } }),
+    );
+    vi.mocked(q.getConversationPersona).mockResolvedValue({
+      activeRole: null, roleStartedAt: null, demoStartedAt: null, promptVariant: 'demo24', reactivationRound: 0, leadTimezone: null,
+    });
+    await handleInboundWebhook(inbound, agentReplying());
+    expect(q.scheduleFollowUp).toHaveBeenCalledWith('cv-uuid', 1, 30, 'America/Mexico_City', undefined, 'cadence', 0);
+  });
+
   it('a persona read failure fails open: arms round 0 (never silences the lead)', async () => {
     vi.mocked(q.loadTenantConfig).mockResolvedValue(
       tenant({ config: { ...tenant().config, followUpCadence: [30, 180] } }),

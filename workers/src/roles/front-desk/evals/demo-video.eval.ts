@@ -1,6 +1,7 @@
 /**
- * El demo de 3 mensajes que Leo graba en video: el lead llega del anuncio, Vale saluda,
- * ofrece DOS horarios, el lead elige y la cita queda "agendada" (calendario simulado).
+ * El demo de 4 mensajes que Leo graba en video: el lead llega del anuncio, Vale saluda,
+ * ofrece DOS horarios, el lead elige, Vale pide el nombre y con él la cita queda "agendada"
+ * (calendario simulado).
  *
  * A diferencia del resto de este directorio, este caso no defiende UNA regla: ensaya la
  * toma completa e IMPRIME la transcripción, para poder ver los mensajes exactos (y los
@@ -11,6 +12,15 @@
  * horarios (1 burbuja) → disponibilidad + horarios reales → bookAppointment y confirmación.
  * Las 4 primeras corridas fueron ANTES de quitarle a `getAvailability` el "(tres como
  * máximo)": ofrecían 3 horarios en 2 de 4. Con "exactamente DOS", 3/3 ofrecieron dos.
+ *
+ * ERA UNA TOMA DE 3 Y SE VOLVIÓ DE 4 (arreglado 2026-09-07). cbdedc6 (08-29) metió el paso
+ * del nombre a la secuencia de agendado —"Demo asks too", dice ese commit— y no tocó este
+ * archivo, así que llevaba nueve días en rojo sin que nadie lo notara: al elegir el horario,
+ * Vale cierra la hora y pregunta "¿A nombre de quién agendo la valoración?" en vez de agendar
+ * (0/3: dos corridas sin ninguna herramienta y una re-consultando disponibilidad). No lo rompió
+ * el cambio de oferta del tenant — el demo corre sobre su propia persona. También es el
+ * recordatorio de que un eval vivo fuera del gate de CI solo falla cuando alguien lo corre.
+ * Con el cuarto turno: 3/3.
  *
  * Como guardia de regresión es débil por diseño (la mitad de sus aserciones las cubre
  * mejor demo-botox.eval.ts, caso por caso); su valor es el ensayo.
@@ -61,7 +71,7 @@ beforeEach(() => {
   vi.mocked(q.logBotEvent).mockResolvedValue(undefined);
 });
 
-describe.skipIf(!evalApiKey)('demo video — 3 mensajes: saludo → 2 horarios → agendada', () => {
+describe.skipIf(!evalApiKey)('demo video — 4 mensajes: saludo → 2 horarios → nombre → agendada', () => {
   it('runs the scripted take', async () => {
     const agent = buildFrontDeskAgent();
     const slots = simulatedSlots(CONV, TZ, Date.now());
@@ -98,12 +108,23 @@ describe.skipIf(!evalApiKey)('demo video — 3 mensajes: saludo → 2 horarios �
     const r3 = await agent.generate(history, { requestContext: rc() });
     say(3, 'LEAD', LEAD_3);
     say(3, `SARA (${splitIntoMessages(r3.text).length} burbuja/s) tools=${toolIds(r3).join(',') || 'none'}`, r3.text);
+    history.push({ role: 'assistant', content: r3.text });
+
+    // Turn 4 — el nombre. Este lead nunca lo dijo, así que la secuencia de agendado lo pide
+    // antes de agendar (cbdedc6): GHL saluda con `{{contact.first_name}}` en su confirmación.
+    const LEAD_4 = 'Mariana Ruiz';
+    history.push({ role: 'user', content: LEAD_4 });
+    const r4 = await agent.generate(history, { requestContext: rc() });
+    say(4, 'LEAD', LEAD_4);
+    say(4, `SARA (${splitIntoMessages(r4.text).length} burbuja/s) tools=${toolIds(r4).join(',') || 'none'}`, r4.text);
 
     // What the take needs to hold.
     expect(toolIds(r1)).not.toContain('getAvailability');   // saludo limpio
     expect(r1.text).not.toMatch(/\d{1,2}:\d{2}/);
     expect(toolIds(r2)).toContain('getAvailability');       // 2 horarios reales
     expect(offered.length).toBeGreaterThanOrEqual(2);
-    expect(toolIds(r3)).toContain('bookAppointment');       // agendada
-  }, 180_000);
+    expect(toolIds(r3)).not.toContain('bookAppointment');   // primero el nombre
+    expect(r3.text.toLowerCase()).toMatch(/nombre/);
+    expect(toolIds(r4)).toContain('bookAppointment');       // agendada
+  }, 240_000);
 });

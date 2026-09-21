@@ -1,60 +1,51 @@
 /**
- * Golden cases for The Bot Crew's own funnel — the Botox Sprint (2026-08-20).
+ * Golden cases for The Bot Crew's own funnel — the response system ($500/mes, 2026-09-07).
  *
- * Three families of rule, all living in `houseRules` so a future campaign variant can't
- * take them down with the flow (business-logic §1.1):
+ * The offer changed shape: Leo stopped selling the Botox Sprint (ads + lead gen + a
+ * 10-appointment guarantee at $3,000/mo) and now sells only the answering system —
+ * WhatsApp, Facebook and Instagram answered 24/7, booking when the business takes
+ * appointments, follow-up on whoever goes quiet. His work is free; the $500 a month are the
+ * tools he pays for on the client's behalf. The rules those cases defended (the fit filter
+ * that could disqualify, the ad-spend disclosure, the guarantee's boundary) are GONE from
+ * prod, so the cases that defended them are gone from here — a case that pins deleted text
+ * is worse than no case: it stays green forever and reads as coverage.
  *
- *   · THE FIT FILTER. The sprint fills a med spa's calendar with botox consults, so the
- *     lead has to be a clinic that already offers the treatment AND already gets messages.
- *     The two failure modes pull in opposite directions, which is why both are here:
- *     ruling out a real lead is far more expensive than talking to a bad one, so an
- *     AMBIGUOUS signal must produce a QUESTION, never a disqualification.
+ * What survives, restated for the new offer:
  *
- *   · THE MONEY DISCLOSURE. The price has two parts — the $3,000 monthly founder fee AND
- *     the ad spend on top, minimum $200 MXN a day, paid straight to Meta. The fee alone is
- *     the seductive half, and a model that omits the second one breaks nothing any metric
- *     can see: the clinic signs, discovers the ad budget later, and feels lied to.
+ *   · NOBODY GETS RULED OUT. There is no qualification step any more — the goal is to
+ *     understand the business and book the call, and whether it applies is Leo's call on
+ *     the call. The one honest carve-out (a shop that closes sales inside the chat) is
+ *     told the truth without being shown the door.
  *
- *   · WHAT IS ACTUALLY PROMISED. Ten consults BOOKED in 30 days, or Leo keeps working for
- *     free until there are ten. Not ten that show up, not ten that buy. The distance
- *     between those is the difference between a guarantee and a lawsuit.
+ *   · THE PRICE IS TWO FACTS, NOT ONE. "$500 al mes" alone is the half that makes the offer
+ *     sound like a cheap bot. The other half — Leo's work is free and the $500 are the
+ *     tools — is what makes the number believable, and it has to travel in the SAME message.
+ *
+ *   · WHAT IS NO LONGER SOLD. Ads and lead generation left the offer but not the world:
+ *     it is the single likeliest thing for a model to agree to, because every AI agency
+ *     does it and the previous prompt did too.
  *
  * The tools are mocked inert: these cases assert on which tools the model REACHES FOR, so
  * nothing may touch the real DB or GHL.
  *
  * What each case is worth (§6c: a case not shown FAILING without its rule proves nothing).
- * Measured on `gpt-5.6-luna`, 2026-08-20: these are GUARDS, not reproductions. Both money
- * cases still passed 3/3 with their rule deleted from the fixture, and the reason is worth
- * keeping: the `offering` states the same two facts a second time in the price section, so
- * removing one line does not remove the knowledge. That redundancy is deliberate — the
- * rules exist to force the fact into the RIGHT message — but it does mean these cases pin
- * behavior that already holds rather than proving the wording produces it.
- *
- * The info-dump HALF of the price case is a reproduction: with the old structure
- * (contract/payment/invoicing inside the "# Precio" block, and the looser drip wording) it
- * failed 1 of 5; with the facts moved into their own "solo si lo preguntan" sections, 0 of 5.
- *
- * The STALL half is not, and the honest record matters more than a clean story. Fixing the
- * dump introduced it: the price block ended with "Y ahí te paras", meaning stop adding facts,
- * and live (23:10) the model read it as stop and ended the thread on the three numbers with
- * no next step. The wording is now scoped to DATOS and the flow rule is marked as outranking
- * any instruction to stop — a defensible fix aimed at the most plausible cause — but 16 runs
- * across three history shapes, WITH the offending wording restored, never reproduced it:
- * plain history 5/5, history with the close already spent 6/6, and again 5/5 once the turn
- * carried a contactPhone so the prompt matched production's shape. So the fix has an unproven
- * effect and this assertion is a guard. What the live thread proves is that the failure is
- * reachable; what the harness proves is that it is rare enough not to surface in ~16 samples. Note what the first attempt
- * at falsifying it got wrong — reverting only the offering left the tightened drip rule in
- * `qualificationNotes` doing the work, and the case passed 5/5, which would have been read
- * as "does not discriminate". Revert the WHOLE change or the red side is not the old state.
- *
- * The mid-conversation disclosure case has a real incident behind it and still does not
- * discriminate: a played thread (2026-08-20) had the model list "manejo de anuncios" among
- * what's included and stop, so the ad budget arrived a message late. Rebuilt from that exact
- * history the case passes 5/5, with the ambiguous wording AND with the disambiguated one —
- * the miss is a RATE, not a deterministic effect of that phrasing. So: the wording fix is a
- * clarity improvement with unproven effect, the case is a guard, and the failure mode is
- * worth watching in real threads because no eval here reliably provokes it.
+ * Measured on `gpt-5.6-luna`, 2026-09-07:
+ *   · "no vende anuncios ni generación de leads" — the one NEW rule here, measured on both
+ *     sides, and it does NOT discriminate: 3/3 with the rule, and 3/3 again with all THREE
+ *     places that carry it deleted from the fixture (the "# Lo que este servicio NO incluye"
+ *     section, the houseRules absolute rule, and the FAQ ficha). Removing only the offering
+ *     section would have been the half-revert the old header warned about, so the red side
+ *     took all three — and the model still answered "hoy no manejamos anuncios ni
+ *     conseguimos clientes nuevos", because the rest of the offering describes a system that
+ *     works on the messages a business ALREADY gets, and that is enough. So this is a GUARD
+ *     on the most expensive available mistake, not proof that the wording produces the
+ *     refusal. The rule stays in prod: redundancy is cheap and the failure is not.
+ *   · Every other case is a PORT of a case that already existed, re-pointed at the new
+ *     numbers, and its red side has NOT been re-measured against this offer. They are
+ *     guards too: they hold the behavior we have, and the honest record is that they were
+ *     green 1/1 the day the offer changed, not that the wording produces the behavior.
+ *     The info-dump/stall case keeps the most history behind it (see git history of this
+ *     file for the 2026-08-20 measurements under the old offer).
  *
  * Live-only (needs an API key); `pnpm eval`, excluded from the CI gate.
  */
@@ -93,25 +84,19 @@ function toolIds(res: { toolCalls?: ToolCallChunkLike[] }): string[] {
   return (res.toolCalls ?? []).map((c) => c.payload.toolName);
 }
 
-/** The arguments the model passed to a given tool, if it called it. */
-function toolArgs(res: { toolCalls?: ToolCallChunkLike[] }, toolName: string): Record<string, unknown> | undefined {
-  const call = (res.toolCalls ?? []).find((c) => c.payload.toolName === toolName);
-  return call?.payload.args as Record<string, unknown> | undefined;
-}
-
 const reply = (res: { text: string }) => res.text.toLowerCase();
 
 beforeEach(() => vi.clearAllMocks());
 
-describe.skipIf(!evalApiKey)('fit filter — the expensive mistake is ruling someone out', () => {
-  it('takes a clinic that already gets messages, without qualifying it to death', async () => {
+describe.skipIf(!evalApiKey)('nobody gets ruled out', () => {
+  it('takes a business that already gets messages, without qualifying it to death', async () => {
     const agent = buildFrontDeskAgent();
     const res = await agent.generate(
       [
         {
           role: 'user',
           content:
-            'Hola, vi su anuncio. Tengo un med spa chiquito, aplicamos bótox y rellenos. Me escriben por WhatsApp pero a veces tardo en contestar. ¿Esto me sirve?',
+            'Hola, vi su anuncio. Tengo un consultorio dental chiquito. Me escriben por WhatsApp pero a veces tardo en contestar. ¿Esto me sirve?',
         },
       ],
       { requestContext: rc() },
@@ -121,50 +106,25 @@ describe.skipIf(!evalApiKey)('fit filter — the expensive mistake is ruling som
     expect(reply(res)).not.toMatch(/no te (lo )?(voy a |puedo )?(vender|servir)|no es para ti/);
   });
 
-  // Ambiguous is not negative. The cost asymmetry is the whole rule: a question costs one
-  // message, a wrong disqualification costs the lead permanently and silently.
-  it('asks the qualifying question instead of ruling out an ambiguous business', async () => {
+  // Ambiguous is not negative, and under this offer nothing is negative: the business that
+  // is "apenas empezando" still gets messages, or will. A question costs one message; a
+  // disqualification costs the lead permanently and silently.
+  it('asks instead of concluding when the business is ambiguous', async () => {
     const agent = buildFrontDeskAgent();
     const res = await agent.generate(
-      [{ role: 'user', content: 'Hola, tengo un spa pero apenas vamos empezando. ¿Esto me sirve o todavía no?' }],
+      [{ role: 'user', content: 'Hola, tengo un negocio pero apenas vamos empezando. ¿Esto me sirve o todavía no?' }],
       { requestContext: rc() },
     );
 
-    // "Apenas empezando" is ambiguous, not negative: it may or may not already get
-    // messages, and only the lead knows. The rule is to ASK before concluding.
     expect(toolIds(res)).not.toContain('updateConversationStatus');
     expect(res.text).toContain('?');
   });
 
-  it('parks the conversation in standby, warmly, with the reason attached', async () => {
-    const agent = buildFrontDeskAgent();
-    const res = await agent.generate(
-      [
-        { role: 'user', content: 'Hola, vi su anuncio de bótox' },
-        { role: 'assistant', content: 'Para ver si te sirve: ¿tu negocio trabaja con citas — consultas o tratamientos que la gente agenda?' },
-        { role: 'user', content: 'No, todavía no abro la clínica. Apenas estoy viendo el local, quiero empezar el año que entra.' },
-      ],
-      { requestContext: rc() },
-    );
-
-    expect(toolIds(res)).toContain('updateConversationStatus');
-    expect(toolArgs(res, 'updateConversationStatus')?.status).toBe('standby');
-    expect(String(toolArgs(res, 'updateConversationStatus')?.reason ?? '')).not.toBe('');
-    // Warm, not a door in the face: the clinic that opens next year is a lead next year.
-    expect(reply(res)).toMatch(/cuando|escríbeme|escribeme|avísame|avisame|abras|con gusto/);
-  });
-
-  // Fuera del avatar, dentro del criterio (2026-09-01): una podóloga real escribió y el
-  // filtro viejo la descalificaba por giro ("no ofrece este tipo de tratamientos"). El
-  // criterio real es negocio-de-citas + dispuesto a invertir en anuncios; el avatar del
-  // anuncio es puntería de la campaña, no el filtro.
-  //
-  // MEDIDO en gpt-5.6-luna, 2026-09-01: filtro nuevo 5/5 · filtro viejo 4/5 — mayormente
-  // GUARDIA: la regla vieja de "nunca descalifiques por sospecha" salva a la podóloga casi
-  // siempre, y la falla (1/5) es la cola que el incidente demuestra alcanzable. La primera
-  // regex tenía una rama "solo … med spas" que reprobaba la respuesta CORRECTA
-  // ("no solo med spas") — por eso la aserción de texto es solo frases de rechazo.
-  it('qualifies an off-avatar appointment business (podóloga) instead of ruling it out', async () => {
+  // Fuera del avatar, dentro del criterio (2026-09-01, mantenido bajo la oferta nueva): una
+  // podóloga real escribió y el filtro viejo la descalificaba por giro. Hoy el criterio es
+  // todavía más ancho —cualquier negocio que reciba mensajes— así que descartarla sería
+  // doblemente falso.
+  it('qualifies an off-avatar business (podóloga) instead of ruling it out', async () => {
     const agent = buildFrontDeskAgent();
     const res = await agent.generate(
       [
@@ -179,14 +139,37 @@ describe.skipIf(!evalApiKey)('fit filter — the expensive mistake is ruling som
 
     expect(toolIds(res)).not.toContain('updateConversationStatus');
     // Refusal phrasings only — "no solo med spas" is a GOOD reply, so no med-spa branch
-    // here (the first regex had one and failed a correct answer on it).
+    // here (an earlier regex had one and failed a correct answer on it).
     expect(reply(res)).not.toMatch(/no te (lo )?(voy a |puedo )?(vender|servir)|no es para ti|no aplica|no te funcionar/);
   }, 120_000);
+
+  // The single carve-out of the new offer, and it is a disclosure, not a door: a shop that
+  // takes the order, charges and ships inside the chat is not what the system is built for
+  // today. Saying so is honest; parking the conversation in standby over it is the old
+  // behavior, and it is exactly what "hoy no descalificas a nadie" removed.
+  it('is honest with a chat-sales business without disqualifying it', async () => {
+    const agent = buildFrontDeskAgent();
+    const res = await agent.generate(
+      [
+        {
+          role: 'user',
+          content:
+            'Hola! Yo vendo ropa por WhatsApp, ahí mismo me hacen el pedido, me pagan y les mando el paquete. ¿Me sirve?',
+        },
+      ],
+      { requestContext: rc() },
+    );
+
+    expect(toolIds(res)).not.toContain('updateConversationStatus');
+    // Not a door in the face: the call stays available, or at minimum the turn keeps moving.
+    expect(/\?/.test(reply(res)) || /llamada|leo/.test(reply(res)), `sin salida: ${res.text}`).toBe(true);
+  });
 });
 
-describe.skipIf(!evalApiKey)('money — the ad spend is the half that gets swallowed', () => {
-  // The reproduction of this suite: the fee is quotable on its own and sounds complete,
-  // so the disclosure rule is what forces the second half into the SAME message.
+describe.skipIf(!evalApiKey)('money — $500 alone is the half that sounds cheap', () => {
+  // The number quotes fine on its own and sounds complete, which is the problem: at $500 a
+  // month the offer reads as a toy unless the same message says Leo's work is free and the
+  // $500 are the tools he pays for. That pairing is what makes it believable.
   it('discloses both halves the first time price comes up', async () => {
     const agent = buildFrontDeskAgent();
     const res = await agent.generate(
@@ -194,119 +177,134 @@ describe.skipIf(!evalApiKey)('money — the ad spend is the half that gets swall
       { requestContext: rc() },
     );
 
-    expect(reply(res)).toMatch(/3[,.]?000/);
-    // The ad budget, in the same breath — by amount or by naming it as separate spend.
-    expect(reply(res)).toMatch(/200|anuncios? (van?|corre|se paga|aparte)|aparte|publicidad/);
+    expect(reply(res)).toMatch(/500/);
+    expect(reply(res)).toMatch(/herramienta|no cobra|sin costo|no te cobra|su trabajo|plataforma/);
   });
 
-  // The single-message version of this case passed while the REAL flow failed: asked for
-  // the price after qualifying, the model listed "manejo de anuncios" among what's
-  // included and stopped — the ad budget arrived a message late, which is exactly the
-  // "found out afterwards" this rule exists to prevent. The word "anuncios" inside the
-  // included list is what made the omission feel complete.
   it('discloses both halves even when price comes up mid-conversation', async () => {
     const agent = buildFrontDeskAgent();
     const res = await agent.generate(
       [
-        { role: 'user', content: 'Hola, vi su anuncio de las citas de botox' },
-        { role: 'assistant', content: 'Hola, qué gusto. Somos The Bot Crew: ayudamos a med spas a llenar su agenda de valoraciones de bótox. ¿Ya ofrecen bótox?' },
-        { role: 'user', content: 'Tengo un med spa en Guadalajara, aplicamos botox y rellenos. Si me escriben por WhatsApp' },
-        { role: 'assistant', content: 'Perfecto, sí les puede servir. ¿Quién contesta esos mensajes hoy?' },
+        { role: 'user', content: 'Hola, vi su anuncio de contestar los mensajes' },
+        {
+          role: 'assistant',
+          content:
+            'Hola, qué gusto. Somos The Bot Crew: contestamos todos los mensajes que le llegan a tu negocio por WhatsApp, Facebook e Instagram, 24/7.\n\n¿De qué es tu negocio?',
+        },
+        { role: 'user', content: 'Tengo un salón de eventos en Guadalajara. Si me escriben harto por WhatsApp' },
+        { role: 'assistant', content: 'Perfecto. ¿Quién contesta esos mensajes hoy?' },
         { role: 'user', content: 'Cuanto cuesta?' },
       ],
       { requestContext: rc() },
     );
 
-    expect(reply(res)).toMatch(/3[,.]?000/);
-    // The ad budget, in the SAME message — and "incluye el manejo de anuncios" is not it.
-    expect(reply(res)).toMatch(/200|aparte|directo a meta|no incluye|va(n)? por (tu|su) cuenta/);
+    expect(reply(res)).toMatch(/500/);
+    expect(reply(res)).toMatch(/herramienta|no cobra|sin costo|no te cobra|su trabajo|plataforma/);
   });
 
-  // Transcribed from a live thread (2026-08-20, 22:02): asked "¿cuánto cuesta?", Sara
-  // answered SEVEN things — price, what's included, no contract, month to month, cancel
-  // anytime, payment methods, invoicing. Not the model ignoring the drip rule: the offering
-  // kept contract/payment/invoicing INSIDE the "# Precio" section, so the price question
-  // pulled the whole block. The facts now live in their own "solo si lo preguntan" sections.
-  it('answers the price with the three numbers, and still moves', async () => {
+  // Transcribed from a live thread (2026-08-20, 22:02) under the previous offer: asked
+  // "¿cuánto cuesta?", Sara answered SEVEN things — price, what's included, no contract,
+  // month to month, cancel anytime, payment methods, invoicing. The cause was structural
+  // (contract/payment/invoicing lived INSIDE the "# Precio" section) and the fix survived
+  // the offer change: those facts still live in their own "solo si lo preguntan" sections,
+  // and the price block still ends with a scoped stop plus an explicit order to keep moving.
+  it('answers the price without dumping the rest, and still moves', async () => {
     const agent = buildFrontDeskAgent();
     const res = await agent.generate(
       [
         { role: 'user', content: '¡Hola! Vi su anuncio y me interesa recibir más información.' },
-        { role: 'assistant', content: '¡Hola! Soy Sara, de The Bot Crew. Ayudamos a med spas a llenar su agenda de valoraciones de bótox.\n\nPara ubicarme: ¿los mensajes los contestas tú o alguien de tu equipo?' },
+        {
+          role: 'assistant',
+          content:
+            '¡Hola! Soy Sara, de The Bot Crew. Contestamos todos los mensajes que le llegan a tu negocio por WhatsApp, Facebook e Instagram, 24/7.\n\nPara ubicarme: ¿los mensajes los contestas tú o alguien de tu equipo?',
+        },
         { role: 'user', content: 'Marina, mi recepcionista' },
-        { role: 'assistant', content: 'La idea no es reemplazar a Marina, sino cubrirla cuando está en cabina o fuera de horario.\n\n¿Ya han probado anuncios de bótox?' },
-        { role: 'user', content: 'Nop, aún no' },
-        { role: 'assistant', content: 'Entonces se puede instalar desde cero.\n\n¿Ya ofrecen bótox en la clínica?' },
-        { role: 'user', content: 'Sip' },
+        {
+          role: 'assistant',
+          content:
+            'La idea no es reemplazar a Marina, sino cubrirla cuando está ocupada o fuera de horario.\n\n¿Más o menos cuántos mensajes les llegan?',
+        },
+        { role: 'user', content: 'Como 30 al día' },
         // The close is SPENT here. That is the ingredient that made it stall live: the
         // model may not reuse this question, so if the price block also tells it to stop,
         // it has no move left. A history without this line does not reproduce the bug.
-        { role: 'assistant', content: 'Entonces sí les puede servir. En una videollamada de 20 minutos, Leo te muestra el sistema funcionando con el caso de tu clínica.\n\n¿Te aparto un espacio con Leo?' },
+        {
+          role: 'assistant',
+          content:
+            'Con ese volumen se nota rápido. En una videollamada de 20 minutos, Leo revisa tu caso y te muestra el sistema.\n\n¿Te aparto un espacio con Leo?',
+        },
         { role: 'user', content: 'Cuando me va costar?' },
       ],
       { requestContext: rc() },
     );
 
-    // The three that DO belong together.
-    expect(reply(res)).toMatch(/3[,.]?000/);
-    expect(reply(res)).toMatch(/200|aparte|directo a meta/);
-    // The four that were riding along uninvited.
+    expect(reply(res)).toMatch(/500/);
+    // The facts that were riding along uninvited.
     expect(reply(res), `info dump: ${res.text}`).not.toMatch(/factura|transferencia|tarjeta de (crédito|debito|débito)/);
     expect(reply(res), `info dump: ${res.text}`).not.toMatch(/sin contrato|plazo forzoso|mes a mes|cancela(n|r)? cuando/);
     // …and it still has to MOVE.
     expect(/\?/.test(reply(res)) || /agend|apart|horario/.test(reply(res)), `sin siguiente paso: ${res.text}`).toBe(true);
   });
 
-  it('names the founder price and the waived install instead of deferring to the call', async () => {
+  // Under the old offer the install was $15,000 waived; now there is no install charge at
+  // all. A model that hedges here invents a cost the offer does not have, right at the
+  // moment of decision.
+  it('says there is no install charge instead of deferring to the call', async () => {
     const agent = buildFrontDeskAgent();
     const res = await agent.generate(
       [{ role: 'user', content: '¿Y cuánto sale la instalación? ¿Cuánto tengo que pagar de entrada?' }],
       { requestContext: rc() },
     );
 
-    expect(reply(res)).toMatch(/15[,.]?000|sin costo|gratis|no tiene costo/);
+    expect(reply(res)).toMatch(/no hay (costo|cargo)|sin costo|gratis|no tiene costo|no cobra|solo (son |es )?\$?500|únicamente/);
   });
 
-  // "Booked" is the promise. "Shows up" and "buys" are somebody else's job, and the
-  // difference is what keeps the guarantee honest when month two arrives.
-  it('promises appointments BOOKED, never that they show up or buy', async () => {
-    const agent = buildFrontDeskAgent();
-    const res = await agent.generate(
-      [{ role: 'user', content: 'O sea, ¿me garantizan 10 pacientes nuevos de bótox en el mes?' }],
-      { requestContext: rc() },
-    );
-
-    expect(reply(res)).toMatch(/agendad|agenda|citas/);
-    expect(reply(res)).not.toMatch(/garantizamos que (se presenten|compren)|10 pacientes que (van a )?(comprar|llegar)/);
-  });
-});
-
-describe.skipIf(!evalApiKey)('money — where the guarantee stops', () => {
-  // The sharpest question a buyer asks, and the one where a generous-sounding answer
-  // creates a debt: Leo keeps working for free, but Meta still charges the clinic. Both
-  // halves have to travel together or the guarantee reads as "everything is covered".
-  it('says the ad spend stays with the clinic even while the guarantee runs', async () => {
-    const agent = buildFrontDeskAgent();
-    const res = await agent.generate(
-      [{ role: 'user', content: 'A ver, si no llegan las 10 citas y sigues trabajando gratis, ¿tú me cubres los anuncios ese tiempo?' }],
-      { requestContext: rc() },
-    );
-
-    // Not just "ads exist": it has to say who keeps paying for them.
-    expect(reply(res)).toMatch(/sigues? (pagando|cubriendo|invirtiendo)|por (tu|su) cuenta|los cubres tú|la clínica|van aparte|directo a meta/);
-    expect(reply(res)).not.toMatch(/yo (te )?(cubro|pago) (los )?anuncios|nosotros (cubrimos|pagamos) (los )?anuncios/);
-  });
-
-  // The previous offer charged for the software on top (~194 USD/mes). A model that
-  // hedges here re-creates a cost the offer no longer has, right at the decision.
-  it('answers that the software is included, without inventing a tool to pay for', async () => {
+  // The tools are the whole reason the $500 exist, so "do I pay for a CRM on top?" has to
+  // land as a flat no. Hedging re-creates the cost the offer was built to absorb.
+  it('answers that the tools are included, without inventing one to pay for', async () => {
     const agent = buildFrontDeskAgent();
     const res = await agent.generate(
       [{ role: 'user', content: '¿Y tengo que pagar alguna herramienta o suscripción aparte? tipo un CRM' }],
       { requestContext: rc() },
     );
 
-    expect(reply(res)).toMatch(/inclui|incluye|no (tienes|hay) que pagar|sin costo adicional/);
+    expect(reply(res)).toMatch(/inclui|incluye|no (tienes|hay) que pagar|sin costo adicional|dentro de los/);
+  });
+});
+
+describe.skipIf(!evalApiKey)('what is no longer sold', () => {
+  // THE case of this rewrite. Lead generation left the offer, but it is what every AI
+  // agency sells and what this very prompt sold three weeks ago, so agreeing to it is the
+  // model's most available mistake — and the most expensive, because the client would find
+  // out on the call at best and after paying at worst.
+  it('does not promise ads or lead generation', async () => {
+    const agent = buildFrontDeskAgent();
+    const res = await agent.generate(
+      [{ role: 'user', content: 'Y ustedes también me manejan los anuncios y me consiguen clientes nuevos?' }],
+      { requestContext: rc() },
+    );
+
+    // The negation has to be ATTACHED to what is being refused. A bare /\bno\b/ passes on
+    // almost any Spanish reply — it was the first version of this assertion and it made the
+    // case unfalsifiable — so the refusal must land within a few words of the ads/clients it
+    // refuses ("no manejamos anuncios", "no en manejar anuncios ni conseguir clientes").
+    expect(reply(res), `sin negación: ${res.text}`).toMatch(
+      /\bno\b[^.!?]{0,20}(manej|consegu|genera|corre|anuncios|clientes nuevos)/,
+    );
+    // …and it must not claim it anyway.
+    expect(reply(res), `promete leads: ${res.text}`).not.toMatch(
+      /(sí|si|claro),? (también )?(te )?(manejamos|manejo|corremos|hacemos)|te (consigo|conseguimos|traemos) clientes|generación de leads incluid/,
+    );
+  });
+
+  it('redirects to what the system actually does', async () => {
+    const agent = buildFrontDeskAgent();
+    const res = await agent.generate(
+      [{ role: 'user', content: 'necesito más clientes, me pueden ayudar con eso?' }],
+      { requestContext: rc() },
+    );
+
+    expect(reply(res)).toMatch(/mensajes?|contest|whatsapp/);
   });
 });
 
@@ -332,13 +330,52 @@ describe.skipIf(!evalApiKey)('the call with Leo — offered when it IS the answe
     expect(reply(res)).not.toMatch(/agendamos una llamada|te agendo una llamada|llamada con leo/);
   });
 
-  it('helps without selling the sprint back to someone who is already a client', async () => {
+  it('helps without selling the offer back to someone who is already a client', async () => {
     const agent = buildFrontDeskAgent();
     const res = await agent.generate(
-      [{ role: 'user', content: 'Oye, ya me están cayendo citas de mis anuncios pero quiero cambiar el horario que ofrece el asistente' }],
+      [{ role: 'user', content: 'Oye, ya me está contestando el asistente pero quiero cambiar el horario que ofrece' }],
       { requestContext: rc() },
     );
 
-    expect(reply(res)).not.toMatch(/3[,.]?000|precio de fundador|instalación sin costo/);
+    expect(reply(res)).not.toMatch(/\$?500|lugares|precio congelado/);
   });
+});
+
+// A capability we do not have TODAY is not the same thing as a fact missing from the
+// config, and reading them as one cost a real lead (2026-09-08, Leo's own test thread):
+// a wedding photographer asked whether the assistant could quote each event, got
+// "cotizaciones formales o documentos personalizados no están contemplados", and the
+// next turn parked the thread on `flagPendingInfo` — a queue nobody owed him an answer
+// from. Both moves are wrong: the system IS built per business, so the honest answer is
+// "sí se puede armar", and the place that gets defined is the call.
+//
+// Measured on `gpt-5.6-luna` (the model that produced the incident), 2026-09-08 — this one
+// DISCRIMINATES, unlike most of the file: 3/3 green with the houseRules section in the
+// fixture, and 6/6 RED (both cases, three runs) with it removed and the old blanket line
+// restored. Every red run failed the same way the incident did — "déjame lo confirmo con el
+// equipo" plus a flagPendingInfo call — so the assertion that carries the weight is the
+// pending-info one, not the refusal wording.
+describe.skipIf(!evalApiKey)('a capability that does not exist YET → the call, not a refusal', () => {
+  const asks = (text: string) => async () => {
+    const agent = buildFrontDeskAgent();
+    const res = await agent.generate([{ role: 'user', content: text }], { requestContext: rc() });
+
+    // 1. It must not close the door.
+    expect(reply(res), `lo niega: ${res.text}`).not.toMatch(
+      /no (est[aá]n? |es )?(contemplad|dispon|inclu|posible)|no (lo |se )?(puede|podemos|hacemos|manejamos) (eso|cotiza|documento)|por ahora no|todav[ií]a no/,
+    );
+    // 2. It must not park it as an owed fact — this is not a config gap.
+    expect(toolIds(res), `lo marca como pendiente: ${res.text}`).not.toContain('flagPendingInfo');
+    expect(reply(res), `dice que lo confirma: ${res.text}`).not.toMatch(/confirm[oa]\w* con el equipo|te aviso en cuanto/);
+    // 3. It must point at the call, which is where it actually gets defined.
+    expect(reply(res), `no ofrece la llamada: ${res.text}`).toMatch(/llamada|videollamada|con leo|20 minutos/);
+  };
+
+  it('quoting each job automatically', asks(
+    'Quisiera poder mandar cotizaciones inmediatamente, calculando cada evento por separado. ¿Es algo que hagas?',
+  ));
+
+  it('a document built from each customer’s data', asks(
+    'Se puede que arme documentos personalizados con los datos de cada cliente?',
+  ));
 });

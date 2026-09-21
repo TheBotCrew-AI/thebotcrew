@@ -29,7 +29,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { createClient } from '@supabase/supabase-js';
-import { BOT_CREW_PERSONA, DEMO_BOTOX_PERSONA, HERIBERTO_PERSONA, MADI_HOUSE_RULES } from './fixtures.js';
+import { BOT_CREW_PERSONA, HERIBERTO_PERSONA, MADI_HOUSE_RULES } from './fixtures.js';
 
 /**
  * Tenants whose `houseRules` an eval fixture mirrors, and must keep mirroring.
@@ -61,8 +61,9 @@ const MIRRORED_PERSONAS: {
   column: 'prompt_overrides' | 'demo_prompt_overrides';
   fixture: Record<string, unknown>;
 }[] = [
-  { label: 'The Bot Crew — base (Botox Sprint)', tenantId: BOT_CREW_TENANT_ID, column: 'prompt_overrides', fixture: BOT_CREW_PERSONA },
-  { label: 'The Bot Crew — botox demo', tenantId: BOT_CREW_TENANT_ID, column: 'demo_prompt_overrides', fixture: DEMO_BOTOX_PERSONA },
+  { label: 'The Bot Crew — base (sistema de respuesta)', tenantId: BOT_CREW_TENANT_ID, column: 'prompt_overrides', fixture: BOT_CREW_PERSONA },
+  // No botox-demo entry: the demo was retired from that tenant with the offer (2026-09-07)
+  // and `demo_prompt_overrides` is NULL, so DEMO_BOTOX_PERSONA is synthetic now, not a mirror.
   { label: 'Dr. Heriberto Valdivia — base', locationId: 'rfL7uM3c5mpfIUGxCR3C', column: 'prompt_overrides', fixture: HERIBERTO_PERSONA },
 ];
 

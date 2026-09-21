@@ -5,6 +5,7 @@ import {
   isFinalRound,
   resolveExtraRounds,
   totalRounds,
+  variantAllowsFollowUps,
 } from './reactivation-rounds.js';
 
 const CADENCE = [30, 360, 1080];
@@ -87,5 +88,31 @@ describe('isFinalRound — the farewell round', () => {
 
   it('follow-ups off: no round is final', () => {
     expect(isFinalRound({ followUpCadence: null }, 0)).toBe(false);
+  });
+});
+
+describe('variantAllowsFollowUps — a campaign that must not chase', () => {
+  const variants = { demo24: { followUpsEnabled: false }, jornada: { identity: 'Sofía' } };
+
+  it('only the variant that opts out is blocked', () => {
+    expect(variantAllowsFollowUps(variants, 'demo24')).toBe(false);
+    expect(variantAllowsFollowUps(variants, 'jornada')).toBe(true);
+  });
+
+  it('no variant pinned = the tenant cadence applies', () => {
+    expect(variantAllowsFollowUps(variants, null)).toBe(true);
+    expect(variantAllowsFollowUps(variants, undefined)).toBe(true);
+  });
+
+  it('a key with no entry falls back to enabled, like the prompt falls back to base', () => {
+    expect(variantAllowsFollowUps(variants, 'ghost')).toBe(true);
+  });
+
+  it('malformed config never silences a tenant', () => {
+    expect(variantAllowsFollowUps(null, 'demo24')).toBe(true);
+    expect(variantAllowsFollowUps('nope', 'demo24')).toBe(true);
+    expect(variantAllowsFollowUps([{ followUpsEnabled: false }], 'demo24')).toBe(true);
+    expect(variantAllowsFollowUps({ demo24: 'nope' }, 'demo24')).toBe(true);
+    expect(variantAllowsFollowUps({ demo24: { followUpsEnabled: 'false' } }, 'demo24')).toBe(true);
   });
 });

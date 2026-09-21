@@ -60,13 +60,16 @@ monolithic prompt (migration 0036; `core/tenant.ts` `matchVariantKeyword`,
   LEAD's business, rules about who WE serve are incoherent. The Bot Crew's fit filter (§2b)
   lives here for precisely this reason — it survived the move out of `qualificationNotes`,
   which is what would otherwise have taken it down on the first campaign variant.
-- **Live example — The Bot Crew's `demo-funnel` (2026-08-01).** `keyword_variants` maps the
-  demo ad CTAs to it (`quiero mi demo`, `mi propia IA` — deliberately NOT
-  `completé el formulario`, which stays a gate keyword only, so form leads take the base
-  route to the call); its `qualificationNotes` is the demo route with **no call script in it
-  at all**, while base keeps the route to the 20-min call. Measured before/after on the same
-  scenario: one blob → the call was offered 1 turn in 5; split → variant 5/5 to the demo,
-  base 3/3 to the call. The placement convention that makes this work (rules → `houseRules`,
+- **Live example — The Bot Crew's `demo24` (2026-09-08).** `keyword_variants` maps `demo24`
+  and `demo 24` to it (the alias exists because the matcher is whole-word: `demo24` does not
+  match "demo 24"). It overrides only `identity` and `qualificationNotes` — the organic,
+  no-ad framing plus a three-line opening that spells the name out ("SARA, Sistema de Atención
+  y Respuesta Automática") — and inherits `offering` untouched, so the $500, the contract and
+  the payment answers stay single-sourced. It also sets `followUpsEnabled: false` (below) and
+  a `calendarLabel`. The earlier `demo-funnel` variant was removed with the Botox Sprint offer
+  it served (2026-09-07); its measurement is still the reason to split a flow rather than pile
+  routes into one blob — one blob offered the call 1 turn in 5, the split ran 5/5 to the demo
+  and 3/3 to the call. The placement convention that makes this work (rules → `houseRules`,
   commercial answers → `offering`, flow → `qualificationNotes`) is in
   [`config-model.md`](config-model.md) § Where to put a given piece of text.
 - **Turning on a variant does NOT reach conversations already in flight.** First-touch sticky
@@ -87,6 +90,14 @@ monolithic prompt (migration 0036; `core/tenant.ts` `matchVariantKeyword`,
   misconfiguration fingerprint** — a keyword mapped to a variant key with no
   `prompt_variants` entry; the prompt falls back to base, loudly, never silently. A variant
   DB failure never blocks the turn (lead gets the base prompt).
+- **A campaign that must not chase (`followUpsEnabled: false`, code-only).** Follow-ups are a
+  TENANT setting (`follow_up_cadence`), but some campaigns must not nudge at all: The Bot
+  Crew's `demo24` is a try-out the lead asked for on their own, and chasing them turns the
+  demo into the pushiness the product is sold against. The flag opts that campaign out of
+  arming (`webhook-handler.ts`) and, defensively, out of sending a row armed before the
+  opt-out (`followup-runner.ts` → `followup_aborted {reason:'variant_no_follow_ups'}`).
+  Absent or malformed reads as ENABLED — a config typo can never silently stop a tenant's
+  whole ladder. Predicate: `variantAllowsFollowUps` (`core/reactivation-rounds.ts`).
 - **Campaign-aware follow-ups (0040, code-only):** a variant may carry its own
   `followUpAngles` — conversations pinned to it nudge from THAT pool ("¿sigues interesada en
   la promo de laser?") instead of the tenant's `follow_up_angles`. **Replace, not merge**:

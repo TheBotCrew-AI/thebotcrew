@@ -41,7 +41,7 @@ import {
 import { parseAngleSelection, resolveAnglePool } from '../roles/reactivation/angle-select.js';
 import { buildAgentRequestContext } from '../core/runtime-context.js';
 import { toModelMessages } from '../core/model-messages.js';
-import { cadenceForRound, isFinalRound, REENTRY_KEYWORD, totalRounds } from '../core/reactivation-rounds.js';
+import { cadenceForRound, isFinalRound, REENTRY_KEYWORD, totalRounds, variantAllowsFollowUps } from '../core/reactivation-rounds.js';
 import type { AiProvider, Channel, TenantContext } from '../core/types.js';
 import { DEMO_REMINDER_CADENCE, DEMO_REMINDER_ROLE } from '../core/types.js';
 import type { DueFollowUp } from '../db/types.js';
@@ -272,6 +272,14 @@ async function processOne(
   // mid-roleplay — the demo ladder owns this conversation until it ends.
   if (activeRole === 'demo') {
     return abortFollowUp(followUp, tenant, 'conversation_in_demo');
+  }
+
+  // Belt for the arming gate in webhook-handler: a campaign that opted out of nudges
+  // can still own rows armed BEFORE the opt-out (the variant was added to config mid
+  // conversation, or `followUpsEnabled` was flipped after the ladder started). Sending
+  // them would be exactly the pushiness the campaign is configured to avoid.
+  if (!variantAllowsFollowUps(tenant.config.promptVariants, promptVariant)) {
+    return abortFollowUp(followUp, tenant, 'variant_no_follow_ups');
   }
 
   // followUp.tier is the 1-based position within the current cadence cycle, and the

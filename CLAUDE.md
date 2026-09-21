@@ -396,16 +396,21 @@ for the retry cron.
 - **The eval fixtures MIRROR prod, and that copy must be kept in sync.** A tenant's real
   behavior is DB text (`tenant_config.prompt_overrides`), which evals can't read at test time,
   so `roles/front-desk/evals/fixtures.ts` carries a **hand-typed copy** of the rules under test
-  (`FIT_FILTER_SECTION`, `MONEY_DISCLOSURE_RULES`, `CALL_OFFER_RULE`, `MADI_HOUSE_RULES`, and
-  `DEMO_BOTOX_PERSONA` — the botox demo persona, mirrored WHOLE from `demo_prompt_overrides`
-  rather than by section, since the persona is small and entirely under test). Edit a tenant row in
+  (`BOT_CREW_PERSONA`, `MADI_HOUSE_RULES`, `HERIBERTO_PERSONA`). `DEMO_BOTOX_PERSONA` is the
+  exception that proves the rule: it mirrored The Bot Crew's `demo_prompt_overrides` until the
+  demo was retired from that tenant (2026-09-07, column NULL), and it now lives on as a
+  SYNTHETIC fixture — demo mode is still platform code, and `demo-botox.eval.ts` /
+  `demo-video.eval.ts` are its only golden coverage, so the drift check simply stopped
+  pointing at it. Edit a tenant row in
   Supabase without updating it and every golden case keeps passing against text nobody runs —
   green tests that prove nothing. **So: whenever you change a tenant's prompt, update the
   fixture in the same change, by pasting the live text back, verbatim** (no reflowing, no
-  "small" wording fixes). For Heriberto that is a script, not a paste:
+  "small" wording fixes). For the two tenants mirrored WHOLE that is a script, not a paste:
   `node workers/scripts/sync-heriberto-fixture.mjs` regenerates `HERIBERTO_PERSONA/_SERVICES/
-  _HOURS/_FAQ` from prod (jsonb reorders keys — the script restores `q` before `a` and the
-  weekday order so the diff shows only real changes). `prompt-drift.eval.ts` is the alarm: the only case that talks to the
+  _HOURS/_FAQ` and `node workers/scripts/sync-botcrew-fixture.mjs` regenerates
+  `BOT_CREW_PERSONA/_FAQ`, both from prod (jsonb reorders keys — the scripts restore `q`
+  before `a` and the weekday order so the diff shows only real changes). Both throw rather
+  than write if the row grew a field the generator doesn't know. `prompt-drift.eval.ts` is the alarm: the only case that talks to the
   DB, it asserts prod still CONTAINS each mirrored section byte-for-byte and self-skips without
   Supabase env vars. When it fails, decide which side is right — usually prod is (Leo edits the
   tenant) and the fixture must be re-copied.
@@ -611,7 +616,11 @@ cualquier Chrome headless recibe SIGTERM a los ~2 s (ver cabecera de `render-bat
     field (not in `promptVariantSchema`) rendered after the flow and labelled as outranking
     it, suppressed in demo mode. Tenant-wide rules go there, never in `qualificationNotes` —
     that's where the fit filter (§2b) lives. A variant changes the script, not the toolbox —
-    every tool stays callable. See docs/business-logic.md §1.1.
+    every tool stays callable. A variant may also set **`followUpsEnabled: false`** (code-only,
+    `core/reactivation-rounds.ts` `variantAllowsFollowUps`): the campaign never arms a nudge and
+    the runner aborts any row armed before the opt-out — for flows where chasing is wrong (The
+    Bot Crew's `demo24`, a try-out the lead asked for). Absent/malformed = enabled, so a typo
+    can't silence a tenant's ladder. See docs/business-logic.md §1.1.
 - Resolved: inbound payload shape (`type=InboundMessage`, `direction=inbound`,
   `locationId/contactId/conversationId/body/messageType`), send/calendar/tag endpoints
   (live in `ghl/client.ts`), and the **auth model** — per-location **OAuth** via the GHL App
