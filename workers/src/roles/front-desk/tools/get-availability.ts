@@ -10,6 +10,7 @@ import { getActiveDemoSession, logBotEvent } from '../../../db/queries.js';
 import { resolveAgentContext } from './agent-context.js';
 import { resolveBookingWindow } from './booking-window.js';
 import { simulatedSlots } from './demo-sim.js';
+import { closedRange, dayListEs, openDaysEs } from './open-days.js';
 import { slotLabel } from './slot-label.js';
 
 export const getAvailabilityTool = createTool({
@@ -116,6 +117,34 @@ export const getAvailabilityTool = createTool({
         note:
           `Solo se pueden agendar horarios dentro de los próximos ${horizon} días (hasta ${maxLabel}). ` +
           'El rango que pediste queda fuera de esa ventana; dile al lead esa limitación y ofrécele un horario dentro de ella.',
+      };
+    }
+
+    // Closed ≠ full. GHL answers both with an empty list, so a day the business never opens
+    // used to come back as "sin disponibilidad" and reach the lead as "para el sábado ya no
+    // tengo espacios" — a lie she acts on (she asks again next Saturday). The weekly schedule
+    // is config we already render in the prompt, so the closed case is settled here, in code.
+    // Day boundaries are the TENANT's: it is the business that opens, not the lead.
+    const closed = closedRange(window.fromMs, window.toMs, config.timezone, config.hours);
+    if (closed) {
+      const closedNames = dayListEs(closed.closed);
+      const openNames = openDaysEs(closed.open);
+      await logBotEvent(tenant.clientId, turn.ghlConversationId, 'availability_checked', {
+        serviceName,
+        calendarId,
+        from: new Date(window.fromMs).toISOString(),
+        to: new Date(window.toMs).toISOString(),
+        outcome: 'closed_day',
+        closedDays: closed.closed,
+        openDays: closed.open,
+      });
+      return {
+        slots: [],
+        note:
+          `Ese rango cae SOLO en días que el negocio no abre (${closedNames}). No están llenos: esos días no hay atención. Se atiende ${openNames}. ` +
+          `Díselo al lead con calidez y en positivo —que ${closedNames} no hay atención, pero ${openNames} sí— y ofrécele un día que sí se atienda. ` +
+          `PROHIBIDO decirle que para ese día "ya no hay espacio", "está lleno" o "ya se agotaron": sería falso y va a volver a preguntar lo mismo. ` +
+          'Consulta de nuevo un día que sí se atienda para ofrecerle horarios concretos.',
       };
     }
 

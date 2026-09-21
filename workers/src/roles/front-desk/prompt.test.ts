@@ -215,6 +215,29 @@ describe('buildFrontDeskInstructions', () => {
       expect(out).not.toContain('Domingo: 07:00–19:00');
       expect(out).toContain('Abrimos lunes a sábado de 10 a 6.');
     });
+
+    // Closed ≠ full. The model reaches this without calling getAvailability ("¿atienden
+    // los sábados?") and used to answer a closed day as "ya no hay espacio".
+    describe('cerrado no es lleno', () => {
+      const weekdays = { mon: [{ open: '10:30', close: '12:30' }], tue: [{ open: '10:30', close: '12:30' }], wed: [{ open: '10:30', close: '12:30' }], thu: [{ open: '10:30', close: '12:30' }], fri: [{ open: '10:30', close: '12:30' }] };
+
+      it('names the open days and bans the "lleno" wording for a closed one', () => {
+        const out = buildFrontDeskInstructions(cfg({ hours: weekdays }), NOW);
+        expect(out).toContain('Se atiende de lunes a viernes.');
+        expect(out).toContain('está CERRADO, que no es lo mismo que lleno');
+        expect(out).toContain('PROHIBIDO');
+      });
+
+      it('is absent for a business open all seven days — it has no closed day to confuse', () => {
+        const day = [{ open: '09:00', close: '18:00' }];
+        const out = buildFrontDeskInstructions(cfg({ hours: { mon: day, tue: day, wed: day, thu: day, fri: day, sat: day, sun: day } }), NOW);
+        expect(out).not.toContain('que no es lo mismo que lleno');
+      });
+
+      it('is absent while the schedule is unconfigured — unknown is not closed', () => {
+        expect(buildFrontDeskInstructions(cfg({ hours: {} }), NOW)).not.toContain('que no es lo mismo que lleno');
+      });
+    });
   });
 
   describe('houseRules — tenant rules that outrank the campaign flow', () => {

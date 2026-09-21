@@ -118,6 +118,72 @@ describe('getAvailability', () => {
     expect(toArg).toBeLessThan(Date.now() + 8 * 86_400_000);
   });
 
+  // Closed ≠ full: GHL answers both with an empty list, and the model turned that into
+  // "para el sábado ya no tengo espacios" on a clinic that is Mon–Fri (Dr. Valdivia,
+  // Instagram, 2026-09-21). A day the business never opens is now settled before the call.
+  describe('closed days', () => {
+    const MON_FRI = {
+      mon: [{ open: '10:30', close: '12:30' }],
+      tue: [{ open: '10:30', close: '12:30' }],
+      wed: [{ open: '10:30', close: '12:30' }],
+      thu: [{ open: '10:30', close: '12:30' }],
+      fri: [{ open: '10:30', close: '12:30' }],
+    };
+    const hoursCtx = (hours: Record<string, { open: string; close: string }[]>) => {
+      const base = makeCtx();
+      const tenant = base.requestContext.get('tenant') as TenantContext;
+      const withHours = { ...tenant, config: { ...tenant.config, timezone: 'America/Chihuahua', hours } } as TenantContext;
+      const turn = { ghlContactId: 'c1', ghlConversationId: 'conv1', channel: 'whatsapp' } as TurnContext;
+      return { requestContext: { get: (k: string) => (k === 'tenant' ? withHours : k === 'turn' ? turn : undefined) } };
+    };
+    // The shape the model writes for "el sábado": local midnight to local midnight.
+    const SAT = { fromDate: '2026-09-26T00:00:00', toDate: '2026-09-27T00:00:00' };
+    const FRI_SAT = { fromDate: '2026-09-25T00:00:00', toDate: '2026-09-27T00:00:00' };
+
+    let nowSpy: ReturnType<typeof vi.spyOn>;
+    beforeEach(() => {
+      nowSpy = vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-09-21T18:00:00Z'));
+    });
+    afterEach(() => nowSpy.mockRestore());
+
+    it('a Saturday-only range on a Mon–Fri business → closed note, GHL never called', async () => {
+      const res = await run({ serviceName: 'Consulta', ...SAT }, hoursCtx(MON_FRI));
+      expect(res.slots).toEqual([]);
+      expect(res.note).toContain('días que el negocio no abre (sábado)');
+      expect(res.note).toContain('de lunes a viernes');
+      expect(ghl.getAvailability).not.toHaveBeenCalled();
+      expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'availability_checked', expect.objectContaining({ outcome: 'closed_day', closedDays: ['sat'] }));
+    });
+
+    // The exact wording the incident produced, banned in the note the model reads.
+    it('the note forbids the "lleno" wording and says closed instead', async () => {
+      const res = await run({ serviceName: 'Consulta', ...SAT }, hoursCtx(MON_FRI));
+      expect(res.note).toContain('No están llenos');
+      expect(res.note).toContain('PROHIBIDO');
+      expect(res.note).not.toContain('Sin disponibilidad');
+    });
+
+    it('a range that also covers an open day is queried normally', async () => {
+      ghl.getAvailability.mockResolvedValue([]);
+      const res = await run({ serviceName: 'Consulta', ...FRI_SAT }, hoursCtx(MON_FRI));
+      expect(ghl.getAvailability).toHaveBeenCalled();
+      expect(res.note).toContain('Sin disponibilidad');
+    });
+
+    it('a tenant with no hours configured is never gated — unknown is not closed', async () => {
+      ghl.getAvailability.mockResolvedValue([]);
+      await run({ serviceName: 'Consulta', ...SAT }, hoursCtx({}));
+      expect(ghl.getAvailability).toHaveBeenCalled();
+    });
+
+    it('a business open every day is never gated', async () => {
+      const day = [{ open: '09:00', close: '18:00' }];
+      ghl.getAvailability.mockResolvedValue([]);
+      await run({ serviceName: 'Consulta', ...SAT }, hoursCtx({ mon: day, tue: day, wed: day, thu: day, fri: day, sat: day, sun: day }));
+      expect(ghl.getAvailability).toHaveBeenCalled();
+    });
+  });
+
   it('GHL error → empty + error note + event', async () => {
     ghl.getAvailability.mockRejectedValue(new Error('ghl 500'));
     const res = await run({ serviceName: 'Consulta' });

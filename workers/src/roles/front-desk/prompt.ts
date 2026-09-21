@@ -12,6 +12,7 @@ import type { DemoHandoff } from '../../core/types.js';
 import { frameTimeZone, zoneLabel, zoneSuffix } from '../../core/lead-timezone.js';
 import { zonedWallClockToMs } from './tools/booking-time.js';
 import { earliestBookableMs } from './tools/booking-window.js';
+import { openDaysEs, openWeekdays, WEEKDAY_LABEL } from './tools/open-days.js';
 import { slotLabel } from './tools/slot-label.js';
 import { holdAmountCents, resolveEffectiveOverrides, type FrontDeskConfig } from './config.js';
 import { formatHoldAmount } from './tools/booking-hold.js';
@@ -195,16 +196,6 @@ const DEMO_STATE_SECTION = `# Modo demo: sin efectos reales
 Esta conversación es una DEMO (juego de rol). NUNCA llames updateConversationStatus, updateContactName ni flagAwaitingHuman: aquí nada es terminal y el contacto real no debe modificarse. Si el lead quiere terminar el juego de rol o pregunta por la demo misma, responde con naturalidad dentro de tu papel o deja que lo diga con la palabra de salida.
 `;
 
-const WEEKDAY_LABEL: Record<string, string> = {
-  mon: 'Lunes',
-  tue: 'Martes',
-  wed: 'Miércoles',
-  thu: 'Jueves',
-  fri: 'Viernes',
-  sat: 'Sábado',
-  sun: 'Domingo',
-};
-
 function renderServices(config: FrontDeskConfig): string {
   if (config.services.length === 0) return '- (No hay servicios configurados.)';
   return config.services
@@ -333,9 +324,20 @@ Hay ${config.faq.length} respuestas oficiales cargadas y NO están en este promp
   // (demo-sim.ts) run Mon–Sat 10:00–17:30 regardless of this config. A tenant open Sundays
   // 07:00–19:00 makes the demo promise a Sunday and then find no slot for it. The demo's
   // hours belong in its `offering`, where they can be written to match the simulator.
+
+  // Closed ≠ full, the half getAvailability can't reach: the tool settles a closed day in
+  // code when it is asked for one, but the model also answers "¿atienden los sábados?"
+  // without calling it at all, and read a closed day as "ya no hay espacio". Suppressed for
+  // a seven-day business, which has no closed day to confuse.
+  const openDays = usingDemo ? [] : openWeekdays(config.hours);
+  const closedDayRule =
+    openDays.length > 0 && openDays.length < 7
+      ? `\n- Se atiende ${openDaysEs(openDays)}. Un día que no está en ese horario está CERRADO, que no es lo mismo que lleno: si el lead pregunta por uno, dile con calidez que ese día no hay atención y ofrécele uno que sí. PROHIBIDO decirle que ese día "ya no hay espacio", "está lleno" o "ya se agotaron" — es falso y va a volver a preguntar.`
+      : '';
+
   const hoursSection = usingDemo
     ? ''
-    : `\n\n# Horario (zona horaria: ${config.timezone})\n${renderHours(config)}`;
+    : `\n\n# Horario (zona horaria: ${config.timezone})\n${renderHours(config)}${closedDayRule}`;
 
   const toneBody = config.tone?.trim()
     ? config.tone.trim()

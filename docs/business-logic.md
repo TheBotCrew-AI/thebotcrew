@@ -409,6 +409,25 @@ slots. Rules (also reinforced in the front-desk prompt):
   and the lead insists. The prompt states the first bookable day as a pre-computed date, next to
   the horizon line. The day boundary is the **tenant's** calendar day, not the lead's (§5d): it
   is the business that opens tomorrow. Dr. Valdivia = 1 (2026-09-02, "solo a partir de mañana").
+- **Closed ≠ full (deterministic, all tenants, 2026-09-21):** GHL returns an empty slot list
+  for a day the business never opens and for a day that is booked solid, and the tool used to
+  report both as "Sin disponibilidad en el rango consultado". The warm-refusal rule
+  (`WARM_NO_RULE`, `core/prompt-rules.ts`) then did its job on the wrong fact: a lead who
+  asked *whether Saturdays are attended* was told
+  "para el sábado ya no tengo espacios" (Dr. Valdivia, Instagram, 2026-09-21) — a lie she acts
+  on, because she waits and asks again for the next Saturday. So the closed case is now settled
+  **in code** from `tenant_config.hours`, which the prompt already renders: `closedRange`
+  (`tools/open-days.ts`, pure) resolves the weekdays a requested range covers **in the tenant's
+  clock** and, when every one of them is closed, `getAvailability` returns a `closed_day` note
+  **without calling GHL** (`availability_checked` logs `outcome: 'closed_day'` with the closed
+  and open days). The note names the open days and **forbids** "ya no hay espacio" / "está
+  lleno" / "se agotaron" for that day. It deliberately does **not** fire when the schedule is
+  unconfigured (unknown is not closed — an onboarding-stage tenant would otherwise tell every
+  lead it never opens), when the business opens all seven days, or when the range touches even
+  one open day (Friday's real slots are the answer to a Friday–Saturday range). The prompt
+  carries the other half next to `# Horario`, for the turn where the model answers "¿atienden
+  los sábados?" without calling the tool at all. Golden case: `evals/closed-day.eval.ts`
+  (5/5 with the fix, 0/5 without).
 - **Unconfirmed bookings (per-tenant, 0061):** with `tenant_config.book_unconfirmed = true` the
   bot creates the GHL event as `appointmentStatus: 'new'` — **"No confirmada"** in the calendar —
   and a reschedule puts it back there (moving a cita must not confirm it on the lead's behalf).

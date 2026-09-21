@@ -439,8 +439,14 @@ export const demoTenant: TenantContext = {
       { name: 'Consulta general', durationMin: 30, description: 'Primera valoración' },
       { name: 'Limpieza dental', durationMin: 45 },
     ],
+    // Monday–Friday, like the prod row: a day left out is CLOSED since `closedRange`
+    // (2026-09-21), so the weekdays in between have to be here for a mocked midweek slot
+    // to be coherent with the rendered schedule.
     hours: {
       mon: [{ open: '09:00', close: '18:00' }],
+      tue: [{ open: '09:00', close: '18:00' }],
+      wed: [{ open: '09:00', close: '18:00' }],
+      thu: [{ open: '09:00', close: '18:00' }],
       fri: [{ open: '09:00', close: '15:00' }],
     },
     calendars: { 'Consulta general': 'cal_demo_general', 'Limpieza dental': 'cal_demo_limpieza' },
@@ -472,7 +478,13 @@ export const botCrewTenant: TenantContext = {
     timezone: 'America/Tijuana',
     tone: 'directo, cálido, sin presión; como una persona real que conoce lo que hace',
     services: [{ name: 'Llamada con Leo', durationMin: 20, description: 'Videollamada de 20 min con Leo' }],
-    hours: { mon: [{ open: '07:00', close: '19:00' }], fri: [{ open: '07:00', close: '19:00' }] },
+    // The seven days prod has, not a two-day trim. Since `closedRange` (2026-09-21) a day
+    // missing from `hours` is CLOSED — the tool refuses to query it and the prompt says the
+    // business doesn't open then — so a trimmed schedule made cases whose mocked slot falls
+    // on a Thursday (booking-name) contradict the prompt and stall the booking.
+    hours: Object.fromEntries(
+      ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'].map((d) => [d, [{ open: '07:00', close: '19:00' }]]),
+    ),
     calendars: { 'Llamada con Leo': 'cal_botcrew_llamada' },
     faq: BOT_CREW_FAQ,
     promptOverrides: BOT_CREW_PERSONA,

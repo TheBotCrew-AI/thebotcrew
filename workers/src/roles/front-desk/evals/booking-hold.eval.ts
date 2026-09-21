@@ -126,8 +126,19 @@ const turn: TurnContext = {
 const rc = (t: TurnContext = turn) =>
   buildAgentRequestContext({ tenant: paidTenant, turn: t, provider: evalProvider, model: evalModel, llmApiKey: evalApiKey });
 
-/** Tomorrow 11:00 in the tenant's zone, the slot the lead picks. */
-const DAY = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+/**
+ * Two days out, skipping the weekend: the tenant opens Monday–Friday, and since
+ * `closedRange` (2026-09-21) a slot on a day `hours` doesn't list is a day the bot says it
+ * is CLOSED — which would make the case fail only when it happens to run on a Thursday.
+ */
+const nextWeekday = (): string => {
+  const d = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
+  while ([0, 6].includes(d.getUTCDay())) d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
+};
+
+/** 11:00 in the tenant's zone on that day, the slot the lead picks. */
+const DAY = nextWeekday();
 const SLOTS = ['10:00', '11:00', '12:00', '16:00'].map((t) => ({ start: `${DAY}T${t}:00-06:00`, end: `${DAY}T${t}:00-06:00` }));
 
 type ToolCallChunkLike = { payload: { toolName: string } };

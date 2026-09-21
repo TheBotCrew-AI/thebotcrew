@@ -92,7 +92,17 @@ const turn: TurnContext = {
 };
 const rc = () => buildAgentRequestContext({ tenant, turn, provider: evalProvider, model: evalModel, llmApiKey: evalApiKey });
 
-const DAY = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+/**
+ * Two days out, skipping the weekend: the tenant opens Monday–Friday, and since
+ * `closedRange` (2026-09-21) a slot on a day `hours` doesn't list is a day the bot says it
+ * is CLOSED — which would make the case fail only when it happens to run on a Thursday.
+ */
+const nextWeekday = (): string => {
+  const d = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
+  while ([0, 6].includes(d.getUTCDay())) d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
+};
+const DAY = nextWeekday();
 const SLOTS = ['10:00', '12:00', '16:00'].map((t) => ({ start: `${DAY}T${t}:00-06:00`, end: `${DAY}T${t}:00-06:00` }));
 
 /** Fixed judge, independent of the model under test. */

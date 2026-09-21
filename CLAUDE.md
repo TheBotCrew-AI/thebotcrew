@@ -488,6 +488,16 @@ cualquier Chrome headless recibe SIGTERM a los ~2 s (ver cabecera de `render-bat
   book/reschedule): GHL's own confirmation/reminder workflows render `{{appointment.start_time}}`
   in that field, and the booking API carries no timezone — it's the only lever. See
   docs/business-logic.md §5d.
+- Cerrado ≠ lleno (2026-09-21, `tools/open-days.ts`): GHL returns an empty slot list both for a
+  day the business never opens and for one that is full, and `getAvailability` reported both as
+  "sin disponibilidad" — which the warm-refusal rule turned into "para el sábado ya no tengo
+  espacios" for a lead who had asked *whether Saturdays are attended* (Dr. Valdivia, Instagram).
+  `closedRange` now resolves the weekdays a requested range covers **in the tenant's clock** from
+  `tenant_config.hours`; when every one is closed the tool returns a `closed_day` note **without
+  calling GHL** and the note forbids the "lleno" wording. It does NOT fire on an unconfigured
+  schedule (unknown ≠ closed), on a seven-day business, or on a range that touches one open day.
+  The prompt carries the same rule next to `# Horario` for the turn that never calls the tool.
+  See docs/business-logic.md §5 and `evals/closed-day.eval.ts`.
 - Calendar event titles (2026-08-31): `bookAppointment` titles the GHL event
   `"Nombre — Tratamiento — Campaña"` (`tools/appointment-title.ts`), degrading to the bare
   service name. Name = tool param → CRM contact name; treatment = new optional model-filled
