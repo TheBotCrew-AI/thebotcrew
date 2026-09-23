@@ -6,8 +6,10 @@
 
 ## The URLs you always forget
 
-The Worker has **no custom domain yet** (see `TODO.md` → Infra). It lives on the
-account's `workers.dev` subdomain, which is `floral-credit-be7e`:
+The Worker lives on the account's `workers.dev` subdomain (`floral-credit-be7e`) for every
+webhook and OAuth URL below. Since 2026-09-22 it ALSO answers on **`tbcpagos.com`** — the
+payment domain (`WORKER_URL`): the short links the lead taps (`/p/<code>`) and Checkout's
+return pages use it; nothing else should be pointed there.
 
 | What | URL |
 | --- | --- |
@@ -543,9 +545,10 @@ the free-install offer), two Worker secrets set **once**, then per tenant it is 
    (default 2, 0063) is how long before the cita the payment must be in: the deadline is the
    sooner of `now + hold_hours` and `cita − margin`, and a slot closer than margin + 30 min is
    neither offered nor booked (`too_soon_to_pay`).
-   **The lead never sees the Stripe URL**: the bot sends `<WORKER_URL>/p/<code>` (0063), which
-   the Worker redirects while the hold is pending. `WORKER_URL` is a plain Worker var; set it
-   when the payment domain exists (e.g. `https://pago.example.com`) and every new link uses it.
+   **The lead never sees the Stripe URL**: the bot sends `https://tbcpagos.com/p/<code>` (0063),
+   which the Worker redirects while the hold is pending. `WORKER_URL` is a Worker var set in
+   the `CloudflareDeployer` config (`mastra/index.ts`, with the `routes` custom domain) — it is
+   the tenant-agnostic payment domain, bought on Cloudflare Registrar 2026-09-22.
 3. **Verify.** Book through the bot: `bot_events` shows `hold_created`, the contact carries
    `pago-pendiente`, the GHL event is "No confirmada". Pay the link: `booking_paid`, the
    event flips to Confirmed, tag `cita-pagada`, the lead gets the fixed confirmation. Let one

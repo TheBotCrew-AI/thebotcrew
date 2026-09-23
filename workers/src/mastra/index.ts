@@ -415,6 +415,11 @@ export const mastra = new Mastra({
         bindings: [{ name: 'CONVERSATION_DO', class_name: 'ConversationDO' }],
       },
       migrations: [{ tag: 'v1', new_sqlite_classes: ['ConversationDO'] }],
+      // The payment domain (0063): the short links the lead taps and Checkout's return pages
+      // live at tbcpagos.com (a Cloudflare-registered zone, so the Custom Domain is created on
+      // deploy). Webhooks — GHL, Stripe — keep the workers.dev address; the Worker answers on both.
+      routes: [{ pattern: 'tbcpagos.com', custom_domain: true }],
+      vars: { WORKER_URL: 'https://tbcpagos.com' },
     });
     // getEntry() is private upstream but we need to add a `scheduled` handler and
     // wrap each request in executionCtxStorage.run() so that route handlers can

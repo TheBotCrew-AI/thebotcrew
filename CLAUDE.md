@@ -361,7 +361,7 @@ go through the `app_log_*` RPCs; `app_log_message` (0005) stores content + attri
 > Full procedure, SQL templates, column gotchas and the live-tenant table:
 > [`docs/onboarding.md`](docs/onboarding.md). Read that instead of re-deriving it.
 
-Worker base URL (no custom domain yet): `https://thebotcrew-agents.floral-credit-be7e.workers.dev`
+Worker base URL: `https://thebotcrew-agents.floral-credit-be7e.workers.dev` (webhooks, OAuth). Payment links + Checkout return pages: `https://tbcpagos.com` (`WORKER_URL` + custom domain in the `CloudflareDeployer` config, 2026-09-22).
 
 1. Insert a `clients` row, a `tenants` row and a `tenant_config` row in Supabase.
 2. Fill config: business name, services, hours, calendar IDs, FAQ, tone, enabled roles.
