@@ -419,6 +419,9 @@ export const mastra = new Mastra({
       // live at tbcpagos.com (a Cloudflare-registered zone, so the Custom Domain is created on
       // deploy). Webhooks — GHL, Stripe — keep the workers.dev address; the Worker answers on both.
       routes: [{ pattern: 'tbcpagos.com', custom_domain: true }],
+      // Explicit: wrangler DISABLES the workers.dev address as soon as `routes` exist, and
+      // every GHL/Stripe webhook points there (2026-09-22: 20 minutes of inbound 404s).
+      workers_dev: true,
       vars: { WORKER_URL: 'https://tbcpagos.com' },
     });
     // getEntry() is private upstream but we need to add a `scheduled` handler and
