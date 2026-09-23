@@ -515,7 +515,10 @@ Notes that save debugging time:
 One Stripe account for the whole platform (ours — this is how the platform gets paid under
 the free-install offer), two Worker secrets set **once**, then per tenant it is a DB field.
 
-1. **Stripe, once.** In the platform Stripe account: Developers → API keys → the secret key;
+1. **Stripe, once.** In the platform Stripe account: Developers → API keys → a **restricted
+   key** with only *Checkout Sessions: Write* (the Worker creates and expires sessions, nothing
+   else; the webhook is verified with its signing secret, not the key). If a Connect call ever
+   answers "This API key does not have permission", add *Connect: Write* to the same key;
    Developers → Webhooks → add endpoint `<WORKER_URL>/webhooks/stripe` listening to
    `checkout.session.completed` and `checkout.session.async_payment_succeeded` → copy its
    signing secret. Then:

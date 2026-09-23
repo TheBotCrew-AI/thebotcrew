@@ -11,7 +11,7 @@
 - [ ] **Durable turn processing (Queues upgrade)** — the reconciliation cron is a backstop with polling latency; the "correct" version moves `runAgentTurn` onto Cloudflare Queues + `delaySeconds` (debounce as durable delay, retries + DLQ). Blocked on the `CloudflareDeployer` queue-binding spike (`docs/plan-durable-execution.md`). Lower priority now that drops self-recover.
 
 ## Infra / Deploy
-- [ ] Add a custom domain to the Worker (replace `workers.dev` URL) — add `"routes"` to `wrangler.jsonc` and redeploy
+- [x] Custom domain — DONE 2026-09-22 for the payment links only: `tbcpagos.com` (routes + `WORKER_URL` in the CloudflareDeployer config). Webhooks/OAuth deliberately stay on `workers.dev`; `workers_dev: true` is load-bearing (see CLAUDE.md → Deploy).
 - [ ] Set up a staging environment (separate Worker name + secrets)
 
 ## GHL Integration

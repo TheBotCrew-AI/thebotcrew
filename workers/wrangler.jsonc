@@ -34,8 +34,17 @@
       ]
     }
   ],
+  "routes": [
+    {
+      "pattern": "tbcpagos.com",
+      "custom_domain": true
+    }
+  ],
+  "workers_dev": true,
   "main": "./.mastra/output/index.mjs",
-  "vars": {},
+  "vars": {
+    "WORKER_URL": "https://tbcpagos.com"
+  },
   "alias": {
     "typescript": "./.mastra/output/typescript-stub.mjs",
     "execa": "./execa-stub.mjs",

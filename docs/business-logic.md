@@ -1085,7 +1085,7 @@ things went wrong in the first real test (2026-09-22, The Bot Crew): the model c
 after it ("Mándale el día y la hora, la liga EXACTA…"), and — the cita being at 6:30 a.m. —
 told the lead to pay "antes de las 6:46 p.m." (`due_at = now + hold_hours`, blind to the cita).
 Then "No abre el link" got a `handed_off` and "Pásala de nuevo" got silence. Four rules, in code:
-- **`<WORKER_URL>/p/<code>`** is what the model sees and relays (`payments/pay-link.ts`): a
+- **`<WORKER_URL>/p/<code>`** — `https://tbcpagos.com/p/<code>` since 2026-09-22 — is what the model sees and relays (`payments/pay-link.ts`): a
   10-character lowercase code without look-alikes (no 0/o, 1/l/i), random (it opens someone's
   checkout), stored on `booking_holds.short_code`. `GET /p/:code` (`worker/pay-link-handler.ts`)
   302s to the Stripe URL while the hold is `pending`, and once it isn't tells the lead so —
