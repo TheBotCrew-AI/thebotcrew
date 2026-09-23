@@ -15,6 +15,7 @@ import { getActiveDemoSession, getBookingHold, logAppointment, logBotEvent, move
 import { resolveAgentContext } from './agent-context.js';
 import { describeHoldForModel, payableNoticeLabel } from './booking-hold.js';
 import { CHECKOUT_MIN_EXPIRY_MS } from '../../../payments/stripe.js';
+import { holdReminderAt } from '../../../payments/hold-reminder.js';
 import { resolveActiveAppointment } from './resolve-appointment.js';
 import { bookingQueryWindow, resolveBookableSlot } from './booking-time.js';
 import { earliestBookableMs } from './booking-window.js';
@@ -186,6 +187,7 @@ export const rescheduleAppointmentTool = createTool({
     // payment window must close before the cita, never after it. Refused when the new cita
     // is too close to pay for at all — before GHL moves anything.
     let movedDueAt: string | undefined;
+    let movedRemindAt: string | null | undefined;
     if (hold && (hold.status === 'pending' || hold.status === 'expiring') && config.bookingPayment) {
       const pulledIn = Math.min(Date.parse(hold.dueAt), Date.parse(canonicalStart) - config.bookingPayment.deadlineMarginHours * HOUR_MS);
       if (pulledIn - now < CHECKOUT_MIN_EXPIRY_MS) {
@@ -205,6 +207,15 @@ export const rescheduleAppointmentTool = createTool({
         };
       }
       if (pulledIn < Date.parse(hold.dueAt)) movedDueAt = new Date(pulledIn).toISOString();
+      // The reminder (0065) follows the deadline: recomputed from now, cleared when nothing fits.
+      const remindMs = holdReminderAt({
+        createdMs: now,
+        dueMs: pulledIn,
+        timeZone: frameTz,
+        quietHours: tenant.config?.quietHours ?? null,
+        hoursBefore: config.bookingPayment.reminderHoursBefore,
+      });
+      movedRemindAt = remindMs == null ? null : new Date(remindMs).toISOString();
     }
 
     try {
@@ -241,7 +252,7 @@ export const rescheduleAppointmentTool = createTool({
     }).catch((e: unknown) => console.error('[rescheduleAppointment] logAppointment failed:', e));
 
     if (hold) {
-      moveHold(appt.ghlAppointmentId, canonicalStart, movedDueAt).catch((e: unknown) =>
+      moveHold(appt.ghlAppointmentId, canonicalStart, movedDueAt, movedRemindAt).catch((e: unknown) =>
         console.error('[rescheduleAppointment] moveHold failed (non-blocking):', e instanceof Error ? e.message : String(e)),
       );
     }

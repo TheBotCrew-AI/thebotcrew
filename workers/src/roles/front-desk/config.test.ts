@@ -143,12 +143,12 @@ describe('bookingPayment (0062)', () => {
 
   it('reads the snake_case jsonb and applies defaults (mxn, 24h)', () => {
     const c = parseFrontDeskConfig({ ...base, bookingPayment: { amount: 500 } } as never);
-    expect(c.bookingPayment).toEqual({ amount: 500, currency: 'mxn', holdHours: 24, deadlineMarginHours: 2 });
+    expect(c.bookingPayment).toEqual({ amount: 500, currency: 'mxn', holdHours: 24, deadlineMarginHours: 2, reminderHoursBefore: 3 });
     const full = parseFrontDeskConfig({
       ...base,
-      bookingPayment: { amount: 350.5, currency: 'MXN', hold_hours: 48, deadline_margin_hours: 0.5, deposit_note: 'se descuenta', statement_suffix: 'DR VALDIVIA' },
+      bookingPayment: { amount: 350.5, currency: 'MXN', hold_hours: 48, deadline_margin_hours: 0.5, reminder_hours_before: 0, deposit_note: 'se descuenta', statement_suffix: 'DR VALDIVIA' },
     } as never);
-    expect(full.bookingPayment).toEqual({ amount: 350.5, currency: 'mxn', holdHours: 48, deadlineMarginHours: 0.5, depositNote: 'se descuenta', statementSuffix: 'DR VALDIVIA' });
+    expect(full.bookingPayment).toEqual({ amount: 350.5, currency: 'mxn', holdHours: 48, deadlineMarginHours: 0.5, reminderHoursBefore: 0, depositNote: 'se descuenta', statementSuffix: 'DR VALDIVIA' });
   });
 
   it('Stripe Connect fields (0064): stripe_account must look like acct_…, platform_fee is pesos', () => {

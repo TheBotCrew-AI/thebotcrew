@@ -238,6 +238,7 @@ export type BotEventType =
   | 'hold_created'      // booking + Stripe session + hold row succeeded ({ghlAppointmentId, amountCents, dueAt})
   | 'hold_released'     // the lead cancelled while the hold was pending or paid ({status})
   | 'hold_expired'      // the cron released the slot: GHL cancelled, session expired
+  | 'hold_reminder_sent' // 0065: the one pre-deadline reminder went out (outcome in metadata)
   | 'booking_paid'      // Stripe paid a pending hold → GHL event confirmed
   | 'booking_paid_late' // Stripe paid a hold the cron had already released — a person decides
   | 'payment_error'     // a Stripe/GHL step failed (metadata.stage); never silent
@@ -435,6 +436,8 @@ export interface CreateBookingHoldParams {
   p_due_at: string;
   p_short_code: string;
   p_stripe_account: string | null;
+  /** 0065: when the one reminder goes out; null = none fits. */
+  p_remind_at: string | null;
 }
 
 /**
@@ -466,3 +469,6 @@ export type SettledHold = ActionableHold & { outcome: 'paid' | 'paid_late' };
 
 /** app_claim_expired_holds: a pending hold now in `expiring`, plus its Stripe session to expire. */
 export type ClaimedHold = ActionableHold & { stripeSessionId: string; stripeAccount: string | null };
+
+/** app_claim_due_hold_reminders (0065): a claimed hold plus the short code the reminder repeats. */
+export type ClaimedHoldReminder = ClaimedHold & { shortCode: string | null };

@@ -26,6 +26,7 @@ import { PAYMENT_PENDING_TAG, PAYMENT_REVIEW_TAG } from '../../../ghl/tags.js';
 import { createBookingHold, finishHold, getBookingHold, logBotEvent } from '../../../db/queries.js';
 import { CHECKOUT_MIN_EXPIRY_MS, createCheckoutSession, expireCheckoutSession, getStripeEnv } from '../../../payments/stripe.js';
 import { newShortCode, payLinkUrl, paymentLinkFor, workerBaseUrl } from '../../../payments/pay-link.js';
+import { holdReminderAt } from '../../../payments/hold-reminder.js';
 import { slotLabel } from './slot-label.js';
 
 export { workerBaseUrl };
@@ -109,6 +110,14 @@ export async function openBookingHold(args: {
   const dueAt = new Date(deadlineMs);
   const base = workerBaseUrl();
   const shortCode = newShortCode();
+  // The one reminder (0065), decided now from this deadline, in the clock the lead reads.
+  const remindMs = holdReminderAt({
+    createdMs: now,
+    dueMs: deadlineMs,
+    timeZone: args.frameTz,
+    quietHours: tenant.config?.quietHours ?? null,
+    hoursBefore: payment.reminderHoursBefore,
+  });
 
   let session: { id: string; url: string };
   try {
@@ -159,6 +168,7 @@ export async function openBookingHold(args: {
       p_due_at: dueAt.toISOString(),
       p_short_code: shortCode,
       p_stripe_account: payment.stripeAccount ?? null,
+      p_remind_at: remindMs == null ? null : new Date(remindMs).toISOString(),
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -189,6 +199,7 @@ export async function openBookingHold(args: {
     amountCents,
     currency: payment.currency,
     dueAt: dueAt.toISOString(),
+    remindAt: remindMs == null ? null : new Date(remindMs).toISOString(),
   });
 
   return {

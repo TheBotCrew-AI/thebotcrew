@@ -114,6 +114,8 @@ describe('openBookingHold', () => {
         p_short_code: expect.stringMatching(new RegExp(`^[${SHORT_CODE_ALPHABET}]{10}$`)),
       }),
     );
+    // The one reminder (0065): due is NOW+24h (13:00 CDMX), target = due − 3 h = 10:00 CDMX, awake → as is.
+    expect(q.createBookingHold).toHaveBeenCalledWith(expect.objectContaining({ p_remind_at: new Date(NOW + 21 * 3600_000).toISOString() }));
     // The code in the row is the one in the link.
     const code = vi.mocked(q.createBookingHold).mock.calls[0]![0].p_short_code;
     expect('paymentUrl' in res && res.paymentUrl).toBe(`https://thebotcrew-agents.floral-credit-be7e.workers.dev/p/${code}`);
@@ -177,6 +179,17 @@ describe('openBookingHold', () => {
     const call = vi.mocked(createCheckoutSession).mock.calls[0]![1];
     expect(call.expiresAt.getTime()).toBe(NOW + 3 * 3600_000);
     expect(q.createBookingHold).toHaveBeenCalledWith(expect.objectContaining({ p_due_at: new Date(NOW + 3 * 3600_000).toISOString() }));
+  });
+
+  it('a cita this afternoon: no reminder fits → p_remind_at null (0065)', async () => {
+    const soon = new Date(NOW + 3.5 * 3600_000).toISOString(); // due in 1.5 h: earliest (+1 h) > latest (due − 1 h)
+    await openBookingHold({ tenant, turn, config: config(), ghl, ghlAppointmentId: 'appt1', serviceName: 'Consulta', startTime: soon, frameTz: 'America/Mexico_City', now: NOW });
+    expect(q.createBookingHold).toHaveBeenCalledWith(expect.objectContaining({ p_remind_at: null }));
+  });
+
+  it('reminder_hours_before: 0 turns the reminder off', async () => {
+    await openBookingHold({ tenant, turn, config: config({ amount: 500, reminder_hours_before: 0 }), ghl, ghlAppointmentId: 'appt1', serviceName: 'Consulta', startTime: START, frameTz: 'America/Mexico_City', now: NOW });
+    expect(q.createBookingHold).toHaveBeenCalledWith(expect.objectContaining({ p_remind_at: null }));
   });
 
   it('a cita too close to pay for → too_soon_to_pay, before Stripe is even called', async () => {

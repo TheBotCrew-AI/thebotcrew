@@ -19,6 +19,7 @@ import type {
   BookingHoldRow,
   BotEventType,
   ClaimedHold,
+  ClaimedHoldReminder,
   CreateBookingHoldParams,
   DueFollowUp,
   SettledHold,
@@ -1912,6 +1913,7 @@ type HoldRpcRow = {
   checkout_url: string;
   stripe_session_id?: string;
   stripe_account?: string | null;
+  short_code?: string | null;
   due_at: string;
   channel: string | null;
   contact_phone: string | null;
@@ -1978,15 +1980,36 @@ export async function finishHold(holdId: string, status: 'expired' | 'cancelled'
  * A reschedule keeps the hold; the mirrored appointment time changes and, when the new cita
  * is sooner than the deadline allows, the deadline is pulled in too (0063). false = no hold.
  */
-export async function moveHold(ghlAppointmentId: string, appointmentDatetime: string, dueAt?: string): Promise<boolean> {
+export async function moveHold(
+  ghlAppointmentId: string,
+  appointmentDatetime: string,
+  dueAt?: string,
+  /** 0065: the recomputed reminder — a string to set it, null to clear it, undefined to keep it. */
+  remindAt?: string | null,
+): Promise<boolean> {
   const supabase = getSupabase();
   const { data, error } = await supabase.rpc('app_move_hold', {
     p_ghl_appointment_id: ghlAppointmentId,
     p_appointment_datetime: appointmentDatetime,
     ...(dueAt ? { p_due_at: dueAt } : {}),
+    ...(remindAt ? { p_remind_at: remindAt } : {}),
+    ...(remindAt === null ? { p_clear_reminder: true } : {}),
   });
   fail('moveHold', error);
   return data === true;
+}
+
+/** Claim the pending holds whose reminder is due (→ reminded_at = now(), SKIP LOCKED) for the 5-min cron (0065). */
+export async function claimDueHoldReminders(limit = 20): Promise<ClaimedHoldReminder[]> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase.rpc('app_claim_due_hold_reminders', { p_limit: limit });
+  fail('claimDueHoldReminders', error);
+  return ((data ?? []) as HoldRpcRow[]).map((r) => ({
+    ...mapActionableHold(r),
+    stripeSessionId: r.stripe_session_id ?? '',
+    stripeAccount: r.stripe_account ?? null,
+    shortCode: r.short_code ?? null,
+  }));
 }
 
 /**

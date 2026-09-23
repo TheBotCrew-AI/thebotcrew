@@ -153,9 +153,9 @@ workers/                       # Mastra + Cloudflare Worker package (@thebotcrew
       reactivation/            # text-only follow-up/reactivation agent (no tools)
     ghl/                       # webhook parse/verify, OAuth, tags + transport-only API client (live)
     meta/                      # Meta Conversions API (0048/0056): capi-config (pure parse/payload, per-channel identity, lead_replies_required reply-threshold) + capi (enqueue + Graph send)
-    payments/                  # Stripe (0062): stripe.ts (fetch client: Checkout Session create/expire + webhook signature, ONE platform account) + hold-messages (LLM-free lead texts) + pay-link (0063: the short code, <WORKER_URL>/p/<code>, and fixPayLinks — the deterministic repair of a link the model padded)
+    payments/                  # Stripe (0062): stripe.ts (fetch client: Checkout Session create/expire + webhook signature, ONE platform account) + hold-messages (LLM-free lead texts) + pay-link (0063: the short code, <WORKER_URL>/p/<code>, and fixPayLinks — the deterministic repair of a link the model padded) + hold-reminder (0065: when the one reminder goes out, kept out of quiet hours)
     db/                        # service-role Supabase client, queries (config read + RPC writes)
-    worker/                    # webhook-handler (inbound) + conversation-do (per-conversation Durable Object: durable-alarm debounce + serialized turn) + outbound-handler (human takeover) + tag-handler (bot-off) + delivery-retry + followup-runner + capi-runner (Meta CAPI queue drain) + info-gap-runner + info-gaps/ (0054: what the bot couldn't answer — extraction queue, aggregate, report; pending_info escalation) + stripe-webhook-handler + hold-expiry-runner + system-message (0062 paid confirmation: settle on payment, release on the 5-min cron, one fixed message outside a turn) + pay-link-handler (0063: GET /p/:code → 302 to Stripe while pending, "ya está pagado" / "venció" pages after)
+    worker/                    # webhook-handler (inbound) + conversation-do (per-conversation Durable Object: durable-alarm debounce + serialized turn) + outbound-handler (human takeover) + tag-handler (bot-off) + delivery-retry + followup-runner + capi-runner (Meta CAPI queue drain) + info-gap-runner + info-gaps/ (0054: what the bot couldn't answer — extraction queue, aggregate, report; pending_info escalation) + stripe-webhook-handler + hold-expiry-runner + system-message (0062 paid confirmation: settle on payment, release on the 5-min cron, one fixed message outside a turn) + pay-link-handler (0063: GET /p/:code → 302 to Stripe while pending, "ya está pagado" / "venció" pages after) + hold-reminder-runner (0065: the one pre-deadline reminder, 5-min cron)
   scripts/simulate-webhook.mjs # local dev: fire a fake GHL webhook
   scripts/demo-take.mjs        # arma/cierra una toma del demo de bótox para grabar video (business-logic §5b)
   scripts/battery.mjs          # pnpm battery <slug>: corre la batería de conversaciones de muestra de un tenant
@@ -300,7 +300,12 @@ supabase/
                                #      directo con header Stripe-Account y la misma key, platform_fee opcional = application_fee. La fila
                                #      guarda stripe_account al crear la sesión (expirarla después necesita el mismo header). Eventos de
                                #      cuentas conectadas = segundo endpoint, secret STRIPE_CONNECT_WEBHOOK_SECRET(_TEST_MODE); sin él,
-                               #      401 y log. app_claim_expired_holds devuelve stripe_account. Ver business-logic §5e, onboarding §9)
+                               #      401 y log. app_claim_expired_holds devuelve stripe_account. Ver business-logic §5e, onboarding §9),
+                               # 0065 hold_reminder (UN recordatorio antes del plazo, calculado —nunca hora fija— desde el due_at
+                               #      del hold y sacado de las quiet_hours en el reloj del lead: booking_holds.remind_at/reminded_at,
+                               #      app_claim_due_hold_reminders (pending only, SKIP LOCKED) drenado por el cron de 5 min, texto fijo
+                               #      con la liga corta, evento hold_reminder_sent. Vive en el hold y NO en follow_ups a propósito:
+                               #      un follow_up lo cancela cualquier inbound y exige status='active'. Ver business-logic §5e)
   clients.sql, seed-tenants.sql# seeds (run by `supabase db reset` per config.toml)
 sites/                         # client marketing sites: static HTML, no build step, no deps
   _template/                   # starting point for a new client

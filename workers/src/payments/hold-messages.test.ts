@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildHoldExpiredMessage, buildHoldPaidLateMessage, buildHoldPaidMessage } from './hold-messages.js';
+import { buildHoldExpiredMessage, buildHoldPaidLateMessage, buildHoldPaidMessage, buildHoldReminderMessage } from './hold-messages.js';
 
 describe('hold messages (LLM-free)', () => {
   // Live 2026-09-23 (Heriberto's Connect test): "…3:45 p.m.." — the label already ends in a period.
@@ -12,5 +12,11 @@ describe('hold messages (LLM-free)', () => {
     expect(buildHoldExpiredMessage('lunes, 28 de septiembre, 3:45 p.m.')).toContain('3:45 p.m. y el lugar');
     expect(buildHoldPaidLateMessage('Clínica')).toContain('Clínica');
     expect(buildHoldPaidLateMessage('Clínica')).not.toMatch(/reembolso|devoluci/);
+  });
+  it('reminder (0065): cita, deadline, "ignora si ya pagaste", and the link LAST on its own line', () => {
+    const m = buildHoldReminderMessage('lunes, 28 de septiembre, 3:45 p.m.', 'lunes, 28 de septiembre, 1:45 p.m.', 'https://tbcpagos.com/p/abcdefghjk');
+    expect(m).toContain('3:45 p.m. sigue apartado hasta el lunes, 28 de septiembre, 1:45 p.m. Si ya lo pagaste');
+    expect(m.endsWith('\nhttps://tbcpagos.com/p/abcdefghjk')).toBe(true);
+    expect(m).not.toContain('..');
   });
 });

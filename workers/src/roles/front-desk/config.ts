@@ -32,6 +32,9 @@ export const bookingPaymentSchema = z.object({
    *  now + holdHours and cita − deadlineMarginHours, so a same-day cita never has a deadline
    *  after the cita itself (2026-09-22: 6:30 a.m. cita, "paga antes de las 6:46 p.m."). */
   deadlineMarginHours: z.number().nonnegative().default(2),
+  /** The one pre-deadline reminder (0065): how many hours before the deadline it aims for, moved
+   *  out of the quiet window by `payments/hold-reminder.ts`. 0 = no reminder. */
+  reminderHoursBefore: z.number().nonnegative().default(3),
   /** What the deposit is, in the tenant's words (rendered into the prompt): "se descuenta del
    *  costo de la consulta", "es una cuota de reservación", … Absent = nothing is claimed. */
   depositNote: z.string().optional(),
@@ -64,6 +67,7 @@ export function parseBookingPayment(raw: unknown): BookingPaymentConfig | null {
     currency: typeof o.currency === 'string' ? o.currency.toLowerCase() : undefined,
     holdHours: o.hold_hours ?? o.holdHours,
     deadlineMarginHours: o.deadline_margin_hours ?? o.deadlineMarginHours,
+    reminderHoursBefore: o.reminder_hours_before ?? o.reminderHoursBefore,
     depositNote: o.deposit_note ?? o.depositNote,
     statementSuffix: o.statement_suffix ?? o.statementSuffix,
     stripeAccount: o.stripe_account ?? o.stripeAccount,

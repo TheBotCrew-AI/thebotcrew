@@ -31,3 +31,15 @@ export function buildHoldPaidLateMessage(businessName: string): string {
     `Alguien de ${businessName} te escribe en un ratito para acomodarte en otro horario o, si lo prefieres, ver lo de tu pago.`
   );
 }
+
+/**
+ * The one pre-deadline reminder (0065). The link goes LAST, alone on its own line —
+ * the same shape the tools use, so a lead's client renders it as a tappable link.
+ */
+export function buildHoldReminderMessage(citaLabel: string, deadlineLabel: string, paymentUrl: string): string {
+  return (
+    `Hola, te recuerdo que tu lugar para el ${sentence(citaLabel)} sigue apartado hasta el ${sentence(deadlineLabel)} ` +
+    'Si ya lo pagaste, ignora este mensaje; si no, aquí tienes la liga de pago:\n' +
+    paymentUrl
+  );
+}

@@ -1137,9 +1137,26 @@ the onboarding link by hand today), payouts scheduling, cross-border accounts.
 (client, month, count, sum, late count) is the monthly read. Stripe's dashboard is the other
 half.
 
-**Deliberately out of v1:** reminders before the deadline ("te quedan 4 horas" — a
-`follow_ups.kind='hold'` ladder later), OXXO/SPEI (a voucher can take 3 days, longer than the
-hold). Stripe Connect landed in 0064 (above).
+**One reminder before the deadline (0065) — a computed instant, never a fixed hour.** Leo's
+worry was exactly the failure: a fixed "3 h before" lands at 5 a.m. for a morning cita, or
+inside the quiet window. So `payments/hold-reminder.ts` decides the instant when the hold is
+opened, from the hold's own `due_at`: target = due − `reminder_hours_before` (default 3 h); if
+that falls in the quiet window (tenant `quiet_hours`, default 21:00–08:00, **in the lead's clock**
+when known) it moves to 20:30 the evening before, or to 08:00 if the evening is before the hold
+existed; never earlier than 1 h after creation nor later than 1 h before the deadline; nothing
+fits → no reminder (a same-afternoon cita doesn't need one). The table of cases is the test
+(`hold-reminder.test.ts`). The reminder lives ON the hold (`remind_at` / `reminded_at`), not in
+`follow_ups`: a follow-up row is cancelled by any inbound and gated on `status='active'`, and a
+booked conversation is `completed` — wrong semantics for a nudge that must survive "gracias".
+The 5-min cron claims due rows atomically (`app_claim_due_hold_reminders`, `pending` only, so a
+paid/expired/cancelled hold is silently never reminded) and sends the fixed text with the short
+link (`hold-reminder-runner.ts`, `hold_reminder_sent`). A reschedule recomputes it from the new
+deadline. `reminder_hours_before: 0` turns it off per tenant; changing `hold_hours`,
+`deadline_margin_hours`, `quiet_hours` or the reminder offset changes holds created afterwards —
+an existing hold keeps the deadline the lead was told.
+
+**Deliberately out of v1:** OXXO/SPEI (a voucher can take 3 days, longer than the hold).
+Stripe Connect landed in 0064, the reminder in 0065 (above).
 
 Evals: `evals/booking-hold.eval.ts` (the link verbatim and ending where the code ends, no
 note wording in the reply, the deadline, "apartada" not "confirmada", "no abre el link" →

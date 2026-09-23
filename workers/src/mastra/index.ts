@@ -21,6 +21,7 @@ import { runPendingFollowUps } from '../worker/followup-runner.js';
 import { runPendingCapiEvents } from '../worker/capi-runner.js';
 import { runInfoGapExtractions, runPendingInfoAlerts } from '../worker/info-gap-runner.js';
 import { runExpiredHolds } from '../worker/hold-expiry-runner.js';
+import { runHoldReminders } from '../worker/hold-reminder-runner.js';
 import { handleStripeWebhook } from '../worker/stripe-webhook-handler.js';
 import { resolvePayLink } from '../worker/pay-link-handler.js';
 import { getStripeEnv } from '../payments/stripe.js';
@@ -38,6 +39,7 @@ export { retryPendingDeliveries } from '../worker/delivery-retry.js';
 export { runPendingCapiEvents } from '../worker/capi-runner.js';
 export { runInfoGapExtractions, runPendingInfoAlerts } from '../worker/info-gap-runner.js';
 export { runExpiredHolds } from '../worker/hold-expiry-runner.js';
+export { runHoldReminders } from '../worker/hold-reminder-runner.js';
 // The Durable Object class MUST be exported from the built Worker entry (index.mjs) for the
 // runtime to instantiate it. The getEntry() override below re-exports it from '#mastra'.
 export { ConversationDO } from '../worker/conversation-do.js';
@@ -457,7 +459,7 @@ export const mastra = new Mastra({
 
         scheduled: async (event, _env, ctx) => {
           ctx.waitUntil((async () => {
-            const { mastra, runPendingFollowUps, retryPendingDeliveries, runPendingCapiEvents, runInfoGapExtractions, runPendingInfoAlerts, runExpiredHolds } = await import('#mastra');
+            const { mastra, runPendingFollowUps, retryPendingDeliveries, runPendingCapiEvents, runInfoGapExtractions, runPendingInfoAlerts, runExpiredHolds, runHoldReminders } = await import('#mastra');
             const _mastra = mastra();
             // Each schedule is its own invocation, and at :00/:05/… the 1-minute and
             // 5-minute crons fire in the SAME second. The minute jobs must run on the
@@ -497,6 +499,12 @@ export const mastra = new Mastra({
                 console.log('[cron] run-hold-expiry:', JSON.stringify(result));
               } catch (err) {
                 console.error('[cron] run-hold-expiry error:', err instanceof Error ? err.message : String(err));
+              }
+              try {
+                const result = await runHoldReminders();
+                console.log('[cron] run-hold-reminders:', JSON.stringify(result));
+              } catch (err) {
+                console.error('[cron] run-hold-reminders error:', err instanceof Error ? err.message : String(err));
               }
             }
             if (event.cron === '0 13 * * *') {

@@ -544,7 +544,9 @@ the free-install offer), two Worker secrets set **once**, then per tenant it is 
    amounts: add `"deposit": 250` to the entry in `services`. `deadline_margin_hours`
    (default 2, 0063) is how long before the cita the payment must be in: the deadline is the
    sooner of `now + hold_hours` and `cita − margin`, and a slot closer than margin + 30 min is
-   neither offered nor booked (`too_soon_to_pay`).
+   neither offered nor booked (`too_soon_to_pay`). `reminder_hours_before` (default 3, 0065):
+   the one pre-deadline reminder aims for that many hours before the deadline and is moved out
+   of `quiet_hours` by code (evening before / 08:00 / none) — `0` turns it off.
    **The lead never sees the Stripe URL**: the bot sends `https://tbcpagos.com/p/<code>` (0063),
    which the Worker redirects while the hold is pending. `WORKER_URL` is a Worker var set in
    the `CloudflareDeployer` config (`mastra/index.ts`, with the `routes` custom domain) — it is

@@ -295,7 +295,9 @@ describe('rescheduleAppointment — paid confirmation (0062)', () => {
     expect(res.rescheduled).toBe(true);
     expect(ghl.rescheduleAppointment).toHaveBeenCalledWith(expect.objectContaining({ appointmentStatus: 'new' }));
     // START is two days out and the deadline one day out: nothing to pull in.
-    expect(q.moveHold).toHaveBeenCalledWith('appt1', START, undefined);
+    // 4th arg = the recomputed reminder (0065): a string, or null when nothing fits.
+    // START is two days out, the deadline one day out: the reminder (due − 3 h) fits → a timestamp.
+    expect(q.moveHold).toHaveBeenCalledWith('appt1', START, undefined, expect.any(String));
     expect(res.message).toContain('APARTADA');
     expect(res.message).toContain('https://pay/x');
   });
@@ -331,7 +333,7 @@ describe('rescheduleAppointment — paid confirmation (0062)', () => {
     ghl.getAvailability.mockResolvedValue([{ start: soon, end: soon }]);
     const res = await run(soon, payCtx());
     expect(res.rescheduled).toBe(true);
-    expect(q.moveHold).toHaveBeenCalledWith('appt1', soon, undefined);
+    expect(q.moveHold).toHaveBeenCalledWith('appt1', soon, undefined, undefined);
   });
 
   it("paid hold → stays 'confirmed' through the move", async () => {
