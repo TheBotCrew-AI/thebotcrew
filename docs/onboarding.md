@@ -562,7 +562,11 @@ the free-install offer), two Worker secrets set **once**, then per tenant it is 
    client's (Dr. Valdivia), not the platform's:
    1. Platform Stripe → Connect → Accounts → Create → **Standard** → send the client the
       onboarding link (they log into or create their Stripe there; RFC, CLABE, ID are between
-      them and Stripe). Copy the `acct_…`. In test mode the account completes itself.
+      them and Stripe). Copy the `acct_…`. **Test-mode connected accounts are separate
+      objects with their own ids** — the live `acct_…` will differ. **The account needs a
+      business name before its first Checkout** (Stripe 400 "you must set an account or
+      business name", 2026-09-23): in test mode fill the onboarding form with Stripe's test
+      data; live, the client's onboarding sets it.
    2. Once, per mode: a SECOND webhook endpoint at the same `<WORKER_URL>/webhooks/stripe`
       with "Listen to events on **Connected accounts**", same two events. Its secret:
       ```bash
@@ -571,10 +575,17 @@ the free-install offer), two Worker secrets set **once**, then per tenant it is 
       ```
    3. Per tenant, in `booking_payment`: `"stripe_account": "acct_…"` and, if the platform
       keeps a cut of each paid cita, `"platform_fee": 150` (pesos → Stripe's application fee).
-   4. Verify: book + pay in the client's name — the Checkout page shows THEIR business, the
+   4. **On a LIVE tenant, fence the rehearsal first**: `test_contact_ids = {<your contact>}`
+      BEFORE `booking_payment` (real leads get no bot reply while fenced — minutes, outside
+      hours), and clear both when done. Then verify: book + pay in the client's name — the Checkout page shows THEIR business, the
       payment appears in THEIR dashboard (and the fee in ours), `booking_holds.stripe_account`
       is set, the hold settles `paid`. The Worker logs `STRIPE_CONNECT_WEBHOOK_SECRET not set`
       if step 2 was skipped: the payment is real but the cita never confirms until it's fixed.
+
+7. **After any rehearsal**: cancel the test cita in GHL (`scripts/cancel-appointment.mjs`),
+   clear the contact's tags (`scripts/reset-test-contact.mjs`), and DELETE the test row from
+   `booking_holds` — a `paid` test hold counts in `paid_bookings_monthly`. Check `capi_events`
+   for an `appointment_paid` Purchase on a CAPI-live tenant.
 
 Revenue: `select * from paid_bookings_monthly order by month desc;` (platform-account charges
 and connected-account charges alike — the ledger is ours either way).
