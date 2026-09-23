@@ -472,7 +472,8 @@ cualquier Chrome headless recibe SIGTERM a los ~2 s (ver cabecera de `render-bat
   (the `tbcpagos.com` custom domain, 2026-09-22), and wrangler DISABLES the `workers.dev`
   address as soon as routes exist unless `workers_dev: true` is set — every GHL and Stripe
   webhook points at `workers.dev`, so the first deploy with the domain answered Cloudflare
-  404s to every inbound for ~24 min (22:27–22:51 PDT) before Leo noticed the bot was mute.
+  404s to every inbound for **7½ hours** (2026-09-22 22:27 → 09-23 05:51 PDT, overnight) before Leo
+  noticed the bot was mute.
   After ANY deploy that touches routes/domains, fetch `<workers.dev>/p/x` and check the body
   is OUR 404 page ("Esta liga no existe"), not Cloudflare's HTML.
 - **Gradual rollout (preferred now that a client is live):** `wrangler versions upload` →
