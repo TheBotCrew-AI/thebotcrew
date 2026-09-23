@@ -416,6 +416,8 @@ export interface BookingHoldRow {
   paidAt: string | null;
   /** 0063: the code behind the short link; null on a hold created before it (the lead has Stripe's URL). */
   shortCode: string | null;
+  /** 0064: the Connect account the session lives on; null = the platform's own account. */
+  stripeAccount: string | null;
 }
 
 /** Params for the app_create_booking_hold RPC (0062, `p_short_code` since 0063). */
@@ -432,6 +434,7 @@ export interface CreateBookingHoldParams {
   p_checkout_url: string;
   p_due_at: string;
   p_short_code: string;
+  p_stripe_account: string | null;
 }
 
 /**
@@ -462,4 +465,4 @@ export interface ActionableHold {
 export type SettledHold = ActionableHold & { outcome: 'paid' | 'paid_late' };
 
 /** app_claim_expired_holds: a pending hold now in `expiring`, plus its Stripe session to expire. */
-export type ClaimedHold = ActionableHold & { stripeSessionId: string };
+export type ClaimedHold = ActionableHold & { stripeSessionId: string; stripeAccount: string | null };

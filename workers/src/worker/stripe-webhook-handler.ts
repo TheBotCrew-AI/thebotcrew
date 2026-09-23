@@ -35,12 +35,24 @@ export async function handleStripeWebhook(
   signatureHeader: string | null,
   webhookSecret: string | undefined,
   now = Date.now(),
+  /** The connected-accounts endpoint's secret (Connect). Its events are signed with THIS one. */
+  connectWebhookSecret?: string,
 ): Promise<WebhookResult> {
   if (!webhookSecret) {
     return { status: 401, body: { error: 'stripe webhook secret not configured' } };
   }
-  const event = await verifyStripeEvent(rawBody, signatureHeader, webhookSecret, Math.floor(now / 1000));
+  const nowSec = Math.floor(now / 1000);
+  // Two endpoints, one URL: the platform's own events and the connected accounts' events
+  // arrive with different signing secrets. Try the platform's first, then Connect's — two
+  // cheap HMACs. Without a Connect secret a connected account's event fails closed, loudly.
+  let event = await verifyStripeEvent(rawBody, signatureHeader, webhookSecret, nowSec);
+  if (!event && connectWebhookSecret) {
+    event = await verifyStripeEvent(rawBody, signatureHeader, connectWebhookSecret, nowSec);
+  }
   if (!event) {
+    if (!connectWebhookSecret && rawBody.includes('"account"')) {
+      console.error('[stripe-webhook] rejected an event that looks like a connected account\'s — STRIPE_CONNECT_WEBHOOK_SECRET not set');
+    }
     return { status: 401, body: { error: 'invalid signature' } };
   }
   return processStripeEvent(event, now);

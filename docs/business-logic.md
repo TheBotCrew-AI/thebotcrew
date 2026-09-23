@@ -1114,14 +1114,32 @@ answers "¿ya quedó?" / "ya pagué" from the hold — pending (link + deadline 
 paid_late, or released (`found:false`, offer to rebook) — so the model never assumes a
 payment it cannot see.
 
+**A tenant paid directly = a Stripe Connect connected account (0064).** The rule above (one
+platform account, one key) holds; what changes for a tenant like Dr. Valdivia, whose deal is
+that the money is HIS, is *where the charge lands*. His Stripe is a **Standard connected
+account** of the platform's (he onboards through a link, keeps his own dashboard, pays his own
+Stripe fees, answers his own disputes) and `booking_payment.stripe_account = "acct_…"` makes
+every call for his holds a **direct charge** on that account: the same platform key with a
+`Stripe-Account` header (`payments/stripe.ts`). The Checkout page and the card statement carry
+HIS name — better for a patient paying their doctor than "The Bot Crew" ever was. The optional
+`platform_fee` (pesos) becomes Stripe's `application_fee_amount`: the platform's cut of each
+paid cita, transferred automatically — the offer's revenue without an invoice chase.
+Connected accounts' events arrive at the same URL signed by a SECOND endpoint ("Listen to events
+on Connected accounts") whose secret is `STRIPE_CONNECT_WEBHOOK_SECRET(_TEST_MODE)`; the handler
+tries the platform secret, then that one, and a Connect-signed event with no Connect secret set
+is a loud 401. The hold row stores `stripe_account` at creation: expiring the session later
+(cron, lead cancel) needs the same header, and a config edit must not strand a live session.
+Tenants without `stripe_account` are unchanged (platform account, no header, no fee).
+Setup: onboarding §9. Not built: OAuth self-onboarding (the dashboard creates the account and
+the onboarding link by hand today), payouts scheduling, cross-border accounts.
+
 **Reporting.** `booking_holds` is the platform's revenue ledger; `paid_bookings_monthly`
 (client, month, count, sum, late count) is the monthly read. Stripe's dashboard is the other
 half.
 
 **Deliberately out of v1:** reminders before the deadline ("te quedan 4 horas" — a
 `follow_ups.kind='hold'` ladder later), OXXO/SPEI (a voucher can take 3 days, longer than the
-hold), Stripe Connect payouts to the client (the interface — open / settle / release — is
-ready for it; the account model is not).
+hold). Stripe Connect landed in 0064 (above).
 
 Evals: `evals/booking-hold.eval.ts` (the link verbatim and ending where the code ends, no
 note wording in the reply, the deadline, "apartada" not "confirmada", "no abre el link" →

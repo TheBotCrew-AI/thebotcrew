@@ -63,6 +63,26 @@ beforeEach(() => {
 });
 
 describe('handleStripeWebhook — signature (fails closed)', () => {
+  // Stripe Connect (0064): a connected account's event is signed by the SECOND endpoint's secret.
+  it('accepts an event signed with the Connect secret when the platform secret does not match', async () => {
+    const body = JSON.stringify({ ...event(), account: 'acct_x' });
+    const sig = await signStripePayload('whsec_connect', body, Math.floor(NOW / 1000));
+    const res = await handleStripeWebhook(body, sig, SECRET, NOW, 'whsec_connect');
+    expect(res.status).toBe(200);
+    expect(q.settleHoldPayment).toHaveBeenCalledWith('cs_1', 'pi_1');
+  });
+
+  it('rejects a Connect-signed event when no Connect secret is configured (fails closed, loud)', async () => {
+    const body = JSON.stringify({ ...event(), account: 'acct_x' });
+    const sig = await signStripePayload('whsec_connect', body, Math.floor(NOW / 1000));
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const res = await handleStripeWebhook(body, sig, SECRET, NOW);
+    expect(res.status).toBe(401);
+    expect(q.settleHoldPayment).not.toHaveBeenCalled();
+    expect(spy).toHaveBeenCalledWith(expect.stringContaining('STRIPE_CONNECT_WEBHOOK_SECRET'));
+    spy.mockRestore();
+  });
+
   const body = JSON.stringify(event());
 
   it('no secret configured → 401 even with a valid signature', async () => {

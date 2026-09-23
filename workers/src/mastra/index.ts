@@ -169,7 +169,8 @@ export const mastra = new Mastra({
           const raw = await c.req.text();
           // The signing secret of the endpoint for the CURRENT mode (STRIPE_MODE=test → the
           // test-mode endpoint's). Undefined = fails closed inside the handler.
-          const result = await handleStripeWebhook(raw, c.req.header('stripe-signature') ?? null, getStripeEnv()?.webhookSecret);
+          const stripe = getStripeEnv();
+          const result = await handleStripeWebhook(raw, c.req.header('stripe-signature') ?? null, stripe?.webhookSecret, Date.now(), stripe?.connectWebhookSecret);
           return c.json(result.body, result.status);
         },
       }),

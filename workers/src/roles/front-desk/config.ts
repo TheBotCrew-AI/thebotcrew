@@ -38,6 +38,11 @@ export const bookingPaymentSchema = z.object({
   /** Card-statement suffix so the lead recognizes the charge ("THE BOT CREW* DR VALDIVIA").
    *  Stripe caps the suffix at 22 characters; letters/digits/spaces only. */
   statementSuffix: z.string().max(22).regex(/^[A-Za-z0-9 ]*$/).optional(),
+  /** Stripe Connect (0064): the tenant's connected account. Set, the charge lands in THEIR
+   *  Stripe (their name on the Checkout page and the card statement); absent, in the platform's. */
+  stripeAccount: z.string().regex(/^acct_[A-Za-z0-9]+$/).optional(),
+  /** With `stripeAccount`: what the platform keeps of each charge, in pesos (application fee). */
+  platformFee: z.number().nonnegative().optional(),
 });
 export type BookingPaymentConfig = z.infer<typeof bookingPaymentSchema>;
 
@@ -61,6 +66,8 @@ export function parseBookingPayment(raw: unknown): BookingPaymentConfig | null {
     deadlineMarginHours: o.deadline_margin_hours ?? o.deadlineMarginHours,
     depositNote: o.deposit_note ?? o.depositNote,
     statementSuffix: o.statement_suffix ?? o.statementSuffix,
+    stripeAccount: o.stripe_account ?? o.stripeAccount,
+    platformFee: o.platform_fee ?? o.platformFee,
   });
   if (!parsed.success) {
     console.error('[booking-payment] tenant_config.booking_payment invalid — feature off:', parsed.error.message);

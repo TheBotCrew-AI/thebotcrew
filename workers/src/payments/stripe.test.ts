@@ -30,6 +30,21 @@ describe('getStripeEnv', () => {
     expect(getStripeEnv()).toEqual({ secretKey: 'sk_live_x', webhookSecret: 'whsec_x', mode: 'live' });
   });
 
+  it('STRIPE_CONNECT_WEBHOOK_SECRET is optional and follows the mode suffix (0064)', () => {
+    delete process.env.STRIPE_MODE;
+    process.env.STRIPE_SECRET_KEY = 'sk_live_x';
+    process.env.STRIPE_WEBHOOK_SECRET = 'whsec_x';
+    delete process.env.STRIPE_CONNECT_WEBHOOK_SECRET;
+    expect(getStripeEnv()?.connectWebhookSecret).toBeUndefined();
+    process.env.STRIPE_CONNECT_WEBHOOK_SECRET = 'whsec_connect_live';
+    process.env.STRIPE_CONNECT_WEBHOOK_SECRET_TEST_MODE = 'whsec_connect_test';
+    expect(getStripeEnv()?.connectWebhookSecret).toBe('whsec_connect_live');
+    process.env.STRIPE_MODE = 'test';
+    process.env.STRIPE_SECRET_KEY_TEST_MODE = 'sk_test_x';
+    process.env.STRIPE_WEBHOOK_SECRET_TEST_MODE = 'whsec_t';
+    expect(getStripeEnv()?.connectWebhookSecret).toBe('whsec_connect_test');
+  });
+
   it('STRIPE_MODE=test reads the *_TEST_MODE pair and ignores the live one', () => {
     process.env.STRIPE_MODE = 'test';
     process.env.STRIPE_SECRET_KEY = 'sk_live_x';
@@ -103,6 +118,24 @@ describe('createCheckoutSession', () => {
     expect(body.get('success_url')).toBe('https://w/pay/ok');
   });
 
+  // Stripe Connect (0064): a direct charge on the tenant's account is the same POST with a
+  // `Stripe-Account` header and, optionally, the platform's cut as the application fee.
+  it('with stripeAccount: sends Stripe-Account and the application fee; without it, neither', async () => {
+    fetchMock.mockImplementation(async () => new Response(JSON.stringify({ id: 'cs_1', url: 'https://checkout.stripe.com/c/pay/cs_1', expires_at: 1 }), { status: 200 }));
+    await createCheckoutSession(env, { ...input, stripeAccount: 'acct_1UIf7kBByPT1k8lc', applicationFeeCents: 15000 });
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect((init.headers as Record<string, string>)['Stripe-Account']).toBe('acct_1UIf7kBByPT1k8lc');
+    const body = new URLSearchParams(init.body as string);
+    expect(body.get('payment_intent_data[application_fee_amount]')).toBe('15000');
+
+    fetchMock.mockClear();
+    await createCheckoutSession(env, { ...input, applicationFeeCents: 15000 });
+    const [, init2] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect((init2.headers as Record<string, string>)['Stripe-Account']).toBeUndefined();
+    // A fee without an account is meaningless (and Stripe rejects it): dropped.
+    expect(new URLSearchParams(init2.body as string).get('payment_intent_data[application_fee_amount]')).toBeNull();
+  });
+
   it('throws with the Stripe body on a non-2xx (the tool then cancels the booking)', async () => {
     fetchMock.mockResolvedValue(new Response('{"error":{"message":"No such price"}}', { status: 400 }));
     await expect(createCheckoutSession(env, input)).rejects.toThrow(/400.*No such price/);
@@ -125,6 +158,13 @@ describe('expireCheckoutSession', () => {
     fetchMock.mockResolvedValueOnce(new Response('{"error":{}}', { status: 400 }));
     expect(await expireCheckoutSession(env, 'cs_1')).toBe('already_closed');
     expect(fetchMock.mock.calls[0]![0]).toBe('https://api.stripe.com/v1/checkout/sessions/cs_1/expire');
+  });
+
+  it('expiring a session on a connected account carries Stripe-Account (0064)', async () => {
+    fetchMock.mockResolvedValueOnce(new Response('{}', { status: 200 }));
+    await expireCheckoutSession(env, 'cs_1', 'acct_x');
+    const [, init] = fetchMock.mock.calls.at(-1) as [string, RequestInit];
+    expect((init.headers as Record<string, string>)['Stripe-Account']).toBe('acct_x');
   });
 
   it('a 401 (bad key) still throws — that one must be seen', async () => {
@@ -157,6 +197,13 @@ describe('verifyStripeEvent', () => {
     expect(await verifyStripeEvent(body, header, 'whsec_test', ts + 301)).toBeNull();
     expect(await verifyStripeEvent(body, null, 'whsec_test', ts)).toBeNull();
     expect(await verifyStripeEvent(body, 't=abc,v1=zz', 'whsec_test', ts)).toBeNull();
+  });
+
+  it('keeps the `account` of a connected-account event (0064)', async () => {
+    const body = JSON.stringify({ id: 'evt_c', type: 'checkout.session.completed', account: 'acct_x', data: { object: { id: 'cs_1' } } });
+    const ts = Math.floor(NOW / 1000);
+    const ev = await verifyStripeEvent(body, await signStripePayload('whsec_connect', body, ts), 'whsec_connect', ts);
+    expect(ev?.account).toBe('acct_x');
   });
 
   it('rejects a signed body that is not an event', async () => {

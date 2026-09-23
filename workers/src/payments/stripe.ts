@@ -3,14 +3,24 @@
  *
  * ONE Stripe account (the platform's), platform-level secrets, every tenant: the
  * lead pays the hold to us, because that is how the platform is paid under the
- * free-install offer. No per-tenant Stripe, no Connect, no GHL payment provider.
+ * free-install offer. No per-tenant keys, no GHL payment provider.
+ *
+ * A tenant that gets paid DIRECTLY (Dr. Valdivia's deal) is a Stripe Connect
+ * connected account (Standard) of that same platform account: every call for that
+ * tenant carries `Stripe-Account: acct_…` (`booking_payment.stripe_account`) and the
+ * same platform key. The charge lands in the tenant's account, the Checkout page
+ * and the card statement carry the tenant's name, and the platform may take an
+ * `application_fee_amount` off each one. The events of connected accounts arrive
+ * signed with the CONNECT endpoint's secret (`STRIPE_CONNECT_WEBHOOK_SECRET`), a
+ * second signing secret at the same URL.
  *
  * Thin fetch client, no SDK: three calls (create a Checkout Session, expire one,
  * verify a webhook signature). The SDK would pull Node shims into the Worker
  * bundle for what is two form-encoded POSTs and one HMAC.
  *
- * Secrets: `STRIPE_SECRET_KEY` (sk_live_/sk_test_) and `STRIPE_WEBHOOK_SECRET`
- * (whsec_…, from the endpoint registered in the Stripe dashboard). Third-party
+ * Secrets: `STRIPE_SECRET_KEY` (sk_live_/sk_test_), `STRIPE_WEBHOOK_SECRET` (whsec_…,
+ * from the endpoint registered in the Stripe dashboard) and, optional,
+ * `STRIPE_CONNECT_WEBHOOK_SECRET` (the "connected accounts" endpoint's). Third-party
  * credentials → Worker secrets, per the no-manual-secrets rule's exception.
  */
 
@@ -24,6 +34,8 @@ const SIGNATURE_TOLERANCE_SEC = 300;
 export interface StripeEnv {
   secretKey: string;
   webhookSecret: string;
+  /** Signing secret of the connected-accounts endpoint. Absent = a connected account's event is rejected (401), loudly. */
+  connectWebhookSecret?: string;
   mode: 'live' | 'test';
 }
 
@@ -44,7 +56,8 @@ export function getStripeEnv(): StripeEnv | null {
   const secretKey = process.env[`STRIPE_SECRET_KEY${suffix}`]?.trim();
   const webhookSecret = process.env[`STRIPE_WEBHOOK_SECRET${suffix}`]?.trim();
   if (!secretKey || !webhookSecret) return null;
-  return { secretKey, webhookSecret, mode };
+  const connectWebhookSecret = process.env[`STRIPE_CONNECT_WEBHOOK_SECRET${suffix}`]?.trim();
+  return { secretKey, webhookSecret, mode, ...(connectWebhookSecret ? { connectWebhookSecret } : {}) };
 }
 
 export interface CreateCheckoutSessionInput {
@@ -65,6 +78,11 @@ export interface CreateCheckoutSessionInput {
   cancelUrl: string;
   /** Prefill the email field when known. */
   customerEmail?: string;
+  /** Stripe Connect: the tenant's connected account (`acct_…`). The session, the charge and the
+   *  money live THERE; the platform key only acts on its behalf (`Stripe-Account` header). */
+  stripeAccount?: string;
+  /** With `stripeAccount`: what the platform keeps of this charge, in cents. Ignored without one. */
+  applicationFeeCents?: number;
   now?: number;
 }
 
@@ -98,12 +116,14 @@ async function stripePost(
   path: string,
   fields: Record<string, string | number | undefined>,
   idempotencyKey?: string,
+  stripeAccount?: string,
 ): Promise<Response> {
   const headers: Record<string, string> = {
     Authorization: `Bearer ${env.secretKey}`,
     'Content-Type': 'application/x-www-form-urlencoded',
   };
   if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey;
+  if (stripeAccount) headers['Stripe-Account'] = stripeAccount;
   return fetch(`${STRIPE_API}${path}`, { method: 'POST', headers, body: encodeForm(fields) });
 }
 
@@ -127,11 +147,14 @@ export async function createCheckoutSession(env: StripeEnv, input: CreateCheckou
   if (input.statementSuffix) {
     fields['payment_intent_data[statement_descriptor_suffix]'] = input.statementSuffix;
   }
+  if (input.stripeAccount && input.applicationFeeCents) {
+    fields['payment_intent_data[application_fee_amount]'] = input.applicationFeeCents;
+  }
   for (const [k, v] of Object.entries(input.metadata)) {
     fields[`metadata[${k}]`] = v;
   }
 
-  const res = await stripePost(env, '/checkout/sessions', fields, input.idempotencyKey);
+  const res = await stripePost(env, '/checkout/sessions', fields, input.idempotencyKey, input.stripeAccount);
   if (!res.ok) {
     const detail = await res.text();
     throw new Error(`[stripe] createCheckoutSession failed ${res.status}: ${detail.slice(0, 500)}`);
@@ -149,8 +172,13 @@ export async function createCheckoutSession(env: StripeEnv, input: CreateCheckou
  * answers 400; that is not a failure for the caller, so it is swallowed here
  * and only a real transport/auth error throws.
  */
-export async function expireCheckoutSession(env: StripeEnv, sessionId: string): Promise<'expired' | 'already_closed'> {
-  const res = await stripePost(env, `/checkout/sessions/${encodeURIComponent(sessionId)}/expire`, {});
+export async function expireCheckoutSession(
+  env: StripeEnv,
+  sessionId: string,
+  /** The connected account the session lives on, when it does — without it Stripe answers 404. */
+  stripeAccount?: string | null,
+): Promise<'expired' | 'already_closed'> {
+  const res = await stripePost(env, `/checkout/sessions/${encodeURIComponent(sessionId)}/expire`, {}, undefined, stripeAccount ?? undefined);
   if (res.ok) return 'expired';
   if (res.status === 400) return 'already_closed';
   const detail = await res.text();
@@ -162,6 +190,8 @@ export interface StripeEvent {
   id: string;
   type: string;
   data: { object: Record<string, unknown> };
+  /** Set on an event from a connected account (Connect). */
+  account?: string;
 }
 
 async function hmacSha256Hex(secret: string, message: string): Promise<string> {
@@ -228,5 +258,6 @@ export async function verifyStripeEvent(
   if (!e || typeof e.id !== 'string' || typeof e.type !== 'string' || !e.data || typeof e.data !== 'object') return null;
   const object = (e.data as { object?: unknown }).object;
   if (!object || typeof object !== 'object') return null;
-  return { id: e.id, type: e.type, data: { object: object as Record<string, unknown> } };
+  const account = typeof (e as { account?: unknown }).account === 'string' ? (e as { account: string }).account : undefined;
+  return { id: e.id, type: e.type, data: { object: object as Record<string, unknown> }, ...(account ? { account } : {}) };
 }

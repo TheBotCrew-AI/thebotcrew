@@ -558,7 +558,26 @@ the free-install offer), two Worker secrets set **once**, then per tenant it is 
    that a paid cita moves but does not cancel. Agree the `deposit_note` wording with the
    client — it is the one sentence the bot adds to that notice (business-logic §5e).
 
-Revenue: `select * from paid_bookings_monthly order by month desc;`.
+6. **A client paid directly — Stripe Connect (0064).** When the deal is that the money is the
+   client's (Dr. Valdivia), not the platform's:
+   1. Platform Stripe → Connect → Accounts → Create → **Standard** → send the client the
+      onboarding link (they log into or create their Stripe there; RFC, CLABE, ID are between
+      them and Stripe). Copy the `acct_…`. In test mode the account completes itself.
+   2. Once, per mode: a SECOND webhook endpoint at the same `<WORKER_URL>/webhooks/stripe`
+      with "Listen to events on **Connected accounts**", same two events. Its secret:
+      ```bash
+      cd workers && pnpm exec wrangler secret put STRIPE_CONNECT_WEBHOOK_SECRET
+      cd workers && pnpm exec wrangler secret put STRIPE_CONNECT_WEBHOOK_SECRET_TEST_MODE
+      ```
+   3. Per tenant, in `booking_payment`: `"stripe_account": "acct_…"` and, if the platform
+      keeps a cut of each paid cita, `"platform_fee": 150` (pesos → Stripe's application fee).
+   4. Verify: book + pay in the client's name — the Checkout page shows THEIR business, the
+      payment appears in THEIR dashboard (and the fee in ours), `booking_holds.stripe_account`
+      is set, the hold settles `paid`. The Worker logs `STRIPE_CONNECT_WEBHOOK_SECRET not set`
+      if step 2 was skipped: the payment is real but the cita never confirms until it's fixed.
+
+Revenue: `select * from paid_bookings_monthly order by month desc;` (platform-account charges
+and connected-account charges alike — the ledger is ours either way).
 
 ## Costs per client — the pricing table
 

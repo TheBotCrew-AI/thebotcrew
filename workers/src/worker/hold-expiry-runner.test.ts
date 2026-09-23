@@ -36,6 +36,7 @@ const claimed = (o: Record<string, unknown> = {}) => ({
   currency: 'mxn',
   checkoutUrl: 'https://pay/x',
   stripeSessionId: 'cs_1',
+  stripeAccount: null,
   dueAt: '2026-09-21T18:00:00Z',
   channel: 'whatsapp',
   contactPhone: '+5266412345',
@@ -71,7 +72,7 @@ describe('runExpiredHolds', () => {
     const res = await runExpiredHolds();
     expect(res).toEqual({ claimed: 1, expired: 1, retried: 0, raced: 0 });
     expect(ghl.cancelAppointment).toHaveBeenCalledWith('appt1');
-    expect(expireCheckoutSession).toHaveBeenCalledWith(expect.anything(), 'cs_1');
+    expect(expireCheckoutSession).toHaveBeenCalledWith(expect.anything(), 'cs_1', null);
     expect(q.finishHold).toHaveBeenCalledWith('hold-1', 'expired');
     expect(q.logAppointment).toHaveBeenCalledWith(expect.objectContaining({ p_action: 'cancelled', p_source: 'hold-expiry', p_ghl_appointment_id: 'appt1' }));
     expect(ghl.addContactTags).toHaveBeenCalledWith('c1', [HOLD_EXPIRED_TAG, CANCELLED_APPOINTMENT_TAG]);
@@ -118,6 +119,12 @@ describe('runExpiredHolds', () => {
     expect(ghl.cancelAppointment).not.toHaveBeenCalled();
     expect(q.finishHold).toHaveBeenCalledWith('hold-1', 'expired');
     spy.mockRestore();
+  });
+
+  it('a Connect hold expires its session ON the connected account (0064)', async () => {
+    vi.mocked(q.claimExpiredHolds).mockResolvedValue([claimed({ stripeAccount: 'acct_123' })]);
+    await runExpiredHolds();
+    expect(expireCheckoutSession).toHaveBeenCalledWith(expect.anything(), 'cs_1', 'acct_123');
   });
 
   it('Stripe not configured → still releases (the session dies on its own expiry)', async () => {

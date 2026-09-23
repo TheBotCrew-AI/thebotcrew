@@ -83,7 +83,7 @@ async function expireOne(hold: ClaimedHold): Promise<'expired' | 'retried' | 'ra
 
   const env = getStripeEnv();
   if (env && hold.stripeSessionId) {
-    await expireCheckoutSession(env, hold.stripeSessionId).catch((e: unknown) =>
+    await expireCheckoutSession(env, hold.stripeSessionId, hold.stripeAccount).catch((e: unknown) =>
       console.error('[hold-expiry] session expire failed (non-blocking):', e instanceof Error ? e.message : String(e)),
     );
   }

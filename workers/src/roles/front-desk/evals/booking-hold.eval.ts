@@ -218,7 +218,7 @@ describe.skipIf(!evalApiKey)(`apartado con pago — la liga se manda tal cual y 
       { ghlAppointmentId: 'appt_eval_hold', appointmentDatetime: start, serviceType: 'Consulta general', action: 'booked', createdAt: new Date().toISOString() },
     ] as never);
     vi.mocked(q.getBookingHold).mockResolvedValue({
-      id: 'h1', ghlAppointmentId: 'appt_eval_hold', stripeSessionId: 'cs_1', checkoutUrl: 'https://checkout.stripe.com/c/pay/cs_1', shortCode: 'x7k2m9qwab',
+      id: 'h1', ghlAppointmentId: 'appt_eval_hold', stripeSessionId: 'cs_1', checkoutUrl: 'https://checkout.stripe.com/c/pay/cs_1', shortCode: 'x7k2m9qwab', stripeAccount: null,
       amountCents: 50000, currency: 'mxn', status: 'pending', dueAt: '2026-09-24T18:00:00.000Z', paidAt: null,
     });
     const agent = buildFrontDeskAgent();
@@ -251,7 +251,7 @@ describe.skipIf(!evalApiKey)(`apartado con pago — la liga se manda tal cual y 
       { ghlAppointmentId: 'appt_eval_hold', appointmentDatetime: start, serviceType: 'Consulta general', action: 'booked', createdAt: new Date().toISOString() },
     ] as never);
     vi.mocked(q.getBookingHold).mockResolvedValue({
-      id: 'h1', ghlAppointmentId: 'appt_eval_hold', stripeSessionId: 'cs_1', checkoutUrl: 'https://checkout.stripe.com/c/pay/cs_1', shortCode: 'x7k2m9qwab',
+      id: 'h1', ghlAppointmentId: 'appt_eval_hold', stripeSessionId: 'cs_1', checkoutUrl: 'https://checkout.stripe.com/c/pay/cs_1', shortCode: 'x7k2m9qwab', stripeAccount: null,
       amountCents: 50000, currency: 'mxn', status: 'pending', dueAt: '2026-09-24T18:00:00.000Z', paidAt: null,
     });
     const agent = buildFrontDeskAgent();
@@ -299,7 +299,7 @@ describe.skipIf(!evalApiKey)(`apartado con pago — la liga se manda tal cual y 
       { ghlAppointmentId: 'appt_eval_hold', appointmentDatetime: start, serviceType: 'Consulta general', action: 'booked', createdAt: new Date().toISOString() },
     ] as never);
     vi.mocked(q.getBookingHold).mockResolvedValue({
-      id: 'h1', ghlAppointmentId: 'appt_eval_hold', stripeSessionId: 'cs_1', checkoutUrl: 'https://checkout.stripe.com/c/pay/cs_1', shortCode: 'x7k2m9qwab',
+      id: 'h1', ghlAppointmentId: 'appt_eval_hold', stripeSessionId: 'cs_1', checkoutUrl: 'https://checkout.stripe.com/c/pay/cs_1', shortCode: 'x7k2m9qwab', stripeAccount: null,
       amountCents: 50000, currency: 'mxn', status: 'paid', dueAt: '2026-09-24T18:00:00.000Z', paidAt: '2026-09-21T10:00:00.000Z',
     });
     const agent = buildFrontDeskAgent();

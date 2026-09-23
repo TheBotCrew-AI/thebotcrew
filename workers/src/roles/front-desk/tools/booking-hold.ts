@@ -124,6 +124,10 @@ export async function openBookingHold(args: {
         ghlConversationId: turn.ghlConversationId,
       },
       statementSuffix: payment.statementSuffix,
+      // Connect (0064): the tenant's own account when it has one — the money and the name on
+      // the Checkout page are theirs; the platform's cut rides along as the application fee.
+      stripeAccount: payment.stripeAccount,
+      applicationFeeCents: payment.platformFee ? Math.round(payment.platformFee * 100) : undefined,
       idempotencyKey: `hold:${args.ghlAppointmentId}`,
       successUrl: `${base}/pay/ok`,
       cancelUrl: `${base}/pay/cancel`,
@@ -154,13 +158,14 @@ export async function openBookingHold(args: {
       p_checkout_url: session.url,
       p_due_at: dueAt.toISOString(),
       p_short_code: shortCode,
+      p_stripe_account: payment.stripeAccount ?? null,
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error('[booking-hold] createBookingHold failed:', msg);
     // A session nobody tracks must not stay payable: a payment on it would reach the
     // webhook with no hold to settle and the money would sit unmatched.
-    await expireCheckoutSession(env, session.id).catch((e: unknown) =>
+    await expireCheckoutSession(env, session.id, payment.stripeAccount).catch((e: unknown) =>
       console.error('[booking-hold] orphan session expire failed:', e instanceof Error ? e.message : String(e)),
     );
     await logBotEvent(tenant.clientId, turn.ghlConversationId, 'payment_error', {
@@ -180,6 +185,7 @@ export async function openBookingHold(args: {
     ghlAppointmentId: args.ghlAppointmentId,
     stripeSessionId: session.id,
     shortCode,
+    stripeAccount: payment.stripeAccount ?? null,
     amountCents,
     currency: payment.currency,
     dueAt: dueAt.toISOString(),
@@ -233,7 +239,8 @@ export async function releaseBookingHold(args: {
   }
   const env = getStripeEnv();
   if (env) {
-    await expireCheckoutSession(env, hold.stripeSessionId).catch((e: unknown) =>
+    // The row remembers which account the session lives on (a config edit can't strand it).
+    await expireCheckoutSession(env, hold.stripeSessionId, hold.stripeAccount).catch((e: unknown) =>
       console.error('[booking-hold] session expire failed (non-blocking):', e instanceof Error ? e.message : String(e)),
     );
   }

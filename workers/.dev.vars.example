@@ -67,3 +67,9 @@ STRIPE_WEBHOOK_SECRET=
 # STRIPE_MODE=test
 # STRIPE_SECRET_KEY_TEST_MODE=
 # STRIPE_WEBHOOK_SECRET_TEST_MODE=
+# Stripe Connect (0064): a tenant paid DIRECTLY is a connected account of the platform
+# (`booking_payment.stripe_account`). Its events are signed by the SECOND endpoint at the
+# same URL ("Listen to events on Connected accounts"); optional — without it those events
+# are rejected (401) and logged. One per mode, like the pair above.
+# STRIPE_CONNECT_WEBHOOK_SECRET=
+# STRIPE_CONNECT_WEBHOOK_SECRET_TEST_MODE=

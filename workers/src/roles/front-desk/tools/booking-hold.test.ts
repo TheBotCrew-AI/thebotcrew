@@ -154,7 +154,7 @@ describe('openBookingHold', () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const res = await open();
     expect(res).toEqual({ error: 'hold_row_failed' });
-    expect(expireCheckoutSession).toHaveBeenCalledWith(env, 'cs_1');
+    expect(expireCheckoutSession).toHaveBeenCalledWith(env, 'cs_1', undefined);
     expect(ghl.addContactTags).not.toHaveBeenCalled();
     expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'payment_error', expect.objectContaining({ stage: 'create_hold_row', stripeSessionId: 'cs_1' }));
     spy.mockRestore();
@@ -188,6 +188,45 @@ describe('openBookingHold', () => {
   });
 });
 
+describe('openBookingHold — Stripe Connect (0064)', () => {
+  it('a tenant with stripe_account: the session is created ON that account, with the platform fee, and the row remembers it', async () => {
+    const cfg = config({ amount: 500, stripe_account: 'acct_1UIf7kBByPT1k8lc', platform_fee: 150 });
+    const res = await openBookingHold({ tenant, turn, config: cfg, ghl, ghlAppointmentId: 'appt1', serviceName: 'Consulta', startTime: START, frameTz: cfg.timezone, now: NOW });
+    expect('paymentUrl' in res).toBe(true);
+    const call = vi.mocked(createCheckoutSession).mock.calls[0]![1];
+    expect(call.stripeAccount).toBe('acct_1UIf7kBByPT1k8lc');
+    expect(call.applicationFeeCents).toBe(15000);
+    expect(q.createBookingHold).toHaveBeenCalledWith(expect.objectContaining({ p_stripe_account: 'acct_1UIf7kBByPT1k8lc' }));
+    expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'hold_created', expect.objectContaining({ stripeAccount: 'acct_1UIf7kBByPT1k8lc' }));
+  });
+
+  it('without stripe_account: no header, no fee, NULL on the row (the platform account)', async () => {
+    await openBookingHold({ tenant, turn, config: config(), ghl, ghlAppointmentId: 'appt1', serviceName: 'Consulta', startTime: START, frameTz: 'America/Mexico_City', now: NOW });
+    const call = vi.mocked(createCheckoutSession).mock.calls[0]![1];
+    expect(call.stripeAccount).toBeUndefined();
+    expect(call.applicationFeeCents).toBeUndefined();
+    expect(q.createBookingHold).toHaveBeenCalledWith(expect.objectContaining({ p_stripe_account: null }));
+  });
+
+  it('a failed hold row expires the orphan session on the connected account', async () => {
+    const cfg = config({ amount: 500, stripe_account: 'acct_x' });
+    vi.mocked(q.createBookingHold).mockRejectedValue(new Error('db down'));
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    await openBookingHold({ tenant, turn, config: cfg, ghl, ghlAppointmentId: 'appt1', serviceName: 'Consulta', startTime: START, frameTz: cfg.timezone, now: NOW });
+    expect(expireCheckoutSession).toHaveBeenCalledWith(env, 'cs_1', 'acct_x');
+    spy.mockRestore();
+  });
+
+  it('releasing a hold expires the session on the account the ROW remembers, not the config', async () => {
+    vi.mocked(q.getBookingHold).mockResolvedValue({
+      id: 'hold-1', ghlAppointmentId: 'appt1', stripeSessionId: 'cs_1', checkoutUrl: 'u', shortCode: null, stripeAccount: 'acct_row',
+      amountCents: 50000, currency: 'mxn', status: 'pending', dueAt: '2026-09-21T18:00:00Z', paidAt: null,
+    });
+    await releaseBookingHold({ tenant, ghl, ghlContactId: 'c1', ghlConversationId: 'conv1', ghlAppointmentId: 'appt1' });
+    expect(expireCheckoutSession).toHaveBeenCalledWith(env, 'cs_1', 'acct_row');
+  });
+});
+
 describe('holdDeadlineMs / earliestPayableStartMs / payableNoticeLabel', () => {
   const H = 3600_000;
   const pay = { holdHours: 24, deadlineMarginHours: 2 };
@@ -218,7 +257,7 @@ describe('holdDeadlineMs / earliestPayableStartMs / payableNoticeLabel', () => {
 
 describe('releaseBookingHold', () => {
   const hold = (status: string) => ({
-    id: 'hold-1', ghlAppointmentId: 'appt1', stripeSessionId: 'cs_1', checkoutUrl: 'u', amountCents: 50000, currency: 'mxn', status, dueAt: '2026-09-21T18:00:00Z', paidAt: null,
+    id: 'hold-1', ghlAppointmentId: 'appt1', stripeSessionId: 'cs_1', checkoutUrl: 'u', shortCode: null, stripeAccount: null, amountCents: 50000, currency: 'mxn', status, dueAt: '2026-09-21T18:00:00Z', paidAt: null,
   });
   const release = () => releaseBookingHold({ tenant, ghl, ghlContactId: 'c1', ghlConversationId: 'conv1', ghlAppointmentId: 'appt1' });
 
@@ -232,7 +271,7 @@ describe('releaseBookingHold', () => {
     vi.mocked(q.getBookingHold).mockResolvedValue(hold('pending') as never);
     expect(await release()).toBe('released');
     expect(q.finishHold).toHaveBeenCalledWith('hold-1', 'cancelled');
-    expect(expireCheckoutSession).toHaveBeenCalledWith(env, 'cs_1');
+    expect(expireCheckoutSession).toHaveBeenCalledWith(env, 'cs_1', null);
     expect(ghl.removeContactTags).toHaveBeenCalledWith('c1', [PAYMENT_PENDING_TAG]);
     expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'hold_released', expect.objectContaining({ status: 'pending' }));
   });

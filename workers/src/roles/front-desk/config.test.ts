@@ -151,6 +151,14 @@ describe('bookingPayment (0062)', () => {
     expect(full.bookingPayment).toEqual({ amount: 350.5, currency: 'mxn', holdHours: 48, deadlineMarginHours: 0.5, depositNote: 'se descuenta', statementSuffix: 'DR VALDIVIA' });
   });
 
+  it('Stripe Connect fields (0064): stripe_account must look like acct_…, platform_fee is pesos', () => {
+    const c = parseFrontDeskConfig({ ...base, bookingPayment: { amount: 500, stripe_account: 'acct_1UIf7kBByPT1k8lc', platform_fee: 150 } } as never);
+    expect(c.bookingPayment).toMatchObject({ stripeAccount: 'acct_1UIf7kBByPT1k8lc', platformFee: 150 });
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    expect(parseFrontDeskConfig({ ...base, bookingPayment: { amount: 500, stripe_account: 'sk_live_oops' } } as never).bookingPayment).toBeNull();
+    spy.mockRestore();
+  });
+
   it('malformed → null + a loud log, never a throw (a typo must not kill every turn)', () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
     expect(parseFrontDeskConfig({ ...base, bookingPayment: { amount: -5 } } as never).bookingPayment).toBeNull();

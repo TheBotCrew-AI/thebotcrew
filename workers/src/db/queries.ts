@@ -1865,7 +1865,7 @@ export async function getBookingHold(ghlAppointmentId: string): Promise<BookingH
   const supabase = getSupabase();
   const { data, error } = await supabase
     .from('booking_holds')
-    .select('id, ghl_appointment_id, stripe_session_id, checkout_url, amount_cents, currency, status, due_at, paid_at, short_code')
+    .select('id, ghl_appointment_id, stripe_session_id, checkout_url, amount_cents, currency, status, due_at, paid_at, short_code, stripe_account')
     .eq('ghl_appointment_id', ghlAppointmentId)
     .maybeSingle();
   fail('getBookingHold', error);
@@ -1881,6 +1881,7 @@ export async function getBookingHold(ghlAppointmentId: string): Promise<BookingH
     due_at: string;
     paid_at: string | null;
     short_code: string | null;
+    stripe_account: string | null;
   };
   return {
     id: r.id,
@@ -1893,6 +1894,7 @@ export async function getBookingHold(ghlAppointmentId: string): Promise<BookingH
     dueAt: r.due_at,
     paidAt: r.paid_at,
     shortCode: r.short_code,
+    stripeAccount: r.stripe_account,
   };
 }
 
@@ -1909,6 +1911,7 @@ type HoldRpcRow = {
   currency: string;
   checkout_url: string;
   stripe_session_id?: string;
+  stripe_account?: string | null;
   due_at: string;
   channel: string | null;
   contact_phone: string | null;
@@ -1957,7 +1960,7 @@ export async function claimExpiredHolds(limit = 20): Promise<ClaimedHold[]> {
   const supabase = getSupabase();
   const { data, error } = await supabase.rpc('app_claim_expired_holds', { p_limit: limit });
   fail('claimExpiredHolds', error);
-  return ((data ?? []) as HoldRpcRow[]).map((r) => ({ ...mapActionableHold(r), stripeSessionId: r.stripe_session_id ?? '' }));
+  return ((data ?? []) as HoldRpcRow[]).map((r) => ({ ...mapActionableHold(r), stripeSessionId: r.stripe_session_id ?? '', stripeAccount: r.stripe_account ?? null }));
 }
 
 /**

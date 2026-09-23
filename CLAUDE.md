@@ -294,7 +294,13 @@ supabase/
                                #      del tool a la respuesta [2026-09-22]. booking_holds.short_code + app_create_booking_hold gana
                                #      p_short_code DEFAULT NULL (el overload de 11 args se DROPEA: convivir sería ambiguo) +
                                #      app_move_hold gana p_due_at (un reagendado a una cita más próxima acerca el plazo). Y el
-                               #      plazo es min(now + hold_hours, cita − deadline_margin_hours): antes vencía DESPUÉS de la cita)
+                               #      plazo es min(now + hold_hours, cita − deadline_margin_hours): antes vencía DESPUÉS de la cita),
+                               # 0064 hold_stripe_account (Stripe Connect: un tenant al que le pagan DIRECTO —Heriberto— es una cuenta
+                               #      conectada Standard de la MISMA cuenta plataforma; booking_payment.stripe_account = acct_… → cargo
+                               #      directo con header Stripe-Account y la misma key, platform_fee opcional = application_fee. La fila
+                               #      guarda stripe_account al crear la sesión (expirarla después necesita el mismo header). Eventos de
+                               #      cuentas conectadas = segundo endpoint, secret STRIPE_CONNECT_WEBHOOK_SECRET(_TEST_MODE); sin él,
+                               #      401 y log. app_claim_expired_holds devuelve stripe_account. Ver business-logic §5e, onboarding §9)
   clients.sql, seed-tenants.sql# seeds (run by `supabase db reset` per config.toml)
 sites/                         # client marketing sites: static HTML, no build step, no deps
   _template/                   # starting point for a new client
@@ -586,7 +592,11 @@ cualquier Chrome headless recibe SIGTERM a los ~2 s (ver cabecera de `render-bat
   A PAID cita is never cancelled by the bot (`cancelAppointment` refuses; the model offers to
   move it), and the first slot offer says so plus the amount — no surprises (Leo, 2026-09-20).
   Secrets: `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET`, platform-wide, both or off; `STRIPE_MODE=test`
-  switches to the `*_TEST_MODE` pair (test cards on prod, no real charge — delete the flag to go live). The Checkout
+  switches to the `*_TEST_MODE` pair (test cards on prod, no real charge — delete the flag to go live).
+  **Connect (0064):** a tenant paid directly sets `booking_payment.stripe_account` (its Standard connected
+  account) → direct charges with `Stripe-Account`, optional `platform_fee`; its webhooks are signed by
+  `STRIPE_CONNECT_WEBHOOK_SECRET(_TEST_MODE)` (second endpoint, same URL). The lead's link is the short
+  `<WORKER_URL>/p/<code>` (0063), never Stripe's URL. The Checkout
   success/cancel pages are `/pay/ok` and `/pay/cancel` on the Worker. See docs/business-logic.md §5e,
   setup in docs/onboarding.md §9.
 - Marketing opt-out (0051) — a date, not a switch. The `marketing-opt-out` tag stamps
