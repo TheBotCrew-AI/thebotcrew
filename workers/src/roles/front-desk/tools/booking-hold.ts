@@ -8,27 +8,29 @@
  * The webhook (`worker/stripe-webhook-handler.ts`) confirms on payment; the cron
  * (`worker/hold-expiry-runner.ts`) releases the slot when the deadline passes.
  *
+ * The link the model relays is the SHORT one (0063, `payments/pay-link.ts`): Stripe's
+ * URL stays in the row and the Worker redirects to it. The deadline is the sooner of
+ * now + holdHours and cita − deadlineMarginHours: a payment window that closes after
+ * the cita is no window at all.
+ *
  * Failure direction, deliberately: a hold WITHOUT a payment link is a free cita,
  * which is exactly what the offer forbids — so when Stripe or the hold insert
  * fails, the caller cancels the booking it just made and tells the model to retry.
  */
 
-import type { FrontDeskConfig } from '../config.js';
+import type { BookingPaymentConfig, FrontDeskConfig } from '../config.js';
 import { holdAmountCents } from '../config.js';
 import type { TenantContext, TurnContext } from '../../../core/types.js';
 import type { GhlClient } from '../../../ghl/client.js';
 import { PAYMENT_PENDING_TAG, PAYMENT_REVIEW_TAG } from '../../../ghl/tags.js';
 import { createBookingHold, finishHold, getBookingHold, logBotEvent } from '../../../db/queries.js';
-import { createCheckoutSession, expireCheckoutSession, getStripeEnv } from '../../../payments/stripe.js';
+import { CHECKOUT_MIN_EXPIRY_MS, createCheckoutSession, expireCheckoutSession, getStripeEnv } from '../../../payments/stripe.js';
+import { newShortCode, payLinkUrl, paymentLinkFor, workerBaseUrl } from '../../../payments/pay-link.js';
 import { slotLabel } from './slot-label.js';
 
-const HOUR_MS = 60 * 60 * 1000;
-/** Where Checkout sends the lead afterwards — a thank-you page on the Worker, then back to WhatsApp. */
-const DEFAULT_WORKER_URL = 'https://thebotcrew-agents.floral-credit-be7e.workers.dev';
+export { workerBaseUrl };
 
-export function workerBaseUrl(): string {
-  return (process.env.WORKER_URL?.trim() || DEFAULT_WORKER_URL).replace(/\/+$/, '');
-}
+const HOUR_MS = 60 * 60 * 1000;
 
 /** "$500 MXN" / "$1,250.50 MXN" — the amount as the model should say it. */
 export function formatHoldAmount(amountCents: number, currency: string): string {
@@ -41,8 +43,34 @@ export function formatHoldAmount(amountCents: number, currency: string): string 
   return `$${n} ${code}`;
 }
 
+/**
+ * When the payment must be in, in ms: the sooner of now + holdHours and cita − margin.
+ * null when that instant is closer than Stripe's 30-minute session minimum — the cita is
+ * too soon to be paid for, and the caller refuses BEFORE booking rather than book + undo.
+ */
+export function holdDeadlineMs(now: number, appointmentStartMs: number, payment: Pick<BookingPaymentConfig, 'holdHours' | 'deadlineMarginHours'>): number | null {
+  const byHold = now + payment.holdHours * HOUR_MS;
+  const byCita = appointmentStartMs - payment.deadlineMarginHours * HOUR_MS;
+  const deadline = Math.min(byHold, byCita);
+  return deadline - now < CHECKOUT_MIN_EXPIRY_MS ? null : deadline;
+}
+
+/** The earliest cita start a hold can be opened for: now + margin + Stripe's minimum. */
+export function earliestPayableStartMs(now: number, payment: Pick<BookingPaymentConfig, 'deadlineMarginHours'>): number {
+  return now + payment.deadlineMarginHours * HOUR_MS + CHECKOUT_MIN_EXPIRY_MS;
+}
+
+/** "2 h" / "30 min" / "1.5 h" — the notice a payable cita needs, as the tool says it. */
+export function payableNoticeLabel(payment: Pick<BookingPaymentConfig, 'deadlineMarginHours'>): string {
+  const minutes = Math.round(payment.deadlineMarginHours * 60 + CHECKOUT_MIN_EXPIRY_MS / 60_000);
+  if (minutes < 60) return `${minutes} min`;
+  const hours = minutes / 60;
+  return `${Number.isInteger(hours) ? hours : hours.toFixed(1)} h`;
+}
+
 export interface HoldOpened {
-  checkoutUrl: string;
+  /** The SHORT link the lead pays at — never Stripe's URL. */
+  paymentUrl: string;
   dueAt: string;
   amountLabel: string;
   dueLabel: string;
@@ -76,8 +104,11 @@ export async function openBookingHold(args: {
   if (!amountCents) return { error: 'no_amount' };
 
   const now = args.now ?? Date.now();
-  const dueAt = new Date(now + payment.holdHours * HOUR_MS);
+  const deadlineMs = holdDeadlineMs(now, Date.parse(args.startTime), payment);
+  if (deadlineMs == null) return { error: 'too_soon_to_pay' };
+  const dueAt = new Date(deadlineMs);
   const base = workerBaseUrl();
+  const shortCode = newShortCode();
 
   let session: { id: string; url: string };
   try {
@@ -122,6 +153,7 @@ export async function openBookingHold(args: {
       p_stripe_session_id: session.id,
       p_checkout_url: session.url,
       p_due_at: dueAt.toISOString(),
+      p_short_code: shortCode,
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -147,13 +179,14 @@ export async function openBookingHold(args: {
   await logBotEvent(tenant.clientId, turn.ghlConversationId, 'hold_created', {
     ghlAppointmentId: args.ghlAppointmentId,
     stripeSessionId: session.id,
+    shortCode,
     amountCents,
     currency: payment.currency,
     dueAt: dueAt.toISOString(),
   });
 
   return {
-    checkoutUrl: session.url,
+    paymentUrl: payLinkUrl(base, shortCode),
     dueAt: dueAt.toISOString(),
     amountLabel: formatHoldAmount(amountCents, payment.currency),
     dueLabel: slotLabel(dueAt.toISOString(), args.frameTz, config.timezone),
@@ -215,9 +248,14 @@ export async function releaseBookingHold(args: {
   return 'released';
 }
 
-/** One line the model can relay about a hold's payment state, or '' when there is no hold. */
+/**
+ * What the model relays about a hold's payment state, or '' when there is no hold.
+ * The link, when there is one, is the LAST thing in the string and sits alone on its
+ * own line: the 2026-09-22 reply pasted the link and then everything that followed it
+ * in the note, verbatim — so nothing follows it.
+ */
 export function describeHoldForModel(
-  hold: { status: string; checkoutUrl: string; amountCents: number; currency: string; dueAt: string } | null,
+  hold: { status: string; checkoutUrl: string; shortCode?: string | null; amountCents: number; currency: string; dueAt: string } | null,
   frameTz: string,
   tenantTz: string,
 ): string {
@@ -228,8 +266,10 @@ export function describeHoldForModel(
     case 'expiring':
       return (
         ` La cita está APARTADA, pendiente de pago: el lead debe pagar ${amount} antes del ` +
-        `${slotLabel(hold.dueAt, frameTz, tenantTz)} en esta liga: ${hold.checkoutUrl} ` +
-        'Si dice que ya pagó y aquí sigue pendiente, dile que en cuanto se refleje le llega la confirmación; no la des por pagada tú.'
+        `${slotLabel(hold.dueAt, frameTz, tenantTz)}. ` +
+        'Si dice que ya pagó y aquí sigue pendiente, dile que en cuanto se refleje le llega la confirmación; no la des por pagada tú. ' +
+        'Si dice que la liga no abre, que no le llegó o te la pide de nuevo, mándasela otra vez tal cual, sola al final de tu mensaje y en su propio renglón. ' +
+        `La liga de pago es la que sigue y nada más:\n${paymentLinkFor(hold)}`
       );
     case 'paid':
       return ' La cita está PAGADA y confirmada. Una cita pagada no se cancela: si necesita cambiarla, se reagenda.';

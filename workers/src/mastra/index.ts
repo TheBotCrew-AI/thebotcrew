@@ -22,6 +22,7 @@ import { runPendingCapiEvents } from '../worker/capi-runner.js';
 import { runInfoGapExtractions, runPendingInfoAlerts } from '../worker/info-gap-runner.js';
 import { runExpiredHolds } from '../worker/hold-expiry-runner.js';
 import { handleStripeWebhook } from '../worker/stripe-webhook-handler.js';
+import { resolvePayLink } from '../worker/pay-link-handler.js';
 import { getStripeEnv } from '../payments/stripe.js';
 import { renderReportPage } from '../worker/info-gaps/report-html.js';
 import { exchangeCode, getInstallUrl } from '../ghl/oauth.js';
@@ -170,6 +171,18 @@ export const mastra = new Mastra({
           // test-mode endpoint's). Undefined = fails closed inside the handler.
           const result = await handleStripeWebhook(raw, c.req.header('stripe-signature') ?? null, getStripeEnv()?.webhookSecret);
           return c.json(result.body, result.status);
+        },
+      }),
+
+      // The short payment link (0063): redirects to Stripe while the hold is pending, tells
+      // the lead what happened once it isn't. Never cached — the answer changes with the hold.
+      registerApiRoute('/p/:code', {
+        method: 'GET',
+        handler: async (c) => {
+          const out = await resolvePayLink(c.req.param('code'));
+          c.header('Cache-Control', 'no-store');
+          if (out.kind === 'redirect') return c.redirect(out.location, out.status);
+          return c.html(out.html, out.status);
         },
       }),
 

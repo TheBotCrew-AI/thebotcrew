@@ -15,7 +15,10 @@ import { createCheckoutSession, expireCheckoutSession, getStripeEnv } from '../.
 import { PAYMENT_PENDING_TAG, PAYMENT_REVIEW_TAG } from '../../../ghl/tags.js';
 import type { GhlClient } from '../../../ghl/client.js';
 import { parseFrontDeskConfig } from '../config.js';
-import { describeHoldForModel, formatHoldAmount, openBookingHold, releaseBookingHold, workerBaseUrl } from './booking-hold.js';
+import { describeHoldForModel, earliestPayableStartMs, formatHoldAmount, holdDeadlineMs, openBookingHold, payableNoticeLabel, releaseBookingHold, workerBaseUrl } from './booking-hold.js';
+import { SHORT_CODE_ALPHABET } from '../../../payments/pay-link.js';
+
+const SHORT_LINK = new RegExp(`^https://thebotcrew-agents\\.floral-credit-be7e\\.workers\\.dev/p/[${SHORT_CODE_ALPHABET}]{10}$`);
 
 const tenant = { tenantId: 't1', clientId: 'client1', ghlLocationId: 'loc1' } as unknown as TenantContext;
 const turn = { ghlContactId: 'c1', ghlConversationId: 'conv1', channel: 'whatsapp' } as TurnContext;
@@ -82,7 +85,8 @@ describe('openBookingHold', () => {
 
   it('creates a 24h card session for the tenant amount, records the hold, tags pago-pendiente, returns link + labels', async () => {
     const res = await open();
-    expect(res).toMatchObject({ checkoutUrl: 'https://checkout.stripe.com/c/pay/cs_1', amountLabel: '$500 MXN' });
+    // The model gets the SHORT link, never Stripe's URL (0063).
+    expect(res).toMatchObject({ paymentUrl: expect.stringMatching(SHORT_LINK), amountLabel: '$500 MXN' });
     expect('dueLabel' in res && res.dueLabel).toMatch(/lunes, 21 de septiembre/);
 
     expect(createCheckoutSession).toHaveBeenCalledWith(
@@ -107,8 +111,12 @@ describe('openBookingHold', () => {
         p_stripe_session_id: 'cs_1',
         p_checkout_url: 'https://checkout.stripe.com/c/pay/cs_1',
         p_due_at: new Date(NOW + 24 * 3600_000).toISOString(),
+        p_short_code: expect.stringMatching(new RegExp(`^[${SHORT_CODE_ALPHABET}]{10}$`)),
       }),
     );
+    // The code in the row is the one in the link.
+    const code = vi.mocked(q.createBookingHold).mock.calls[0]![0].p_short_code;
+    expect('paymentUrl' in res && res.paymentUrl).toBe(`https://thebotcrew-agents.floral-credit-be7e.workers.dev/p/${code}`);
     expect(ghl.addContactTags).toHaveBeenCalledWith('c1', [PAYMENT_PENDING_TAG]);
     expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'hold_created', expect.objectContaining({ amountCents: 50000 }));
   });
@@ -156,8 +164,55 @@ describe('openBookingHold', () => {
     ghl.addContactTags.mockRejectedValue(new Error('ghl down'));
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const res = await open();
-    expect('checkoutUrl' in res).toBe(true);
+    expect('paymentUrl' in res).toBe(true);
     spy.mockRestore();
+  });
+
+  // 2026-09-22, live: a 6:30 a.m. cita got "paga antes de las 6:46 p.m." — a deadline AFTER
+  // the cita. The deadline is the sooner of now + holdHours and cita − margin (default 2 h).
+  it('a cita sooner than holdHours pulls the deadline to cita − margin (Stripe session included)', async () => {
+    const soon = new Date(NOW + 5 * 3600_000).toISOString(); // cita in 5 h
+    const res = await openBookingHold({ tenant, turn, config: config(), ghl, ghlAppointmentId: 'appt1', serviceName: 'Consulta', startTime: soon, frameTz: 'America/Mexico_City', now: NOW });
+    expect('dueAt' in res && res.dueAt).toBe(new Date(NOW + 3 * 3600_000).toISOString());
+    const call = vi.mocked(createCheckoutSession).mock.calls[0]![1];
+    expect(call.expiresAt.getTime()).toBe(NOW + 3 * 3600_000);
+    expect(q.createBookingHold).toHaveBeenCalledWith(expect.objectContaining({ p_due_at: new Date(NOW + 3 * 3600_000).toISOString() }));
+  });
+
+  it('a cita too close to pay for → too_soon_to_pay, before Stripe is even called', async () => {
+    const soon = new Date(NOW + 2 * 3600_000).toISOString(); // cita in 2 h: deadline would be now
+    const res = await openBookingHold({ tenant, turn, config: config(), ghl, ghlAppointmentId: 'appt1', serviceName: 'Consulta', startTime: soon, frameTz: 'America/Mexico_City', now: NOW });
+    expect(res).toEqual({ error: 'too_soon_to_pay' });
+    expect(createCheckoutSession).not.toHaveBeenCalled();
+    expect(q.createBookingHold).not.toHaveBeenCalled();
+  });
+});
+
+describe('holdDeadlineMs / earliestPayableStartMs / payableNoticeLabel', () => {
+  const H = 3600_000;
+  const pay = { holdHours: 24, deadlineMarginHours: 2 };
+  it('far cita → now + holdHours', () => {
+    expect(holdDeadlineMs(NOW, NOW + 3 * 24 * H, pay)).toBe(NOW + 24 * H);
+  });
+  it('near cita → cita − margin', () => {
+    expect(holdDeadlineMs(NOW, NOW + 6 * H, pay)).toBe(NOW + 4 * H);
+  });
+  it("closer than Stripe's 30-minute minimum → null", () => {
+    expect(holdDeadlineMs(NOW, NOW + 2 * H + 29 * 60_000, pay)).toBeNull();
+    expect(holdDeadlineMs(NOW, NOW + 2 * H + 30 * 60_000, pay)).toBe(NOW + 30 * 60_000);
+  });
+  it('margin 0 → the cita itself is the deadline', () => {
+    expect(holdDeadlineMs(NOW, NOW + 1 * H, { holdHours: 24, deadlineMarginHours: 0 })).toBe(NOW + 1 * H);
+  });
+  it('earliestPayableStartMs = now + margin + 30 min; the label says it in hours or minutes', () => {
+    expect(earliestPayableStartMs(NOW, pay)).toBe(NOW + 2 * H + 30 * 60_000);
+    expect(payableNoticeLabel(pay)).toBe('2.5 h');
+    expect(payableNoticeLabel({ deadlineMarginHours: 0 })).toBe('30 min');
+    expect(payableNoticeLabel({ deadlineMarginHours: 1.5 })).toBe('2 h');
+  });
+  it('the config default is a 2 h margin; deadline_margin_hours overrides it', () => {
+    expect(config().bookingPayment?.deadlineMarginHours).toBe(2);
+    expect(config({ amount: 500, deadline_margin_hours: 0.5 }).bookingPayment?.deadlineMarginHours).toBe(0.5);
   });
 });
 
@@ -208,7 +263,7 @@ describe('releaseBookingHold', () => {
 
 describe('describeHoldForModel', () => {
   const tz = 'America/Mexico_City';
-  const base = { checkoutUrl: 'https://pay/x', amountCents: 50000, currency: 'mxn', dueAt: '2026-09-21T18:00:00Z' };
+  const base = { checkoutUrl: 'https://pay/x', shortCode: null, amountCents: 50000, currency: 'mxn', dueAt: '2026-09-21T18:00:00Z' };
   it('pending → link, amount, deadline, and the "don\'t assume paid" rule', () => {
     const s = describeHoldForModel({ ...base, status: 'pending' }, tz, tz);
     expect(s).toContain('APARTADA');
@@ -216,6 +271,16 @@ describe('describeHoldForModel', () => {
     expect(s).toContain('https://pay/x');
     expect(s).toMatch(/lunes, 21 de septiembre/);
     expect(s).toContain('no la des por pagada');
+  });
+  // 2026-09-22: the model pasted the link and then the words that followed it in the note.
+  // So the link is the LAST thing, alone on its own line — and the short one when there is a code.
+  it('pending → the link is the last thing in the note, on its own line; short when the hold has a code', () => {
+    const legacy = describeHoldForModel({ ...base, status: 'pending' }, tz, tz);
+    expect(legacy.endsWith('\nhttps://pay/x')).toBe(true);
+    const short = describeHoldForModel({ ...base, shortCode: 'abcdefghjk', status: 'pending' }, tz, tz);
+    expect(short.endsWith('\nhttps://thebotcrew-agents.floral-credit-be7e.workers.dev/p/abcdefghjk')).toBe(true);
+    expect(short).not.toContain('https://pay/x');
+    expect(short).toContain('no abre');
   });
   it('paid → confirmed; paid_late → under review; expired → released; none → empty', () => {
     expect(describeHoldForModel({ ...base, status: 'paid' }, tz, tz)).toContain('PAGADA');

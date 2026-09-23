@@ -153,9 +153,9 @@ workers/                       # Mastra + Cloudflare Worker package (@thebotcrew
       reactivation/            # text-only follow-up/reactivation agent (no tools)
     ghl/                       # webhook parse/verify, OAuth, tags + transport-only API client (live)
     meta/                      # Meta Conversions API (0048/0056): capi-config (pure parse/payload, per-channel identity, lead_replies_required reply-threshold) + capi (enqueue + Graph send)
-    payments/                  # Stripe (0062): stripe.ts (fetch client: Checkout Session create/expire + webhook signature, ONE platform account) + hold-messages (LLM-free lead texts)
+    payments/                  # Stripe (0062): stripe.ts (fetch client: Checkout Session create/expire + webhook signature, ONE platform account) + hold-messages (LLM-free lead texts) + pay-link (0063: the short code, <WORKER_URL>/p/<code>, and fixPayLinks — the deterministic repair of a link the model padded)
     db/                        # service-role Supabase client, queries (config read + RPC writes)
-    worker/                    # webhook-handler (inbound) + conversation-do (per-conversation Durable Object: durable-alarm debounce + serialized turn) + outbound-handler (human takeover) + tag-handler (bot-off) + delivery-retry + followup-runner + capi-runner (Meta CAPI queue drain) + info-gap-runner + info-gaps/ (0054: what the bot couldn't answer — extraction queue, aggregate, report; pending_info escalation) + stripe-webhook-handler + hold-expiry-runner + system-message (0062 paid confirmation: settle on payment, release on the 5-min cron, one fixed message outside a turn)
+    worker/                    # webhook-handler (inbound) + conversation-do (per-conversation Durable Object: durable-alarm debounce + serialized turn) + outbound-handler (human takeover) + tag-handler (bot-off) + delivery-retry + followup-runner + capi-runner (Meta CAPI queue drain) + info-gap-runner + info-gaps/ (0054: what the bot couldn't answer — extraction queue, aggregate, report; pending_info escalation) + stripe-webhook-handler + hold-expiry-runner + system-message (0062 paid confirmation: settle on payment, release on the 5-min cron, one fixed message outside a turn) + pay-link-handler (0063: GET /p/:code → 302 to Stripe while pending, "ya está pagado" / "venció" pages after)
   scripts/simulate-webhook.mjs # local dev: fire a fake GHL webhook
   scripts/demo-take.mjs        # arma/cierra una toma del demo de bótox para grabar video (business-logic §5b)
   scripts/battery.mjs          # pnpm battery <slug>: corre la batería de conversaciones de muestra de un tenant
@@ -288,7 +288,13 @@ supabase/
                                #      el cron de 5 min la cancela al vencer hold_hours. Tabla booking_holds + 5 RPCs con las
                                #      transiciones atómicas (pending→paid | expiring→expired | paid_late = pagó después de que se
                                #      liberó el lugar → tag pago-revisar, lo decide una persona) + vista paid_bookings_monthly.
-                               #      Sin liga no hay cita: si Stripe falla, bookAppointment deshace la reserva. Ver business-logic §5e)
+                               #      Sin liga no hay cita: si Stripe falla, bookAppointment deshace la reserva. Ver business-logic §5e),
+                               # 0063 hold_short_code (la liga que recibe el lead es <WORKER_URL>/p/<código de 10>, nunca la URL
+                               #      de Stripe: el modelo copió a mano 300 caracteres y duplicó el fragmento, y arrastró la nota
+                               #      del tool a la respuesta [2026-09-22]. booking_holds.short_code + app_create_booking_hold gana
+                               #      p_short_code DEFAULT NULL (el overload de 11 args se DROPEA: convivir sería ambiguo) +
+                               #      app_move_hold gana p_due_at (un reagendado a una cita más próxima acerca el plazo). Y el
+                               #      plazo es min(now + hold_hours, cita − deadline_margin_hours): antes vencía DESPUÉS de la cita)
   clients.sql, seed-tenants.sql# seeds (run by `supabase db reset` per config.toml)
 sites/                         # client marketing sites: static HTML, no build step, no deps
   _template/                   # starting point for a new client

@@ -414,9 +414,11 @@ export interface BookingHoldRow {
   status: BookingHoldStatus;
   dueAt: string;
   paidAt: string | null;
+  /** 0063: the code behind the short link; null on a hold created before it (the lead has Stripe's URL). */
+  shortCode: string | null;
 }
 
-/** Params for the app_create_booking_hold RPC (0062). */
+/** Params for the app_create_booking_hold RPC (0062, `p_short_code` since 0063). */
 export interface CreateBookingHoldParams {
   p_client_id: string;
   p_ghl_conversation_id: string;
@@ -429,6 +431,7 @@ export interface CreateBookingHoldParams {
   p_stripe_session_id: string;
   p_checkout_url: string;
   p_due_at: string;
+  p_short_code: string;
 }
 
 /**

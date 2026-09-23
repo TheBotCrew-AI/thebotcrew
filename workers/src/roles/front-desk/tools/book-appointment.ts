@@ -13,7 +13,7 @@ import { getActiveDemoSession, logAppointment, logBotEvent, logEvent, resetReact
 import { queueCapiEvent } from '../../../meta/capi.js';
 import { resolveAgentContext } from './agent-context.js';
 import { buildAppointmentTitle } from './appointment-title.js';
-import { openBookingHold, type HoldOpened } from './booking-hold.js';
+import { earliestPayableStartMs, openBookingHold, payableNoticeLabel, type HoldOpened } from './booking-hold.js';
 import { bookingQueryWindow, resolveBookableSlot } from './booking-time.js';
 import { earliestBookableMs } from './booking-window.js';
 import { simSlotLabel, simulatedSlots } from './demo-sim.js';
@@ -59,7 +59,7 @@ export const bookAppointmentTool = createTool({
   outputSchema: z.object({
     booked: z.boolean(),
     ghlAppointmentId: z.string().optional(),
-    /** Paid confirmation (0062): the Stripe link the lead must pay, and by when. */
+    /** Paid confirmation (0062): the SHORT payment link (0063) the lead must pay, and by when. */
     paymentUrl: z.string().optional(),
     paymentAmount: z.string().optional(),
     paymentDueLabel: z.string().optional(),
@@ -166,6 +166,26 @@ export const bookAppointmentTool = createTool({
         message:
           `Ese horario queda antes del aviso mínimo (${config.bookingMinNoticeDays} día(s) de anticipación), así que para hoy ya no hay espacio. ` +
           'Díselo al lead con calidez y en positivo, consulta getAvailability y ofrécele un horario a partir del primer día disponible.',
+      };
+    }
+
+    // Paid confirmation (0063): a cita the lead can't pay for in time is refused HERE, before
+    // the GHL booking — the alternative (book, fail to open the hold, undo) leaves a cancelled
+    // event in the calendar and a "no pude" in the chat. Mirrors the floor in getAvailability.
+    if (config.bookingPayment && Date.parse(canonicalStart) < earliestPayableStartMs(now, config.bookingPayment)) {
+      const notice = payableNoticeLabel(config.bookingPayment);
+      await logBotEvent(tenant.clientId, turn.ghlConversationId, 'booking_failed', {
+        serviceName,
+        calendarId,
+        startTime: canonicalStart,
+        reason: 'too_soon_to_pay',
+        deadlineMarginHours: config.bookingPayment.deadlineMarginHours,
+      });
+      return {
+        booked: false,
+        message:
+          `Ese horario ya está demasiado cerca para alcanzar a pagar el apartado (se necesitan al menos ${notice} de anticipación). ` +
+          'Díselo al lead con calidez y en positivo, consulta getAvailability y ofrécele el siguiente horario que sí alcance.',
       };
     }
 
@@ -348,16 +368,19 @@ export const bookAppointmentTool = createTool({
     // in another zone, re-convert) the instant itself — the one thing it must never do.
     const label = slotLabel(canonicalStart, frameTz, config.timezone);
     if (hold) {
+      // The link is the LAST thing in the note, alone on its own line: on 2026-09-22 the
+      // model pasted the link and then the instruction that followed it, word for word.
       return {
         booked: true,
         ghlAppointmentId,
-        paymentUrl: hold.checkoutUrl,
+        paymentUrl: hold.paymentUrl,
         paymentAmount: hold.amountLabel,
         paymentDueLabel: hold.dueLabel,
         message:
           `Cita APARTADA (todavía NO confirmada): ${serviceName} el ${label}. Se confirma cuando el lead pague ${hold.amountLabel} ` +
-          `antes del ${hold.dueLabel} en esta liga: ${hold.checkoutUrl} ` +
-          'Mándale el día y la hora, la liga EXACTA (pégala tal cual) y el plazo. No digas que la cita está confirmada.',
+          `antes del ${hold.dueLabel}. Tu mensaje lleva el día y la hora, el monto, el plazo y la liga de pago; di que el lugar queda apartado, ` +
+          'no que la cita está confirmada. La liga va sola al final de tu mensaje, en su propio renglón, sin cambiarle ni agregarle nada. ' +
+          `La liga de pago es la que sigue y nada más:\n${hold.paymentUrl}`,
       };
     }
     return {

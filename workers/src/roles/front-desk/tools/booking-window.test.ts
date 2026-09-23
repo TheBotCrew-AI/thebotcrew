@@ -16,6 +16,8 @@ describe('resolveBookingWindow', () => {
       tooSoon: false,
       minMs: null,
       liftedFrom: false,
+      tooSoonToPay: false,
+      liftedForPay: false,
     });
   });
 
@@ -145,6 +147,22 @@ describe('resolveBookingWindow — minimum notice (0059)', () => {
     expect(w.fromMs).toBe(TOMORROW_MIDNIGHT);
     expect(w.toMs).toBe(NOW + 3 * DAY);
     expect(w.clamped).toBe(true);
+  });
+
+  // Paid confirmation (0063): the pay floor is an instant (now + margin + Stripe's minimum),
+  // composed with the calendar-day notice — whichever is later wins.
+  it('pay floor: lifts `from` to it and flags liftedForPay; a range ending before it is tooSoonToPay', () => {
+    const floor = NOW + 2.5 * 3600_000;
+    const w = resolveBookingWindow(NOW, undefined, undefined, null, CDMX, null, floor);
+    expect(w.fromMs).toBe(floor);
+    expect(w.liftedForPay).toBe(true);
+    expect(w.toMs).toBe(floor + SEVEN_DAYS_MS);
+    const soon = resolveBookingWindow(NOW, undefined, new Date(NOW + 3600_000).toISOString(), null, CDMX, null, floor);
+    expect(soon.tooSoonToPay).toBe(true);
+    // The day floor is later than the pay floor → the day floor wins and liftedForPay stays false.
+    const both = resolveBookingWindow(NOW, undefined, undefined, null, CDMX, 1, floor);
+    expect(both.fromMs).toBe(TOMORROW_MIDNIGHT);
+    expect(both.liftedForPay).toBe(false);
   });
 
   it('no minimum notice → same behaviour as before (from = now)', () => {

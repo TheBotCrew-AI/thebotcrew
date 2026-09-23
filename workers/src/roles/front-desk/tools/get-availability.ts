@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { GhlClient } from '../../../ghl/client.js';
 import { getActiveDemoSession, logBotEvent } from '../../../db/queries.js';
 import { resolveAgentContext } from './agent-context.js';
+import { earliestPayableStartMs, payableNoticeLabel } from './booking-hold.js';
 import { resolveBookingWindow } from './booking-window.js';
 import { simulatedSlots } from './demo-sim.js';
 import { closedRange, dayListEs, openDaysEs } from './open-days.js';
@@ -81,8 +82,30 @@ export const getAvailabilityTool = createTool({
     // tomorrow is queried, so a same-day slot is never on the board. The day boundary is the
     // TENANT's calendar day — it is the business that opens tomorrow, not the lead.
     const minNotice = config.bookingMinNoticeDays ?? null;
+    // Paid confirmation (0063): a slot the lead couldn't pay for before the cita is never
+    // on the board — offering it and then refusing it in bookAppointment is the bad turn.
+    const payFloorMs = config.bookingPayment ? earliestPayableStartMs(Date.now(), config.bookingPayment) : null;
     // The model types fromDate/toDate in the clock it reads, so they're interpreted in frameTz.
-    const window = resolveBookingWindow(Date.now(), fromDate, toDate, horizon, frameTz, minNotice);
+    const window = resolveBookingWindow(Date.now(), fromDate, toDate, horizon, frameTz, minNotice, payFloorMs);
+
+    if (window.tooSoonToPay && payFloorMs != null && config.bookingPayment) {
+      const notice = payableNoticeLabel(config.bookingPayment);
+      await logBotEvent(tenant.clientId, turn.ghlConversationId, 'availability_checked', {
+        serviceName,
+        calendarId,
+        from: new Date(window.fromMs).toISOString(),
+        to: new Date(window.toMs).toISOString(),
+        outcome: 'too_soon_to_pay',
+        deadlineMarginHours: config.bookingPayment.deadlineMarginHours,
+      });
+      return {
+        slots: [],
+        note:
+          `Ese rango ya está demasiado cerca para alcanzar a pagar el apartado: se necesitan al menos ${notice} de anticipación, ` +
+          `así que los horarios empiezan a partir del ${label(new Date(payFloorMs).toISOString())}. ` +
+          'Díselo al lead en positivo y con calidez —que tan pronto ya no alcanza a apartarse, pero un poco más tarde sí— y consulta de nuevo desde esa hora para ofrecerle horarios concretos.',
+      };
+    }
 
     if (window.tooSoon && window.minMs != null) {
       const minLabel = label(new Date(window.minMs).toISOString());
@@ -156,6 +179,13 @@ export const getAvailabilityTool = createTool({
       window.liftedFrom && window.minMs != null
         ? ` IMPORTANTE: para hoy ya no hay espacio (las citas se abren con mínimo ${minNotice} día(s) de anticipación): estos horarios empiezan el ${label(new Date(window.minMs).toISOString())}. Si el lead pidió hoy, díselo en positivo y con calidez —para hoy ya no te queda espacio, pero sí le tienes estos— y ofrécele ÚNICAMENTE estos.`
         : '';
+    // Only when the model ASKED for a start inside the floor: the default range (from = now)
+    // is lifted by a couple of hours on every call, and saying so each time reads as "the
+    // slots you have can't be paid for" and derails the booking (eval, 2026-09-22: 0/3).
+    const payNote =
+      window.liftedForPay && fromDate && payFloorMs != null && config.bookingPayment
+        ? ` IMPORTANTE: los horarios más próximos ya no alcanzan a pagarse a tiempo (el apartado necesita al menos ${payableNoticeLabel(config.bookingPayment)} de anticipación): estos empiezan a partir del ${label(new Date(payFloorMs).toISOString())}. Si el lead pidió algo más pronto, díselo en positivo y ofrécele ÚNICAMENTE estos.`
+        : '';
 
     const from = new Date(window.fromMs).toISOString();
     const to = new Date(window.toMs).toISOString();
@@ -180,7 +210,7 @@ export const getAvailabilityTool = createTool({
           : 'Ofrece estos horarios al lead usando EXACTAMENTE el texto del campo "label" (ya trae el día de la semana correcto). No recalcules ni traduzcas fechas.';
       return {
         slots: labeled,
-        note: baseNote + (horizonNote ?? '') + noticeNote,
+        note: baseNote + (horizonNote ?? '') + noticeNote + payNote,
       };
     } catch (err) {
       await logBotEvent(tenant.clientId, turn.ghlConversationId, 'availability_checked', {

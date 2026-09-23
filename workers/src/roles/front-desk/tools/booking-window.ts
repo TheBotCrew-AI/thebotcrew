@@ -33,6 +33,10 @@ export interface BookingWindow {
   minMs: number | null;
   /** True when `from` was lifted up to the minimum notice. */
   liftedFrom: boolean;
+  /** Paid confirmation (0063): true when the whole range ends before a cita could still be paid for. */
+  tooSoonToPay: boolean;
+  /** True when `from` was lifted up to the pay floor (now + margin + Stripe's minimum). */
+  liftedForPay: boolean;
 }
 
 /**
@@ -63,6 +67,10 @@ export function resolveBookingWindow(
    *  this zone — reading it as UTC shifts the window and silently truncates real slots. */
   timeZone = 'UTC',
   minNoticeDays: number | null | undefined = null,
+  /** Paid confirmation (0063): the earliest cita start the lead could still pay for in time
+   *  (`earliestPayableStartMs`), or null when the tenant doesn't charge. An instant, not a
+   *  calendar day — it is Stripe's clock and the deadline margin, not the business's opening. */
+  payFloorMs: number | null = null,
 ): BookingWindow {
   let fromMs = requestedInstantMs(fromDate, timeZone, now);
   if (Number.isNaN(fromMs) || fromMs < now) fromMs = now;
@@ -79,11 +87,20 @@ export function resolveBookingWindow(
       liftedFrom = true;
     }
   }
+  let liftedForPay = false;
+  let tooSoonToPay = false;
+  if (payFloorMs != null) {
+    if (!Number.isNaN(toMs) && toMs <= payFloorMs) tooSoonToPay = true;
+    if (fromMs < payFloorMs) {
+      fromMs = payFloorMs;
+      liftedForPay = true;
+    }
+  }
   // The default range is counted from the (possibly lifted) start, so a minimum notice
   // never eats into the seven days of slots the model gets to choose from.
   if (Number.isNaN(toMs)) toMs = fromMs + SEVEN_DAYS_MS;
 
-  const base = { fromMs, toMs, tooSoon, minMs, liftedFrom };
+  const base = { fromMs, toMs, tooSoon, minMs, liftedFrom, tooSoonToPay, liftedForPay };
   if (horizonDays == null) {
     return { ...base, outOfHorizon: false, maxMs: null, clamped: false };
   }

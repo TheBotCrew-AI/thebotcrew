@@ -539,7 +539,13 @@ the free-install offer), two Worker secrets set **once**, then per tenant it is 
    ```
    `deposit_note` is what the bot says the deposit IS (credited to the service, a booking
    fee, …) — agree it with the client, it is a promise the clinic honours. Per-service
-   amounts: add `"deposit": 250` to the entry in `services`.
+   amounts: add `"deposit": 250` to the entry in `services`. `deadline_margin_hours`
+   (default 2, 0063) is how long before the cita the payment must be in: the deadline is the
+   sooner of `now + hold_hours` and `cita − margin`, and a slot closer than margin + 30 min is
+   neither offered nor booked (`too_soon_to_pay`).
+   **The lead never sees the Stripe URL**: the bot sends `<WORKER_URL>/p/<code>` (0063), which
+   the Worker redirects while the hold is pending. `WORKER_URL` is a plain Worker var; set it
+   when the payment domain exists (e.g. `https://pago.example.com`) and every new link uses it.
 3. **Verify.** Book through the bot: `bot_events` shows `hold_created`, the contact carries
    `pago-pendiente`, the GHL event is "No confirmada". Pay the link: `booking_paid`, the
    event flips to Confirmed, tag `cita-pagada`, the lead gets the fixed confirmation. Let one

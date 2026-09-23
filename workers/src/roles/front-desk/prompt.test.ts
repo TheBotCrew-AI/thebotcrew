@@ -814,8 +814,13 @@ describe('buildFrontDeskInstructions — apartado con pago (0062)', () => {
     expect(out).toContain('$500 MXN');
     expect(out).toContain('se descuenta de tu consulta');
     expect(out).toContain('NUNCA digas "confirmada"');
-    expect(out).toContain('liga de pago EXACTA');
+    // 0063: the link goes LAST, alone on its own line, and nothing invites a "paste".
+    expect(out).toContain('en su propio renglón');
+    expect(out).not.toMatch(/pégala tal cual/);
     expect(out).toContain('lookupAppointment');
+    // 2026-09-22: "no abre el link" is answered with the link again, never with a handoff.
+    expect(out).toContain('la liga no abre');
+    expect(out).toContain('NO cambies el estado');
     // The two rules Leo added after the first live test (2026-09-20): told BEFORE choosing,
     // and a paid cita moves but never cancels — without the word "devolución".
     expect(out).toContain('SIN SORPRESAS');

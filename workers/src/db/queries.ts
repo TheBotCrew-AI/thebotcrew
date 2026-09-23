@@ -1865,7 +1865,7 @@ export async function getBookingHold(ghlAppointmentId: string): Promise<BookingH
   const supabase = getSupabase();
   const { data, error } = await supabase
     .from('booking_holds')
-    .select('id, ghl_appointment_id, stripe_session_id, checkout_url, amount_cents, currency, status, due_at, paid_at')
+    .select('id, ghl_appointment_id, stripe_session_id, checkout_url, amount_cents, currency, status, due_at, paid_at, short_code')
     .eq('ghl_appointment_id', ghlAppointmentId)
     .maybeSingle();
   fail('getBookingHold', error);
@@ -1880,6 +1880,7 @@ export async function getBookingHold(ghlAppointmentId: string): Promise<BookingH
     status: BookingHoldRow['status'];
     due_at: string;
     paid_at: string | null;
+    short_code: string | null;
   };
   return {
     id: r.id,
@@ -1891,6 +1892,7 @@ export async function getBookingHold(ghlAppointmentId: string): Promise<BookingH
     status: r.status,
     dueAt: r.due_at,
     paidAt: r.paid_at,
+    shortCode: r.short_code,
   };
 }
 
@@ -1969,13 +1971,36 @@ export async function finishHold(holdId: string, status: 'expired' | 'cancelled'
   return data === true;
 }
 
-/** A reschedule keeps the hold; only the mirrored appointment time changes. false = no hold. */
-export async function moveHold(ghlAppointmentId: string, appointmentDatetime: string): Promise<boolean> {
+/**
+ * A reschedule keeps the hold; the mirrored appointment time changes and, when the new cita
+ * is sooner than the deadline allows, the deadline is pulled in too (0063). false = no hold.
+ */
+export async function moveHold(ghlAppointmentId: string, appointmentDatetime: string, dueAt?: string): Promise<boolean> {
   const supabase = getSupabase();
   const { data, error } = await supabase.rpc('app_move_hold', {
     p_ghl_appointment_id: ghlAppointmentId,
     p_appointment_datetime: appointmentDatetime,
+    ...(dueAt ? { p_due_at: dueAt } : {}),
   });
   fail('moveHold', error);
   return data === true;
+}
+
+/**
+ * The hold behind a short payment link (0063), for the redirect route: only what the
+ * route needs to decide between "go pay", "already paid" and "this expired".
+ */
+export async function getBookingHoldByShortCode(
+  shortCode: string,
+): Promise<{ status: BookingHoldRow['status']; checkoutUrl: string } | null> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from('booking_holds')
+    .select('status, checkout_url')
+    .eq('short_code', shortCode)
+    .maybeSingle();
+  fail('getBookingHoldByShortCode', error);
+  if (!data) return null;
+  const r = data as { status: BookingHoldRow['status']; checkout_url: string };
+  return { status: r.status, checkoutUrl: r.checkout_url };
 }

@@ -75,6 +75,7 @@ import { interestPromptAddendum, matchInterest, serviceNames } from '../core/int
 import type { GhlInboundWebhook, InboundAttachment, ParsedInbound } from '../ghl/types.js';
 import { DEFAULT_MODEL, DEFAULT_PROVIDER, FRONT_DESK_ROLE } from '../roles/front-desk/index.js';
 import { buildDemoEndAnnouncement, buildDemoStartAnnouncement } from '../roles/front-desk/prompt.js';
+import { fixPayLinks } from '../payments/pay-link.js';
 import { AUX_MAX_COMPLETION_TOKENS, recordAuxUsage, type AuxLlmCall } from './aux-llm.js';
 import { classifyNeedsReply, RESUME_TAIL_SIZE } from './resume-gate.js';
 
@@ -1028,6 +1029,10 @@ export async function runAgentTurn({
       ? (steps.slice().reverse().find((s) => s.text?.trim())?.text?.trim() ?? result.text)
       : result.text;
   }
+  // Paid confirmation (0063): a short payment link the model padded (a doubled code, a
+  // trailing instruction) is cut back to the exact link, in code — a lead can't pay at an
+  // almost-right URL.
+  reply = fixPayLinks(reply);
 
   // The demo just STARTED on this turn: the normal persona was speaking and startDemo
   // created a session mid-turn. Detected by re-reading (never by parsing the model's

@@ -499,14 +499,20 @@ describe('bookAppointment — paid confirmation (0062)', () => {
       payCtx(),
     );
 
+  const PAY_URL = 'https://thebotcrew-agents.floral-credit-be7e.workers.dev/p/x7k2m9qwab';
   beforeEach(() => {
+    // START is 2026-07-10 17:00Z; the payable floor is measured from "now", so pin it the day before.
+    vi.useFakeTimers({ now: Date.parse('2026-07-09T17:00:00.000Z'), toFake: ['Date'] });
     vi.mocked(openBookingHold).mockResolvedValue({
-      checkoutUrl: 'https://checkout.stripe.com/c/pay/cs_1',
-      dueAt: '2026-07-11T17:00:00.000Z',
+      paymentUrl: PAY_URL,
+      dueAt: '2026-07-10T15:00:00.000Z',
       amountLabel: '$500 MXN',
-      dueLabel: 'sábado, 11 de julio, 12:00 p.m.',
+      dueLabel: 'viernes, 10 de julio, 10:00 a.m.',
     });
     ghl.cancelAppointment.mockResolvedValue(undefined);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("books as 'new' (the payment confirms) and returns the link, the amount and the deadline for the model to relay", async () => {
@@ -514,13 +520,16 @@ describe('bookAppointment — paid confirmation (0062)', () => {
     expect(res.booked).toBe(true);
     expect(ghl.bookAppointment).toHaveBeenCalledWith(expect.objectContaining({ appointmentStatus: 'new' }));
     expect(openBookingHold).toHaveBeenCalledWith(expect.objectContaining({ ghlAppointmentId: 'appt1', serviceName: 'Consulta', startTime: START }));
-    expect(res.paymentUrl).toBe('https://checkout.stripe.com/c/pay/cs_1');
+    expect(res.paymentUrl).toBe(PAY_URL);
     expect(res.paymentAmount).toBe('$500 MXN');
     expect(res.message).toContain('APARTADA');
-    expect(res.message).toContain('https://checkout.stripe.com/c/pay/cs_1');
     expect(res.message).toContain('$500 MXN');
-    expect(res.message).toContain('sábado, 11 de julio');
+    expect(res.message).toContain('viernes, 10 de julio');
     expect(res.message).not.toMatch(/Cita agendada/);
+    // 2026-09-22: the model pasted the link AND the instruction that followed it. The link is
+    // now the last thing in the note, alone on its own line, and nothing invites a "paste".
+    expect(res.message.endsWith(`\n${PAY_URL}`)).toBe(true);
+    expect(res.message).not.toMatch(/pégala|tal cual/);
     // Still a real booking for the stats layer + the round reset.
     expect(q.logAppointment).toHaveBeenCalledWith(expect.objectContaining({ p_action: 'booked', p_ghl_appointment_id: 'appt1' }));
   });
@@ -533,6 +542,17 @@ describe('bookAppointment — paid confirmation (0062)', () => {
     expect(q.logAppointment).not.toHaveBeenCalled();
     expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'booking_failed', expect.objectContaining({ reason: 'payment_link_failed', error: 'checkout_session_failed' }));
     expect(res.message).toContain('NO quedó apartada');
+  });
+
+  it('a cita the lead cannot pay for in time is refused BEFORE booking (too_soon_to_pay)', async () => {
+    // 2 h margin + Stripe's 30 min = 2.5 h; a cita 2 h away can't be held.
+    vi.setSystemTime(Date.parse('2026-07-10T15:00:00.000Z'));
+    const res = await runPaid();
+    expect(res.booked).toBe(false);
+    expect(ghl.bookAppointment).not.toHaveBeenCalled();
+    expect(openBookingHold).not.toHaveBeenCalled();
+    expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'booking_failed', expect.objectContaining({ reason: 'too_soon_to_pay' }));
+    expect(res.message).toMatch(/2\.5 h/);
   });
 
   it('a tenant without booking_payment never touches the hold', async () => {

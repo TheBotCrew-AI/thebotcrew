@@ -28,6 +28,19 @@
  *     Re-medido el mismo día tras el ajuste de tono (Leo: "ya está pagada y apartada así que
  *     no se cancela" suena a orden): con las aserciones nuevas —disculpa primero, "gusto",
  *     nunca "no se cancela" ni "así que"— 4/4 con la sección.
+ *   MEDIDO 2026-09-22 (gpt-5.6-luna, seriado), tras 0063 — liga corta, nota con la liga al final,
+ *   regla "no abre el link" — y la primera prueba real que rompió (ver business-logic §5e):
+ *   - tras agendar (liga exacta, sin la nota del tool en la respuesta): 3/3 con la sección. Las tres
+ *     corridas anteriores fallaron por el eval, no por el modelo: "pasado mañana" en el historial
+ *     vs. un DAY calculado en UTC que ya era un día después (corrida vespertina) — el modelo
+ *     frenó a preguntar, que es lo correcto; ahora el historial nombra el día (DAY_LABEL).
+ *   - "no abre el link" → lookupAppointment + la liga, sin escalar: 6/6 con la sección · 1/3 SIN
+ *     ella (las dos fallas llamaron lookupFaq + flagPendingInfo: la escalación del incidente).
+ *     Este caso SÍ discrimina.
+ *   - "¿ya quedó?": las fallas fueron de aserción — "queda confirmada en cuanto se refleje el
+ *     pago" es la respuesta correcta y el regex la castigaba; ahora se descarta la condicional.
+ *   - primera oferta 5/6 (la falla: "ya no cancelar" no casaba con el regex, ampliado);
+ *     cita pagada + cancelar 5/6 (la falla: "no se cancela" seco, la guardia de tono de Leo).
  *   Lectura honesta del primer par de casos: la sección del prompt NO discrimina ahí. Lo que sostiene el comportamiento
  *   es el mensaje que devuelve bookAppointment (la liga, el plazo y "no digas confirmada" viajan
  *   en el resultado del tool, en código) más el historial. La sección se conserva por lo que el
@@ -46,7 +59,8 @@ vi.mock('../../../db/queries.js');
 // has to be hoisted too.
 const { RULE_OFF, CHECKOUT_URL, DUE_LABEL } = vi.hoisted(() => ({
   RULE_OFF: process.env.HOLD_RULE_OFF === '1',
-  CHECKOUT_URL: 'https://checkout.stripe.com/c/pay/cs_test_a1B2c3D4e5F6g7H8',
+  // The SHORT link (0063) — the Stripe URL never reaches the model any more.
+  CHECKOUT_URL: 'https://thebotcrew-agents.floral-credit-be7e.workers.dev/p/x7k2m9qwab',
   DUE_LABEL: 'jueves, 24 de septiembre, 12:00 p.m.',
 }));
 
@@ -63,7 +77,7 @@ vi.mock('../prompt.js', async (importOriginal) => {
 vi.mock('../tools/booking-hold.js', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../tools/booking-hold.js')>()),
   openBookingHold: vi.fn().mockResolvedValue({
-    checkoutUrl: CHECKOUT_URL,
+    paymentUrl: CHECKOUT_URL,
     dueAt: '2026-09-24T18:00:00.000Z',
     amountLabel: '$500 MXN',
     dueLabel: DUE_LABEL,
@@ -139,10 +153,19 @@ const nextWeekday = (): string => {
 
 /** 11:00 in the tenant's zone on that day, the slot the lead picks. */
 const DAY = nextWeekday();
+/** The day as the bot would have said it. "pasado mañana" broke in an evening run (2026-09-22,
+ *  19:00 PDT): the UTC date was already two days ahead of the tenant's, the slots came back a
+ *  day later than "pasado mañana", and the model — rightly — stopped to ask instead of booking. */
+const DAY_LABEL = new Intl.DateTimeFormat('es-MX', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' }).format(new Date(`${DAY}T12:00:00Z`));
 const SLOTS = ['10:00', '11:00', '12:00', '16:00'].map((t) => ({ start: `${DAY}T${t}:00-06:00`, end: `${DAY}T${t}:00-06:00` }));
 
 type ToolCallChunkLike = { payload: { toolName: string } };
-const toolIds = (res: { toolCalls?: ToolCallChunkLike[] }) => (res.toolCalls ?? []).map((c) => c.payload.toolName);
+const toolIds = (res: { toolCalls?: ToolCallChunkLike[]; text?: string }) => {
+  const ids = (res.toolCalls ?? []).map((c) => c.payload.toolName);
+  // EVAL_DEBUG=1 prints what the model did — the assertions only say what it didn't.
+  if (process.env.EVAL_DEBUG) console.log('[eval] tools:', ids.join(','), '\n[eval] text:', res.text);
+  return ids;
+};
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -161,7 +184,7 @@ describe.skipIf(!evalApiKey)(`apartado con pago — la liga se manda tal cual y 
     const res = await agent.generate(
       [
         { role: 'user', content: 'Hola, quiero una consulta general' },
-        { role: 'assistant', content: 'Claro. Tengo estos horarios: pasado mañana a las 10:00 a.m., 11:00 a.m., 12:00 p.m. o 4:00 p.m. ¿Cuál te acomoda y a nombre de quién agendo la cita?' },
+        { role: 'assistant', content: `Claro. Tengo estos horarios: el ${DAY_LABEL} a las 10:00 a.m., 11:00 a.m., 12:00 p.m. o 4:00 p.m. ¿Cuál te acomoda y a nombre de quién agendo la cita?` },
         { role: 'user', content: 'A las 11, a nombre de Karla Mendoza' },
       ],
       { requestContext: rc() },
@@ -171,6 +194,11 @@ describe.skipIf(!evalApiKey)(`apartado con pago — la liga se manda tal cual y 
     const text = res.text;
     // The link, byte for byte — a paraphrased or shortened URL sends the lead nowhere.
     expect(text).toContain(CHECKOUT_URL);
+    // 2026-09-22, live: the link came out with its code doubled and the tool's instruction
+    // pasted after it ("Mándale el día y la hora, la liga EXACTA…"). The link must end where
+    // the code ends, and none of the note's wording may leak into the reply.
+    expect(text).not.toMatch(new RegExp(`${CHECKOUT_URL}\\S`));
+    expect(text).not.toMatch(/renglón|Tu mensaje lleva|nada más|no que la cita/i);
     // The deadline, as the tool rendered it (day + hour); the model must not re-derive it.
     expect(text).toMatch(/jueves,? 24 de septiembre/);
     expect(text).toMatch(/12:00 p\.?\s?m\./);
@@ -190,24 +218,59 @@ describe.skipIf(!evalApiKey)(`apartado con pago — la liga se manda tal cual y 
       { ghlAppointmentId: 'appt_eval_hold', appointmentDatetime: start, serviceType: 'Consulta general', action: 'booked', createdAt: new Date().toISOString() },
     ] as never);
     vi.mocked(q.getBookingHold).mockResolvedValue({
-      id: 'h1', ghlAppointmentId: 'appt_eval_hold', stripeSessionId: 'cs_1', checkoutUrl: CHECKOUT_URL,
+      id: 'h1', ghlAppointmentId: 'appt_eval_hold', stripeSessionId: 'cs_1', checkoutUrl: 'https://checkout.stripe.com/c/pay/cs_1', shortCode: 'x7k2m9qwab',
       amountCents: 50000, currency: 'mxn', status: 'pending', dueAt: '2026-09-24T18:00:00.000Z', paidAt: null,
     });
     const agent = buildFrontDeskAgent();
     const res = await agent.generate(
       [
         { role: 'user', content: 'Hola, quiero una consulta general' },
-        { role: 'assistant', content: 'Claro. Tengo estos horarios: pasado mañana a las 10:00 a.m., 11:00 a.m., 12:00 p.m. o 4:00 p.m. ¿Cuál te acomoda y a nombre de quién agendo la cita?' },
+        { role: 'assistant', content: `Claro. Tengo estos horarios: el ${DAY_LABEL} a las 10:00 a.m., 11:00 a.m., 12:00 p.m. o 4:00 p.m. ¿Cuál te acomoda y a nombre de quién agendo la cita?` },
         { role: 'user', content: 'A las 11, a nombre de Karla Mendoza' },
-        { role: 'assistant', content: `Listo, Karla: te aparté la consulta general para pasado mañana a las 11:00 a.m. Para confirmarla, paga el apartado de $500 MXN antes del ${DUE_LABEL} en esta liga: ${CHECKOUT_URL}` },
+        { role: 'assistant', content: `Listo, Karla: te aparté la consulta general para el ${DAY_LABEL} a las 11:00 a.m. Para confirmarla, paga el apartado de $500 MXN antes del ${DUE_LABEL} en esta liga: ${CHECKOUT_URL}` },
         { role: 'user', content: 'Ok gracias, entonces ya quedó mi cita?' },
       ],
       { requestContext: rc({ ...turn, activeAppointment: { startTime: start, service: 'Consulta general' } }) },
     );
 
     const text = res.text.toLowerCase();
-    expect(text).not.toMatch(/confirmad[ao]|ya qued[óo]|est[áa] lista/);
+    if (process.env.EVAL_DEBUG) console.log('[eval] text:', res.text);
+    // "no confirmada todavía" / "sin confirmar" / "queda confirmada en cuanto se refleje el pago"
+    // are the right answer, not a slip: a CONDITIONAL confirmation is dropped before the check.
+    const unconditional = text.replace(/(queda|quedar[áa]|estar[áa]|se) confirmad[ao] (en cuanto|cuando|una vez|al |tras )[^.]*/g, '');
+    expect(unconditional).not.toMatch(/(?<!no |sin )confirmad[ao]|ya qued[óo]|est[áa] lista/);
     expect(text).toMatch(/apartad|pag/);
+  }, 120_000);
+
+  // 2026-09-22, live: "No abre el link" → the model set handed_off + lead_disqualified and
+  // went mute; "Pásala de nuevo" got run_suppressed. The answer is the link again, from
+  // lookupAppointment, with the conversation left alone.
+  it('"no abre el link": la reenvía desde lookupAppointment, sin escalar ni cambiar el estado', async () => {
+    const start = `${DAY}T11:00:00-06:00`;
+    vi.mocked(q.loadAppointmentLog).mockResolvedValue([
+      { ghlAppointmentId: 'appt_eval_hold', appointmentDatetime: start, serviceType: 'Consulta general', action: 'booked', createdAt: new Date().toISOString() },
+    ] as never);
+    vi.mocked(q.getBookingHold).mockResolvedValue({
+      id: 'h1', ghlAppointmentId: 'appt_eval_hold', stripeSessionId: 'cs_1', checkoutUrl: 'https://checkout.stripe.com/c/pay/cs_1', shortCode: 'x7k2m9qwab',
+      amountCents: 50000, currency: 'mxn', status: 'pending', dueAt: '2026-09-24T18:00:00.000Z', paidAt: null,
+    });
+    const agent = buildFrontDeskAgent();
+    const res = await agent.generate(
+      [
+        { role: 'user', content: 'Hola, quiero una consulta general' },
+        { role: 'assistant', content: `Claro. Tengo estos horarios: el ${DAY_LABEL} a las 10:00 a.m., 11:00 a.m., 12:00 p.m. o 4:00 p.m. ¿Cuál te acomoda y a nombre de quién agendo la cita?` },
+        { role: 'user', content: 'A las 11, a nombre de Karla Mendoza' },
+        { role: 'assistant', content: `Listo, Karla: te aparté la consulta general para el ${DAY_LABEL} a las 11:00 a.m. Se confirma en cuanto pagues los $500 MXN antes del ${DUE_LABEL}:\n${CHECKOUT_URL}` },
+        { role: 'user', content: 'No abre el link' },
+      ],
+      { requestContext: rc({ ...turn, activeAppointment: { startTime: start, service: 'Consulta general' } }) },
+    );
+    const ids = toolIds(res);
+    expect(ids).toContain('lookupAppointment');
+    expect(ids).not.toContain('updateConversationStatus');
+    expect(ids).not.toContain('flagAwaitingHuman');
+    expect(res.text).toContain(CHECKOUT_URL);
+    expect(res.text).not.toMatch(new RegExp(`${CHECKOUT_URL}\\S`));
   }, 120_000);
 
   // Leo, after the first live run (2026-09-20): "nunca avisa antes, solo cuando la aparta
@@ -223,7 +286,8 @@ describe.skipIf(!evalApiKey)(`apartado con pago — la liga se manda tal cual y 
     const text = res.text.toLowerCase();
     expect(text).toMatch(/\$?500/);
     expect(text).toMatch(/reagend|mover|cambiar|mueve/);
-    expect(text).toMatch(/no se cancela|sin cancelaci|ya no se puede cancelar|no se puede cancelar/);
+    // "ya no cancelar" (2026-09-22 run) says the same thing as "no se cancela" — the assertion, not the model, was short.
+    expect(text).toMatch(/no se cancela|sin cancelaci|ya no (se puede |puede |se )?cancelar|no se puede cancelar|no (se )?cancela/);
     expect(text).not.toMatch(/devoluci|reembols|pol[íi]tica/);
   }, 120_000);
 
@@ -235,18 +299,18 @@ describe.skipIf(!evalApiKey)(`apartado con pago — la liga se manda tal cual y 
       { ghlAppointmentId: 'appt_eval_hold', appointmentDatetime: start, serviceType: 'Consulta general', action: 'booked', createdAt: new Date().toISOString() },
     ] as never);
     vi.mocked(q.getBookingHold).mockResolvedValue({
-      id: 'h1', ghlAppointmentId: 'appt_eval_hold', stripeSessionId: 'cs_1', checkoutUrl: CHECKOUT_URL,
+      id: 'h1', ghlAppointmentId: 'appt_eval_hold', stripeSessionId: 'cs_1', checkoutUrl: 'https://checkout.stripe.com/c/pay/cs_1', shortCode: 'x7k2m9qwab',
       amountCents: 50000, currency: 'mxn', status: 'paid', dueAt: '2026-09-24T18:00:00.000Z', paidAt: '2026-09-21T10:00:00.000Z',
     });
     const agent = buildFrontDeskAgent();
     const res = await agent.generate(
       [
         { role: 'user', content: 'Hola, quiero una consulta general' },
-        { role: 'assistant', content: 'Claro. La cita se confirma con el pago de $500 MXN y, una vez pagada, se puede mover de horario pero ya no se cancela. Tengo pasado mañana a las 11:00 a.m. o 4:00 p.m. ¿Cuál te acomoda y a nombre de quién agendo?' },
+        { role: 'assistant', content: `Claro. La cita se confirma con el pago de $500 MXN y, una vez pagada, se puede mover de horario pero ya no se cancela. Tengo el ${DAY_LABEL} a las 11:00 a.m. o 4:00 p.m. ¿Cuál te acomoda y a nombre de quién agendo?` },
         { role: 'user', content: 'A las 11, Karla Mendoza' },
-        { role: 'assistant', content: `Listo, Karla: te aparté la consulta para pasado mañana a las 11:00 a.m. Para confirmarla, paga los $500 MXN antes del ${DUE_LABEL} aquí: ${CHECKOUT_URL}` },
+        { role: 'assistant', content: `Listo, Karla: te aparté la consulta para el ${DAY_LABEL} a las 11:00 a.m. Para confirmarla, paga los $500 MXN antes del ${DUE_LABEL} aquí: ${CHECKOUT_URL}` },
         { role: 'user', content: 'Ya pagué' },
-        { role: 'assistant', content: '¡Recibimos tu pago! Tu cita quedó confirmada para pasado mañana a las 11:00 a.m.' },
+        { role: 'assistant', content: `¡Recibimos tu pago! Tu cita quedó confirmada para el ${DAY_LABEL} a las 11:00 a.m.` },
         { role: 'user', content: 'Oye, me salió algo, cancela mi cita por favor' },
       ],
       { requestContext: rc({ ...turn, activeAppointment: { startTime: start, service: 'Consulta general' } }) },

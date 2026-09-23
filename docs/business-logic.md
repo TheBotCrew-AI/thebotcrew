@@ -1079,8 +1079,35 @@ tells the model to offer two real slots instead; the prompt owns the wording —
 reagenda", never "devolución"/"reembolso"/"política". Whether a refund ever happens is a
 person's decision, outside the bot.
 
-**What the other tools do.** `rescheduleAppointment` keeps the hold (same link, same
-deadline, `app_move_hold` mirrors the new time) and keeps a paid cita `confirmed` through the
+**The link the lead gets is SHORT (0063), and the deadline is always before the cita.** Three
+things went wrong in the first real test (2026-09-22, The Bot Crew): the model copied Stripe's
+~300-character URL with its `#fragment` twice (a dead link), pasted the tool's own instruction
+after it ("Mándale el día y la hora, la liga EXACTA…"), and — the cita being at 6:30 a.m. —
+told the lead to pay "antes de las 6:46 p.m." (`due_at = now + hold_hours`, blind to the cita).
+Then "No abre el link" got a `handed_off` and "Pásala de nuevo" got silence. Four rules, in code:
+- **`<WORKER_URL>/p/<code>`** is what the model sees and relays (`payments/pay-link.ts`): a
+  10-character lowercase code without look-alikes (no 0/o, 1/l/i), random (it opens someone's
+  checkout), stored on `booking_holds.short_code`. `GET /p/:code` (`worker/pay-link-handler.ts`)
+  302s to the Stripe URL while the hold is `pending`, and once it isn't tells the lead so —
+  "ya está pagado" / "venció, escríbenos" — instead of Stripe's generic error. A hold born
+  before 0063 has no code and keeps its Stripe URL (`paymentLinkFor`).
+- **The link is the LAST thing in every tool note, alone on its own line**, and nothing in the
+  note says "pégala tal cual" any more — that wording is what dragged the rest of the note into
+  the reply. The turn also runs `fixPayLinks` over the reply: a short link the model padded (a
+  doubled code, a trailing word, punctuation) is cut back to the exact link, deterministically.
+- **`due_at = min(now + hold_hours, cita − deadline_margin_hours)`** (`holdDeadlineMs`; margin
+  default 2 h, `booking_payment.deadline_margin_hours`). A cita closer than margin + Stripe's
+  30-minute minimum is refused **before** booking (`booking_failed` reason `too_soon_to_pay`),
+  and `getAvailability` never offers such a slot (the pay floor lifts `from`, note
+  `too_soon_to_pay` when the whole range is inside it). A reschedule to a sooner cita pulls the
+  deadline in (`app_move_hold(..., p_due_at)`) or is refused the same way.
+- **"No abre el link" is answered with the link again** — `lookupAppointment` returns it — and
+  the conversation is left alone: no `handed_off`, no `lead_disqualified`. Only when the lead
+  says it still doesn't open after the resend does the bot `flagAwaitingHuman`.
+
+**What the other tools do.** `rescheduleAppointment` keeps the hold (same link; `app_move_hold`
+mirrors the new time and, when the new cita is sooner, the pulled-in deadline) and keeps a paid
+cita `confirmed` through the
 move. `cancelAppointment` closes a pending hold (session expired, tag off) and refuses a paid
 one (above). `lookupAppointment`
 answers "¿ya quedó?" / "ya pagué" from the hold — pending (link + deadline again), paid,
@@ -1096,8 +1123,10 @@ half.
 hold), Stripe Connect payouts to the client (the interface — open / settle / release — is
 ready for it; the account model is not).
 
-Evals: `evals/booking-hold.eval.ts` (the link verbatim, the deadline, "apartada" not
-"confirmada"). DB transitions: `supabase/tests/0062_booking_holds.test.sql`.
+Evals: `evals/booking-hold.eval.ts` (the link verbatim and ending where the code ends, no
+note wording in the reply, the deadline, "apartada" not "confirmada", "no abre el link" →
+resend without a handoff). DB transitions: `supabase/tests/0062_booking_holds.test.sql`; the
+short code + deadline move: `supabase/tests/0063_hold_short_code.test.sql`.
 
 ## 6. Models & factual grounding
 

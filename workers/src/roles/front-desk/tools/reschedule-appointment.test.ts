@@ -294,9 +294,44 @@ describe('rescheduleAppointment — paid confirmation (0062)', () => {
     const res = await run(START, payCtx());
     expect(res.rescheduled).toBe(true);
     expect(ghl.rescheduleAppointment).toHaveBeenCalledWith(expect.objectContaining({ appointmentStatus: 'new' }));
-    expect(q.moveHold).toHaveBeenCalledWith('appt1', START);
+    // START is two days out and the deadline one day out: nothing to pull in.
+    expect(q.moveHold).toHaveBeenCalledWith('appt1', START, undefined);
     expect(res.message).toContain('APARTADA');
     expect(res.message).toContain('https://pay/x');
+  });
+
+  // 0063: the payment window must close BEFORE the cita. A move to a sooner slot pulls the
+  // deadline to cita − margin (2 h default); a slot too close to pay for is refused, untouched.
+  it('pending hold moved to a sooner cita → the deadline is pulled in to cita − 2 h and relayed', async () => {
+    vi.mocked(q.getBookingHold).mockResolvedValue(hold('pending') as never);
+    const soon = new Date(Date.now() + 5 * 3600_000).toISOString();
+    ghl.getAvailability.mockResolvedValue([{ start: soon, end: soon }]);
+    const res = await run(soon, payCtx());
+    expect(res.rescheduled).toBe(true);
+    const [, , dueAt] = vi.mocked(q.moveHold).mock.calls[0]!;
+    expect(dueAt).toBeDefined();
+    expect(Math.abs(Date.parse(dueAt!) - (Date.parse(soon) - 2 * 3600_000))).toBeLessThan(1000);
+    expect(res.message).toContain('https://pay/x');
+  });
+
+  it('pending hold moved to a cita too close to pay for → refused, GHL untouched', async () => {
+    vi.mocked(q.getBookingHold).mockResolvedValue(hold('pending') as never);
+    const soon = new Date(Date.now() + 2 * 3600_000).toISOString();
+    ghl.getAvailability.mockResolvedValue([{ start: soon, end: soon }]);
+    const res = await run(soon, payCtx());
+    expect(res.rescheduled).toBe(false);
+    expect(ghl.rescheduleAppointment).not.toHaveBeenCalled();
+    expect(q.moveHold).not.toHaveBeenCalled();
+    expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'booking_failed', expect.objectContaining({ reason: 'too_soon_to_pay' }));
+  });
+
+  it('paid hold moved to a sooner cita → no deadline games, it is already paid', async () => {
+    vi.mocked(q.getBookingHold).mockResolvedValue(hold('paid') as never);
+    const soon = new Date(Date.now() + 2 * 3600_000).toISOString();
+    ghl.getAvailability.mockResolvedValue([{ start: soon, end: soon }]);
+    const res = await run(soon, payCtx());
+    expect(res.rescheduled).toBe(true);
+    expect(q.moveHold).toHaveBeenCalledWith('appt1', soon, undefined);
   });
 
   it("paid hold → stays 'confirmed' through the move", async () => {

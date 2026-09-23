@@ -13,12 +13,15 @@ import { GhlClient } from '../../../ghl/client.js';
 import { syncContactTimezone } from '../../../ghl/contact-timezone.js';
 import { getActiveDemoSession, getBookingHold, logAppointment, logBotEvent, moveHold, setSimulatedBooking } from '../../../db/queries.js';
 import { resolveAgentContext } from './agent-context.js';
-import { describeHoldForModel } from './booking-hold.js';
+import { describeHoldForModel, payableNoticeLabel } from './booking-hold.js';
+import { CHECKOUT_MIN_EXPIRY_MS } from '../../../payments/stripe.js';
 import { resolveActiveAppointment } from './resolve-appointment.js';
 import { bookingQueryWindow, resolveBookableSlot } from './booking-time.js';
 import { earliestBookableMs } from './booking-window.js';
 import { simSlotLabel, simulatedSlots } from './demo-sim.js';
 import { slotLabel } from './slot-label.js';
+
+const HOUR_MS = 60 * 60 * 1000;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -179,6 +182,31 @@ export const rescheduleAppointmentTool = createTool({
       // Moving the cita leaves it as unconfirmed as a fresh booking would (0061).
       : config.bookUnconfirmed ? 'new' : 'confirmed';
 
+    // A pending hold moved to a sooner cita may need its deadline pulled in (0063): the
+    // payment window must close before the cita, never after it. Refused when the new cita
+    // is too close to pay for at all — before GHL moves anything.
+    let movedDueAt: string | undefined;
+    if (hold && (hold.status === 'pending' || hold.status === 'expiring') && config.bookingPayment) {
+      const pulledIn = Math.min(Date.parse(hold.dueAt), Date.parse(canonicalStart) - config.bookingPayment.deadlineMarginHours * HOUR_MS);
+      if (pulledIn - now < CHECKOUT_MIN_EXPIRY_MS) {
+        await logBotEvent(tenant.clientId, turn.ghlConversationId, 'booking_failed', {
+          stage: 'reschedule',
+          ghlAppointmentId: appt.ghlAppointmentId,
+          serviceName,
+          startTime: canonicalStart,
+          reason: 'too_soon_to_pay',
+          deadlineMarginHours: config.bookingPayment.deadlineMarginHours,
+        });
+        return {
+          rescheduled: false,
+          message:
+            `Ese horario ya está demasiado cerca para alcanzar a pagar el apartado (se necesitan al menos ${payableNoticeLabel(config.bookingPayment)} de anticipación), así que la cita se queda como está. ` +
+            'Díselo al lead con calidez y en positivo, consulta getAvailability y ofrécele el siguiente horario que sí alcance.',
+        };
+      }
+      if (pulledIn < Date.parse(hold.dueAt)) movedDueAt = new Date(pulledIn).toISOString();
+    }
+
     try {
       await ghl.rescheduleAppointment({
         appointmentId: appt.ghlAppointmentId,
@@ -213,7 +241,7 @@ export const rescheduleAppointmentTool = createTool({
     }).catch((e: unknown) => console.error('[rescheduleAppointment] logAppointment failed:', e));
 
     if (hold) {
-      moveHold(appt.ghlAppointmentId, canonicalStart).catch((e: unknown) =>
+      moveHold(appt.ghlAppointmentId, canonicalStart, movedDueAt).catch((e: unknown) =>
         console.error('[rescheduleAppointment] moveHold failed (non-blocking):', e instanceof Error ? e.message : String(e)),
       );
     }
@@ -225,7 +253,7 @@ export const rescheduleAppointmentTool = createTool({
       rescheduled: true,
       message:
         `Cita reagendada: ${label}. Confírmasela al lead usando EXACTAMENTE ese texto.` +
-        describeHoldForModel(hold, frameTz, config.timezone),
+        describeHoldForModel(hold && movedDueAt ? { ...hold, dueAt: movedDueAt } : hold, frameTz, config.timezone),
     };
   },
 });

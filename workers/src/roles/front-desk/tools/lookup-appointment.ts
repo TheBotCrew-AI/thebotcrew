@@ -13,6 +13,7 @@ import { GhlClient } from '../../../ghl/client.js';
 import { getActiveDemoSession, getBookingHold } from '../../../db/queries.js';
 import { resolveAgentContext } from './agent-context.js';
 import { describeHoldForModel } from './booking-hold.js';
+import { paymentLinkFor } from '../../../payments/pay-link.js';
 import { resolveActiveAppointment } from './resolve-appointment.js';
 import { slotLabel } from './slot-label.js';
 
@@ -94,7 +95,7 @@ export const lookupAppointmentTool = createTool({
       startTime,
       label,
       service: appt.serviceType ?? undefined,
-      ...(hold ? { paymentStatus: hold.status, paymentUrl: hold.checkoutUrl } : {}),
+      ...(hold ? { paymentStatus: hold.status, paymentUrl: paymentLinkFor(hold) } : {}),
       message:
         `Tu cita es el ${label}. Preséntasela al lead usando EXACTAMENTE este texto; no recalcules la fecha.` +
         describeHoldForModel(hold, frameTz, config.timezone),
