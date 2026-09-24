@@ -9,6 +9,7 @@ para verificar su cuenta en Meta.
 sites/
   _template/           # scaffold neutro — punto de partida de cada cliente
   madi-skincare/       # primer cliente (referencia de identidad, no molde)
+  medicina-regenerativa/  # EXCEPCIÓN: multipágina ES/EN hosteado en Vercel, no se pega en GHL (ver su README)
   <client-slug>/       # una carpeta por cliente (kebab-case del nombre; no hay columna slug en la DB)
 ```
 

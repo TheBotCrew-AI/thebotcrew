@@ -1,0 +1,15 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@500;700&display=swap"><style>
+html,body{margin:0;width:1200px;height:630px;overflow:hidden;font-family:Inter,Arial,sans-serif}
+.w{position:relative;width:1200px;height:630px;background:linear-gradient(140deg,#123A56 0%,#174B69 100%);color:#fff}
+.w svg{position:absolute;inset:0}
+.t{position:absolute;left:88px;top:150px;width:760px}
+.m{width:84px;height:84px;border-radius:22px;background:#fff;color:#123A56;display:grid;place-items:center;font-weight:700;font-size:32px;margin-bottom:40px}
+h1{font-size:76px;line-height:1.05;margin:0;letter-spacing:-.02em}
+p{font-size:30px;margin:22px 0 0;color:#BFE6EA;font-weight:500}
+</style></head><body><div class="w">
+<svg width="1200" height="630" viewBox="0 0 1200 630"><circle cx="1040" cy="120" r="260" fill="none" stroke="rgba(138,211,218,.3)" stroke-width="2"/><circle cx="1040" cy="120" r="360" fill="none" stroke="rgba(138,211,218,.18)" stroke-width="2"/><g id="h"></g></svg>
+<div class="t"><div class="m">MR</div><h1>Medicina Regenerativa</h1><p>Tijuana, Baja California</p></div></div>
+<script>
+const g=document.getElementById('h');let a=[],b=[],r='';for(let s=0;s<=760;s+=6){const y=-60+s,w=Math.sin(s/230*Math.PI*2)*70;a.push([980+w,y]);b.push([980-w,y]);if(s%24===0&&Math.abs(w)>18)r+=`M${980+w} ${y}L${980-w} ${y}`}
+const d=p=>'M'+p.map(q=>q.join(' ')).join('L');g.innerHTML=`<path d="${r}" stroke="rgba(138,211,218,.3)" stroke-width="2"/><path d="${d(a)}" stroke="#8AD3DA" stroke-width="4" fill="none"/><path d="${d(b)}" stroke="#8AD3DA" stroke-width="4" fill="none" opacity=".6"/>`;
+</script></body></html>
