@@ -261,3 +261,59 @@ export async function verifyStripeEvent(
   const account = typeof (e as { account?: unknown }).account === 'string' ? (e as { account: string }).account : undefined;
   return { id: e.id, type: e.type, data: { object: object as Record<string, unknown> }, ...(account ? { account } : {}) };
 }
+
+const STRIPE_OAUTH_TOKEN_URL = 'https://connect.stripe.com/oauth/token';
+
+/**
+ * Every configured platform secret key, the current mode's first. The OAuth callback
+ * cannot tell from the code which mode the authorization ran in, so it tries both.
+ * Needs only the key — unlike `getStripeEnv`, a missing webhook secret doesn't matter here.
+ */
+export function stripeSecretKeys(): Array<{ mode: 'live' | 'test'; secretKey: string }> {
+  const current = process.env.STRIPE_MODE?.trim().toLowerCase() === 'test' ? 'test' : 'live';
+  const order: Array<'live' | 'test'> = current === 'test' ? ['test', 'live'] : ['live', 'test'];
+  const keys: Array<{ mode: 'live' | 'test'; secretKey: string }> = [];
+  for (const mode of order) {
+    const secretKey = process.env[`STRIPE_SECRET_KEY${mode === 'test' ? '_TEST_MODE' : ''}`]?.trim();
+    if (secretKey) keys.push({ mode, secretKey });
+  }
+  return keys;
+}
+
+export type OAuthExchangeResult =
+  | { ok: true; stripeUserId: string; livemode: boolean; scope: string | null }
+  | { ok: false; status: number; error: string; description: string };
+
+/**
+ * POST connect.stripe.com/oauth/token — turns the `ac_…` code of a Standard-account
+ * OAuth authorization into the connection. Only `stripe_user_id` (the `acct_…`) is
+ * kept: charges go through the platform key + `Stripe-Account`, so the access and
+ * refresh tokens Stripe returns are dropped here and never logged.
+ */
+export async function exchangeOAuthCode(secretKey: string, code: string): Promise<OAuthExchangeResult> {
+  const res = await fetch(STRIPE_OAUTH_TOKEN_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: encodeForm({ client_secret: secretKey, code, grant_type: 'authorization_code' }),
+  });
+  let data: Record<string, unknown> = {};
+  try {
+    data = (await res.json()) as Record<string, unknown>;
+  } catch {
+    // non-JSON body: reported below by status
+  }
+  if (!res.ok || typeof data.stripe_user_id !== 'string') {
+    return {
+      ok: false,
+      status: res.status,
+      error: typeof data.error === 'string' ? data.error : 'unexpected_response',
+      description: typeof data.error_description === 'string' ? data.error_description : '',
+    };
+  }
+  return {
+    ok: true,
+    stripeUserId: data.stripe_user_id,
+    livemode: data.livemode === true,
+    scope: typeof data.scope === 'string' ? data.scope : null,
+  };
+}

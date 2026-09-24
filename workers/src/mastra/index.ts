@@ -24,6 +24,7 @@ import { runExpiredHolds } from '../worker/hold-expiry-runner.js';
 import { runHoldReminders } from '../worker/hold-reminder-runner.js';
 import { handleStripeWebhook } from '../worker/stripe-webhook-handler.js';
 import { resolvePayLink } from '../worker/pay-link-handler.js';
+import { handleStripeOAuthCallback } from '../worker/stripe-oauth-handler.js';
 import { getStripeEnv } from '../payments/stripe.js';
 import { renderReportPage } from '../worker/info-gaps/report-html.js';
 import { exchangeCode, getInstallUrl } from '../ghl/oauth.js';
@@ -174,6 +175,22 @@ export const mastra = new Mastra({
           const stripe = getStripeEnv();
           const result = await handleStripeWebhook(raw, c.req.header('stripe-signature') ?? null, stripe?.webhookSecret, Date.now(), stripe?.connectWebhookSecret);
           return c.json(result.body, result.status);
+        },
+      }),
+
+      // Stripe Connect OAuth: a client connecting their EXISTING Stripe account lands here;
+      // the code is exchanged for the connection and the `acct_…` is logged. Register
+      // <WORKER_URL>/stripe/oauth/callback as a redirect URI in Connect → Settings → OAuth.
+      registerApiRoute('/stripe/oauth/callback', {
+        method: 'GET',
+        handler: async (c) => {
+          const out = await handleStripeOAuthCallback({
+            code: c.req.query('code'),
+            error: c.req.query('error'),
+            error_description: c.req.query('error_description'),
+          });
+          c.header('Cache-Control', 'no-store');
+          return c.html(out.html, out.status);
         },
       }),
 
