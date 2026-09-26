@@ -8,6 +8,14 @@ describe('hold messages (LLM-free)', () => {
     expect(buildHoldPaidMessage('lunes, 28 de septiembre, 3:45 p.m.', 'X')).not.toContain('..');
     expect(buildHoldPaidMessage('lunes 28, 15:45', 'X')).toContain('15:45. Si algo');
   });
+  // Live 2026-09-26: "tu cita en Dr. Heriberto Valdivia" — "en" only reads right for a place,
+  // and a business can be a person's name. "con" / "del equipo de" read right for both.
+  it('the business name reads right whether it is a clinic or a person', () => {
+    const paid = buildHoldPaidMessage('lunes, 28 de septiembre, 3:45 p.m.', 'Dr. Heriberto Valdivia');
+    expect(paid).toContain('tu cita con Dr. Heriberto Valdivia quedó confirmada');
+    expect(paid).not.toContain('cita en ');
+    expect(buildHoldPaidLateMessage('Dr. Heriberto Valdivia')).toContain('Alguien del equipo de Dr. Heriberto Valdivia');
+  });
   it('expired and paid_late carry the label / the business, nothing about refunds', () => {
     expect(buildHoldExpiredMessage('lunes, 28 de septiembre, 3:45 p.m.')).toContain('3:45 p.m. y el lugar');
     expect(buildHoldPaidLateMessage('Clínica')).toContain('Clínica');

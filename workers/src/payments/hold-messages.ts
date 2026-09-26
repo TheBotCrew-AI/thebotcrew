@@ -13,7 +13,7 @@ const sentence = (label: string): string => (label.endsWith('.') ? label : `${la
 
 export function buildHoldPaidMessage(label: string, businessName: string): string {
   return (
-    `¡Muchas gracias, ya recibimos tu pago! 🎉 Con eso tu cita en ${businessName} quedó confirmada para el ${sentence(label)} ` +
+    `¡Muchas gracias, ya recibimos tu pago! 🎉 Con eso tu cita con ${businessName} quedó confirmada para el ${sentence(label)} ` +
     'Si algo se te atraviesa, escríbeme con confianza y con gusto la movemos a otro horario. ¡Nos vemos!'
   );
 }
@@ -28,7 +28,7 @@ export function buildHoldExpiredMessage(label: string): string {
 export function buildHoldPaidLateMessage(businessName: string): string {
   return (
     `¡Gracias, ya recibimos tu pago! Una disculpa: como llegó después del plazo, ese lugar ya se había liberado. ` +
-    `Alguien de ${businessName} te escribe en un ratito para acomodarte en otro horario o, si lo prefieres, ver lo de tu pago.`
+    `Alguien del equipo de ${businessName} te escribe en un ratito para acomodarte en otro horario o, si lo prefieres, ver lo de tu pago.`
   );
 }
 
