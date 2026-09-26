@@ -29,7 +29,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { createClient } from '@supabase/supabase-js';
-import { BOT_CREW_PERSONA, HERIBERTO_PERSONA, MADI_HOUSE_RULES } from './fixtures.js';
+import { BOT_CREW_PERSONA, HERIBERTO_PERSONA, HERIBERTO_PLAN_VARIANT, MADI_HOUSE_RULES } from './fixtures.js';
 
 /**
  * Tenants whose `houseRules` an eval fixture mirrors, and must keep mirroring.
@@ -58,13 +58,16 @@ const MIRRORED_PERSONAS: {
   label: string;
   tenantId?: string;
   locationId?: string;
-  column: 'prompt_overrides' | 'demo_prompt_overrides';
+  column: 'prompt_overrides' | 'demo_prompt_overrides' | 'prompt_variants';
+  /** With column 'prompt_variants': the variant key whose object the fixture mirrors. */
+  variant?: string;
   fixture: Record<string, unknown>;
 }[] = [
   { label: 'The Bot Crew — base (sistema de respuesta)', tenantId: BOT_CREW_TENANT_ID, column: 'prompt_overrides', fixture: BOT_CREW_PERSONA },
   // No botox-demo entry: the demo was retired from that tenant with the offer (2026-09-07)
   // and `demo_prompt_overrides` is NULL, so DEMO_BOTOX_PERSONA is synthetic now, not a mirror.
   { label: 'Dr. Heriberto Valdivia — base', locationId: 'rfL7uM3c5mpfIUGxCR3C', column: 'prompt_overrides', fixture: HERIBERTO_PERSONA },
+  { label: 'Dr. Heriberto Valdivia — variante i01 (PLAN)', locationId: 'rfL7uM3c5mpfIUGxCR3C', column: 'prompt_variants', variant: 'i01', fixture: HERIBERTO_PLAN_VARIANT },
 ];
 
 const supabaseUrl = process.env.SUPABASE_URL;
@@ -123,7 +126,7 @@ describe.skipIf(!supabaseUrl || !serviceKey)('prompt drift — live tenant vs ev
 describe.skipIf(!supabaseUrl || !serviceKey)('prompt drift — mirrored personas', () => {
   it.each(MIRRORED_PERSONAS.flatMap((p) => Object.keys(p.fixture).map((field) => ({ ...p, field }))))(
     '$label: $column.$field still matches the fixture',
-    async ({ tenantId, locationId, column, fixture, field }) => {
+    async ({ tenantId, locationId, column, variant, fixture, field }) => {
       const supabase = createClient(supabaseUrl!, serviceKey!, {
         auth: { persistSession: false, autoRefreshToken: false },
       });
@@ -147,10 +150,11 @@ describe.skipIf(!supabaseUrl || !serviceKey)('prompt drift — mirrored personas
 
       expect(error, `tenant_config read failed: ${error?.message}`).toBeNull();
 
-      const live = (data as Record<string, unknown> | null)?.[column] as Record<string, unknown> | null;
+      const row = (data as Record<string, unknown> | null)?.[column] as Record<string, unknown> | null;
+      const live = variant ? ((row?.[variant] as Record<string, unknown> | undefined) ?? null) : row;
       // No overrides at all is the loudest drift: the tenant falls back to the built-in
       // prompt, which sells nothing and knows none of the offer.
-      expect(live, `prod has NO ${column} — the persona under test is not live`).toBeTruthy();
+      expect(live, `prod has NO ${column}${variant ? `.${variant}` : ''} — the persona under test is not live`).toBeTruthy();
 
       const expected = fixture[field];
       const actual = live?.[field];

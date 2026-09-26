@@ -21,4 +21,11 @@ describe('resolveAgentContext', () => {
     expect(res.turn).toBe(turn);
     expect(res.config.businessName).toBe('X');
   });
+
+  it('scopes booking_payment to the pinned variant (only_variants)', () => {
+    const paying = { ...tenant, config: { ...tenant.config, bookingPayment: { amount: 500, only_variants: ['i01'] } } };
+    expect(resolveAgentContext(ctxWith({ tenant: paying, turn: { ...turn, promptVariant: 'i01' } })).config.bookingPayment).toMatchObject({ amount: 500 });
+    expect(resolveAgentContext(ctxWith({ tenant: paying, turn: { ...turn, promptVariant: 'a02' } })).config.bookingPayment).toBeNull();
+    expect(resolveAgentContext(ctxWith({ tenant: paying, turn })).config.bookingPayment).toBeNull();
+  });
 });

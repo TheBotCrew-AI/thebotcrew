@@ -13,7 +13,7 @@ import { createAnthropic } from '@ai-sdk/anthropic';
 import type { AiProvider, TenantContext, TurnContext } from '../../core/types.js';
 import { reasoningProviderOptions, type ReasoningEffort } from '../../core/reasoning.js';
 import { buildFrontDeskInstructions } from './prompt.js';
-import { parseFrontDeskConfig } from './config.js';
+import { parseFrontDeskConfig, scopeBookingPayment } from './config.js';
 import { lookupFaqTool } from './tools/lookup-faq.js';
 import { getAvailabilityTool } from './tools/get-availability.js';
 import { bookAppointmentTool } from './tools/book-appointment.js';
@@ -47,7 +47,7 @@ export function buildFrontDeskAgent(): Agent {
     instructions: ({ requestContext }) => {
       const tenant = requestContext.get('tenant') as TenantContext;
       const turn = requestContext.get('turn') as TurnContext | undefined;
-      const config = parseFrontDeskConfig(tenant.config);
+      const config = scopeBookingPayment(parseFrontDeskConfig(tenant.config), turn?.promptVariant);
       const nowLocal = new Date()
         .toLocaleString('sv-SE', { timeZone: config.timezone })
         .replace(' ', 'T');

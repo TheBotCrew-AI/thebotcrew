@@ -606,6 +606,9 @@ cualquier Chrome headless recibe SIGTERM a los ~2 s (ver cabecera de `render-bat
   move it), and the first slot offer says so plus the amount — no surprises (Leo, 2026-09-20).
   Secrets: `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET`, platform-wide, both or off; `STRIPE_MODE=test`
   switches to the `*_TEST_MODE` pair (test cards on prod, no real charge — delete the flag to go live).
+  **`only_variants`** (2026-09-26, no migration — a key inside the jsonb) limits the charge to
+  conversations pinned to those campaign variants (`scopeBookingPayment`, applied where the turn's
+  config is built); Heriberto charges only on `i01` (PLAN).
   **Connect (0064):** a tenant paid directly sets `booking_payment.stripe_account` (its Standard connected
   account) → direct charges with `Stripe-Account`, optional `platform_fee`; its webhooks are signed by
   `STRIPE_CONNECT_WEBHOOK_SECRET(_TEST_MODE)` (second endpoint, same URL). A client with an EXISTING

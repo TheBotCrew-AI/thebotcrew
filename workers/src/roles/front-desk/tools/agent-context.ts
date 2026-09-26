@@ -5,7 +5,7 @@
 
 import type { TenantContext, TurnContext } from '../../../core/types.js';
 import { frameTimeZone } from '../../../core/lead-timezone.js';
-import { parseFrontDeskConfig, type FrontDeskConfig } from '../config.js';
+import { parseFrontDeskConfig, scopeBookingPayment, type FrontDeskConfig } from '../config.js';
 
 /** Minimal shape of the tool execution context we depend on. */
 export interface ToolCtxLike {
@@ -33,7 +33,7 @@ export function resolveAgentContext(ctx: ToolCtxLike): ResolvedAgentContext {
   if (!tenant || !turn) {
     throw new Error('front-desk tool: missing tenant/turn in request context');
   }
-  const config = parseFrontDeskConfig(tenant.config);
+  const config = scopeBookingPayment(parseFrontDeskConfig(tenant.config), turn.promptVariant);
   const frameTz = turn.activeRole === 'demo' ? config.timezone : frameTimeZone(config, turn);
   return { tenant, turn, config, frameTz };
 }

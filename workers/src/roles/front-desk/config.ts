@@ -46,6 +46,9 @@ export const bookingPaymentSchema = z.object({
   stripeAccount: z.string().regex(/^acct_[A-Za-z0-9]+$/).optional(),
   /** With `stripeAccount`: what the platform keeps of each charge, in pesos (application fee). */
   platformFee: z.number().nonnegative().optional(),
+  /** Campaign variants whose conversations pay (e.g. ["i01"]); absent = every conversation.
+   *  Applied per turn by `scopeBookingPayment` — a tenant can charge for one offer only. */
+  onlyVariants: z.array(z.string().min(1)).min(1).optional(),
 });
 export type BookingPaymentConfig = z.infer<typeof bookingPaymentSchema>;
 
@@ -72,6 +75,7 @@ export function parseBookingPayment(raw: unknown): BookingPaymentConfig | null {
     statementSuffix: o.statement_suffix ?? o.statementSuffix,
     stripeAccount: o.stripe_account ?? o.stripeAccount,
     platformFee: o.platform_fee ?? o.platformFee,
+    onlyVariants: o.only_variants ?? o.onlyVariants,
   });
   if (!parsed.success) {
     console.error('[booking-payment] tenant_config.booking_payment invalid — feature off:', parsed.error.message);
@@ -259,6 +263,18 @@ export function parseFrontDeskConfig(raw: RawTenantConfig): FrontDeskConfig {
     bookUnconfirmed: raw.bookUnconfirmed === true,
     bookingPayment: parseBookingPayment(raw.bookingPayment),
   });
+}
+
+/**
+ * The payment config in force for THIS conversation: with `onlyVariants`, a conversation
+ * not pinned to one of them books as if the tenant had no booking_payment — no deposit
+ * rule in the prompt, no hold, no link. Called where the turn's config is built (the
+ * agent's instructions and the tools), the only two places that know the pinned variant.
+ */
+export function scopeBookingPayment(config: FrontDeskConfig, promptVariant?: string | null): FrontDeskConfig {
+  const only = config.bookingPayment?.onlyVariants;
+  if (!only || (promptVariant && only.includes(promptVariant))) return config;
+  return { ...config, bookingPayment: null };
 }
 
 /** Hold amount for a service, in cents: the service's own `deposit` wins over the tenant amount. */

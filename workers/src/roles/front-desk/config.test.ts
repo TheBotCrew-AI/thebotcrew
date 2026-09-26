@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { holdAmountCents, parseFrontDeskConfig, resolveEffectiveOverrides } from './config.js';
+import { holdAmountCents, parseFrontDeskConfig, resolveEffectiveOverrides, scopeBookingPayment } from './config.js';
 
 describe('parseFrontDeskConfig', () => {
   it('applies defaults for optional fields', () => {
@@ -174,5 +174,29 @@ describe('bookingPayment (0062)', () => {
     expect(holdAmountCents(c, 'B')).toBe(50000);
     expect(holdAmountCents(c, 'unknown')).toBe(50000);
     expect(holdAmountCents(parseFrontDeskConfig(base as never), 'A')).toBeNull();
+  });
+
+  it('only_variants: only conversations pinned to a listed variant pay', () => {
+    const c = parseFrontDeskConfig({ ...base, bookingPayment: { amount: 500, only_variants: ['i01'] } } as never);
+    expect(c.bookingPayment?.onlyVariants).toEqual(['i01']);
+    expect(scopeBookingPayment(c, 'i01').bookingPayment).toMatchObject({ amount: 500 });
+    expect(scopeBookingPayment(c, 'a02').bookingPayment).toBeNull();
+    expect(scopeBookingPayment(c, undefined).bookingPayment).toBeNull();
+    expect(scopeBookingPayment(c, null).bookingPayment).toBeNull();
+  });
+
+  it('without only_variants every conversation pays, pinned or not', () => {
+    const c = parseFrontDeskConfig({ ...base, bookingPayment: { amount: 500 } } as never);
+    expect(scopeBookingPayment(c, 'a02')).toBe(c);
+    expect(scopeBookingPayment(c, undefined)).toBe(c);
+    const off = parseFrontDeskConfig(base as never);
+    expect(scopeBookingPayment(off, 'i01').bookingPayment).toBeNull();
+  });
+
+  it('an empty only_variants list is malformed → feature off + log', () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    expect(parseFrontDeskConfig({ ...base, bookingPayment: { amount: 500, only_variants: [] } } as never).bookingPayment).toBeNull();
+    expect(spy).toHaveBeenCalledTimes(1);
+    spy.mockRestore();
   });
 });

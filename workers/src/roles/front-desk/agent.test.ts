@@ -34,4 +34,22 @@ describe('buildFrontDeskAgent', () => {
     const opts = await defaultOptionsFor('gpt-4o-mini');
     expect(opts.providerOptions).toEqual({});
   });
+
+  // The prompt half of only_variants: the deposit rules render only for the paying campaign.
+  it('renders the paid-hold section only for a variant listed in only_variants', async () => {
+    const instructionsFor = async (promptVariant?: string) => {
+      const requestContext = new RequestContext();
+      requestContext.set('tenant', {
+        tenantId: 't1',
+        clientId: 'c1',
+        config: { businessName: 'X', timezone: 'America/Chihuahua', bookingPayment: { amount: 500, only_variants: ['i01'] } },
+      });
+      requestContext.set('turn', { ghlContactId: 'c1', ghlConversationId: 'conv1', promptVariant });
+      return String(await buildFrontDeskAgent().getInstructions({ requestContext }));
+    };
+    expect(await instructionsFor('i01')).toContain('# Apartado con pago');
+    expect(await instructionsFor('a02')).not.toContain('# Apartado con pago');
+    expect(await instructionsFor()).not.toContain('# Apartado con pago');
+  });
 });
+

@@ -1035,6 +1035,17 @@ costo de tu consulta", "statement_suffix": "DR VALDIVIA" }`. `amount` is pesos;
 `services[].deposit` overrides it per service. Malformed → feature off + a loud log, never a
 thrown turn (`parseBookingPayment`).
 
+**One campaign only (`only_variants`, 2026-09-26).** `"only_variants": ["i01"]` limits the
+charge to conversations pinned to those campaign variants (§1.1); every other conversation of
+the tenant books exactly as if `booking_payment` were NULL — no deposit section in the prompt,
+no hold, no link, no reminder. Absent = every conversation pays (The Bot Crew). Applied per
+turn by `scopeBookingPayment` where the turn's config is built (the agent's instructions and
+the tools' `resolveAgentContext`), because `booking_payment` itself is tenant-wide and a
+variant cannot carry it. First user: Heriberto's PLAN offer ("Primera Visita de Armonización
+Facial", $500 deposit that is part of a $1,000 treatment credit; his other 12 campaigns keep
+"se paga en el consultorio"). Holds already opened are untouched — they carry their own
+`stripe_account`.
+
 **The flow, end to end.**
 
 1. `bookAppointment` books the GHL event as `new` ("No confirmada" — the 0061 state, but here
