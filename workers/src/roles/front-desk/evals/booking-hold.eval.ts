@@ -41,6 +41,8 @@
  *     pago" es la respuesta correcta y el regex la castigaba; ahora se descarta la condicional.
  *   - primera oferta 5/6 (la falla: "ya no cancelar" no casaba con el regex, ampliado);
  *     cita pagada + cancelar 5/6 (la falla: "no se cancela" seco, la guardia de tono de Leo).
+ *   MEDIDO 2026-09-26 (gpt-5.6-luna, seriado): con policy_note, la línea de la política va en el
+ *   mensaje de la liga y la liga lo cierra: 3/3 con la sección · 0/3 sin ella.
  *   Lectura honesta del primer par de casos: la sección del prompt NO discrimina ahí. Lo que sostiene el comportamiento
  *   es el mensaje que devuelve bookAppointment (la liga, el plazo y "no digas confirmada" viajan
  *   en el resultado del tool, en código) más el historial. La sección se conserva por lo que el
@@ -206,6 +208,31 @@ describe.skipIf(!evalApiKey)(`apartado con pago — la liga se manda tal cual y 
     // "apartada" / "aparté" / "apartado": the verb in any form, never "confirmada".
     expect(text.toLowerCase()).toMatch(/apart/);
     expect(text.toLowerCase()).not.toMatch(/confirmad[ao]/);
+  }, 120_000);
+
+  // policy_note (2026-09-26, Heriberto): the tenant's policy is said once, in the message that
+  // carries the link — not at the first slot offer — and the link still closes the message.
+  it('con policy_note: la línea de la política va en el mensaje de la liga, antes de ella', async () => {
+    const policy = 'El depósito no es reembolsable, porque el doctor va al consultorio únicamente para atender las citas agendadas.';
+    const tenant: TenantContext = {
+      ...paidTenant,
+      config: { ...paidTenant.config, bookingPayment: { amount: 500, policy_note: policy } },
+    };
+    const res = await buildFrontDeskAgent().generate(
+      [
+        { role: 'user', content: 'Hola, quiero una consulta general' },
+        { role: 'assistant', content: `Claro. Tengo el ${DAY_LABEL} a las 11:00 a.m. o a las 4:00 p.m.; la cita se aparta con $500. ¿Cuál te acomoda y a nombre de quién agendo?` },
+        { role: 'user', content: 'A las 11, a nombre de Karla Mendoza' },
+      ],
+      { requestContext: buildAgentRequestContext({ tenant, turn, provider: evalProvider, model: evalModel, llmApiKey: evalApiKey }) },
+    );
+    expect(toolIds(res)).toContain('bookAppointment');
+    const text = res.text;
+    expect(text).toContain(CHECKOUT_URL);
+    expect(text.trim().endsWith(CHECKOUT_URL)).toBe(true);
+    const beforeLink = text.slice(0, text.indexOf(CHECKOUT_URL)).toLowerCase();
+    expect(beforeLink).toMatch(/reembolsable/);
+    expect(beforeLink).not.toMatch(/no se cancela|ya no se cancela/);
   }, 120_000);
 
   // The turn AFTER the booking, with no tool result in hand: the lead asks whether it's

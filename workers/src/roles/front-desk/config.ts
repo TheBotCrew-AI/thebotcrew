@@ -46,6 +46,11 @@ export const bookingPaymentSchema = z.object({
   stripeAccount: z.string().regex(/^acct_[A-Za-z0-9]+$/).optional(),
   /** With `stripeAccount`: what the platform keeps of each charge, in pesos (application fee). */
   platformFee: z.number().nonnegative().optional(),
+  /** The one line the lead hears right BEFORE the payment link, in the tenant's words ("el
+   *  depósito no es reembolsable porque…"). Set, it replaces the platform's up-front notice
+   *  ("pagada se reagenda, no se cancela" at the first slot offer): the offer mentions only the
+   *  amount, and the policy waits for the moment the lead is about to pay. */
+  policyNote: z.string().min(1).optional(),
   /** Campaign variants whose conversations pay (e.g. ["i01"]); absent = every conversation.
    *  Applied per turn by `scopeBookingPayment` — a tenant can charge for one offer only. */
   onlyVariants: z.array(z.string().min(1)).min(1).optional(),
@@ -75,6 +80,7 @@ export function parseBookingPayment(raw: unknown): BookingPaymentConfig | null {
     statementSuffix: o.statement_suffix ?? o.statementSuffix,
     stripeAccount: o.stripe_account ?? o.stripeAccount,
     platformFee: o.platform_fee ?? o.platformFee,
+    policyNote: o.policy_note ?? o.policyNote,
     onlyVariants: o.only_variants ?? o.onlyVariants,
   });
   if (!parsed.success) {

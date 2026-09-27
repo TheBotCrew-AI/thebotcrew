@@ -1046,6 +1046,15 @@ Facial", $500 deposit that is part of a $1,000 treatment credit; his other 12 ca
 "se paga en el consultorio"). Holds already opened are untouched — they carry their own
 `stripe_account`.
 
+**When the policy is said (`policy_note`, 2026-09-26).** By default the first slot offer carries
+"se confirma con el pago de $X, y pagada se reagenda pero ya no se cancela" (no surprises, Leo
+2026-09-20). A tenant can set `"policy_note"` instead: its own one line, said once, in the
+message that carries the payment link, right before it — and the first offer carries only the
+amount. Leo, on Heriberto: a lead who asks what the consulta costs gets "$500, que se te
+acreditan al doble en tu tratamiento", not the cancellation rules; the policy is phrased as
+"no es reembolsable porque el doctor va al consultorio solo para las citas", never "no se
+cancela". The paid-cita cancel rule (apologise, offer to move it) is unchanged for everyone.
+
 **The flow, end to end.**
 
 1. `bookAppointment` books the GHL event as `new` ("No confirmada" — the 0061 state, but here

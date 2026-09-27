@@ -22,6 +22,11 @@
  *     "¿cuánto cuesta?" murió por timeout de la API a los 60 s, no por la aserción). No los
  *     sostiene la sección sino el offering y el deposit_note, que dicen lo mismo: son guardias
  *     de que la oferta se presenta completa y de que los dos números nunca se suman.
+ *   MEDIDO 2026-09-26, tras "no sobre-compartas" (Leo: le preguntaron el costo de la consulta y el
+ *   bot agregó "pagada se reagenda pero no se cancela"). `PLAN_POLICY_OFF=1` quita el policy_note y
+ *   devuelve el aviso de plataforma en la primera oferta:
+ *   - "¿cuánto cuesta la consulta?" sin política: con policy_note 3/3 · sin él 1/3.
+ *   - "¿cuánto cuesta?" (ofrece horarios) sin cancelar/reembolso: con policy_note 3/3 · sin él 0/3.
  *
  * Live cases need an API key (`pnpm eval`); excluded from the CI gate.
  */
@@ -49,6 +54,10 @@ import { HERIBERTO_PLAN_VARIANT, heribertoTenant } from './fixtures.js';
 import { evalApiKey, evalModel, evalProvider } from './eval-model.js';
 
 const RULE_OFF = process.env.PLAN_RULE_OFF === '1';
+/** Drops `policy_note`: the platform's up-front "pagada se reagenda, no se cancela" comes back. */
+const POLICY_OFF = process.env.PLAN_POLICY_OFF === '1';
+const POLICY_NOTE =
+  'El depósito no es reembolsable, porque el Dr. Valdivia va al consultorio únicamente para atender las citas agendadas; si algo se te complica, con gusto te ayudamos a reagendar.';
 const CREDIT_SECTION = '# El crédito y el depósito';
 
 /** Drop one section (`# Title` … up to the next `# `). */
@@ -72,7 +81,8 @@ const planTenant: TenantContext = {
     bookingPayment: {
       amount: 500,
       hold_hours: 24,
-      deposit_note: 'forma parte de tu crédito de $1,000 para el tratamiento',
+      deposit_note: 'se te acredita al doble en tu tratamiento si decides realizarlo',
+      ...(POLICY_OFF ? {} : { policy_note: POLICY_NOTE }),
       only_variants: ['i01'],
     },
   },
@@ -129,7 +139,24 @@ describe('Heriberto i01 (PLAN) — prompt (offline)', () => {
   });
 });
 
-describe.skipIf(!evalApiKey)(`Heriberto i01 (PLAN) — live (${RULE_OFF ? 'SIN' : 'con'} "${CREDIT_SECTION}")`, () => {
+describe.skipIf(!evalApiKey)(`Heriberto i01 (PLAN) — live (${RULE_OFF ? 'SIN' : 'con'} "${CREDIT_SECTION}", ${POLICY_OFF ? 'SIN' : 'con'} policy_note)`, () => {
+  it('"¿cuánto cuesta la consulta?": $500 que se acreditan al doble — y nada de cancelar, reagendar ni reembolsos', async () => {
+    const res = await buildFrontDeskAgent().generate(
+      [
+        { role: 'user', content: 'PLAN' },
+        { role: 'assistant', content: OPENER },
+        { role: 'user', content: 'Si me interesa. Cuánto cuesta la consulta?' },
+      ],
+      { requestContext: rc() },
+    );
+    toolIds(res);
+    const text = reply(res);
+    expect(text).toMatch(/\$?500\b/);
+    expect(text).not.toMatch(FREE);
+    // Leo, 2026-09-26: policy nobody asked for is oversharing at this moment.
+    expect(text).not.toMatch(/cancel|reagend|reprogram|reembols|devoluci|mover de horario/);
+  });
+
   it('"PLAN": presenta la visita y el crédito de $1,000, sin precios ni "gratis"', async () => {
     const res = await buildFrontDeskAgent().generate([{ role: 'user', content: 'PLAN' }], { requestContext: rc() });
     toolIds(res);
@@ -157,6 +184,7 @@ describe.skipIf(!evalApiKey)(`Heriberto i01 (PLAN) — live (${RULE_OFF ? 'SIN' 
     expect(text).not.toMatch(/1,?500/);
     expect(text).not.toMatch(FREE);
     expect(tools).toContain('getAvailability');
+    expect(text).not.toMatch(/cancel|reembols|devoluci/);
   });
 
   it('"¿la evaluación es gratis?": no lo es — se reserva con el depósito de $500', async () => {
@@ -185,7 +213,7 @@ describe.skipIf(!evalApiKey)(`Heriberto i01 (PLAN) — live (${RULE_OFF ? 'SIN' 
         {
           role: 'assistant',
           content:
-            'Botox desde $2,000 y ácido hialurónico desde $5,500; el precio final depende de la evaluación, la zona y la cantidad indicada. Para reservar se paga un depósito de $500, que forma parte de tu crédito para el tratamiento. Tengo el lunes a las 4:15 p.m. o a las 6:15 p.m., ¿cuál te funciona mejor?',
+            'Botox desde $2,000 y ácido hialurónico desde $5,500; el precio final depende de la evaluación, la zona y la cantidad indicada. Para reservar se paga un depósito de $500, que se te acredita al doble en tu tratamiento si decides realizarlo. Tengo el lunes a las 4:15 p.m. o a las 6:15 p.m., ¿cuál te funciona mejor?',
         },
         { role: 'user', content: 'O sea que pago 500 y me dan 1000 de credito, entonces son 1500?' },
       ],
@@ -194,7 +222,7 @@ describe.skipIf(!evalApiKey)(`Heriberto i01 (PLAN) — live (${RULE_OFF ? 'SIN' 
     toolIds(res);
     const text = reply(res);
     expect(text).toMatch(/1,?000/);
-    expect(text).toMatch(/incluid|dentro|parte|en total/);
+    expect(text).toMatch(/incluid|dentro|parte|en total|doble/);
     expect(text).not.toMatch(/(s[ií],?\s+(son|ser[ií]an)|recibes|tendr[ií]as|te quedan)\s+\$?1,?500/);
   });
 });

@@ -597,6 +597,8 @@ the free-install offer), two Worker secrets set **once**, then per tenant it is 
       keeps a cut of each paid cita, `"platform_fee": 150` (pesos → Stripe's application fee).
       To charge for ONE campaign only, add `"only_variants": ["<variant key>"]`: every other
       conversation books free, as if `booking_payment` were NULL (business-logic §5e).
+      `"policy_note": "…"` replaces the platform's up-front "pagada se reagenda, no se cancela"
+      with the tenant's own line, said only in the message with the link (business-logic §5e).
    4. **On a LIVE tenant, fence the rehearsal first**: `test_contact_ids = {<your contact>}`
       BEFORE `booking_payment` (real leads get no bot reply while fenced — minutes, outside
       hours), and clear both when done. Then verify: book + pay in the client's name — the Checkout page shows THEIR business, the

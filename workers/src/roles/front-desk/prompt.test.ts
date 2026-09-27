@@ -828,6 +828,19 @@ describe('buildFrontDeskInstructions — apartado con pago (0062)', () => {
     expect(out).toContain('"devolución"');
   });
 
+  it('policy_note: the offer carries only the amount; the tenant\'s policy line waits for the link', () => {
+    const policy = 'El depósito no es reembolsable, porque el doctor va al consultorio solo para las citas agendadas.';
+    const out = buildFrontDeskInstructions(cfg({ bookingPayment: { amount: 500, policy_note: policy } }), NOW);
+    expect(out).not.toContain('SIN SORPRESAS');
+    expect(out).not.toContain('una vez pagada se puede reagendar pero ya no se cancela');
+    expect(out).toContain('ni reagendar, ni cancelar, ni reembolsos');
+    expect(out).toContain(`CUATRO cosas`);
+    expect(out.split(policy).length - 1).toBe(2); // before the link + when asked before paying
+    expect(out).not.toContain('pagada se reagenda, no se cancela.');
+    // The paid-cita cancel rule is the same for everyone.
+    expect(out).toContain('NO llames cancelAppointment');
+  });
+
   it('absent without the feature, in demo mode, and when booking is off', () => {
     expect(buildFrontDeskInstructions(cfg(), NOW)).not.toContain('# Apartado con pago');
     expect(buildFrontDeskInstructions(cfg({ bookingPayment: { amount: 500 }, promptOverrides: { bookingEnabled: false } }), NOW)).not.toContain('# Apartado con pago');

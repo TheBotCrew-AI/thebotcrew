@@ -441,16 +441,29 @@ No tenemos número de WhatsApp del lead en el sistema (típico de leads de Faceb
     const cents = holdAmountCents(config, '') ?? Math.round(config.bookingPayment.amount * 100);
     const amount = formatHoldAmount(cents, config.bookingPayment.currency);
     const note = config.bookingPayment.depositNote?.trim();
+    const policy = config.bookingPayment.policyNote?.trim();
+    // Without a tenant policy line, the platform's up-front notice (Leo, 2026-09-20: no
+    // surprises at the first offer). With one, the offer carries only the amount and the
+    // policy is said once, in the tenant's words, in the message that carries the link.
+    const upFront = policy
+      ? `- La PRIMERA vez que ofrezcas horarios, di en media línea que la cita se aparta con ${amount}${note ? ` (${note})` : ''}, y nada más: ni reagendar, ni cancelar, ni reembolsos. Esas reglas no se adelantan; se dicen solo si pregunta, y la del pago justo antes de la liga.`
+      : `- SIN SORPRESAS: la PRIMERA vez que ofrezcas horarios (en ese mismo mensaje, antes de la lista o justo después), avisa en UNA línea, en positivo y como información, no como advertencia: la cita se confirma con el pago de ${amount}, y una vez pagada se puede reagendar pero ya no se cancela. Dilo UNA sola vez, antes de que elija; no lo repitas en cada mensaje. Si ya lo dijiste antes en esta conversación, no lo vuelvas a decir.`;
+    const closing = policy
+      ? `CUATRO cosas: el día y la hora, hasta cuándo tiene para pagar, justo antes de la liga esta línea dicha con tus palabras y en tono cálido ("${policy}"), y la liga de pago que devolvió la herramienta.`
+      : 'TRES cosas: el día y la hora, hasta cuándo tiene para pagar, y la liga de pago que devolvió la herramienta.';
+    const askedBeforePaying = policy
+      ? `- Si pregunta antes de pagar si podría cancelar después o si se le devuelve el depósito, contesta en positivo con esto, dicho con tus palabras: "${policy}", y ofrécele con gusto que si algo se le complica se la reagendas.`
+      : '- Si pregunta antes de pagar si podría cancelar después, contesta con la verdad y en positivo: pagada se reagenda, no se cancela.';
     paidHoldSection = `\n\n# Apartado con pago — manda sobre la secuencia de agendar
 En este negocio una cita se CONFIRMA solo cuando la persona paga el apartado de ${amount}${note ? ` (${note})` : ''}, y una cita ya pagada se puede MOVER de horario pero no se cancela. bookAppointment ya no confirma: APARTA el lugar y te devuelve una liga de pago y una fecha límite.
-- SIN SORPRESAS: la PRIMERA vez que ofrezcas horarios (en ese mismo mensaje, antes de la lista o justo después), avisa en UNA línea, en positivo y como información, no como advertencia: la cita se confirma con el pago de ${amount}, y una vez pagada se puede reagendar pero ya no se cancela. Dilo UNA sola vez, antes de que elija; no lo repitas en cada mensaje. Si ya lo dijiste antes en esta conversación, no lo vuelvas a decir.
-- Tras agendar con éxito, tu mensaje de cierre lleva TRES cosas: el día y la hora, hasta cuándo tiene para pagar, y la liga de pago que devolvió la herramienta. La liga va SOLA, al final del mensaje, en su propio renglón, exactamente como viene: no la acortes, no la describas, no le agregues ni le quites nada, y no escribas nada después de ella. Di que el lugar queda apartado y que se confirma en cuanto pague.
+${upFront}
+- Tras agendar con éxito, tu mensaje de cierre lleva ${closing} La liga va SOLA, al final del mensaje, en su propio renglón, exactamente como viene: no la acortes, no la describas, no le agregues ni le quites nada, y no escribas nada después de ella. Di que el lugar queda apartado y que se confirma en cuanto pague.
 - Si dice que la liga no abre, que no le llegó o te la pide de nuevo: llama lookupAppointment y vuelve a mandársela tal cual, sola en su renglón. Es una liga nueva y corta; no la escribas de memoria. NO escales, NO cambies el estado de la conversación ni la marques para el equipo por eso: solo si después de reenviarla te dice que sigue sin abrir, llama flagAwaitingHuman y dile que una persona del equipo le manda otra.
 - NUNCA digas "confirmada", "lista", "ya quedó" ni "nos vemos" antes del pago. La palabra es "apartada". Tampoco digas que le llegará una confirmación: le llega cuando pague.
 - Si dice que ya pagó, llama lookupAppointment y contesta con lo que devuelva; no lo des por pagado tú.
 - Si pregunta por qué se paga o si puede pagar después, dilo en positivo y en una línea: así su lugar queda reservado de verdad. No ofrezcas apartar sin pago, pagar en el lugar ni ampliar el plazo.
 - Si la cita YA está pagada y pide cancelarla: NO llames cancelAppointment. Contesta como persona, no como reglamento, y en este orden: (1) una disculpa sincera y cercana ("ay, una disculpa, [nombre]" / "qué pena contigo"), (2) con suavidad, que cancelarla tal cual ya no te es posible porque quedó pagada y apartada a su nombre, (3) de inmediato y con muchísimo gusto, que le apoyas a acomodarla en otro horario que le venga mejor: llama getAvailability y ofrécele dos horarios, o pregúntale qué día le acomoda. Un solo mensaje, cálido, que dé vueltas si hace falta. PROHIBIDO: la frase seca "no se cancela", un "así que…" que suene a consecuencia, y las palabras "devolución", "reembolso" y "política". Si insiste, vuelve a disculparte, repite que con gusto se la mueves cuando quiera y que su lugar queda guardado; no la canceles.
-- Si pregunta antes de pagar si podría cancelar después, contesta con la verdad y en positivo: pagada se reagenda, no se cancela.
+${askedBeforePaying}
 - Si te dice que el plazo venció o lookupAppointment dice que el lugar se liberó, la liga anterior ya no sirve: ofrécele agendar de nuevo con getAvailability, sin reproches.`;
   }
 
