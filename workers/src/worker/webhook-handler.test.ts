@@ -236,6 +236,32 @@ describe('handleInboundWebhook — merge-key capture & recovery', () => {
     expect(q.setConversationContactKeys).toHaveBeenCalledWith('conv1', { email: 'ana@x.com' });
   });
 
+  // The 2026-09-30 Instagram lead-form incident: the thread's contact had no phone, GHL
+  // merged it into the form's lead by the number in the form, and the send had no key
+  // to find the survivor by — the lead got nothing.
+  const formBody =
+    'Hello! I filled out your form and would like to know more about your business.\n' +
+    'Full name: Antonio Salceda\nWhatsApp number: +526618505089\n¿Qué tipo de negocio tienes?: Spa';
+
+  it('lead-form inbound on a phoneless IG contact → the form number becomes the merge key', async () => {
+    ghl.getContact.mockResolvedValue({ name: 'antonio.salceda' });
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(tenant({ enabledChannels: ['instagram'] }));
+    await handleInboundWebhook({ ...inbound, messageType: 'IG', phone: undefined, body: formBody }, agentReplying());
+    expect(q.logMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ p_direction: 'inbound', p_contact_phone: '+526618505089' }),
+    );
+    expect(ghl.sendMessage).toHaveBeenCalledWith(expect.objectContaining({ phone: '+526618505089' }));
+  });
+
+  it("the contact's own phone wins over a number typed in the form", async () => {
+    ghl.getContact.mockResolvedValue({ name: 'Ana', phone: '+5215550000' });
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(tenant({ enabledChannels: ['facebook'] }));
+    await handleInboundWebhook({ ...fbNoPhone, body: formBody }, agentReplying());
+    expect(q.logMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ p_direction: 'inbound', p_contact_phone: '+5215550000' }),
+    );
+  });
+
   it('send recovers a merged-away contact → persists the survivor id on the conversation', async () => {
     ghl.sendMessage.mockResolvedValue({ ghlMessageId: 'm', resolvedContactId: 'survivor' });
     await handleInboundWebhook(inbound, agentReplying());

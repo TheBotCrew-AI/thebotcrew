@@ -544,7 +544,9 @@ cualquier Chrome headless recibe SIGTERM a los ~2 s (ver cabecera de `render-bat
   persist it (`updateConversationContact`). Wired on all three send paths (turn, delivery-retry cron,
   follow-up). The merge keys are **captured while the contact is still alive** — at inbound and again
   on the first turn's `getContact` — and stored on the conversation (`contact_phone`, `contact_email`
-  migration 0031; `setConversationContactKeys`). **Requires the `conversations.readonly` scope**
+  migration 0031; `setConversationContactKeys`). A FB/IG **lead-form** thread's contact has no phone at all,
+  so its key is the `WhatsApp number: +…` line of the form's own text (`core/form-phone.ts`, deterministic,
+  E.164 only) — without it the 2026-09-30 IG form lead got a reply GHL refused and nothing else. **Requires the `conversations.readonly` scope**
   (`ghl/oauth.ts`, for the last-resort `GET /conversations/{id}` read — a *different* scope than
   `conversations/message.*`) and `contacts.readonly` (for the search). Tokens issued before
   `conversations.readonly` was added 401 on that read; adding a scope means tenants must

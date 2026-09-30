@@ -70,6 +70,7 @@ import { GhlClient } from '../ghl/client.js';
 import { parseAttachments, parseInboundWebhook } from '../ghl/webhook.js';
 import { transcribeAudio } from '../core/transcribe.js';
 import { describeImages } from '../core/describe-image.js';
+import { phoneFromFormText } from '../core/form-phone.js';
 import { demoEndTag, interestTag, STATUS_TAGS } from '../ghl/tags.js';
 import { interestPromptAddendum, matchInterest, serviceNames } from '../core/interest.js';
 import type { GhlInboundWebhook, InboundAttachment, ParsedInbound } from '../ghl/types.js';
@@ -1362,11 +1363,14 @@ export async function handleInboundWebhook(
   // it's still alive. Besides giving WhatsApp its phone, this is the EARLY capture of the
   // merge keys: if GHL later merges this contact away, the send re-resolves the survivor by
   // phone/email (persisted just below). Only fetched when the payload didn't already carry a phone.
+  // A FB/IG lead-form message carries the lead's number in its text while the thread's contact
+  // has none — and GHL merges that contact into the form's lead by that number seconds later —
+  // so the form's number is the merge key when the contact has no phone of its own.
   let phone = parsed.phone;
   let inboundEmail: string | undefined;
   if (!phone) {
     const contact = await new GhlClient(tenant.tenantId).getContact(parsed.contactId);
-    phone = contact?.phone;
+    phone = contact?.phone ?? phoneFromFormText(parsed.text);
     inboundEmail = contact?.email;
   }
 
