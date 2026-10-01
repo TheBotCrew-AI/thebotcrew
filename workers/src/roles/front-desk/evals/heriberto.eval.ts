@@ -148,6 +148,12 @@
  *     Sin una salida que ofrecer, cierra; con ella, promete preguntarle al doctor y deja la
  *     solicitud marcada. El caso del cierre (flagAwaitingHuman sin preguntas) mide 4/5 en
  *     rojo porque su propia historia ya trae el plan: es guardia, no prueba.
+ *   MEDIDO 2026-09-30 (pedir la mañana ya es la excepción, sin pasar por otras tardes):
+ *   - "No tiene horario en la mañana" (prod) y "¿y en la mañana no hay? me queda mejor": con
+ *     la regla nueva 5/5 cada uno · con la anterior (`morning-ask`) 0/5 — las diez rojas son
+ *     el mensaje de prod: "el consultorio agenda únicamente por la tarde" + las mismas tardes.
+ *   - "ese día no puedo" sigue 5/5 (no escala) y "ningún día" 15/16 con la regla nueva; la
+ *     roja salió en una corrida en paralelo y no se repitió en 15 seriales.
  *   - El horario dejó de tener franja de mañana el 2026-09-21, así que los slots mockeados de
  *     este archivo son todos de la tarde. Un slot de mañana contradice el `hours` del tenant
  *     y, desde `closedRange`, el prompt lo dice en voz alta.
@@ -207,6 +213,18 @@ const OLD_GOLDEN_RULE =
 const OLD_GETAVAILABILITY_WORDING = [
   'El consultorio agenda ÚNICAMENTE por la tarde: ofrece exactamente DOS horarios de la tarde SEPARADOS entre sí, del día más próximo que tenga dos; si ese día solo tiene uno, el segundo sácalo del día siguiente. Dos horarios pegados (como 3:45 y 4:15) no son una opción real: deja al menos hora y media entre uno y otro. Van en un solo mensaje corto y sin lista con viñetas',
   'Ofrece exactamente DOS horarios, en un solo mensaje corto y sin lista con viñetas',
+] as const;
+
+/**
+ * The pre-2026-09-30 morning rule — the red side of the "¿tienen en la mañana?" cases. It
+ * read every objection as "try another afternoon first", so a lead who asked for the morning
+ * was told the office only books afternoons and got the same slots again.
+ */
+const OLD_MORNING_WORDING = [
+  `- Si el horario que le ofreciste no le acomoda por el día o la hora ("ese día no puedo", "¿más tarde?"), prueba con otras tardes: pregúntale qué día le viene mejor y vuelve a consultar. La mayoría se resuelve ahí.
+- Si lo que pide es la mañana — pregunta si hay horario en la mañana, dice que la prefiere o que por la tarde no puede —, no le insistas con las tardes ni le expliques que solo se agenda por la tarde: ve directo a ofrecerle preguntarle al doctor. Dile`,
+  `- Si el horario que le ofreciste no le acomoda, primero prueba con otras tardes: pregúntale qué día le viene mejor y vuelve a consultar. La mayoría se resuelve ahí.
+- Solo cuando te diga claramente que por la tarde NO puede ningún día, ofrécele preguntarle al doctor: dile`,
 ] as const;
 
 /**
@@ -273,7 +291,7 @@ Las "líneas de ventrílocuo" (o líneas de marioneta) son los surcos que bajan 
 `;
 
 const tenantWithout = (
-  rule: 'afternoon-only' | 'medical' | 'faq-consulta' | 'drip' | 'service-name' | 'next-step' | 'consulta-hook' | 'zone-list' | 'slot-contrast' | 'promo-price' | 'consulta-why' | 'first-time-fear' | 'negative-payments' | 'discovery-first' | 'city-split' | 'lada-faq' | 'zone-vocabulary' | 'walk-in',
+  rule: 'afternoon-only' | 'morning-ask' | 'medical' | 'faq-consulta' | 'drip' | 'service-name' | 'next-step' | 'consulta-hook' | 'zone-list' | 'slot-contrast' | 'promo-price' | 'consulta-why' | 'first-time-fear' | 'negative-payments' | 'discovery-first' | 'city-split' | 'lada-faq' | 'zone-vocabulary' | 'walk-in',
 ): TenantContext => {
   const p = HERIBERTO_PERSONA;
   const cfg = heribertoTenant.config;
@@ -287,6 +305,16 @@ const tenantWithout = (
     return {
       ...heribertoTenant,
       config: { ...cfg, promptOverrides: { ...p, houseRules: withoutSection(p.houseRules, '# Solo se agenda por la tarde') } },
+    };
+  }
+  if (rule === 'morning-ask') {
+    if (!p.houseRules.includes(OLD_MORNING_WORDING[0])) throw new Error('morning wording not found');
+    return {
+      ...heribertoTenant,
+      config: {
+        ...cfg,
+        promptOverrides: { ...p, houseRules: p.houseRules.replace(OLD_MORNING_WORDING[0], OLD_MORNING_WORDING[1]) },
+      },
     };
   }
   if (rule === 'slot-contrast') {
@@ -1194,6 +1222,35 @@ describe.skipIf(!evalApiKey)('Dr. Heriberto Valdivia — solo por la tarde', () 
     expect(text, text).toMatch(/doctor|dr\.|valdivia/);
     // Nunca una mañana dada por hecha ni apartada.
     expect(text, text).not.toMatch(/te (aparto|agendo|dejo|guardo) .{0,30}ma(ñ|n)ana/);
+    expect(toolIds(res), text).not.toContain('bookAppointment');
+  }, 120_000);
+
+  /**
+   * Si ella pide la mañana, eso ES la excepción: ofrecerle preguntarle al doctor en ese
+   * mismo turno, sin explicarle que solo se agenda por la tarde ni volverle a ofrecer las
+   * tardes. El primer caso es el mensaje de prod tal cual (2026-09-30, PLAN, Messenger): el
+   * bot contestó "por ahora el consultorio agenda únicamente por la tarde" + las mismas
+   * tardes, y la excepción llegó un turno después, cuando ella ya se estaba despidiendo.
+   */
+  const SOLO_TARDE = /(únicamente|solamente|solo|sólo)[^.?!]{0,30}tarde/i;
+  const AFTERNOON_SLOT = /\d{1,2}:\d{2}\s*(p\.?\s*m|de la tarde)/i;
+
+  it.each([
+    ['la pregunta de prod', 'No tiene horario en la mañana 👋🏽'],
+    ['la prefiere', '¿Y en la mañana no hay? Me queda mejor'],
+  ])('pide la mañana (%s) → ofrece preguntarle al doctor, sin insistir con la tarde', async (_label, ask) => {
+    const res = await buildFrontDeskAgent().generate(
+      [...AFTERNOON_THREAD, { role: 'user', content: ask }],
+      { requestContext: rc(tenantFor('morning-ask')) },
+    );
+    const text = reply(res);
+    expect(text, text).toMatch(/pregunt|consult|chec|revis|ver con/);
+    expect(text, text).toMatch(/doctor|dr\.|valdivia/i);
+    expect(text, text).not.toMatch(SOLO_TARDE);
+    expect(text, text).not.toMatch(AFTERNOON_SLOT);
+    expect(text, text).not.toMatch(/te (aparto|agendo|dejo|guardo) .{0,30}ma(ñ|n)ana/);
+    // Todavía no sabe qué mañanas le acomodan: pregunta, así que no marca ni agenda.
+    expect(toolIds(res), text).not.toContain('flagAwaitingHuman');
     expect(toolIds(res), text).not.toContain('bookAppointment');
   }, 120_000);
 
