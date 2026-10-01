@@ -57,21 +57,20 @@ monolithic prompt (migration 0036; `core/tenant.ts` `matchVariantKeyword`,
   `resolveEffectiveOverrides` even if someone adds it there later) rendered as its own
   section **after** the flow and labelled as outranking it — because a campaign's script is
   exactly what it exists to override. **Suppressed in demo mode**: inside a roleplay for the
-  LEAD's business, rules about who WE serve are incoherent. The Bot Crew's fit filter (§2b)
-  lives here for precisely this reason — it survived the move out of `qualificationNotes`,
-  which is what would otherwise have taken it down on the first campaign variant.
-- **Live example — The Bot Crew's `demo24` (2026-09-08).** `keyword_variants` maps `demo24`
-  and `demo 24` to it (the alias exists because the matcher is whole-word: `demo24` does not
-  match "demo 24"). It overrides only `identity` and `qualificationNotes` — the organic,
-  no-ad framing plus a three-line opening that spells the name out ("SARA, Sistema de Atención
-  y Respuesta Automática") — and inherits `offering` untouched, so the $500, the contract and
-  the payment answers stay single-sourced. It also sets `followUpsEnabled: false` (below) and
-  a `calendarLabel`. The earlier `demo-funnel` variant was removed with the Botox Sprint offer
-  it served (2026-09-07); its measurement is still the reason to split a flow rather than pile
-  routes into one blob — one blob offered the call 1 turn in 5, the split ran 5/5 to the demo
-  and 3/3 to the call. The placement convention that makes this work (rules → `houseRules`,
-  commercial answers → `offering`, flow → `qualificationNotes`) is in
-  [`config-model.md`](config-model.md) § Where to put a given piece of text.
+  LEAD's business, rules about who WE serve are incoherent. The exception to the exception: a
+  fit filter that is itself per-campaign belongs in the campaign's `qualificationNotes`, so the
+  next campaign can bring its own — The Bot Crew's clinic qualification lives there (§2b).
+- **Live example — The Bot Crew's `clinicas` (2026-09-30).** The keyword is not a word the
+  lead types: it is a QUESTION of the Meta lead form (`cuántas personas nuevas te escriben por
+  WhatsApp a la semana`, plus a second question as backup), because the form's answers arrive
+  verbatim in the first message, in English on IG/FB and in Spanish on WhatsApp. Two campaigns
+  running at once therefore need forms with at least one question each of their own. The
+  variant is THIN — only a `calendarLabel` — because the clinic offer is also the base (the
+  default for anyone who matches no campaign), so it lives once, in base. The day another
+  campaign replaces the base text, copy the clinic text INTO `clinicas` first, or its pinned
+  leads silently switch offers. (`demo24`, the earlier live example, was removed 2026-09-30.)
+  The placement convention (rules → `houseRules`, commercial answers → `offering`, flow →
+  `qualificationNotes`) is in [`config-model.md`](config-model.md) § Where to put a given piece of text.
 - **Turning on a variant does NOT reach conversations already in flight.** First-touch sticky
   means a thread whose opening message predates the `keyword_variants` entry keeps
   `prompt_variant = NULL` forever — it will never match again. When a campaign is introduced
@@ -92,8 +91,8 @@ monolithic prompt (migration 0036; `core/tenant.ts` `matchVariantKeyword`,
   DB failure never blocks the turn (lead gets the base prompt).
 - **A campaign that must not chase (`followUpsEnabled: false`, code-only).** Follow-ups are a
   TENANT setting (`follow_up_cadence`), but some campaigns must not nudge at all: The Bot
-  Crew's `demo24` is a try-out the lead asked for on their own, and chasing them turns the
-  demo into the pushiness the product is sold against. The flag opts that campaign out of
+  Crew's former `demo24` was a try-out the lead asked for on their own, and chasing them turned
+  the demo into the pushiness the product is sold against. The flag opts that campaign out of
   arming (`webhook-handler.ts`) and, defensively, out of sending a row armed before the
   opt-out (`followup-runner.ts` → `followup_aborted {reason:'variant_no_follow_ups'}`).
   Absent or malformed reads as ENABLED — a config typo can never silently stop a tenant's
@@ -668,22 +667,19 @@ the RPC's usual `status_changed {from,to}`.
 - **Skipped in demo mode**, like every other side effect (§5b): a roleplayed brush-off must
   not pollute the real funnel's stats.
 
-**Its first user — The Bot Crew's own fit filter (tenant config, not code).** The platform
-sells to businesses that **book appointments** — to deliver a service, or a sales call. A
-business whose sale closes inside the chat (online store, catalog resale, food delivery) has
-nothing to schedule, so the agent explains that warmly, does **not** call `startDemo`, and
-parks the conversation in `standby` with reason `"no agenda citas"`. Two rules make it safe:
-suspicion is never grounds — an ambiguous business gets **one** qualifying question first
-(a wrongly disqualified lead costs far more than a wasted demo) — and size, giro and message
-volume still never disqualify. The rule text lives in that tenant's
-**`prompt_overrides.houseRules`** (§1.1 — not `qualificationNotes`, so a campaign variant
-can't replace it away). The golden cases that protect it are
-`roles/front-desk/evals/fit-filter.eval.ts`, including one that pins an offer-campaign
-variant and checks the filter still bites. They run against a **copy** of the text in
-`evals/fixtures.ts` (`FIT_FILTER_SECTION`), and `evals/prompt-drift.eval.ts` compares that
-copy byte-for-byte against prod on every `pnpm eval` — the only case in the suite that
-touches the DB, self-skipping without Supabase env vars so the CI gate never needs them.
-Edit the tenant, then paste the result back into the constant.
+**Its first user — The Bot Crew's own fit filter (tenant config, not code).** Since
+2026-09-30 the offer is a pilot for **medical-aesthetics clinics**, sold by an ad that promises
+"te digo si tu clínica califica", so the flow qualifies on three conditions: the business does
+medical aesthetics (a beauty salon, a spa without medical treatments or a laser-only shop does
+not), it can fund ~$200 MXN/day of ad spend, and whoever decides is on the call. A miss is told
+warmly, never booked, and parked in `standby` with a reason (`"no puede invertir en pauta"`).
+Two rules keep it from over-trimming: an ambiguous business type ("spa", "clínica") gets **one**
+question about its treatments before any verdict, and hesitating on the ad spend is not a no.
+The text lives in **`prompt_overrides.qualificationNotes`**, not `houseRules`: the filter is
+the CAMPAIGN's, and a second campaign brings its own. The golden cases are
+`roles/front-desk/evals/fit-filter.eval.ts` (measurements in its header); they run against
+the copy in `evals/fixtures.ts`, regenerated with `node workers/scripts/sync-botcrew-fixture.mjs`,
+and `evals/prompt-drift.eval.ts` compares it byte-for-byte against prod.
 
 ## 5a. Tenants that don't book through the bot (`bookingEnabled: false`)
 

@@ -661,12 +661,12 @@ cualquier Chrome headless recibe SIGTERM a los ~2 s (ver cabecera de `render-bat
     written inside `qualificationNotes` silently disappears for that campaign's leads: no
     event, no failure, it just stops happening. Hence **`houseRules`**: a base-only override
     field (not in `promptVariantSchema`) rendered after the flow and labelled as outranking
-    it, suppressed in demo mode. Tenant-wide rules go there, never in `qualificationNotes` —
-    that's where the fit filter (§2b) lives. A variant changes the script, not the toolbox —
+    it, suppressed in demo mode. Tenant-wide rules go there, never in `qualificationNotes`
+    (a fit filter that belongs to ONE campaign is the exception — §2b). A variant changes the script, not the toolbox —
     every tool stays callable. A variant may also set **`followUpsEnabled: false`** (code-only,
     `core/reactivation-rounds.ts` `variantAllowsFollowUps`): the campaign never arms a nudge and
-    the runner aborts any row armed before the opt-out — for flows where chasing is wrong (The
-    Bot Crew's `demo24`, a try-out the lead asked for). Absent/malformed = enabled, so a typo
+    the runner aborts any row armed before the opt-out — for flows where chasing is wrong (e.g. a
+    try-out the lead asked for). Absent/malformed = enabled, so a typo
     can't silence a tenant's ladder. See docs/business-logic.md §1.1.
 - Resolved: inbound payload shape (`type=InboundMessage`, `direction=inbound`,
   `locationId/contactId/conversationId/body/messageType`), send/calendar/tag endpoints

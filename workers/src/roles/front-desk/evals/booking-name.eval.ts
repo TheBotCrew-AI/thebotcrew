@@ -36,7 +36,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('../../../db/queries.js');
-const SLOT = '2026-09-03T18:00:00.000Z'; // 11:00 a.m. Tijuana
+// Two days out at 11:00 a.m. Tijuana: a fixed date goes stale (the model notices the
+// offered slot is in the past and stops booking), and two days stays inside any horizon.
+const SLOT_DATE = new Date(Date.now() + 2 * 86_400_000);
+SLOT_DATE.setUTCHours(18, 0, 0, 0);
+const SLOT = SLOT_DATE.toISOString();
+const SLOT_DAY = SLOT_DATE.toLocaleDateString('es-MX', { timeZone: 'America/Tijuana', weekday: 'long', day: 'numeric', month: 'long' });
 const ghl = {
   addContactTags: vi.fn().mockResolvedValue(undefined),
   removeContactTags: vi.fn().mockResolvedValue(undefined),
@@ -75,10 +80,10 @@ const ASKS_NAME = /a nombre de qui[eé]n|tu nombre|c[oó]mo te llamas|con qui[e�
 
 // A qualified lead who never said their name, at the point where a slot was offered.
 const slotOffered = [
-  { role: 'user' as const, content: 'Hola, tengo una clínica estética en Tijuana, aplicamos bótox y nos escriben por Instagram todo el día.' },
-  { role: 'assistant' as const, content: 'Perfecto, sí les puede servir. En una videollamada de 20 minutos, Leo te muestra el sistema funcionando con el caso de tu clínica. ¿Te aparto un espacio con Leo?' },
-  { role: 'user' as const, content: 'Sí, ¿qué horarios tienes el jueves?' },
-  { role: 'assistant' as const, content: 'Tengo el jueves 3 de septiembre a las 11:00 a.m. ¿Te lo aparto?' },
+  { role: 'user' as const, content: 'Hola, tengo una clínica de medicina estética en Tijuana, aplicamos bótox, soy la dueña y sí podemos invertir los $200 diarios en pauta.' },
+  { role: 'assistant' as const, content: 'Perfecto, tu clínica sí califica. En una videollamada de 20 minutos, Leo revisa tu caso y lo que falta para arrancar. ¿Te aparto un espacio con Leo?' },
+  { role: 'user' as const, content: 'Sí, ¿qué horarios tienes?' },
+  { role: 'assistant' as const, content: `Tengo el ${SLOT_DAY} a las 11:00 a.m. ¿Te lo aparto?` },
 ];
 
 beforeEach(() => {
@@ -113,7 +118,7 @@ describe.skipIf(!evalApiKey)('name at booking — asked only when unknown', () =
       { requestContext: rc() },
     );
 
-    expect(toolIds(res)).toContain('bookAppointment');
+    expect(toolIds(res), `no agenda: ${res.text}`).toContain('bookAppointment');
     expect(String(toolArgs(res, 'bookAppointment')?.contactName ?? '').toLowerCase()).toContain('karla');
     expect(ghl.updateContactName).toHaveBeenCalledWith('contact_eval_name', { firstName: 'Karla', lastName: 'Mendoza' });
   });
@@ -122,7 +127,7 @@ describe.skipIf(!evalApiKey)('name at booking — asked only when unknown', () =
     const agent = buildFrontDeskAgent();
     const res = await agent.generate(
       [
-        { role: 'user', content: 'Hola, soy Karla Mendoza, tengo una clínica estética en Tijuana, aplicamos bótox y nos escriben por Instagram todo el día.' },
+        { role: 'user', content: 'Hola, soy Karla Mendoza, tengo una clínica de medicina estética en Tijuana, aplicamos bótox, soy la dueña y sí podemos invertir los $200 diarios en pauta.' },
         ...slotOffered.slice(1),
         { role: 'user', content: 'Sí, ese me queda bien' },
       ],
