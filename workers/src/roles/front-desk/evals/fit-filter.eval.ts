@@ -32,6 +32,13 @@
  *   · not the decision-maker → asks if who decides can join: DISCRIMINATES — red 1/3, green 3/3.
  *   · price before qualification → price in that same message: was 2/5 before "no lo
  *     condiciones a la calificación" (the model withheld it to qualify first), 5/5 + 3/3 after.
+ *   · light opener, not the ad spend (2026-10-01, red side = the "# El orden" of 2026-09-30):
+ *     DISCRIMINATES — red 0/3 (the $200/día question in the opener, as in prod), green 5/5 + 3/3.
+ *     Its guard, "ad spend after two light questions", is green on both sides.
+ *     The first wording of the rule broke "meets all three → califica" (prod 5/5 → 0/5, then
+ *     2/5, 3/5): with no small talk in the history, the model went back to it instead of
+ *     giving the result. "La plática es solo para abrir; una vez que tocaste una condición,
+ *     no regresas a ella" restored it, 5/5; the whole file 18/18 twice.
  *   · Every other case is a GUARD — green on both sides (the salon is ruled out from the
  *     offering's "Para quién es" alone, the ad spend is asked from the price block alone).
  *     They hold the behavior we have; they do not prove the wording produces it.
@@ -96,7 +103,19 @@ WhatsApp number: +526641112233
 ¿Qué tipo de negocio tienes?: ${tipo}
 De los mensajes que llegan a WA, ¿cuántos crees que se queden sin contestar o los contestas tarde?: Algunos`;
 
+// The answers of a real form (2026-10-01), name and number replaced.
+const FORM_MEDICO = `Hello! I filled out your form and would like to know more about your business.
+¿Qué tipo de negocio tienes?: medico estetico
+¿Cuántas personas nuevas te escriben por WhatsApp a la semana?: Menos de 10
+WhatsApp number: +526641230000
+De los mensajes que llegan a WA, ¿cuántos crees que se queden sin contestar o los contestas tarde?: todos se comtestan
+Full name: Dra Paola Ruiz
+¿Cuál es tu rol en el negocio?: Soy el dueño / la dueña
+¿Quién contesta el WhatsApp del negocio hoy?: Yo, desde mi celular`;
+
 const PAUTA = /pauta|anuncios|invertir|inversión|\$?200/;
+// "Anuncios" alone is a fair light question ("¿te llegan por anuncios?"); the money is not.
+const PAUTA_ASK = /pauta|invertir|inversión|presupuesto|\$?200/;
 
 describe.skipIf(!evalApiKey)('qualification — the ad promised "te digo si tu clínica califica"', () => {
   // "Spa" alone does not say whether it does medical aesthetics, so the first move is to
@@ -114,14 +133,43 @@ describe.skipIf(!evalApiKey)('qualification — the ad promised "te digo si tu c
     expect(reply(res), `suelta el precio: ${res.text}`).not.toMatch(/\$?500/);
   }, 120_000);
 
-  it('asks about the ad spend once the business is clearly medical aesthetics', async () => {
+  // A form that already meets two conditions (medical aesthetics, owner) left the ad spend
+  // as "the first missing condition", and the opener's second bubble was the $200/día
+  // question — before the lead had said a word about her clinic. The opener is a light
+  // question about the clinic instead; the ad spend comes after one or two of those.
+  it('opens with a light question about the clinic, not the ad spend', async () => {
+    const agent = buildFrontDeskAgent();
+    const res = await agent.generate([{ role: 'user', content: FORM_MEDICO }], { requestContext: rc() });
+
+    expect(res.text).toContain('?');
+    expect(reply(res), `abre con la pauta: ${res.text}`).not.toMatch(PAUTA_ASK);
+    expect(toolIds(res)).not.toContain('updateConversationStatus');
+  }, 120_000);
+
+  // The other side of the same rule: the small talk is capped at two, so it cannot
+  // postpone the qualification the ad promised.
+  it('asks about the ad spend after two light questions', async () => {
     const agent = buildFrontDeskAgent();
     const res = await agent.generate(
-      [{ role: 'user', content: form('Clínica de medicina estética (bótox, rellenos, bioestimuladores)') }],
+      [
+        { role: 'user', content: FORM_MEDICO },
+        {
+          role: 'assistant',
+          content:
+            'Hola, Dra. Paola. Soy Sara, asistente de Leo, de The Bot Crew. Gracias por llenar el formulario; vi que tú misma contestas los mensajes.\n\n¿Qué tratamiento te gustaría llenar más en tu agenda?',
+        },
+        { role: 'user', content: 'Bótox y rellenos, es lo que más hago' },
+        {
+          role: 'assistant',
+          content:
+            'Qué bien, son de los que más se buscan.\n\n¿Y hoy de dónde te llegan los pacientes nuevos: redes, recomendación o anuncios?',
+        },
+        { role: 'user', content: 'Más que nada recomendación, y algo de Instagram' },
+      ],
       { requestContext: rc() },
     );
 
-    expect(reply(res), `no pregunta la pauta: ${res.text}`).toMatch(PAUTA);
+    expect(reply(res), `no pregunta la pauta: ${res.text}`).toMatch(PAUTA_ASK);
     expect(toolIds(res)).not.toContain('updateConversationStatus');
   }, 120_000);
 
