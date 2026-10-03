@@ -73,7 +73,11 @@ double-run guard for the one case two schedulers can reach the same message. Its
 `turn_answered {messageId}` event a run writes right before its first send (0060, `wasAnsweredByRun`),
 **not** "any outbound after the inbound": the previous message's turn keeps generating while a new
 inbound lands, so its reply sits after that inbound without having seen it — that reading dropped
-22 lead messages in six days (2026-08-28 → 09-02; see business-logic §7 incidents). `scheduleTurn` stores the turn and arms a **durable 15s Alarm**
+22 lead messages in six days (2026-08-28 → 09-02; see business-logic §7 incidents). The mirror
+case — the in-flight reply going out AND the next turn repeating it — is the **newer-inbound
+guard** (2026-10-03): after generating, a run whose lead wrote again drops its reply unsent
+(`run_superseded {reason:'newer_inbound'}`) unless a non-read tool (a booking, a status) already
+acted on it. `scheduleTurn` stores the turn and arms a **durable 15s Alarm**
 (each new inbound resets it → debounce/coalescing). On the alarm the DO runs `runAgentTurn`.
 Because a DO instance is single-threaded, all processing for a conversation is **serialized**
 (kills the double-run / self-block-on-booking class), and the Alarm is **durable** (kills the

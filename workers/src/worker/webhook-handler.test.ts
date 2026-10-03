@@ -770,6 +770,73 @@ describe('runAgentTurn — double-run guard', () => {
   });
 });
 
+describe('runAgentTurn — newer-inbound guard (the lead wrote again during generation)', () => {
+  // The Bot Crew 2026-10-03 (conv iFctALSTR15hq8OmG75Z): "Si" fired a turn; "En Que Horario
+  // puedes?" landed 1 s into it. The turn offered slots without having seen the question, then
+  // the question's own turn offered the SAME slots again ("Una disculpa, ya revisé…"). Three
+  // times in five minutes, the last one a second "ya quedó agendada".
+  const turn = (agent: Agent, debounced = true) => runAgentTurn({
+    agent, conversationId: 'cv-uuid', messageId: 'msg-uuid', tenant: tenant(),
+    parsed: parseInboundWebhook(inbound as never)!, phone: '+521', debounced,
+  });
+  const agentCalling = (tools: string[], text = 'Tengo 9:00 a.m. o 5:00 p.m. ¿Cuál te acomoda?'): Agent =>
+    ({
+      generate: vi.fn().mockResolvedValue({
+        text,
+        steps: [{ text: '', toolCalls: tools.map((toolName) => ({ payload: { toolName } })) }, { text }],
+      }),
+    }) as unknown as Agent;
+  /** Latest at the start of the turn, superseded by the time the reply is ready. */
+  const newerInboundDuringGeneration = () =>
+    vi.mocked(q.isLatestInboundMessage).mockResolvedValueOnce(true).mockResolvedValue(false);
+
+  it('drops a read-only reply when a newer lead message arrived — the newer turn answers both', async () => {
+    newerInboundDuringGeneration();
+    const agent = agentCalling(['getAvailability']);
+    const res = await turn(agent);
+
+    expect(agent.generate).toHaveBeenCalledTimes(1);
+    expect(res.body).toMatchObject({ skipped: 'superseded_during_generation' });
+    expect(ghl.sendMessage).not.toHaveBeenCalled();
+    // Nothing logged as outbound (the delivery cron would re-send it) and the message is not
+    // claimed as answered (its successor must not read it as handled).
+    expect(q.logMessage).not.toHaveBeenCalled();
+    expect(q.logBotEvent).not.toHaveBeenCalledWith('client1', 'conv1', 'turn_answered', expect.anything());
+    expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'run_superseded',
+      { messageId: 'msg-uuid', reason: 'newer_inbound' });
+  });
+
+  it('drops a plain reply (no tools) the same way', async () => {
+    newerInboundDuringGeneration();
+    await turn(agentReplying());
+    expect(ghl.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it.each(['bookAppointment', 'updateConversationStatus', 'flagPendingInfo', 'startDemo'])(
+    'still sends when the turn called %s — the write already happened and the reply reports it',
+    async (tool) => {
+      newerInboundDuringGeneration();
+      const res = await turn(agentCalling(['getAvailability', tool], '¡Listo! Quedó agendada para el sábado a las 5:00 p.m.'));
+      expect(res.body).toMatchObject({ replied: true });
+      expect(ghl.sendMessage).toHaveBeenCalled();
+      expect(q.logBotEvent).not.toHaveBeenCalledWith('client1', 'conv1', 'run_superseded', expect.anything());
+    },
+  );
+
+  it('sends when no newer message arrived (checked twice: before and after generation)', async () => {
+    const res = await turn(agentCalling(['getAvailability']));
+    expect(res.body).toMatchObject({ replied: true });
+    expect(q.isLatestInboundMessage).toHaveBeenCalledTimes(2);
+  });
+
+  it('a non-debounced run (resume / sync path) is not superseded', async () => {
+    vi.mocked(q.isLatestInboundMessage).mockResolvedValue(false);
+    const res = await turn(agentReplying(), false);
+    expect(res.body).toMatchObject({ replied: true });
+    expect(q.isLatestInboundMessage).not.toHaveBeenCalled();
+  });
+});
+
 describe('handleInboundWebhook — gates', () => {
   it('dedup: null conversationId → ignored, no agent run', async () => {
     vi.mocked(q.logMessage).mockResolvedValueOnce({ conversationId: null, messageId: null });

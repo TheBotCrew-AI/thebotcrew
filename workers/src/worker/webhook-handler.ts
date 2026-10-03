@@ -356,16 +356,29 @@ async function classifyConversationOutcome(
   }
 }
 
-/** Whether the agent called a given tool anywhere in this turn (any step). Tolerant of the
- *  two shapes a tool call takes in the result: `{ payload: { toolName } }` and `{ toolName }`. */
-export function calledTool(result: unknown, toolName: string): boolean {
+/** Every tool the agent called in this turn (any step). Tolerant of the two shapes a tool
+ *  call takes in the result: `{ payload: { toolName } }` and `{ toolName }`. */
+export function calledToolNames(result: unknown): Set<string> {
   type Call = { toolName?: string; payload?: { toolName?: string } };
-  const nameOf = (c: Call) => c.payload?.toolName ?? c.toolName;
   const r = result as { toolCalls?: Call[]; steps?: Array<{ toolCalls?: Call[] }> } | null | undefined;
-  if (!r) return false;
-  if (r.toolCalls?.some((c) => nameOf(c) === toolName)) return true;
-  return (r.steps ?? []).some((s) => s.toolCalls?.some((c) => nameOf(c) === toolName));
+  const names = new Set<string>();
+  if (!r) return names;
+  for (const c of [...(r.toolCalls ?? []), ...(r.steps ?? []).flatMap((s) => s.toolCalls ?? [])]) {
+    const name = c.payload?.toolName ?? c.toolName;
+    if (name) names.add(name);
+  }
+  return names;
 }
+
+/** Whether the agent called a given tool anywhere in this turn (any step). */
+export function calledTool(result: unknown, toolName: string): boolean {
+  return calledToolNames(result).has(toolName);
+}
+
+/** Tools that only READ. A reply built on nothing but these can be thrown away and
+ *  regenerated with no trace left behind; any other tool changed something (a booking, a
+ *  status, a tag, a demo session) and the reply that reports it has to go out. */
+const READ_ONLY_TOOLS = new Set(['lookupFaq', 'getAvailability', 'lookupAppointment']);
 
 const EXTRACT_NAME_PROMPT = (assistantQuestion: string, leadMessage: string, storedName: string) =>
   `El asistente le pidió su nombre al usuario. Extrae el NOMBRE DE LA PERSONA si lo dio.
@@ -983,6 +996,9 @@ export async function runAgentTurn({
   let reply: string;
   // Whether the agent closed the conversation itself this turn (see the classifier below).
   let agentSetStatus = false;
+  // Whether this reply can be dropped for a newer one: model-written, and nothing but reads
+  // behind it (see the newer-inbound guard below).
+  let replyIsDisposable = false;
   if (forcedReply) {
     reply = forcedReply;
     console.log(`[demo-session] deterministic handover reply conv=${parsed.conversationId}`);
@@ -1008,6 +1024,7 @@ export async function runAgentTurn({
     }
     console.log(`[agent] reply conv=${parsed.conversationId} replyLen=${result.text?.length ?? 0}`);
     agentSetStatus = calledTool(result, 'updateConversationStatus');
+    replyIsDisposable = [...calledToolNames(result)].every((name) => READ_ONLY_TOOLS.has(name));
     // The agent turn is the bulk of the spend — record it before any of the
     // early-return paths below (human takeover, etc.) can skip it. The tokens were
     // burned whether or not we end up sending the reply.
@@ -1108,6 +1125,20 @@ export async function runAgentTurn({
     console.log(`[agent] drop reply conv=${parsed.conversationId} — human took over during generation`);
     await logBotEvent(tenant.clientId, parsed.conversationId, 'run_suppressed', { stage: 'post_generate' });
     return { status: 200, body: { ignored: 'suppressed during generation', conversationId } };
+  }
+
+  // Newer-inbound guard: the LEAD wrote again while we were generating. This reply never
+  // saw that message, and the newer message has its own turn already scheduled (the DO
+  // took it while this one awaited the model), which will answer both with full context.
+  // Sending this one too is how a lead typing in bursts got every answer twice — the
+  // second turn repeating the first, often opening with an apology for it.
+  // Only a disposable reply is dropped: once a tool wrote something (a booking, a status),
+  // the reply that reports it goes out. The last message of a burst always gets answered,
+  // since no newer inbound can supersede it.
+  if (debounced && replyIsDisposable && !(await isLatestInboundMessage(conversationId, messageId))) {
+    console.log(`[agent] drop reply conv=${parsed.conversationId} — newer lead message arrived during generation`);
+    await logBotEvent(tenant.clientId, parsed.conversationId, 'run_superseded', { messageId, reason: 'newer_inbound' });
+    return { status: 200, body: { skipped: 'superseded_during_generation', conversationId } };
   }
 
   // Deterministic name-correction backstop (opt-in per tenant). Runs only in the opening

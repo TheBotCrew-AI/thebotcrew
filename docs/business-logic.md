@@ -1488,6 +1488,22 @@ Short log of *why* certain rules exist, so they aren't "simplified away" later.
   that HAD this message in its history reply?" — which is exactly what a genuine double-run
   (same messageId) still trips. `hasReplyAfter` stays only in the resume gate (§3), where the
   bot is paused and the only reply that can follow the inbound is a human's.
+- **2026-10-03 — the other half of the same race: the in-flight reply went out AND the next
+  turn answered again.** Bot Crew lead Jose Humberto (conv `iFctALSTR15hq8OmG75Z`, WA,
+  variant `clinicas`) typed in bursts 15–20 s apart, just past the debounce. Three times a
+  message landed 1–5 s into the previous turn: that turn sent its reply (blind to it), then the
+  new message's turn sent nearly the same reply again — the slots twice ("Una disculpa, ya
+  revisé la disponibilidad real…"), "son horarios de Tijuana" twice, "quedó agendada" then "sí,
+  está confirmada". The 0060 fix made sure the second turn RUNS; nothing stopped the first from
+  sending. Fix (**newer-inbound guard**, `runAgentTurn`): after generating, a debounced run
+  re-asks `isLatestInboundMessage`; if the lead wrote again, it drops its reply unsent (no
+  outbound row, no `turn_answered`) and logs `run_superseded {reason:'newer_inbound'}` — the
+  newer turn, already stored in the DO, answers both with full context. **Only a reply built on
+  read-only tools is dropped** (`lookupFaq`, `getAvailability`, `lookupAppointment`, or none):
+  once a tool wrote something — a booking, a status, a flag, a demo session — the reply that
+  reports it goes out, so the lead never misses a confirmation. Not dropped either: the
+  non-debounced paths (resume, sync fallback) and the deterministic demo handover. The last
+  message of a burst always gets an answer, since nothing can supersede it.
 - **2026-09-02 — the bot could not "see" a photo (media, 0046 → image descriptions).**
   Background: until 0046 (2026-08-01) a media-only inbound (voice note, photo) was DROPPED at
   parse — `text` was empty, the parser returned null, nothing was stored, no turn ran, and the
