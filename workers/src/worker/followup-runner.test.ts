@@ -468,7 +468,7 @@ describe('runPendingFollowUps — reactivation rounds (0049)', () => {
   it('the appointment check ALWAYS consults GHL — staff-booked appointments have no store row', async () => {
     await runPendingFollowUps(agent);
     expect(findUpcomingAppointment).toHaveBeenCalledWith(
-      'client1', 'c1', expect.anything(), expect.any(Number), { alwaysCheckGhl: true },
+      'client1', 'c1', expect.anything(), expect.any(Number), 'America/Mexico_City', { alwaysCheckGhl: true },
     );
   });
 

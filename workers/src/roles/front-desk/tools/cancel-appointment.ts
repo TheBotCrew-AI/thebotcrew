@@ -43,7 +43,7 @@ export const cancelAppointmentTool = createTool({
     }
 
     const ghl = new GhlClient(tenant.tenantId);
-    const appt = await resolveActiveAppointment(ghl, tenant.clientId, turn.ghlContactId, Date.now());
+    const appt = await resolveActiveAppointment(ghl, tenant.clientId, turn.ghlContactId, Date.now(), config.timezone);
     if (!appt) {
       return { cancelled: false, message: 'No encuentro una cita activa para cancelar.' };
     }

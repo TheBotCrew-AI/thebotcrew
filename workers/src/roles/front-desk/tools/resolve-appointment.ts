@@ -31,6 +31,7 @@ export async function resolveActiveAppointment(
   clientId: string,
   ghlContactId: string,
   nowMs: number,
+  timeZone: string,
 ): Promise<ResolvedAppointment | null> {
   // 1) Our store — bot bookings + workflow-webhook rows. The event log is collapsed
   //    to "the SOONEST upcoming appointment" (soonestUpcomingAppointment): a past
@@ -52,7 +53,7 @@ export async function resolveActiveAppointment(
 
   // 2) GHL fallback — appointment booked/edited outside the bot. Pick the soonest upcoming
   //    one that isn't cancelled or deleted (mirrors isAppointmentActive: not cancelled, future).
-  const events = await ghl.getContactAppointments(ghlContactId);
+  const events = await ghl.getContactAppointments(ghlContactId, timeZone);
   const next = events
     .filter(
       (e) =>

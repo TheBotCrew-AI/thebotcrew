@@ -69,7 +69,7 @@ export const rescheduleAppointmentTool = createTool({
     }
 
     const ghl = new GhlClient(tenant.tenantId);
-    const appt = await resolveActiveAppointment(ghl, tenant.clientId, turn.ghlContactId, Date.now());
+    const appt = await resolveActiveAppointment(ghl, tenant.clientId, turn.ghlContactId, Date.now(), config.timezone);
     if (!appt) {
       return { rescheduled: false, message: 'No encuentro una cita activa para reagendar.' };
     }

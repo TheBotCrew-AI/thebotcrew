@@ -942,7 +942,7 @@ export async function runAgentTurn({
     try {
       const staffBookedTenant =
         (tenant.config.promptOverrides as { bookingEnabled?: boolean } | null)?.bookingEnabled === false;
-      const appt = await findUpcomingAppointment(tenant.clientId, parsed.contactId, ghl, Date.now(), {
+      const appt = await findUpcomingAppointment(tenant.clientId, parsed.contactId, ghl, Date.now(), tenant.config.timezone, {
         alwaysCheckGhl: staffBookedTenant,
       });
       if (appt) activeAppointment = { startTime: appt.startTime, service: appt.service ?? undefined };

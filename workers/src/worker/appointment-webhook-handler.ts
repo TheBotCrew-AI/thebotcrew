@@ -113,7 +113,7 @@ export async function handleAppointmentWebhook(
   let startTime: string | null = null;
   let service: string | null = null;
   try {
-    const events = await ghl.getContactAppointments(contactId);
+    const events = await ghl.getContactAppointments(contactId, tenant.config.timezone);
     const match = events.find((e) => e.id === appointmentId);
     if (match) {
       startTime = match.startTime ?? null;

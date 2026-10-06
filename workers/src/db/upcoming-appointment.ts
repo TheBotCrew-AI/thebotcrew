@@ -21,6 +21,7 @@ import { loadAppointmentLog } from './queries.js';
 export interface ContactAppointmentsSource {
   getContactAppointments(
     contactId: string,
+    timeZone: string,
   ): Promise<Array<{ id: string; startTime?: string; status?: string; title?: string; deleted?: boolean }>>;
 }
 
@@ -47,6 +48,7 @@ export async function findUpcomingAppointment(
   ghlContactId: string,
   ghl: ContactAppointmentsSource,
   nowMs: number,
+  timeZone: string,
   opts: { alwaysCheckGhl?: boolean } = {},
 ): Promise<UpcomingAppointment | null> {
   const log = await loadAppointmentLog(clientId, ghlContactId);
@@ -57,7 +59,7 @@ export async function findUpcomingAppointment(
   }
   if (log.length === 0 && !opts.alwaysCheckGhl) return null;
 
-  const events = await ghl.getContactAppointments(ghlContactId);
+  const events = await ghl.getContactAppointments(ghlContactId, timeZone);
   const upcoming = events
     .filter((e) => !e.deleted && e.status !== 'cancelled')
     .map((e) => ({ ...e, startMs: e.startTime ? Date.parse(e.startTime) : NaN }))

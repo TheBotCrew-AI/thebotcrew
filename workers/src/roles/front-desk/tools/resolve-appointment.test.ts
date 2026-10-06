@@ -7,6 +7,7 @@ import type { GhlClient } from '../../../ghl/client.js';
 import { resolveActiveAppointment } from './resolve-appointment.js';
 
 const NOW = Date.parse('2026-07-06T00:00:00Z');
+const TZ = 'America/Tijuana';
 const future = (h: number) => new Date(NOW + h * 3_600_000).toISOString();
 const past = (h: number) => new Date(NOW - h * 3_600_000).toISOString();
 
@@ -28,7 +29,7 @@ describe('resolveActiveAppointment', () => {
   it('store hit → returns the stored appointment, never touches GHL', async () => {
     log([row()]);
     const ghl = ghlWith([]);
-    const res = await resolveActiveAppointment(ghl, 'client1', 'c1', NOW);
+    const res = await resolveActiveAppointment(ghl, 'client1', 'c1', NOW, TZ);
     expect(res).toEqual({
       ghlAppointmentId: 'stored-1', startTime: future(24), serviceType: 'Valoración', calendarId: null, source: 'store',
     });
@@ -40,7 +41,7 @@ describe('resolveActiveAppointment', () => {
     const ghl = ghlWith([
       { id: 'ghl-1', startTime: future(12), status: 'confirmed', calendarId: 'cal-9' },
     ]);
-    const res = await resolveActiveAppointment(ghl, 'client1', 'c1', NOW);
+    const res = await resolveActiveAppointment(ghl, 'client1', 'c1', NOW, TZ);
     expect(res).toEqual({
       ghlAppointmentId: 'ghl-1', startTime: future(12), serviceType: null, calendarId: 'cal-9', source: 'ghl',
     });
@@ -49,7 +50,7 @@ describe('resolveActiveAppointment', () => {
   it('store appointment cancelled → still falls back to GHL for a live one', async () => {
     log([row({ action: 'cancelled' })]);
     const ghl = ghlWith([{ id: 'ghl-2', startTime: future(3), status: 'confirmed', calendarId: 'cal-1' }]);
-    const res = await resolveActiveAppointment(ghl, 'client1', 'c1', NOW);
+    const res = await resolveActiveAppointment(ghl, 'client1', 'c1', NOW, TZ);
     expect(res?.ghlAppointmentId).toBe('ghl-2');
     expect(res?.source).toBe('ghl');
   });
@@ -61,7 +62,7 @@ describe('resolveActiveAppointment', () => {
       row({ action: 'booked', createdAt: past(2) }),
     ]);
     const ghl = ghlWith([]);
-    expect(await resolveActiveAppointment(ghl, 'client1', 'c1', NOW)).toBeNull();
+    expect(await resolveActiveAppointment(ghl, 'client1', 'c1', NOW, TZ)).toBeNull();
     expect(ghl.getContactAppointments).toHaveBeenCalled();
   });
 
@@ -70,7 +71,7 @@ describe('resolveActiveAppointment', () => {
       row({ ghlAppointmentId: 'later', appointmentDatetime: future(48), createdAt: past(1) }),
       row({ ghlAppointmentId: 'sooner', appointmentDatetime: future(12), createdAt: past(2) }),
     ]);
-    const res = await resolveActiveAppointment(ghlWith([]), 'client1', 'c1', NOW);
+    const res = await resolveActiveAppointment(ghlWith([]), 'client1', 'c1', NOW, TZ);
     expect(res?.ghlAppointmentId).toBe('sooner');
   });
 
@@ -83,20 +84,20 @@ describe('resolveActiveAppointment', () => {
       { id: 'soonest', startTime: future(5), status: 'confirmed', calendarId: 'cal' },
       { id: 'later', startTime: future(30), status: 'confirmed', calendarId: 'cal' },
     ]);
-    const res = await resolveActiveAppointment(ghl, 'client1', 'c1', NOW);
+    const res = await resolveActiveAppointment(ghl, 'client1', 'c1', NOW, TZ);
     expect(res?.ghlAppointmentId).toBe('soonest');
   });
 
   it('store miss + no upcoming GHL appointment → null', async () => {
     log([]);
     const ghl = ghlWith([{ id: 'old', startTime: past(1), status: 'confirmed', calendarId: 'cal' }]);
-    expect(await resolveActiveAppointment(ghl, 'client1', 'c1', NOW)).toBeNull();
+    expect(await resolveActiveAppointment(ghl, 'client1', 'c1', NOW, TZ)).toBeNull();
   });
 
   it('store rows all in the PAST → GHL fallback is reached (the package-customer trap, 0049)', async () => {
     log([row({ appointmentDatetime: past(48), serviceType: 'Sesión 1' })]);
     const ghl = ghlWith([{ id: 'ghl-next', startTime: future(72), status: 'confirmed', calendarId: 'cal-2' }]);
-    const res = await resolveActiveAppointment(ghl, 'client1', 'c1', NOW);
+    const res = await resolveActiveAppointment(ghl, 'client1', 'c1', NOW, TZ);
     expect(res?.ghlAppointmentId).toBe('ghl-next');
     expect(res?.source).toBe('ghl');
   });
@@ -104,7 +105,7 @@ describe('resolveActiveAppointment', () => {
   it('store row with an unparsable datetime → treated as inactive, GHL consulted', async () => {
     log([row({ appointmentDatetime: null })]);
     const ghl = ghlWith([]);
-    expect(await resolveActiveAppointment(ghl, 'client1', 'c1', NOW)).toBeNull();
+    expect(await resolveActiveAppointment(ghl, 'client1', 'c1', NOW, TZ)).toBeNull();
     expect(ghl.getContactAppointments).toHaveBeenCalled();
   });
 });

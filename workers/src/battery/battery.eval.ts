@@ -199,7 +199,7 @@ async function runScenario(scenario: Scenario, order: number, tenant: TenantCont
     say(`${t}. ${scenario.lead.name.toUpperCase()}`, leadText);
 
     // Same as runAgentTurn: the agent must know about an appointment it (or a preset) booked.
-    const appt = await findUpcomingAppointment(tenant.clientId, turn.ghlContactId, ghl, Date.now());
+    const appt = await findUpcomingAppointment(tenant.clientId, turn.ghlContactId, ghl, Date.now(), tenant.config.timezone);
     turn.activeAppointment = appt ? { startTime: appt.startTime, service: appt.service } : undefined;
 
     const res = await agent.generate(history, { requestContext, maxSteps: 8 });

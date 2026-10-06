@@ -7,6 +7,7 @@ vi.mock('./queries.js', () => ({
 }));
 
 const NOW = Date.parse('2026-08-02T12:00:00Z');
+const TZ = 'America/Tijuana';
 const FUTURE = '2026-08-05T17:00:00Z';
 const LATER = '2026-08-06T17:00:00Z';
 const PAST = '2026-07-20T17:00:00Z';
@@ -38,7 +39,7 @@ describe('findUpcomingAppointment', () => {
   it('returns the store appointment when it is future and not cancelled — no GHL call', async () => {
     mockLog.mockResolvedValue([row()]);
     const ghl = ghlWith([]);
-    const out = await findUpcomingAppointment('client', 'contact', ghl, NOW);
+    const out = await findUpcomingAppointment('client', 'contact', ghl, NOW, TZ);
     expect(out).toEqual({ startTime: FUTURE, service: 'facial' });
     expect(ghl.calls).toBe(0);
   });
@@ -48,7 +49,7 @@ describe('findUpcomingAppointment', () => {
       row({ ghlAppointmentId: 'second-booking', appointmentDatetime: LATER, createdAt: '2026-08-02T03:48:00Z' }),
       row({ ghlAppointmentId: 'first-booking', appointmentDatetime: FUTURE, createdAt: '2026-08-02T03:46:00Z' }),
     ]);
-    const out = await findUpcomingAppointment('client', 'contact', ghlWith([]), NOW);
+    const out = await findUpcomingAppointment('client', 'contact', ghlWith([]), NOW, TZ);
     expect(out?.startTime).toBe(FUTURE);
   });
 
@@ -58,7 +59,7 @@ describe('findUpcomingAppointment', () => {
       row({ action: 'booked', createdAt: '2026-08-01T00:00:00Z' }),
     ]);
     const ghl = ghlWith([]);
-    const out = await findUpcomingAppointment('client', 'contact', ghl, NOW);
+    const out = await findUpcomingAppointment('client', 'contact', ghl, NOW, TZ);
     expect(out).toBeNull();
     expect(ghl.calls).toBe(1); // history exists → GHL consulted
   });
@@ -72,7 +73,7 @@ describe('findUpcomingAppointment', () => {
       { id: 'g4', startTime: '2026-08-04T16:00:00Z', status: 'cancelled' },
       { id: 'g5', startTime: '2026-08-03T16:00:00Z', deleted: true },
     ]);
-    const out = await findUpcomingAppointment('client', 'contact', ghl, NOW);
+    const out = await findUpcomingAppointment('client', 'contact', ghl, NOW, TZ);
     // Soonest upcoming that is neither cancelled nor deleted.
     expect(out).toEqual({ startTime: FUTURE, service: 'Sesión 1' });
     expect(ghl.calls).toBe(1);
@@ -81,7 +82,7 @@ describe('findUpcomingAppointment', () => {
   it('no store rows → null WITHOUT a GHL call (fresh leads stay cheap)', async () => {
     mockLog.mockResolvedValue([]);
     const ghl = ghlWith([{ id: 'g1', startTime: FUTURE }]);
-    const out = await findUpcomingAppointment('client', 'contact', ghl, NOW);
+    const out = await findUpcomingAppointment('client', 'contact', ghl, NOW, TZ);
     expect(out).toBeNull();
     expect(ghl.calls).toBe(0);
   });
@@ -89,14 +90,14 @@ describe('findUpcomingAppointment', () => {
   it('no store rows + alwaysCheckGhl (the runner backstop) → GHL still consulted', async () => {
     mockLog.mockResolvedValue([]);
     const ghl = ghlWith([{ id: 'g1', startTime: FUTURE, title: 'walk-in' }]);
-    const out = await findUpcomingAppointment('client', 'contact', ghl, NOW, { alwaysCheckGhl: true });
+    const out = await findUpcomingAppointment('client', 'contact', ghl, NOW, TZ, { alwaysCheckGhl: true });
     expect(out).toEqual({ startTime: FUTURE, service: 'walk-in' });
     expect(ghl.calls).toBe(1);
   });
 
   it('GHL failure shape ([]) fails open to "no appointment"', async () => {
     mockLog.mockResolvedValue([row({ appointmentDatetime: PAST })]);
-    const out = await findUpcomingAppointment('client', 'contact', ghlWith([]), NOW);
+    const out = await findUpcomingAppointment('client', 'contact', ghlWith([]), NOW, TZ);
     expect(out).toBeNull();
   });
 
@@ -106,7 +107,7 @@ describe('findUpcomingAppointment', () => {
       { id: 'g1' },
       { id: 'g2', startTime: 'no-es-fecha' },
     ]);
-    const out = await findUpcomingAppointment('client', 'contact', ghl, NOW, { alwaysCheckGhl: true });
+    const out = await findUpcomingAppointment('client', 'contact', ghl, NOW, TZ, { alwaysCheckGhl: true });
     expect(out).toBeNull();
   });
 });

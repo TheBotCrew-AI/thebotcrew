@@ -291,22 +291,33 @@ describe('GhlClient — getContactAppointments', () => {
   it('maps events and reads the misspelled appoinmentStatus field', async () => {
     stubFetch().mockResolvedValue(ok({
       events: [
-        { id: 'e1', startTime: 'S1', endTime: 'E1', appointmentStatus: 'confirmed', calendarId: 'cal', title: 'Leo' },
-        { id: 'e2', startTime: 'S2', appoinmentStatus: 'cancelled', calendarId: 'cal', deleted: true },
+        { id: 'e1', startTime: '2026-10-06T08:00:00-07:00', endTime: '2026-10-06T08:30:00-07:00', appointmentStatus: 'confirmed', calendarId: 'cal', title: 'Leo' },
+        { id: 'e2', startTime: '2026-10-07T15:00:00Z', appoinmentStatus: 'cancelled', calendarId: 'cal', deleted: true },
       ],
     }));
-    const out = await new GhlClient().getContactAppointments('c1');
+    const out = await new GhlClient().getContactAppointments('c1', 'America/Tijuana');
     expect(out).toEqual([
-      { id: 'e1', startTime: 'S1', endTime: 'E1', status: 'confirmed', calendarId: 'cal', title: 'Leo', deleted: false },
-      { id: 'e2', startTime: 'S2', endTime: undefined, status: 'cancelled', calendarId: 'cal', title: undefined, deleted: true },
+      { id: 'e1', startTime: '2026-10-06T08:00:00-07:00', endTime: '2026-10-06T08:30:00-07:00', status: 'confirmed', calendarId: 'cal', title: 'Leo', deleted: false },
+      { id: 'e2', startTime: '2026-10-07T15:00:00Z', endTime: undefined, status: 'cancelled', calendarId: 'cal', title: undefined, deleted: true },
     ]);
+  });
+
+  // The shape GHL actually returns: bare wall-clock in the calendar's zone. Read as UTC it
+  // stored a Tijuana 8:00 a.m. cita as 1:00 a.m.
+  it('reads offset-less wall-clock times in the tenant timezone', async () => {
+    stubFetch().mockResolvedValue(ok({
+      events: [{ id: 'e1', startTime: '2026-10-06 08:00:00', endTime: '2026-10-06 08:30:00', appointmentStatus: 'confirmed' }],
+    }));
+    const [e] = await new GhlClient().getContactAppointments('c1', 'America/Tijuana');
+    expect(e!.startTime).toBe('2026-10-06T15:00:00.000Z');
+    expect(e!.endTime).toBe('2026-10-06T15:30:00.000Z');
   });
 
   it('drops events with no id and returns [] on a non-ok response', async () => {
     const f = stubFetch();
     f.mockResolvedValueOnce(ok({ events: [{ startTime: 'S' }, { id: 'keep', startTime: 'S2' }] }));
-    expect((await new GhlClient().getContactAppointments('c1')).map((e) => e.id)).toEqual(['keep']);
+    expect((await new GhlClient().getContactAppointments('c1', 'America/Tijuana')).map((e) => e.id)).toEqual(['keep']);
     f.mockResolvedValueOnce(err(404));
-    expect(await new GhlClient().getContactAppointments('c1')).toEqual([]);
+    expect(await new GhlClient().getContactAppointments('c1', 'America/Tijuana')).toEqual([]);
   });
 });

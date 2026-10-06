@@ -309,7 +309,7 @@ async function processOne(
   try {
     const appt = await findUpcomingAppointment(
       tenant.clientId, followUp.ghlContactId, new GhlClient(tenant.tenantId), Date.now(),
-      { alwaysCheckGhl: true },
+      tenant.config.timezone, { alwaysCheckGhl: true },
     );
     if (appt) {
       return abortFollowUp(followUp, tenant, 'has_upcoming_appointment');

@@ -498,6 +498,10 @@ Notes that save debugging time:
   (`getContactAppointments`) — the default payload's `calendar.startTime` is a
   wall-clock string in the calendar's timezone with NO offset, the exact class of
   the 5:15→10:15 booking bug. Everything else in the payload is ignored.
+  `getContactAppointments` returns the SAME offset-less shape (`"2026-10-06 08:00:00"`);
+  the client reads it in the tenant's timezone (`ghl/appointment-time.ts`) — this assumes
+  every calendar shares the tenant's zone. Until 2026-10-06 it was stored as UTC (a 8:00 a.m.
+  Tijuana cita landed as 1:00 a.m.).
 - **Bot bookings fire the workflow too** — that's fine: the endpoint dedups by
   appointment id + action (the bot's own row lands first).
 - On `booked` the endpoint also cancels pending nudges, resets

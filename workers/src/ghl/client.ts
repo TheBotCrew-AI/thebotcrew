@@ -12,6 +12,7 @@
 import { getGhlEnv } from '../core/env.js';
 import type { Channel } from '../core/types.js';
 import { getOAuthToken, getTenantGhlLocationId, upsertOAuthToken } from '../db/queries.js';
+import { ghlAppointmentInstant } from './appointment-time.js';
 import { refreshAccessToken } from './oauth.js';
 import type { BookAppointmentInput, BookAppointmentResult, GhlAppointmentStatus, Slot } from './types.js';
 
@@ -458,9 +459,12 @@ export class GhlClient {
   /** A contact's appointments straight from GHL — the source of truth even for bookings the
    *  bot never made (created/edited in the GHL calendar UI, or by a human). Lets the
    *  appointment tools see appointments that were never mirrored into our store. Returns []
-   *  on failure. Works with the `calendars/events.write` scope. */
+   *  on failure. Works with the `calendars/events.write` scope.
+   *  GHL sends startTime/endTime as offset-less wall-clock in the calendar's zone; they come
+   *  back here as UTC instants, read in `timeZone` (the tenant's). */
   async getContactAppointments(
     contactId: string,
+    timeZone: string,
   ): Promise<Array<{ id: string; startTime?: string; endTime?: string; status?: string; calendarId?: string; title?: string; deleted?: boolean }>> {
     const token = await this.getAccessToken();
     const res = await fetch(`${this.apiBase}/contacts/${contactId}/appointments`, {
@@ -472,8 +476,8 @@ export class GhlClient {
     return (data.events ?? [])
       .map((e) => ({
         id: asStr(e.id) ?? '',
-        startTime: asStr(e.startTime),
-        endTime: asStr(e.endTime),
+        startTime: ghlAppointmentInstant(asStr(e.startTime), timeZone),
+        endTime: ghlAppointmentInstant(asStr(e.endTime), timeZone),
         // GHL ships both `appointmentStatus` and the misspelled `appoinmentStatus` — read either.
         status: asStr(e.appointmentStatus) ?? asStr(e.appoinmentStatus),
         calendarId: asStr(e.calendarId),
