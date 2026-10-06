@@ -1,0 +1,177 @@
+{
+  "tenant": {
+    "slug": "heriberto-laser",
+    "businessName": "Dr. Heriberto Valdivia",
+    "assistantName": "Sofía",
+    "timezone": "America/Chihuahua",
+    "configSource": "supabase"
+  },
+  "scenario": {
+    "id": "i01-laser",
+    "order": 6,
+    "title": "i01 — llega por armonización y quiere láser",
+    "shows": "Su depósito de $500 es su evaluación de láser: se descuenta de la primera sesión, sin el crédito de $1,000 ni el \"al doble\".",
+    "lead": {
+      "name": "Sofía Ramírez",
+      "channel": "whatsapp"
+    }
+  },
+  "model": "gpt-5.6-luna",
+  "leadModel": "gpt-5.6-luna",
+  "generatedAt": "2026-10-06T06:42:25.785Z",
+  "messages": [
+    {
+      "from": "lead",
+      "text": "Hola, vi lo de la primera visita PLAN. Me interesa más el láser CO2, cuánto cuesta?",
+      "at": "2026-10-06T06:41:41.042Z"
+    },
+    {
+      "from": "bot",
+      "text": "Qué bueno que te interesa el láser CO₂. La evaluación médica se aparta con $500, que se descuenta de tu primera sesión. Cada sesión cuesta $4,500, o $3,500 si asistes a tu primera sesión dentro de los 14 días posteriores a la evaluación. El número de sesiones lo define el Dr. Valdivia al valorarte.",
+      "at": "2026-10-06T06:42:29.042Z",
+      "turn": 1
+    },
+    {
+      "from": "bot",
+      "text": "Para apartar tu visita tengo miércoles, 7 de octubre, 4:15 p.m. o 6:15 p.m.; ¿cuál te acomoda mejor?",
+      "at": "2026-10-06T06:42:34.542Z",
+      "turn": 1
+    },
+    {
+      "from": "lead",
+      "text": "y los $500 del depósito se descuentan del costo del láser?",
+      "at": "2026-10-06T06:44:48.542Z"
+    },
+    {
+      "from": "bot",
+      "text": "Sí, claro. Los $500 se descuentan de la primera sesión: si inicias dentro de los 14 días, esa primera sesión queda en $3,000. Si inicias después, también se acreditan, pero las sesiones quedan en $4,500.",
+      "at": "2026-10-06T06:45:49.542Z",
+      "turn": 2
+    },
+    {
+      "from": "lead",
+      "text": "me queda miércoles, 7 de octubre, 4:15 p.m. ¿me pasas la liga para hacer el depósito?",
+      "at": "2026-10-06T06:48:40.542Z"
+    },
+    {
+      "from": "bot",
+      "text": "Sí, ese horario está disponible. Para apartar el miércoles, 7 de octubre, 4:15 p.m., ¿a nombre de quién agendo la cita?",
+      "at": "2026-10-06T06:49:24.542Z",
+      "turn": 3
+    },
+    {
+      "from": "lead",
+      "text": "Sofía Ramírez.",
+      "at": "2026-10-06T06:50:52.542Z"
+    },
+    {
+      "from": "bot",
+      "text": "Sofía, tu lugar queda apartado para el miércoles, 7 de octubre, 4:15 p.m. Tienes hasta el miércoles, 7 de octubre, 12:42 a.m. para realizar el depósito de $500; la cita se confirma en cuanto pagues.",
+      "at": "2026-10-06T06:51:49.542Z",
+      "turn": 4
+    },
+    {
+      "from": "bot",
+      "text": "El depósito no es reembolsable, porque el Dr. Valdivia va al consultorio únicamente para atender las citas agendadas; si algo se te complica, con gusto te ayudamos a reagendar. En tu caso, además, se descuenta de tu primera sesión de láser.",
+      "at": "2026-10-06T06:51:55.042Z",
+      "turn": 4
+    },
+    {
+      "from": "bot",
+      "text": "https://thebotcrew-agents.floral-credit-be7e.workers.dev/p/cvrwpb6c8g",
+      "at": "2026-10-06T06:52:00.542Z",
+      "turn": 4
+    },
+    {
+      "from": "lead",
+      "text": "ahorita hago el pago, gracias",
+      "at": "2026-10-06T06:54:05.542Z"
+    },
+    {
+      "from": "bot",
+      "text": "Con mucho gusto, Sofía. En cuanto realices el pago, tu cita quedará confirmada para el miércoles 7 de octubre a las 4:15 p.m. 😊",
+      "at": "2026-10-06T06:54:45.542Z",
+      "turn": 5
+    }
+  ],
+  "toolCalls": [
+    {
+      "turn": 1,
+      "name": "lookupFaq",
+      "args": {
+        "question": "Precio del láser CO₂, costo de la evaluación, precio por sesión y condiciones del precio especial para pacientes nuevos."
+      }
+    },
+    {
+      "turn": 1,
+      "name": "getAvailability",
+      "args": {
+        "serviceName": "Consulta",
+        "fromDate": "2026-10-07T00:00:00-06:00",
+        "toDate": "2026-10-13T23:59:59-06:00"
+      }
+    },
+    {
+      "turn": 3,
+      "name": "getAvailability",
+      "args": {
+        "serviceName": "Consulta",
+        "fromDate": "2026-10-07T00:00:00-06:00",
+        "toDate": "2026-10-08T00:00:00-06:00"
+      }
+    },
+    {
+      "turn": 4,
+      "name": "getAvailability",
+      "args": {
+        "serviceName": "Consulta",
+        "fromDate": "2026-10-07T00:00:00-06:00",
+        "toDate": "2026-10-08T00:00:00-06:00"
+      }
+    },
+    {
+      "turn": 4,
+      "name": "bookAppointment",
+      "args": {
+        "serviceName": "Consulta",
+        "startTime": "2026-10-07T16:15:00-06:00",
+        "whatsappPhone": null,
+        "contactName": "Sofía Ramírez",
+        "treatment": "Láser CO₂"
+      }
+    },
+    {
+      "turn": 4,
+      "name": "updateConversationStatus",
+      "args": {
+        "status": "completed",
+        "reason": ""
+      }
+    },
+    {
+      "turn": 4,
+      "name": "updateConversationStatus",
+      "args": {
+        "status": "completed",
+        "reason": "Cita apartada, pendiente de pago"
+      }
+    }
+  ],
+  "ghl": {
+    "appointments": [
+      {
+        "id": "appt_1",
+        "calendarId": "qh8yxxSnb4DAo72obVmG",
+        "serviceName": "Sofía Ramírez — Láser CO₂ — Primera Visita Armonización",
+        "startTime": "2026-10-07T16:15:00-06:00",
+        "status": "confirmed"
+      }
+    ],
+    "tags": [
+      "pago-pendiente",
+      "bot-completed"
+    ],
+    "contactName": "Sofía Ramírez"
+  },
+  "endedBy": "goal"
+}

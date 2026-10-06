@@ -118,5 +118,21 @@ Tu objetivo es dejar la evaluación agendada. Cuando te la confirmen, agradeces 
       maxTurns: 8,
       endWhen: { toolCalled: ['bookAppointment'] },
     },
+    {
+      id: 'i01-laser',
+      title: 'i01 — llega por armonización y quiere láser',
+      shows: 'Su depósito de $500 es su evaluación de láser: se descuenta de la primera sesión, sin el crédito de $1,000 ni el "al doble".',
+      lead: {
+        name: 'Sofía Ramírez',
+        phone: '+526141110007',
+        persona: `Tienes 36 años. Viste el anuncio de la Primera Visita de Armonización Facial, pero lo que te interesa es el láser CO2 para manchas y textura.
+Preguntas cuánto cuesta el láser. Luego preguntas qué pasa con los $500 del depósito.
+Si te convence, agendas y eliges uno de los horarios. Si te mandan una liga de pago, dices que ahorita la pagas y terminas.`,
+      },
+      opener: 'Hola, vi lo de la primera visita PLAN. Me interesa más el láser CO2, cuánto cuesta?',
+      promptVariant: 'i01',
+      maxTurns: 7,
+      endWhen: { toolCalled: ['bookAppointment'] },
+    },
   ],
 };
