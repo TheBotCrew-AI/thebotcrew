@@ -1,0 +1,188 @@
+{
+  "tenant": {
+    "slug": "heriberto-sim",
+    "businessName": "Dr. Heriberto Valdivia",
+    "assistantName": "Sofía",
+    "timezone": "America/Chihuahua",
+    "configSource": "supabase"
+  },
+  "scenario": {
+    "id": "cotizacion-laser-plan",
+    "order": 0,
+    "title": "Ya trae cotización de láser — conversación en PLAN desde el inicio",
+    "shows": "La paciente ya tiene su cotización del doctor y solo quiere fecha. La conversación está en la campaña PLAN (cobra depósito).",
+    "lead": {
+      "name": "Karla",
+      "channel": "facebook"
+    }
+  },
+  "model": "gpt-5.6-luna",
+  "leadModel": "gpt-5.6-luna",
+  "generatedAt": "2026-09-29T00:55:54.920Z",
+  "messages": [
+    {
+      "from": "lead",
+      "text": "Buen día, tengo una cotización de 4000, pesos que me hizo para láser co2 más  subsicion,  me podría indicar que días tiene disponobles y donde se ubica, quedo atenta.",
+      "at": "2026-09-29T00:55:01.534Z"
+    },
+    {
+      "from": "bot",
+      "text": "¡Buen día! Qué bueno que ya tienes tu cotización. El consultorio está en Periférico de la Juventud 6902, Plaza Cumbres, Local 34, Chihuahua, Chih., C.P. 31217, justo enfrente de la tienda de AT&T.",
+      "at": "2026-09-29T00:55:49.534Z",
+      "turn": 1
+    },
+    {
+      "from": "bot",
+      "text": "Para tu valoración de láser CO₂ y subcisión tengo el martes, 29 de septiembre, 3:45 p.m. o el miércoles, 30 de septiembre, 4:15 p.m. La cita se aparta con un depósito de $500, que se acredita al doble en tu tratamiento si decides realizarlo. ¿Cuál te acomoda mejor?",
+      "at": "2026-09-29T00:55:55.034Z",
+      "turn": 1
+    },
+    {
+      "from": "lead",
+      "text": "me acomoda el miércoles, 30 de septiembre, 4:15 p.m. el depósito de $500 se descuenta de los $4,000 y ese día ya me hacen el tratamiento?",
+      "at": "2026-09-29T00:58:09.034Z"
+    },
+    {
+      "from": "bot",
+      "text": "Qué bueno, ese horario sí está disponible. El depósito de $500 no se descuenta tal cual: si el doctor considera adecuado hacerte el tratamiento ese día y decides avanzar, se acredita al doble, es decir, $1,000 a tu tratamiento.",
+      "at": "2026-09-29T00:59:10.034Z",
+      "turn": 2
+    },
+    {
+      "from": "bot",
+      "text": "Usualmente el láser CO₂ puede realizarse el mismo día de la consulta, pero depende de la valoración del doctor y de la disponibilidad. Ya tomo en cuenta que te interesa hacerlo ese día. Para apartarte el miércoles, 30 de septiembre, 4:15 p.m., ¿me compartes tu nombre y tu WhatsApp con código de país, por favor?",
+      "at": "2026-09-29T00:59:15.534Z",
+      "turn": 2
+    },
+    {
+      "from": "lead",
+      "text": "soy Karla, mi WhatsApp es con lada 614, ¿me compartes la liga para hacer el depósito?",
+      "at": "2026-09-29T01:02:06.534Z"
+    },
+    {
+      "from": "bot",
+      "text": "Claro, Karla. El miércoles, 30 de septiembre, 4:15 p.m. sigue disponible. Para apartarlo y generarte la liga del depósito, me falta tu número completo: ¿me compartes los 10 dígitos de tu WhatsApp con +52?",
+      "at": "2026-09-29T01:02:50.534Z",
+      "turn": 3
+    },
+    {
+      "from": "lead",
+      "text": "+52 614 123 4567, ahorita pago la liga, gracias",
+      "at": "2026-09-29T01:04:18.534Z"
+    },
+    {
+      "from": "bot",
+      "text": "Listo, Karla. Tu lugar queda apartado para el miércoles, 30 de septiembre, 4:15 p.m. Tienes hasta el martes, 29 de septiembre, 6:55 p.m. para realizar el depósito de $500.",
+      "at": "2026-09-29T01:05:15.534Z",
+      "turn": 4
+    },
+    {
+      "from": "bot",
+      "text": "El depósito no es reembolsable, porque el Dr. Valdivia va al consultorio únicamente para atender citas agendadas; si algo se te complica, con gusto te ayudamos a reagendar. En cuanto pagues, tu cita queda confirmada y te llegará la confirmación con los recordatorios.",
+      "at": "2026-09-29T01:05:21.034Z",
+      "turn": 4
+    },
+    {
+      "from": "bot",
+      "text": "https://thebotcrew-agents.floral-credit-be7e.workers.dev/p/pv7u3nrgmy",
+      "at": "2026-09-29T01:05:26.534Z",
+      "turn": 4
+    }
+  ],
+  "toolCalls": [
+    {
+      "turn": 1,
+      "name": "lookupFaq",
+      "args": {
+        "question": "¿Dónde se ubica el consultorio y cuál es la dirección exacta? ¿Qué días y horarios hay disponibles para una consulta de láser CO₂ con subcisión?"
+      }
+    },
+    {
+      "turn": 1,
+      "name": "getAvailability",
+      "args": {
+        "serviceName": "Consulta",
+        "fromDate": "2026-09-29T00:00:00-06:00",
+        "toDate": "2026-10-05T23:59:59-06:00"
+      }
+    },
+    {
+      "turn": 2,
+      "name": "lookupFaq",
+      "args": {
+        "question": "¿El depósito de $500 se descuenta de los $4,000 de la cotización de láser CO₂ más subcisión y ese mismo día pueden realizar el tratamiento? ¿La visita incluye láser CO₂ y subcisión el mismo día?"
+      }
+    },
+    {
+      "turn": 2,
+      "name": "getAvailability",
+      "args": {
+        "serviceName": "Consulta",
+        "fromDate": "2026-09-30T00:00:00-06:00",
+        "toDate": "2026-10-01T00:00:00-06:00"
+      }
+    },
+    {
+      "turn": 3,
+      "name": "getAvailability",
+      "args": {
+        "serviceName": "Consulta",
+        "fromDate": "2026-09-30T00:00:00-06:00",
+        "toDate": "2026-10-01T00:00:00-06:00"
+      }
+    },
+    {
+      "turn": 4,
+      "name": "getAvailability",
+      "args": {
+        "serviceName": "Consulta",
+        "fromDate": "2026-09-29T00:00:00-06:00",
+        "toDate": "2026-10-05T23:59:59-06:00"
+      }
+    },
+    {
+      "turn": 4,
+      "name": "bookAppointment",
+      "args": {
+        "serviceName": "Consulta",
+        "startTime": "2026-09-30T16:15:00-06:00",
+        "whatsappPhone": "+526141234567",
+        "contactName": "Karla",
+        "treatment": "Láser CO₂ y subcisión"
+      }
+    },
+    {
+      "turn": 4,
+      "name": "updateConversationStatus",
+      "args": {
+        "status": "completed",
+        "reason": ""
+      }
+    },
+    {
+      "turn": 4,
+      "name": "updateConversationStatus",
+      "args": {
+        "status": "completed",
+        "reason": "Cita apartada con pago pendiente"
+      }
+    }
+  ],
+  "ghl": {
+    "appointments": [
+      {
+        "id": "appt_1",
+        "calendarId": "qh8yxxSnb4DAo72obVmG",
+        "serviceName": "Karla — Láser CO₂ y subcisión — Primera Visita Armonización",
+        "startTime": "2026-09-30T16:15:00-06:00",
+        "status": "confirmed"
+      }
+    ],
+    "tags": [
+      "pago-pendiente",
+      "bot-completed"
+    ],
+    "contactName": "Karla"
+  },
+  "endedBy": "goal"
+}

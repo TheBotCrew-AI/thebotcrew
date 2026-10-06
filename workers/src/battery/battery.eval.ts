@@ -30,6 +30,18 @@ vi.mock('../ghl/client.js', () => ({
   }),
 }));
 
+// A paid-confirmation tenant opens a Checkout Session on booking: fake it, so a run never
+// creates a real session (or a real charge) and needs no Stripe keys.
+vi.mock('../payments/stripe.js', async (importOriginal) => {
+  const real = await importOriginal<typeof import('../payments/stripe.js')>();
+  return {
+    ...real,
+    getStripeEnv: () => ({ secretKey: 'sk_battery', webhookSecret: 'whsec_battery', mode: 'test' as const }),
+    createCheckoutSession: async () => ({ id: 'cs_battery', url: 'https://checkout.stripe.test/battery' }),
+    expireCheckoutSession: async () => 'expired' as const,
+  };
+});
+
 // Everything but the config read is faked. Unknown queries THROW rather than reach prod:
 // a stub that quietly "works" would let a new write land in the real tables.
 vi.mock('../db/queries.js', async (importOriginal) => {
@@ -48,6 +60,9 @@ vi.mock('../db/queries.js', async (importOriginal) => {
     resetReactivationRound: async () => undefined,
     cancelFollowUps: async () => undefined,
     scheduleFollowUp: async () => undefined,
+    createBookingHold: async () => 'hold_fake',
+    getBookingHold: async () => null,
+    finishHold: async () => true,
     loadAppointmentLog: async () => ghl().appointmentLog,
     logAppointment: async (p: {
       p_action: string;
@@ -149,6 +164,7 @@ async function runScenario(scenario: Scenario, order: number, tenant: TenantCont
     contactPhone: scenario.lead.phone,
     channel: scenario.lead.channel ?? 'whatsapp',
     hasHumanReplies: false,
+    promptVariant: scenario.promptVariant,
   };
   const requestContext = buildAgentRequestContext({
     tenant,
@@ -170,6 +186,10 @@ async function runScenario(scenario: Scenario, order: number, tenant: TenantCont
   let goalMet = false;
   let endedBy: Transcript['endedBy'] = 'maxTurns';
   let leadText: string | null = scenario.opener;
+  for (const m of scenario.history ?? []) {
+    history.push({ role: m.from === 'lead' ? 'user' : 'assistant', content: m.text });
+    messages.push({ from: m.from, text: m.text, at: m.from === 'lead' ? clock.lead() : clock.bot(1) });
+  }
 
   const say = (who: string, text: string) => console.log(`\n--- ${who} ---\n${text}`);
 

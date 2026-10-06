@@ -1,0 +1,179 @@
+{
+  "tenant": {
+    "slug": "heriberto-sim",
+    "businessName": "Dr. Heriberto Valdivia",
+    "assistantName": "Sofía",
+    "timezone": "America/Chihuahua",
+    "configSource": "supabase"
+  },
+  "scenario": {
+    "id": "cotizacion-laser-plan-continua",
+    "order": 1,
+    "title": "Ya trae cotización de láser — se pasa a PLAN a media conversación",
+    "shows": "El hilo real (contestado sin campaña) y, a partir de su respuesta, la conversación ya en PLAN.",
+    "lead": {
+      "name": "Karla",
+      "channel": "facebook"
+    }
+  },
+  "model": "gpt-5.6-luna",
+  "leadModel": "gpt-5.6-luna",
+  "generatedAt": "2026-09-29T00:56:29.749Z",
+  "messages": [
+    {
+      "from": "lead",
+      "text": "Buen día, tengo una cotización de 4000, pesos que me hizo para láser co2 más  subsicion,  me podría indicar que días tiene disponobles y donde se ubica, quedo atenta.",
+      "at": "2026-09-29T00:55:55.517Z"
+    },
+    {
+      "from": "bot",
+      "text": "¡Buen día! Soy Sofía, del consultorio del Dr. Heriberto Valdivia. Claro, con gusto revisamos tu cita para láser CO₂ y subcisión; en consulta el Dr. confirma el plan antes de aplicar cualquier tratamiento.",
+      "at": "2026-09-29T00:56:01.017Z"
+    },
+    {
+      "from": "bot",
+      "text": "Tengo martes, 29 de septiembre, 3:45 p.m. o martes, 29 de septiembre, 5:45 p.m. ¿Cuál de los dos te acomoda?",
+      "at": "2026-09-29T00:56:06.517Z"
+    },
+    {
+      "from": "bot",
+      "text": "Estamos en Periférico de la Juventud 6902, Plaza Cumbres, Local 34, Chihuahua, Chih., justo enfrente de la tienda de AT&T.",
+      "at": "2026-09-29T00:56:12.017Z"
+    },
+    {
+      "from": "bot",
+      "text": "¡Qué gusto saludarte nuevamente! De los horarios que te compartí, ¿alguno te acomoda o te busco otra opción?",
+      "at": "2026-09-29T00:56:17.517Z"
+    },
+    {
+      "from": "lead",
+      "text": "Si, el martes a las 5:45 está bien",
+      "at": "2026-09-29T00:58:31.517Z"
+    },
+    {
+      "from": "bot",
+      "text": "¡Qué bien! Te aparto el martes a las 5:45 p.m. La cita se aparta con un depósito de $500, que se acredita al doble en tu tratamiento si decides realizarlo. ¿A nombre de quién la agendo y cuál es tu WhatsApp con código de país (+52)?",
+      "at": "2026-09-29T00:59:32.517Z",
+      "turn": 1
+    },
+    {
+      "from": "lead",
+      "text": "Karla, mi WhatsApp es +52 y te paso el número enseguida. Ese depósito se descuenta de los $4,000 y ese día ya me hacen el tratamiento?",
+      "at": "2026-09-29T01:02:23.517Z"
+    },
+    {
+      "from": "bot",
+      "text": "Qué bueno que me preguntas, Karla. El depósito es de $500 y se acredita al doble en tu tratamiento: serían $1,000 de crédito. Si la cotización vigente es de $4,000, quedarían $3,000 por cubrir.",
+      "at": "2026-09-29T01:03:07.517Z",
+      "turn": 2
+    },
+    {
+      "from": "bot",
+      "text": "El láser CO₂ más la subcisión podrían realizarse ese mismo día únicamente si el Dr. Valdivia confirma que es adecuado y hay disponibilidad para hacerlo. Cuando me pases el número completo, termino de apartar tu cita.",
+      "at": "2026-09-29T01:03:13.017Z",
+      "turn": 2
+    },
+    {
+      "from": "lead",
+      "text": "Va, entonces sí se descuenta de los $4,000. Mi número es +52 614 123 4567.",
+      "at": "2026-09-29T01:04:41.017Z"
+    },
+    {
+      "from": "bot",
+      "text": "¡Listo, Karla! Tu lugar queda apartado para el martes, 29 de septiembre, 5:45 p.m. y se confirma en cuanto realices el pago de $500.",
+      "at": "2026-09-29T01:05:38.017Z",
+      "turn": 3
+    },
+    {
+      "from": "bot",
+      "text": "Tienes hasta el martes, 29 de septiembre, 3:45 p.m. para pagarlo. El depósito no es reembolsable, porque el Dr. Valdivia va al consultorio únicamente para atender las citas agendadas; si algo se te complica, con gusto te ayudamos a reagendar.",
+      "at": "2026-09-29T01:05:43.517Z",
+      "turn": 3
+    },
+    {
+      "from": "bot",
+      "text": "Cuando pagues, te llegará la confirmación y los recordatorios por WhatsApp. La liga de pago es:",
+      "at": "2026-09-29T01:05:49.017Z",
+      "turn": 3
+    },
+    {
+      "from": "bot",
+      "text": "https://thebotcrew-agents.floral-credit-be7e.workers.dev/p/y2tam85kfy",
+      "at": "2026-09-29T01:05:54.517Z",
+      "turn": 3
+    },
+    {
+      "from": "lead",
+      "text": "Gracias, ahorita la pago.",
+      "at": "2026-09-29T01:07:59.517Z"
+    },
+    {
+      "from": "bot",
+      "text": "Con mucho gusto, Karla. En cuanto realices el pago, te llegará la confirmación y los recordatorios por WhatsApp.",
+      "at": "2026-09-29T01:08:39.517Z",
+      "turn": 4
+    }
+  ],
+  "toolCalls": [
+    {
+      "turn": 2,
+      "name": "lookupFaq",
+      "args": {
+        "question": "¿El depósito de $500 se descuenta o acredita en el precio cotizado de $4,000 para láser CO₂ más subcisión, y se puede realizar el tratamiento el mismo día de la consulta?"
+      }
+    },
+    {
+      "turn": 3,
+      "name": "getAvailability",
+      "args": {
+        "serviceName": "Consulta",
+        "fromDate": "2026-09-29T00:00:00-06:00",
+        "toDate": "2026-09-29T23:59:59-06:00"
+      }
+    },
+    {
+      "turn": 3,
+      "name": "bookAppointment",
+      "args": {
+        "serviceName": "Consulta",
+        "startTime": "2026-09-29T17:45:00-06:00",
+        "whatsappPhone": "+526141234567",
+        "contactName": "Karla",
+        "treatment": "Láser CO₂ más subcisión"
+      }
+    },
+    {
+      "turn": 3,
+      "name": "updateConversationStatus",
+      "args": {
+        "status": "completed",
+        "reason": ""
+      }
+    },
+    {
+      "turn": 3,
+      "name": "updateConversationStatus",
+      "args": {
+        "status": "completed",
+        "reason": "Cita apartada, pendiente de pago"
+      }
+    }
+  ],
+  "ghl": {
+    "appointments": [
+      {
+        "id": "appt_1",
+        "calendarId": "qh8yxxSnb4DAo72obVmG",
+        "serviceName": "Karla — Láser CO₂ más subcisión — Primera Visita Armonización",
+        "startTime": "2026-09-29T17:45:00-06:00",
+        "status": "confirmed"
+      }
+    ],
+    "tags": [
+      "pago-pendiente",
+      "bot-completed"
+    ],
+    "contactName": "Karla"
+  },
+  "endedBy": "goal"
+}

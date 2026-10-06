@@ -108,6 +108,12 @@
  *   - El probe usa dos mensajes (headline + "dónde se ubican"). Con el hilo real de tres
  *     ("¿y trabajan los sábados?" encima) baja a 2/4, pero por la regla de GOTEO: el bot
  *     contesta una duda y se para. Ese caso mide el goteo, no esta regla.
+ *   MEDIDO 2026-10-05 (oferta del láser: $4,500 / $3,500 a 14 días / evaluación $500):
+ *   - con la oferta 3/3 · sin ella (línea, sección del offering y fichas con $3,500) 0/3: el
+ *     rojo da $4,500 + evaluación de $500 y nunca el precio especial.
+ *   - Ese mismo día los casos de promo de bótox y Sculptra fallan 1–2/3 en VERDE sin tocarlos:
+ *     el modelo sabe la fecha y dice "la promoción de septiembre ya terminó". Es la promo
+ *     vencida que sigue en la config, no una regresión de este cambio.
  *   MEDIDO 2026-09-03 (campañas de Sculptra y láser CO₂):
  *   - láser: con regla 3/3 · sin regla 5/6. La corrida roja que pasa es informativa: RULE_OFF
  *     revierte la LISTA de tratamientos, no el banco de FAQ, y la ficha del láser también trae
@@ -236,14 +242,17 @@ const PROMO_BOTOX_LINE =
   '- Botox — precio de promoción de septiembre, por zona: frente $2,125 (regular $2,500), entrecejo $1,700 (regular $2,000), patas de gallo $1,700 (regular $2,000), maseteros $3,500 (su precio de siempre); full face (frente, entrecejo y patas de gallo) $4,200 (regular $6,000). La promoción aplica a las citas que se atienden a más tardar el miércoles 30 de septiembre.';
 const PLAIN_BOTOX_LINE =
   '- Botox — por zona: frente $2,125, entrecejo $1,700, patas de gallo $1,700, maseteros $3,500; full face (frente, entrecejo y patas de gallo) $4,200.';
-const PROMO_LASER_LINE =
-  '- Láser CO₂ Fraccionado — precio de promoción de septiembre: $2,999 por sesión (regular $4,500).';
-const PLAIN_LASER_LINE = '- Láser CO₂ Fraccionado — $3,000 por sesión.';
 const PROMO_SCULPTRA_LINE =
   '- Sculptra — precio de promoción de septiembre: $12,499 por vial o sesión (regular $18,000); el tratamiento completo de 3 viales son $30,000.';
 const PLAIN_SCULPTRA_LINE = '- Sculptra — $12,500 por vial o sesión (tratamiento completo de 3 viales: $30,000).';
 const PROMO_PRICE_RULE_START =
-  'Con el bótox, el láser CO₂ y Sculptra hay promoción de septiembre, y los tres datos van SIEMPRE juntos';
+  'Con el bótox y Sculptra hay promoción de septiembre, y los tres datos van SIEMPRE juntos';
+
+/** El láser: precio normal, precio especial a 14 días y evaluación de $500 (prod, 2026-10-05). */
+const LASER_OFFER_LINE =
+  '- Láser CO₂ Fraccionado — $4,500 por sesión, o $3,500 por sesión con el precio especial (ver "Láser CO₂: evaluación médica y precio especial").';
+const LASER_LIST_PRICE_LINE = '- Láser CO₂ Fraccionado — $4,500 por sesión.';
+const LASER_OFFER_SECTION = '\n\n# Láser CO₂: evaluación médica y precio especial';
 
 /** El bullet que explica PARA QUÉ sirve la consulta (prod, 2026-09-03). */
 const CONSULTA_WHY_RULE =
@@ -291,7 +300,7 @@ Las "líneas de ventrílocuo" (o líneas de marioneta) son los surcos que bajan 
 `;
 
 const tenantWithout = (
-  rule: 'afternoon-only' | 'morning-ask' | 'medical' | 'faq-consulta' | 'drip' | 'service-name' | 'next-step' | 'consulta-hook' | 'zone-list' | 'slot-contrast' | 'promo-price' | 'consulta-why' | 'first-time-fear' | 'negative-payments' | 'discovery-first' | 'city-split' | 'lada-faq' | 'zone-vocabulary' | 'walk-in',
+  rule: 'afternoon-only' | 'morning-ask' | 'medical' | 'faq-consulta' | 'drip' | 'service-name' | 'next-step' | 'consulta-hook' | 'zone-list' | 'slot-contrast' | 'promo-price' | 'consulta-why' | 'first-time-fear' | 'negative-payments' | 'discovery-first' | 'city-split' | 'lada-faq' | 'zone-vocabulary' | 'walk-in' | 'laser-offer',
 ): TenantContext => {
   const p = HERIBERTO_PERSONA;
   const cfg = heribertoTenant.config;
@@ -388,10 +397,9 @@ const tenantWithout = (
     // data points. What's left is exactly what prod said before 2026-09-03.
     const offering = p.offering
       .replace(PROMO_BOTOX_LINE, PLAIN_BOTOX_LINE)
-      .replace(PROMO_LASER_LINE, PLAIN_LASER_LINE)
       .replace(PROMO_SCULPTRA_LINE, PLAIN_SCULPTRA_LINE);
     if (offering === p.offering) throw new Error('promo botox line not found');
-    for (const promo of [PROMO_BOTOX_LINE, PROMO_LASER_LINE, PROMO_SCULPTRA_LINE]) {
+    for (const promo of [PROMO_BOTOX_LINE, PROMO_SCULPTRA_LINE]) {
       if (offering.includes(promo)) throw new Error(`promo line not reverted: ${promo.slice(0, 40)}`);
     }
     const start = p.qualificationNotes.indexOf(PROMO_PRICE_RULE_START);
@@ -400,6 +408,17 @@ const tenantWithout = (
     const qualificationNotes = (p.qualificationNotes.slice(0, start).trimEnd() + p.qualificationNotes.slice(end)).trim();
     if (qualificationNotes.includes('promoción')) throw new Error('promo rule not fully stripped');
     return { ...heribertoTenant, config: { ...cfg, promptOverrides: { ...p, offering, qualificationNotes } } };
+  }
+  if (rule === 'laser-offer') {
+    // The offer lives in three places, and all three go: the list line, the offering section
+    // and every FAQ answer that carries the $3,500. What's left is the list price alone.
+    const start = p.offering.indexOf(LASER_OFFER_SECTION);
+    if (start < 0) throw new Error('laser offer section not found');
+    const offering = p.offering.slice(0, start).replace(LASER_OFFER_LINE, LASER_LIST_PRICE_LINE);
+    if (!offering.includes(LASER_LIST_PRICE_LINE)) throw new Error('laser offer line not found');
+    const faq = HERIBERTO_FAQ.filter((f) => !/3,500|3,000/.test(f.a));
+    if (faq.length === HERIBERTO_FAQ.length) throw new Error('laser offer FAQ entries not found');
+    return { ...heribertoTenant, config: { ...cfg, faq, promptOverrides: { ...p, offering } } };
   }
   if (rule === 'zone-list') {
     return {
@@ -818,21 +837,6 @@ describe.skipIf(!evalApiKey)('Dr. Heriberto Valdivia — la promoción se dice c
     expect(text, text).toMatch(/30 de septiembre/);
   }, 120_000);
 
-  it('láser CO₂ → promoción, regular y fecha', async () => {
-    const res = await buildFrontDeskAgent().generate(
-      [
-        { role: 'user', content: 'Hola, me interesa el láser CO2' },
-        { role: 'assistant', content: OPENER },
-        { role: 'user', content: '¿Cuánto cuesta una sesión?' },
-      ],
-      { requestContext: rc(tenantFor('promo-price')) },
-    );
-    const text = reply(res);
-    expect(text, text).toMatch(/\$\s?2[,.]?999\b/);
-    expect(text, text).toMatch(/\$\s?4[,.]?500\b/);
-    expect(text, text).toMatch(/30 de septiembre/);
-  }, 120_000);
-
   it('Sculptra → promoción, regular y fecha', async () => {
     const res = await buildFrontDeskAgent().generate(
       [
@@ -862,6 +866,31 @@ describe.skipIf(!evalApiKey)('Dr. Heriberto Valdivia — la promoción se dice c
     // No hay precio regular de maseteros distinto de $3,500: cualquier otro número
     // presentado como "regular" o "antes" sería inventado.
     expect(text, text).not.toMatch(/regular\s*\$?\s?(?!3[,.]?500)\d/);
+  }, 120_000);
+});
+
+/**
+ * El láser tiene un precio normal y uno especial, y el especial depende de una evaluación
+ * de $500: los tres números van juntos cuando preguntan el precio, sin importar de qué
+ * anuncio venga la persona (prod, 2026-10-05). Y esa evaluación es la única consulta que
+ * cuesta — decir "gratis" de ella contradice la oferta.
+ */
+describe.skipIf(!evalApiKey)('Dr. Heriberto Valdivia — oferta del láser', () => {
+  it('precio de sesión → $4,500, $3,500 a 14 días y evaluación de $500', async () => {
+    const res = await buildFrontDeskAgent().generate(
+      [
+        { role: 'user', content: 'Hola, me interesa el láser CO2' },
+        { role: 'assistant', content: OPENER },
+        { role: 'user', content: '¿Cuánto cuesta una sesión?' },
+      ],
+      { requestContext: rc(tenantFor('laser-offer')) },
+    );
+    const text = reply(res);
+    expect(text, text).toMatch(/\$\s?4[,.]?500\b/);
+    expect(text, text).toMatch(/\$\s?3[,.]?500\b/);
+    expect(text, text).toMatch(/14 d[ií]as/);
+    expect(text, text).toMatch(/\$\s?500\b/);
+    expect(text, text).not.toMatch(/gratis|sin costo|cortes[ií]a/);
   }, 120_000);
 });
 

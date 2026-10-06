@@ -1,0 +1,196 @@
+{
+  "tenant": {
+    "slug": "heriberto-laser",
+    "businessName": "Dr. Heriberto Valdivia",
+    "assistantName": "Sofía",
+    "timezone": "America/Chihuahua",
+    "configSource": "supabase"
+  },
+  "scenario": {
+    "id": "lp4-manchas",
+    "order": 0,
+    "title": "P4 — manchas que no se quitan con cremas",
+    "shows": "Llega con curiosidad: Sofía no abre con el precio, entiende su caso y le presenta la evaluación.",
+    "lead": {
+      "name": "Claudia",
+      "channel": "whatsapp"
+    }
+  },
+  "model": "gpt-5.6-luna",
+  "leadModel": "gpt-5.6-luna",
+  "generatedAt": "2026-10-06T06:20:11.832Z",
+  "messages": [
+    {
+      "from": "lead",
+      "text": "*Headline:* ¿No se van las manchas?\n\nHola, tengo manchas que no se quitan con cremas y quiero saber si se pueden tratar",
+      "at": "2026-10-06T06:19:18.323Z"
+    },
+    {
+      "from": "bot",
+      "text": "¡Hola! Qué bueno que escribes, soy Sofía, del consultorio del Dr. Heriberto Valdivia. Las manchas que no se van con cremas suelen estar más profundas de donde llega una crema, y ahí es donde trabaja el láser. ¿En qué zona las tienes?",
+      "at": "2026-10-06T06:20:06.323Z",
+      "turn": 1
+    },
+    {
+      "from": "lead",
+      "text": "En las mejillas, me salieron después de mi último embarazo hace como 5 años.",
+      "at": "2026-10-06T06:22:20.323Z"
+    },
+    {
+      "from": "bot",
+      "text": "Gracias por contarme. Por el tiempo que llevan, el Dr. Valdivia tendría que valorar la piel para confirmar qué tratamiento te conviene. ¿Has probado cremas despigmentantes o solo productos de farmacia?",
+      "at": "2026-10-06T06:23:21.323Z",
+      "turn": 2
+    },
+    {
+      "from": "lead",
+      "text": "Sí, he probado varias cremas despigmentantes y no me han funcionado. ¿Cuánto cuesta la evaluación?",
+      "at": "2026-10-06T06:26:12.323Z"
+    },
+    {
+      "from": "bot",
+      "text": "Claro, gracias por contarme. La evaluación médica para el láser cuesta $500. Las sesiones son de $4,500, o $3,500 si asistes a tu primera sesión dentro de los 14 días posteriores a la evaluación; el número de sesiones lo define el Dr. Valdivia al revisar tu piel. ¿Te reviso horarios para tu evaluación?",
+      "at": "2026-10-06T06:26:56.323Z",
+      "turn": 3
+    },
+    {
+      "from": "lead",
+      "text": "Sí, me parece bien. ¿Qué horarios tienen disponibles?",
+      "at": "2026-10-06T06:28:24.323Z"
+    },
+    {
+      "from": "bot",
+      "text": "Qué bueno, para que el Dr. Valdivia revise tus mejillas y confirme qué tratamiento les conviene, tengo el miércoles, 7 de octubre, a las 4:15 p.m. o a las 5:45 p.m. ¿Cuál te acomoda más?",
+      "at": "2026-10-06T06:29:21.323Z",
+      "turn": 4
+    },
+    {
+      "from": "lead",
+      "text": "El miércoles, 7 de octubre, a las 4:15 p.m. por favor.",
+      "at": "2026-10-06T06:31:26.323Z"
+    },
+    {
+      "from": "bot",
+      "text": "Claro, la evaluación sería el miércoles, 7 de octubre, 4:15 p.m. ¿A nombre de quién agendo la cita?",
+      "at": "2026-10-06T06:32:06.323Z",
+      "turn": 5
+    },
+    {
+      "from": "lead",
+      "text": "A nombre de Claudia.",
+      "at": "2026-10-06T06:34:48.323Z"
+    },
+    {
+      "from": "bot",
+      "text": "¡Listo, Claudia! Tu evaluación quedó agendada para el miércoles, 7 de octubre, 4:15 p.m. Te llegará la confirmación y los recordatorios por WhatsApp.",
+      "at": "2026-10-06T06:35:41.323Z",
+      "turn": 6
+    },
+    {
+      "from": "lead",
+      "text": "Gracias, estaré pendiente.",
+      "at": "2026-10-06T06:37:00.323Z"
+    },
+    {
+      "from": "bot",
+      "text": "¡Con mucho gusto, Claudia! Aquí estaremos pendientes. Nos vemos el miércoles, 7 de octubre, a las 4:15 p.m.",
+      "at": "2026-10-06T06:37:36.323Z",
+      "turn": 7
+    }
+  ],
+  "toolCalls": [
+    {
+      "turn": 3,
+      "name": "lookupFaq",
+      "args": {
+        "question": "¿Cuánto cuesta la evaluación médica para tratar manchas en mejillas con láser CO₂?"
+      }
+    },
+    {
+      "turn": 4,
+      "name": "getAvailability",
+      "args": {
+        "serviceName": "Consulta",
+        "fromDate": "2026-10-07T00:00:00-06:00",
+        "toDate": "2026-10-13T23:59:59-06:00"
+      }
+    },
+    {
+      "turn": 5,
+      "name": "getAvailability",
+      "args": {
+        "serviceName": "Consulta",
+        "fromDate": "2026-10-07T00:00:00-06:00",
+        "toDate": "2026-10-07T23:59:59-06:00"
+      }
+    },
+    {
+      "turn": 6,
+      "name": "getAvailability",
+      "args": {
+        "serviceName": "Consulta",
+        "fromDate": "2026-10-07T00:00:00-06:00",
+        "toDate": "2026-10-08T00:00:00-06:00"
+      }
+    },
+    {
+      "turn": 6,
+      "name": "bookAppointment",
+      "args": {
+        "serviceName": "Consulta",
+        "startTime": "2026-10-07T16:15:00-06:00",
+        "whatsappPhone": null,
+        "contactName": "Claudia",
+        "treatment": "Láser CO₂"
+      }
+    },
+    {
+      "turn": 6,
+      "name": "updateConversationStatus",
+      "args": {
+        "status": "completed",
+        "reason": ""
+      }
+    },
+    {
+      "turn": 6,
+      "name": "updateConversationStatus",
+      "args": {
+        "status": "completed",
+        "reason": "Cita agendada"
+      }
+    },
+    {
+      "turn": 7,
+      "name": "updateConversationStatus",
+      "args": {
+        "status": "completed",
+        "reason": ""
+      }
+    },
+    {
+      "turn": 7,
+      "name": "updateConversationStatus",
+      "args": {
+        "status": "completed",
+        "reason": "Cita agendada y proceso concluido"
+      }
+    }
+  ],
+  "ghl": {
+    "appointments": [
+      {
+        "id": "appt_1",
+        "calendarId": "qh8yxxSnb4DAo72obVmG",
+        "serviceName": "Claudia — Láser CO₂ — Láser P4 Manchas",
+        "startTime": "2026-10-07T16:15:00-06:00",
+        "status": "confirmed"
+      }
+    ],
+    "tags": [
+      "bot-completed"
+    ],
+    "contactName": "Claudia"
+  },
+  "endedBy": "goal"
+}

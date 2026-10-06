@@ -47,6 +47,17 @@ export interface Scenario {
   preset?: {
     appointment?: { serviceName: string; daysAhead: number; time: string };
   };
+  /**
+   * The campaign variant the conversation is pinned to (a `prompt_variants` key), exactly as
+   * `conversations.prompt_variant` pins it in prod — the variant's prompt AND its
+   * `booking_payment.only_variants` scope. Absent = base prompt.
+   */
+  promptVariant?: string;
+  /**
+   * Messages that already happened before `opener` — to replay a real thread and see how the
+   * bot carries on from it. They go into the agent's history and the transcript as-is.
+   */
+  history?: { from: 'lead' | 'bot'; text: string }[];
 }
 
 export interface TenantScenarios {
