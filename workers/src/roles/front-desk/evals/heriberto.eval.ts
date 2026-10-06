@@ -267,7 +267,7 @@ const NO_PROCEDURE_WITHOUT_CONSENT =
  * (2026-09-01 → 09-02) pese a WARM_NO_RULE.
  */
 const POSITIVE_PAYMENTS_LINE =
-  'El pago es en el consultorio el día de la cita: efectivo, tarjeta o transferencia, y con tarjeta siempre hay 3 meses sin intereses. Si pregunta por anticipos, paquetes o membresías, contéstalo desde lo que sí hay — aquí se paga completo ese día y ya.';
+  'El pago es en el consultorio el día de la cita: efectivo, tarjeta o transferencia, y con tarjeta siempre hay 3 meses sin intereses. Si pregunta por anticipos, paquetes o membresías, contéstalo desde lo que sí hay — se paga completo ese día y ya.';
 /** El bloque de pagos de la base tal como estaba hasta hoy: SIN el dato del anticipo,
  *  que vivía solo en las 6 variantes. Un lead sin keyword se quedaba sin respuesta. */
 const PAYMENTS_WITHOUT_THE_FACT = 'Efectivo, tarjeta y transferencia. Con tarjeta siempre hay 3 meses sin intereses.';
@@ -283,7 +283,7 @@ const BOTH_THINGS_ANY_ORDER = `Antes de ofrecer la consulta quieres entender dos
 
 /** Ciudad, dirección y estacionamiento como tres datos distintos (prod, 2026-09-04). */
 const CITY_SPLIT_LINES = `- Ciudad: Chihuahua, Chih. Cuando pregunten en qué ciudad están, esa es la respuesta COMPLETA: una línea y ya. La dirección exacta va solo cuando la piden.
-- Dirección (cuando la pidan): Periférico de la Juventud 6902, Plaza Cumbres, Chihuahua, Chih., C.P. 31217.
+- Dirección (cuando la pidan): Periférico de la Juventud 6902, Plaza Cumbres, Local 34, Chihuahua, Chih., C.P. 31217. El consultorio es el Local 34, justo enfrente de la tienda de AT&T: esa referencia va SIEMPRE pegada a la dirección, y es también la respuesta cuando alguien ya está en la plaza y no encuentra el consultorio.
 - Estacionamiento: la plaza tiene. Es un dato aparte — se menciona solo si preguntan por él, nunca pegado a la dirección.`;
 /** Lo que había hasta hoy: los tres datos en una sola línea, y la ficha de dirección
  *  arrastrando el estacionamiento. Por eso una pregunta de ciudad devolvía la plaza entera. */
