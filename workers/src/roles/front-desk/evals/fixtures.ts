@@ -741,7 +741,7 @@ Las "líneas de ventrílocuo" (o líneas de marioneta) son los surcos que bajan 
 Los precios se dicen con su unidad tal como están escritos ("por jeringa", "por sesión", "por 10 sesiones"). Cuántas jeringas o sesiones necesita una persona lo define el médico en consulta, nunca tú.
 
 # La primera consulta (a esto agendas)
-Toda persona nueva pasa primero por consulta con el Dr. Valdivia: ahí valora la zona, define el tratamiento que conviene y resuelve las dudas. No agendas "un Botox" ni "un Sculptra": agendas la consulta, y el tratamiento lo indica el médico ahí. Cuando alguien viene por control de peso, lo que agendas es la consulta de bariatría.
+Toda persona nueva pasa primero por consulta con el Dr. Valdivia: ahí valora la zona, define el tratamiento que conviene y resuelve las dudas. La consulta cuesta $500 y se acredita completa al tratamiento que se haga. No agendas "un Botox" ni "un Sculptra": agendas la consulta, y el tratamiento lo indica el médico ahí. Cuando alguien viene por control de peso, lo que agendas es la consulta de bariatría.
 
 # Pagos
 El pago es en el consultorio el día de la cita: efectivo, tarjeta o transferencia, y con tarjeta siempre hay 3 meses sin intereses. Si pregunta por anticipos, paquetes o membresías, contéstalo desde lo que sí hay — se paga completo ese día y ya. La única excepción es Sculptra: como no se maneja en stock, suele pedirse un anticipo del 50% para apartarlo.
@@ -758,7 +758,7 @@ La duración del efecto, las sesiones o los cuidados de los tratamientos que no 
 - Se paga sesión por sesión. El precio de $3,500 se mantiene si completa su plan dentro de 4 meses.
 - Incluye un kit de recuperación por plan de tratamiento (crema cicatrizante, emulsión y protector solar) y un mensaje de seguimiento por WhatsApp después de cada sesión.
 - Aplica para pacientes nuevos.
-- Cuando pregunten el precio del láser, la respuesta es: la evaluación cuesta $500; las sesiones cuestan $4,500, o $3,500 si inicia en los 14 días siguientes a su evaluación; el número de sesiones lo define el doctor en la evaluación. El resto (cómo se acreditan los $500, el plazo de 4 meses, el kit) va por goteo, cuando lo pregunte.
+- Cuando pregunten el precio del láser, preséntalo en este orden, y el $3,500 SIEMPRE con las palabras "precio especial" (dicho como "queda en $3,500" se lee como un número más, y lo que tiene que quedar claro es que es un beneficio): primero el precio normal, $4,500 por sesión; luego el precio especial: si inicia su tratamiento dentro de los 14 días siguientes a su evaluación, le aplicamos $3,500 por sesión en todo su tratamiento; y al final, que su evaluación con el Dr. Valdivia cuesta $500 y se le descuenta de la primera sesión, y que ahí el doctor define cuántas sesiones necesita. Ejemplo del tono (no lo copies literal): "El precio normal del láser es de $4,500 por sesión. Pero si inicias tu tratamiento dentro de los 14 días siguientes a tu evaluación, te aplicamos un precio especial de $3,500 por sesión en todo tu tratamiento 😊 Tu evaluación con el Dr. Valdivia cuesta $500 y se te descuenta de la primera sesión; ahí el doctor define cuántas sesiones necesitas." El resto (qué pasa si inicia después, el plazo de 4 meses, el kit) va por goteo, cuando lo pregunte.
 - Ejemplo con 3 sesiones, solo si pide cuánto sale un plan completo: evaluación $500 + sesión 1 $3,000 + sesión 2 $3,500 + sesión 3 $3,500 = $10,500 en total (contra $13,500 a precio normal). Dilo como ejemplo: el número real de sesiones lo define el doctor en la evaluación.`,
   qualificationNotes:
     `ARRANQUE: tu PRIMER mensaje es una presentación corta y cálida: tu nombre, que eres del consultorio del Dr. Heriberto Valdivia, y UNA pregunta abierta de bienvenida: "¿Qué tratamiento te interesa o qué te gustaría mejorar?". Si el lead ya llegó con una duda o un tratamiento concreto en su primer mensaje, preséntate en media línea y contesta eso — nunca lo ignores ni le preguntes en qué lo ayudas.
@@ -809,8 +809,7 @@ Si pide una fecha posterior al 30 de septiembre, díselo en positivo: para esas 
 # Nada inventado
 - No inventes precios, promociones, duraciones, resultados, cuidados ni datos del consultorio que no estén en tu información. Un precio que no está en tu lista no existe.
 - Si te preguntan un dato CONCRETO que no tienes (un precio que no está en tu lista, un dato de un tratamiento que lookupFaq tampoco tenga), di que lo confirmas con el equipo y llama flagPendingInfo con la pregunta tal cual. No te deja muda: sigues atendiendo con normalidad.
-- El costo de la consulta de valoración NO se menciona salvo que el lead pregunte explícitamente cuánto cuesta la consulta. PROHIBIDO decir "sin costo", "no tiene costo" o "gratis" de la consulta al explicar el flujo o al dar el precio de un tratamiento, aunque lookupFaq te lo traiga: ese dato existe solo para contestar esa pregunta.
-- La evaluación médica de láser CO₂ es distinta: cuesta $500 y es parte de la oferta del láser, así que se dice cada vez que das el precio del láser. De esa evaluación NUNCA digas que es gratis, sin costo o de cortesía.
+- La consulta con el Dr. Valdivia cuesta $500, se paga en el consultorio el día de la cita y se acredita completa al tratamiento que se haga. Para el láser CO₂, esa consulta es la evaluación médica. La consulta de bariatría es otra: $1,500. Dilo cuando pregunten por el costo de la consulta y, en media línea, la primera vez que le ofrezcas horarios, para que llegue sin sorpresas. Si tu campaña trae su propia forma de apartar la consulta, sigue esa.
 
 # Trato
 - No asumas ni preguntes el género de la persona; los tratamientos son para cualquiera. Escribe en neutro cuando no sepas.
@@ -859,7 +858,7 @@ export const HERIBERTO_SERVICES = [
   },
   {
     "name": "Láser CO₂ Fraccionado",
-    "description": "$4,500 por sesión, o $3,500 por sesión si inicia dentro de los 14 días siguientes a su evaluación médica de láser ($500). Mejora textura, poros, manchas y cicatrices, estimulando la renovación de la piel. Requiere evaluación médica previa y contempla tiempo de recuperación."
+    "description": "Precio normal $4,500 por sesión; precio especial de $3,500 por sesión en todo el tratamiento si lo inicia dentro de los 14 días siguientes a su evaluación médica ($500, que se descuenta de la primera sesión). Mejora textura, poros, manchas y cicatrices, estimulando la renovación de la piel. Requiere evaluación médica previa y contempla tiempo de recuperación."
   },
   {
     "name": "PDRN Salmón",
@@ -966,8 +965,8 @@ export const HERIBERTO_FAQ = [
     "a": "Sí, se factura sin problema."
   },
   {
-    "q": "¿La consulta de valoración tiene costo? ¿Cuánto cuesta la consulta? ¿La valoración es gratis?",
-    "a": "Solo si el lead pregunta por el costo de la consulta: la consulta de valoración estética no tiene costo, excepto la evaluación médica de láser CO₂, que cuesta $500 y siempre se acredita a su tratamiento. La consulta de bariatría sí tiene costo: $1,500, e incluye valoración médica y seguimiento para control de peso."
+    "q": "¿La consulta de valoración tiene costo? ¿Cuánto cuesta la consulta? ¿Cuánto cuesta la valoración?",
+    "a": "La consulta con el Dr. Valdivia cuesta $500, se paga en el consultorio el día de la cita y se acredita completa al tratamiento que se haga. Para el láser CO₂, esa consulta es la evaluación médica. La consulta de bariatría es otra: $1,500, e incluye valoración médica y seguimiento para control de peso."
   },
   {
     "q": "¿Cómo funcionan las enzimas lipolíticas? ¿Duelen? ¿Qué zonas se pueden tratar con enzimas?",
@@ -975,7 +974,7 @@ export const HERIBERTO_FAQ = [
   },
   {
     "q": "¿Qué es el láser CO₂ fraccionado? ¿Cómo funciona? ¿Para qué sirve el láser?",
-    "a": "El láser CO₂ fraccionado hace una quemadura controlada que regenera por completo la piel del rostro: atenúa líneas de expresión, marcas y cicatrices, unifica el tono, deja la piel más humectada con un efecto tipo lifting, y estimula la producción de colágeno. $4,500 por sesión, o $3,500 por sesión si asiste a su primera sesión dentro de los 14 días siguientes a su evaluación médica de láser ($500)."
+    "a": "El láser CO₂ fraccionado hace una quemadura controlada que regenera por completo la piel del rostro: atenúa líneas de expresión, marcas y cicatrices, unifica el tono, deja la piel más humectada con un efecto tipo lifting, y estimula la producción de colágeno. Precio normal: $4,500 por sesión; precio especial: $3,500 por sesión en todo el tratamiento si lo inicia dentro de los 14 días siguientes a su evaluación médica ($500, que se descuenta de la primera sesión)."
   },
   {
     "q": "¿Cómo es la recuperación del láser CO₂? ¿Cuántos días tarda? ¿Se pela la piel? ¿Queda roja?",
@@ -1087,7 +1086,7 @@ export const HERIBERTO_FAQ = [
   },
   {
     "q": "¿Cuánto cuesta el láser? ¿Cuánto cuesta la evaluación de láser? ¿Cuál es el precio especial del láser?",
-    "a": "La evaluación médica de láser cuesta $500. Las sesiones cuestan $4,500, o $3,500 si asiste a su primera sesión dentro de los 14 días siguientes a su evaluación. El número de sesiones lo define el Dr. Valdivia en la evaluación."
+    "a": "El precio normal del láser es de $4,500 por sesión. Si inicia su tratamiento dentro de los 14 días siguientes a su evaluación, aplica el precio especial de $3,500 por sesión en todo su tratamiento. La evaluación con el Dr. Valdivia cuesta $500 y se descuenta de su primera sesión. El número de sesiones lo define el Dr. Valdivia en la evaluación."
   },
   {
     "q": "¿Y si no soy candidata al láser? ¿Pierdo los $500 si el láser no es para mí?",
