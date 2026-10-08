@@ -1,0 +1,191 @@
+{
+  "tenant": {
+    "slug": "happynaty",
+    "businessName": "HappyNatyNat",
+    "assistantName": "HappyNatyNat",
+    "timezone": "America/Tijuana",
+    "configSource": "supabase"
+  },
+  "scenario": {
+    "id": "c1-filtros",
+    "order": 3,
+    "title": "Cierre — ya probó filtros y apps",
+    "shows": "Llega con más intención: la oferta va en el primer mensaje y la llamada en el segundo.",
+    "lead": {
+      "name": "Alejandra",
+      "channel": "instagram"
+    }
+  },
+  "model": "gpt-5.6-luna",
+  "leadModel": "gpt-5.6-luna",
+  "generatedAt": "2026-10-08T02:20:57.283Z",
+  "messages": [
+    {
+      "from": "lead",
+      "text": "Quiero saber mis colores reales, sin filtro",
+      "at": "2026-10-08T02:20:08.716Z"
+    },
+    {
+      "from": "bot",
+      "text": "Claro, con telas reales junto a tu cara y luz natural sí descubres tus colores reales, sin depender de filtros ✨ Es una sesión 1 a 1 de 120 minutos donde encuentras tu combinación exacta y te llevas tu paleta física y digital, además de la guía de ropa, tinte y maquillaje. ¿Lo que más quieres resolver es ropa, cabello o maquillaje?",
+      "at": "2026-10-08T02:20:56.716Z",
+      "turn": 1
+    },
+    {
+      "from": "lead",
+      "text": "principalmente ropa y cabello, ¿la sesión es presencial?",
+      "at": "2026-10-08T02:23:10.716Z"
+    },
+    {
+      "from": "bot",
+      "text": "Sí, la sesión es presencial en Tijuana, con telas reales junto a tu cara y luz natural. Para ropa y cabello te sirve muchísimo porque recibes tu paleta y la guía con colores de tinte para llevarle a tu colorista ✨",
+      "at": "2026-10-08T02:24:11.716Z",
+      "turn": 2
+    },
+    {
+      "from": "bot",
+      "text": "El primer paso es una llamada de diagnóstico sin costo, de 30 minutos por Google Meet con Nat. ¿Te gustaría agendarla?",
+      "at": "2026-10-08T02:24:17.216Z",
+      "turn": 2
+    },
+    {
+      "from": "lead",
+      "text": "sí, me gustaría agendarla",
+      "at": "2026-10-08T02:27:08.216Z"
+    },
+    {
+      "from": "bot",
+      "text": "Qué gusto, te aparto la llamada con Nat 💛 Para el martes, 13 de octubre tengo 9:00 a.m. o 1:00 p.m., por Google Meet y sin costo. ¿Cuál te acomoda más?",
+      "at": "2026-10-08T02:27:52.216Z",
+      "turn": 3
+    },
+    {
+      "from": "lead",
+      "text": "el martes, 13 de octubre a la 1:00 p.m. me acomoda perfecto",
+      "at": "2026-10-08T02:29:20.216Z"
+    },
+    {
+      "from": "bot",
+      "text": "Qué bueno, esa hora sí está disponible: martes, 13 de octubre, 1:00 p.m. Para agendarla, ¿me compartes tu nombre y tu WhatsApp con código de país, por favor? 💛",
+      "at": "2026-10-08T02:30:17.216Z",
+      "turn": 4
+    },
+    {
+      "from": "lead",
+      "text": "soy Alejandra, mi WhatsApp es +52 664 123 4567",
+      "at": "2026-10-08T02:32:22.216Z"
+    },
+    {
+      "from": "bot",
+      "text": "¡Listo, Alejandra! Tu llamada de diagnóstico quedó agendada para el martes, 13 de octubre, 1:00 p.m., por Google Meet. Te llegará la confirmación y los recordatorios por WhatsApp. ✨",
+      "at": "2026-10-08T02:33:02.216Z",
+      "turn": 5
+    },
+    {
+      "from": "lead",
+      "text": "gracias, quedo pendiente ✨",
+      "at": "2026-10-08T02:35:44.216Z"
+    },
+    {
+      "from": "bot",
+      "text": "Con mucho gusto, Alejandra ✨ Nos vemos el martes. Cualquier cosa, aquí andamos.",
+      "at": "2026-10-08T02:36:37.216Z",
+      "turn": 6
+    }
+  ],
+  "toolCalls": [
+    {
+      "turn": 2,
+      "name": "lookupFaq",
+      "args": {
+        "question": "¿La sesión de Análisis de Color Full es presencial y dónde se realiza? También le interesa principalmente ropa y cabello."
+      }
+    },
+    {
+      "turn": 3,
+      "name": "getAvailability",
+      "args": {
+        "serviceName": "Llamada de diagnóstico",
+        "fromDate": "2026-10-07T19:20:20-07:00",
+        "toDate": "2026-10-14T23:59:59-07:00"
+      }
+    },
+    {
+      "turn": 4,
+      "name": "getAvailability",
+      "args": {
+        "serviceName": "Llamada de diagnóstico",
+        "fromDate": "2026-10-13T00:00:00-07:00",
+        "toDate": "2026-10-13T23:59:59-07:00"
+      }
+    },
+    {
+      "turn": 5,
+      "name": "getAvailability",
+      "args": {
+        "serviceName": "Llamada de diagnóstico",
+        "fromDate": "2026-10-13T00:00:00-07:00",
+        "toDate": "2026-10-14T00:00:00-07:00"
+      }
+    },
+    {
+      "turn": 5,
+      "name": "bookAppointment",
+      "args": {
+        "serviceName": "Llamada de diagnóstico",
+        "startTime": "2026-10-13T13:00:00-07:00",
+        "whatsappPhone": "+52 664 123 4567",
+        "contactName": "Alejandra",
+        "treatment": "ropa y cabello"
+      }
+    },
+    {
+      "turn": 5,
+      "name": "updateConversationStatus",
+      "args": {
+        "status": "completed",
+        "reason": ""
+      }
+    },
+    {
+      "turn": 5,
+      "name": "updateConversationStatus",
+      "args": {
+        "status": "completed",
+        "reason": "Cita de diagnóstico agendada"
+      }
+    },
+    {
+      "turn": 6,
+      "name": "updateConversationStatus",
+      "args": {
+        "status": "completed",
+        "reason": ""
+      }
+    },
+    {
+      "turn": 6,
+      "name": "updateConversationStatus",
+      "args": {
+        "status": "completed",
+        "reason": "Cita agendada"
+      }
+    }
+  ],
+  "ghl": {
+    "appointments": [
+      {
+        "id": "appt_1",
+        "calendarId": "uao69NXxt7qHliwP6xvS",
+        "serviceName": "Alejandra — ropa y cabello — Full Color C1",
+        "startTime": "2026-10-13T13:00:00-07:00",
+        "status": "confirmed"
+      }
+    ],
+    "tags": [
+      "bot-completed"
+    ],
+    "contactName": "Alejandra"
+  },
+  "endedBy": "goal"
+}

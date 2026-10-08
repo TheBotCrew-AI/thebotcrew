@@ -1535,6 +1535,17 @@ Short log of *why* certain rules exist, so they aren't "simplified away" later.
   "[imagen]" forever (a voice note, "[nota de voz]") — the turn now also resolves the other
   unresolved media rows of the last 30 minutes (`recentInboundAttachments` + `isUnresolvedMedia`).
   Golden cases: `evals/photo-description.eval.ts`.
+- **An image that opens the conversation is the ad, not the lead** (2026-10-07). Replying to an
+  Instagram ad attaches the ad's own creative to the lead's first message. HappyNatyNat's first
+  live lead sent the P4 phrase plus that image (left as a bare "[imagen]") and got "Gracias por
+  mandármela… ¿qué me quisiste mostrar?" — the "[imagen]" bullet above told the model exactly
+  that, and it rendered after the tenant's rules. "# Fotos del lead" now opens with: an image
+  that arrives before the bot has said anything is almost always the ad — don't mention it,
+  answer the text, move on; it is hers only if the description clearly shows the person. The
+  "[imagen] → thank and ask" bullet applies only later in the conversation. Measured: bare
+  "[imagen]" 0/3 without the bullet → 5/5 with it; a DESCRIBED ad image already held 3/3 on the
+  tenant's own `houseRules` ("# Su primer mensaje es solo la entrada"). Cases in
+  `evals/happynaty.eval.ts`.
 
 ## 8. Info gaps — what the bot could not answer, per tenant (0054)
 

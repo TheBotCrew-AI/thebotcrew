@@ -29,7 +29,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { createClient } from '@supabase/supabase-js';
-import { BOT_CREW_PERSONA, HERIBERTO_PERSONA, HERIBERTO_PLAN_VARIANT, MADI_HOUSE_RULES } from './fixtures.js';
+import { BOT_CREW_PERSONA, HAPPYNATY_PERSONA, HAPPYNATY_VARIANTS, HERIBERTO_PERSONA, HERIBERTO_PLAN_VARIANT, MADI_HOUSE_RULES } from './fixtures.js';
 
 /**
  * Tenants whose `houseRules` an eval fixture mirrors, and must keep mirroring.
@@ -68,6 +68,14 @@ const MIRRORED_PERSONAS: {
   // and `demo_prompt_overrides` is NULL, so DEMO_BOTOX_PERSONA is synthetic now, not a mirror.
   { label: 'Dr. Heriberto Valdivia — base', locationId: 'rfL7uM3c5mpfIUGxCR3C', column: 'prompt_overrides', fixture: HERIBERTO_PERSONA },
   { label: 'Dr. Heriberto Valdivia — variante i01 (PLAN)', locationId: 'rfL7uM3c5mpfIUGxCR3C', column: 'prompt_variants', variant: 'i01', fixture: HERIBERTO_PLAN_VARIANT },
+  { label: 'HappyNatyNat — base', locationId: 'X8zdJcQaVckHuF3W4grr', column: 'prompt_overrides', fixture: HAPPYNATY_PERSONA },
+  ...Object.entries(HAPPYNATY_VARIANTS).map(([variant, fixture]) => ({
+    label: `HappyNatyNat — variante ${variant}`,
+    locationId: 'X8zdJcQaVckHuF3W4grr',
+    column: 'prompt_variants' as const,
+    variant,
+    fixture,
+  })),
 ];
 
 const supabaseUrl = process.env.SUPABASE_URL;

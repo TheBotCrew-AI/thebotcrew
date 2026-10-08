@@ -1,0 +1,209 @@
+{
+  "tenant": {
+    "slug": "happynaty",
+    "businessName": "HappyNatyNat",
+    "assistantName": "HappyNatyNat",
+    "timezone": "America/Tijuana",
+    "configSource": "supabase"
+  },
+  "scenario": {
+    "id": "c2-estacion",
+    "order": 4,
+    "title": "Cierre — \"ya sé que soy primavera\"",
+    "shows": "Ya le dijeron su estación. Se valida lo que sabe, sin corregirla, y se explica la combinación de 3.",
+    "lead": {
+      "name": "Paola",
+      "channel": "whatsapp"
+    }
+  },
+  "model": "gpt-5.6-luna",
+  "leadModel": "gpt-5.6-luna",
+  "generatedAt": "2026-10-08T02:21:49.770Z",
+  "messages": [
+    {
+      "from": "lead",
+      "text": "¿Cuál es mi combinación de colores?",
+      "at": "2026-10-08T02:20:57.666Z"
+    },
+    {
+      "from": "bot",
+      "text": "Tu combinación exacta se descubre con telas reales junto a tu cara; no sería responsable decirte una por foto o chat. Nat analiza seis características —profundo, cálido, frío, brillante, suave y luminoso— y encuentra tu combinación de tres, una principal, secundaria y terciaria ✨",
+      "at": "2026-10-08T02:21:45.666Z",
+      "turn": 1
+    },
+    {
+      "from": "bot",
+      "text": "En la llamada de diagnóstico, sin costo, te explica cómo funciona y conoce tu caso. ¿Ya te habían dicho tu estación?",
+      "at": "2026-10-08T02:21:51.166Z",
+      "turn": 1
+    },
+    {
+      "from": "lead",
+      "text": "sí, hace años una amiga me dijo que soy primavera, pero sigo sin atinarle a lo que compro. [Foto que mandó: selfie de una mujer de piel clara con pecas y cabello cobrizo, luz de ventana]",
+      "at": "2026-10-08T02:24:05.166Z"
+    },
+    {
+      "from": "bot",
+      "text": "Qué bueno que me lo cuentas; primavera puede ser una guía, pero la combinación de 3 características de Nat es mucho más precisa y personal. ¿Quieres resolver sobre todo ropa, cabello, maquillaje o compras en línea? ✨",
+      "at": "2026-10-08T02:25:06.166Z",
+      "turn": 2
+    },
+    {
+      "from": "lead",
+      "text": "sobre todo ropa y compras en línea, me cuesta mucho elegir colores que sí me favorezcan",
+      "at": "2026-10-08T02:27:57.166Z"
+    },
+    {
+      "from": "bot",
+      "text": "Justo para eso te sirve: te llevas tu paleta digital en el celular para comprar en línea y una paleta física para comparar colores en tienda. En la llamada con Nat, sin costo, conoce tu caso y te explica el análisis ✨ ¿Te aparto una llamada de diagnóstico?",
+      "at": "2026-10-08T02:28:41.166Z",
+      "turn": 3
+    },
+    {
+      "from": "lead",
+      "text": "sí, por favor aparta una llamada de diagnóstico.",
+      "at": "2026-10-08T02:30:09.166Z"
+    },
+    {
+      "from": "bot",
+      "text": "Qué gusto, con mucho gusto te la aparto 💛 Para la llamada con Nat por Google Meet tengo el martes, 13 de octubre, 9:00 a.m. o 1:00 p.m.; ¿cuál te acomoda mejor?",
+      "at": "2026-10-08T02:31:06.166Z",
+      "turn": 4
+    },
+    {
+      "from": "lead",
+      "text": "el martes, 13 de octubre, 9:00 a.m. me acomoda perfecto.",
+      "at": "2026-10-08T02:33:11.166Z"
+    },
+    {
+      "from": "bot",
+      "text": "Qué bueno, ese horario sí está disponible: martes, 13 de octubre, 9:00 a.m. por Google Meet. ¿A nombre de quién agendo la llamada? 💛",
+      "at": "2026-10-08T02:33:51.166Z",
+      "turn": 5
+    },
+    {
+      "from": "lead",
+      "text": "Paola.",
+      "at": "2026-10-08T02:36:33.166Z"
+    },
+    {
+      "from": "bot",
+      "text": "¡Listo, Paola! Tu llamada quedó agendada para el martes, 13 de octubre, 9:00 a.m. por Google Meet. Te llegará la confirmación y los recordatorios por WhatsApp 💛",
+      "at": "2026-10-08T02:37:26.166Z",
+      "turn": 6
+    },
+    {
+      "from": "lead",
+      "text": "gracias 💛",
+      "at": "2026-10-08T02:38:45.166Z"
+    },
+    {
+      "from": "bot",
+      "text": "¡Con mucho gusto, Paola! Nos vemos el martes, 13 de octubre, a las 9:00 a.m. por Google Meet. 💛",
+      "at": "2026-10-08T02:39:21.166Z",
+      "turn": 7
+    }
+  ],
+  "toolCalls": [
+    {
+      "turn": 1,
+      "name": "lookupFaq",
+      "args": {
+        "question": "¿Cuál es mi combinación de colores? ¿Se puede saber por chat o cómo se descubre?"
+      }
+    },
+    {
+      "turn": 3,
+      "name": "lookupFaq",
+      "args": {
+        "question": "¿Qué incluye el Análisis de Color Full y cómo funciona la llamada de diagnóstico para ropa y compras en línea?"
+      }
+    },
+    {
+      "turn": 4,
+      "name": "getAvailability",
+      "args": {
+        "serviceName": "Llamada de diagnóstico",
+        "fromDate": "2026-10-07T19:21:17-07:00",
+        "toDate": "2026-10-14T23:59:59-07:00"
+      }
+    },
+    {
+      "turn": 5,
+      "name": "getAvailability",
+      "args": {
+        "serviceName": "Llamada de diagnóstico",
+        "fromDate": "2026-10-13T00:00:00-07:00",
+        "toDate": "2026-10-13T23:59:59-07:00"
+      }
+    },
+    {
+      "turn": 6,
+      "name": "getAvailability",
+      "args": {
+        "serviceName": "Llamada de diagnóstico",
+        "fromDate": "2026-10-13T00:00:00-07:00",
+        "toDate": "2026-10-14T00:00:00-07:00"
+      }
+    },
+    {
+      "turn": 6,
+      "name": "bookAppointment",
+      "args": {
+        "serviceName": "Llamada de diagnóstico",
+        "startTime": "2026-10-13T09:00:00-07:00",
+        "whatsappPhone": null,
+        "contactName": "Paola",
+        "treatment": "Análisis de Color Full"
+      }
+    },
+    {
+      "turn": 6,
+      "name": "updateConversationStatus",
+      "args": {
+        "status": "completed",
+        "reason": ""
+      }
+    },
+    {
+      "turn": 6,
+      "name": "updateConversationStatus",
+      "args": {
+        "status": "completed",
+        "reason": "Cita de diagnóstico agendada"
+      }
+    },
+    {
+      "turn": 7,
+      "name": "updateConversationStatus",
+      "args": {
+        "status": "completed",
+        "reason": ""
+      }
+    },
+    {
+      "turn": 7,
+      "name": "updateConversationStatus",
+      "args": {
+        "status": "completed",
+        "reason": "Cita de diagnóstico agendada"
+      }
+    }
+  ],
+  "ghl": {
+    "appointments": [
+      {
+        "id": "appt_1",
+        "calendarId": "uao69NXxt7qHliwP6xvS",
+        "serviceName": "Paola — Análisis de Color Full — Full Color C2",
+        "startTime": "2026-10-13T09:00:00-07:00",
+        "status": "confirmed"
+      }
+    ],
+    "tags": [
+      "bot-completed"
+    ],
+    "contactName": "Paola"
+  },
+  "endedBy": "goal"
+}

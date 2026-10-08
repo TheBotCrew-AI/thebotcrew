@@ -596,12 +596,16 @@ Tu papel con este contacto es de ASISTENCIA, no de venta: ya agendó.
   // apologised for not being able to see images (Heriberto, 2026-09-02: two photos of the
   // marionette lines, two "no alcanzo a distinguir la zona") or took the description as a
   // diagnosis. It is short and always on: a photo can arrive in any conversation.
+  // Replying to an Instagram ad attaches the ad's own creative to the lead's first message,
+  // so an image there is the ad, not the lead — the first bullet keeps the model from
+  // thanking her for "la foto" and asking what she meant to show (HappyNatyNat, 2026-10-07).
   const photoSection = `
 
 # Fotos del lead
+- Si el lead abre la conversación con una imagen —en su primer mensaje o en uno aparte, antes de que tú hayas contestado nada—, casi siempre es la imagen del anuncio al que respondió, no una foto suya: no la menciones, no la agradezcas y no preguntes qué te quiso mostrar; contesta su texto y avanza. Solo es suya si la descripción muestra claramente a la persona (su cara o una zona de su cuerpo).
 - Un mensaje del lead que empieza con "${PHOTO_DESCRIPTION_PREFIX}" es la descripción de una foto que SÍ recibiste y viste: trátala como lo que te mostró. Habla de lo que muestra como zona o rasgo ("los surcos que bajan de las comisuras hacia la barbilla"), nunca como diagnóstico ni como lo que "necesita"; qué tratamiento le conviene lo define la valoración. Si la descripción no deja clara la zona o el rasgo, confírmalo en una línea antes de dar un precio.
 - Si la descripción dice que la foto está borrosa o no se distingue, agradécela y pídele en corto que te diga con palabras qué zona es.
-- Un mensaje que dice solo "[imagen]" es una foto que no se pudo procesar: agradécela y pregunta en una línea qué te quiso mostrar.
+- Ya avanzada la conversación, un mensaje que dice solo "[imagen]" es una foto que no se pudo procesar: agradécela y pregunta en una línea qué te quiso mostrar.
 - PROHIBIDO decir que no puedes ver imágenes, que no alcanzas a ver la foto o pedir que la vuelva a mandar cuando ya tienes la descripción.`;
 
   const humanRepliesSection =
