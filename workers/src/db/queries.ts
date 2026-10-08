@@ -60,7 +60,7 @@ export async function loadTenantConfig(ghlLocationId: string): Promise<TenantCon
   const { data, error } = await supabase
     .from('tenant_config')
     .select(
-      'business_name, timezone, tone, services, hours, calendars, faq, enabled_roles, prompt_overrides, ai_provider, ai_model, ai_key_ref, awaiting_human_tag, pending_info_tag, follow_up_tiers, follow_up_cadence, follow_up_angles, follow_up_rounds, quiet_hours, booking_horizon_days, booking_min_notice_days, human_pause_minutes, enabled_channels, test_contact_ids, trigger_keywords, demo_on_keywords, demo_off_keywords, demo_prompt_overrides, keyword_variants, prompt_variants, demo_sessions_enabled, meta_capi, lead_timezone_enabled, interest_tags, book_unconfirmed, booking_payment,' +
+      'business_name, timezone, tone, services, hours, calendars, faq, enabled_roles, prompt_overrides, ai_provider, ai_model, ai_key_ref, awaiting_human_tag, pending_info_tag, follow_up_tiers, follow_up_cadence, follow_up_angles, follow_up_rounds, quiet_hours, booking_horizon_days, booking_min_notice_days, human_pause_minutes, enabled_channels, test_contact_ids, trigger_keywords, demo_on_keywords, demo_off_keywords, demo_prompt_overrides, keyword_variants, prompt_variants, demo_sessions_enabled, meta_capi, lead_timezone_enabled, interest_tags, book_unconfirmed, booking_payment, prime_time,' +
         'tenants!inner(id, client_id, ghl_location_id, is_active)',
     )
     .eq('tenants.ghl_location_id', ghlLocationId)
@@ -128,6 +128,7 @@ export async function loadTenantConfig(ghlLocationId: string): Promise<TenantCon
       interestTags: row.interest_tags === true,
       bookUnconfirmed: row.book_unconfirmed === true,
       bookingPayment: row.booking_payment ?? null,
+      primeTime: row.prime_time ?? null,
     },
   };
 }
@@ -1495,6 +1496,30 @@ export async function wasAnsweredByRun(conversationId: string, messageId: string
     .eq('event_type', 'turn_answered')
     .eq('metadata->>messageId', messageId);
   fail('wasAnsweredByRun', error);
+  return (count ?? 0) > 0;
+}
+
+/**
+ * True once getAvailability released the prime-time slots to this conversation (0066): the
+ * lead refused every off-peak option, so a restricted service may now book a prime slot.
+ * Keyed by the GHL conversation id, like the event itself (app_log_event resolves the row).
+ */
+export async function wasPrimeTimeReleased(ghlConversationId: string): Promise<boolean> {
+  const supabase = getSupabase();
+  const { data: conv, error: convErr } = await supabase
+    .from('conversations')
+    .select('id')
+    .eq('ghl_conversation_id', ghlConversationId)
+    .maybeSingle();
+  fail('wasPrimeTimeReleased:conversation', convErr);
+  const conversationId = (conv as { id?: string } | null)?.id;
+  if (!conversationId) return false;
+  const { count, error } = await supabase
+    .from('bot_events')
+    .select('id', { count: 'exact', head: true })
+    .eq('conversation_id', conversationId)
+    .eq('event_type', 'prime_time_released');
+  fail('wasPrimeTimeReleased', error);
   return (count ?? 0) > 0;
 }
 

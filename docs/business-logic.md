@@ -427,6 +427,28 @@ slots. Rules (also reinforced in the front-desk prompt):
   carries the other half next to `# Horario`, for the turn where the model answers "¿atienden
   los sábados?" without calling the tool at all. Golden case: `evals/closed-day.eval.ts`
   (5/5 with the fix, 0/5 without).
+- **Prime time reserved for paying services (deterministic, per-tenant, 0066):**
+  `tenant_config.prime_time` (jsonb, NULL = off) names the busiest windows of the week
+  (`windows: [{days, start, end}]`, wall-clock in the **tenant's** zone) and the services kept
+  out of them (`restricted_services`, exact `services[].name` — a free valoración). The rule is
+  soft on purpose: the restricted lead is offered the off-peak slots **first**, and gets a prime
+  slot only when none of the others works. A soft withhold-rule left to the model is the class
+  that fails at a rate (§6c), and `bookAppointment` would book whatever GHL has free anyway — so
+  it is settled in code, the same family as horizon / min-notice / closed-day:
+  - `getAvailability` splits the slots (`tools/prime-time.ts`, pure) and, for a restricted
+    service, returns only the off-peak ones; the note says how many are held and forbids
+    calling the hidden hour "tomada" (it may be offered a turn later). A range with nothing
+    off-peak returns empty and asks the model to widen the range, **not** to release.
+  - The model asks for the prime slots with `includePrimeTime: true` **only after the lead says
+    none of the offered slots works**; that call logs `prime_time_released` on the conversation.
+  - `bookAppointment` / `rescheduleAppointment` refuse a prime slot for a restricted service
+    **unless that event exists** (`booking_failed` reason `prime_time`) — the release is the
+    only key, so a model that re-typed a hidden slot can't book it.
+  - The prompt (`# Horario preferente`) carries the words: never mention the rule, never say
+    "ocupada" for a hidden hour, never announce the release as a favour. Not rendered in demo
+    (the simulated calendar never applies the split). An unrestricted service is byte-identical
+    to before. No tenant has it on yet; showcase in `pnpm battery prime-time-demo` (synthetic
+    clinic, offline bundle).
 - **Unconfirmed bookings (per-tenant, 0061):** with `tenant_config.book_unconfirmed = true` the
   bot creates the GHL event as `appointmentStatus: 'new'` — **"No confirmada"** in the calendar —
   and a reschedule puts it back there (moving a cita must not confirm it on the lead's behalf).

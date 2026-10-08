@@ -12,6 +12,7 @@ import { earliestPayableStartMs, payableNoticeLabel } from './booking-hold.js';
 import { resolveBookingWindow } from './booking-window.js';
 import { simulatedSlots } from './demo-sim.js';
 import { closedRange, dayListEs, openDaysEs } from './open-days.js';
+import { isRestrictedService, primeWindowsEs, splitPrimeSlots } from './prime-time.js';
 import { slotLabel } from './slot-label.js';
 
 export const getAvailabilityTool = createTool({
@@ -23,12 +24,19 @@ export const getAvailabilityTool = createTool({
     serviceName: z.string().describe('Nombre exacto del servicio (debe coincidir con los configurados)'),
     fromDate: z.string().optional().describe('Fecha/hora ISO 8601 de inicio del rango (por defecto: ahora)'),
     toDate: z.string().optional().describe('Fecha/hora ISO 8601 de fin del rango (por defecto: +7 días)'),
+    includePrimeTime: z
+      .boolean()
+      .optional()
+      .describe(
+        'SOLO cuando el lead ya dijo explícitamente que NINGUNO de los horarios que le ofreciste le funciona: ' +
+          'pide también los horarios del horario preferente. Nunca en la primera consulta.',
+      ),
   }),
   outputSchema: z.object({
     slots: z.array(z.object({ start: z.string(), end: z.string(), label: z.string() })),
     note: z.string().optional(),
   }),
-  execute: async ({ serviceName, fromDate, toDate }, ctx) => {
+  execute: async ({ serviceName, fromDate, toDate, includePrimeTime }, ctx) => {
     const { tenant, turn, config, frameTz } = resolveAgentContext(ctx);
 
     // Demo mode: SIMULATED slots — no GHL call (nothing can fail in front of a
@@ -193,7 +201,42 @@ export const getAvailabilityTool = createTool({
     const ghl = new GhlClient(tenant.tenantId);
     try {
       const slots = await ghl.getAvailability(calendarId, from, to);
-      const labeled = slots.map((s) => ({ ...s, label: label(s.start) }));
+      let labeled = slots.map((s) => ({ ...s, label: label(s.start) }));
+
+      // Prime time (0066): a restricted service sees the off-peak slots first. The prime
+      // ones are held back HERE — not by asking the model to skip them — and come out only
+      // when the model asks for them on the lead's refusal, which is logged so the booking
+      // tools accept the prime slot afterwards. The window is read in the tenant's clock.
+      const prime = config.primeTime;
+      let primeNote = '';
+      let primeHeld = 0;
+      if (prime && isRestrictedService(prime, serviceName)) {
+        const split = splitPrimeSlots(labeled, prime, config.timezone);
+        if (includePrimeTime) {
+          await logBotEvent(tenant.clientId, turn.ghlConversationId, 'prime_time_released', {
+            serviceName,
+            calendarId,
+            from,
+            to,
+            offPeakCount: split.offPeak.length,
+            primeCount: split.prime.length,
+          });
+          primeNote =
+            ' Esta vez la lista YA incluye los horarios del horario preferente porque el lead no pudo en ningún otro: ofrécele hasta 3 con naturalidad, sin decir que son una excepción ni que son horarios especiales.';
+        } else {
+          primeHeld = split.prime.length;
+          labeled = split.offPeak;
+          if (primeHeld > 0) {
+            primeNote =
+              ` Hay ${primeHeld} horario(s) más dentro del horario preferente (${primeWindowsEs(prime)}) que NO están en esta lista y NO debes mencionar: para este servicio se ofrecen primero los de fuera. ` +
+              (labeled.length === 0
+                ? 'En este rango no quedó ninguno fuera del horario preferente: ofrécele otro día u otra hora (consulta un rango más amplio). '
+                : 'Si el lead pide una hora que no está aquí, NO digas que está ocupada ni tomada: dile que lo más próximo que le puedes apartar es lo de la lista. ') +
+              'Solo si el lead dice explícitamente que NINGUNO de los que le ofreciste le funciona, vuelve a llamar getAvailability con includePrimeTime: true.';
+          }
+        }
+      }
+
       // Persist the raw slots GHL returned so an availability claim can later be
       // audited against ground truth (the agent presents these labels verbatim).
       await logBotEvent(tenant.clientId, turn.ghlConversationId, 'availability_checked', {
@@ -202,15 +245,16 @@ export const getAvailabilityTool = createTool({
         from,
         to,
         slotCount: labeled.length,
+        ...(prime && isRestrictedService(prime, serviceName) ? { primeHeld, primeReleased: includePrimeTime === true } : {}),
         slots: labeled.slice(0, 50).map((s) => ({ start: s.start, label: s.label })),
       });
       const baseNote =
-        slots.length === 0
+        labeled.length === 0
           ? 'Sin disponibilidad en el rango consultado.'
           : 'Ofrece estos horarios al lead usando EXACTAMENTE el texto del campo "label" (ya trae el día de la semana correcto). No recalcules ni traduzcas fechas.';
       return {
         slots: labeled,
-        note: baseNote + (horizonNote ?? '') + noticeNote + payNote,
+        note: baseNote + (horizonNote ?? '') + noticeNote + payNote + primeNote,
       };
     } catch (err) {
       await logBotEvent(tenant.clientId, turn.ghlConversationId, 'availability_checked', {

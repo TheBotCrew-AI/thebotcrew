@@ -99,6 +99,9 @@ export interface RawTenantConfig {
    *  lead pays a Stripe Checkout link (the money lands on the PLATFORM account). Raw jsonb,
    *  validated by the front-desk config; null/absent = citas confirm without payment. */
   bookingPayment?: unknown;
+  /** Prime time (0066): windows reserved for paying services + the services kept out of them.
+   *  Raw jsonb, validated by the front-desk config; null/absent = every service sees every slot. */
+  primeTime?: unknown;
   /** Slug of the Worker secret holding this tenant's own provider key
    *  (`'MADI'` → `OPENAI_API_KEY__MADI`). Never the key itself. null = platform key. */
   aiKeyRef?: string | null;

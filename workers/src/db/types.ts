@@ -43,6 +43,7 @@ export interface TenantConfigRow {
   book_unconfirmed?: boolean | null;
   /** Paid confirmation config ({amount, currency, hold_hours, …}, 0062). NULL = off. */
   booking_payment?: unknown;
+  prime_time?: unknown;
   /** Channels the bot may reply on. NULL = none (installed but silent). */
   enabled_channels: string[] | null;
   /** Pre-live test allowlist: when non-empty, reply only to these GHL contact ids. */
@@ -294,7 +295,10 @@ export type BotEventType =
   // lead names the same treatment again — adding an existing tag in GHL is a no-op.
   | 'interest_tagged'
   /** A run that had this inbound in its history logged its reply (0060). The double-run guard's key. */
-  | 'turn_answered';
+  | 'turn_answered'
+  /** getAvailability handed a restricted service its prime-time slots (0066): the lead refused
+   *  every off-peak option. The key bookAppointment checks before it books a prime slot. */
+  | 'prime_time_released';
 
 export interface LogAppointmentParams {
   p_client_id: string;

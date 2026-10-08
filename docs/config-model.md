@@ -87,6 +87,7 @@ Four things people get wrong here:
 | `confirmContactName` | ✅ | ❌ base only (handler backstop) | n/a |
 | `followUpAngles` | tenant column | ✅ replaces pool | n/a (follow-ups off in demo) |
 | `followUpsEnabled` | tenant column (`follow_up_cadence`) | ✅ **variant-only**: `false` = this campaign never nudges | n/a |
+| `primeTime` (0066) | tenant column (`prime_time`) | ❌ never — a window is the business's busy hour, not a campaign knob | 🚫 suppressed (simulated calendar) |
 | `bookingPayment` (0062) | tenant column (`booking_payment`) | ❌ never — the hold is the platform's revenue, not a campaign knob | 🚫 suppressed (a demo booking is simulated) |
 
 **Rule of thumb:** the *flow* belongs to the campaign; the *rules* belong to the tenant.

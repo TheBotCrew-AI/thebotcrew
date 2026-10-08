@@ -13,6 +13,7 @@ import { frameTimeZone, zoneLabel, zoneSuffix } from '../../core/lead-timezone.j
 import { zonedWallClockToMs } from './tools/booking-time.js';
 import { earliestBookableMs } from './tools/booking-window.js';
 import { openDaysEs, openWeekdays, WEEKDAY_LABEL } from './tools/open-days.js';
+import { primeWindowsEs } from './tools/prime-time.js';
 import { slotLabel } from './tools/slot-label.js';
 import { holdAmountCents, resolveEffectiveOverrides, type FrontDeskConfig } from './config.js';
 import { formatHoldAmount } from './tools/booking-hold.js';
@@ -406,6 +407,19 @@ Hay ${config.faq.length} respuestas oficiales cargadas y NO están en este promp
       `\nLas citas se abren con mínimo ${config.bookingMinNoticeDays} día(s) de anticipación` +
       (firstReadable ? `: el primer día que puedes ofrecer es el ${firstReadable}` : '') +
       '. Nunca ofrezcas ni agendes un horario de hoy. Si el lead pide hoy, dilo en positivo y con calidez —para hoy ya no te queda espacio, pero a partir de ese día sí— y ofrécele los horarios más próximos; nunca un "no" seco.';
+  }
+
+  // Prime time (0066): the tool already hides the prime slots of a restricted service, so
+  // this section is about the WORDS — the hidden slots must not be called "taken" (they may
+  // be offered a turn later) and the release must not be announced as a favour. Not in demo:
+  // the simulated calendar never applies it.
+  if (config.primeTime && bookingEnabled && !usingDemo) {
+    const restricted = config.primeTime.restrictedServices.join(', ');
+    horizonLine +=
+      `\n\n# Horario preferente
+Las horas de ${primeWindowsEs(config.primeTime)} son horario preferente. Para ${restricted}, getAvailability te devuelve PRIMERO los horarios fuera de ese rango: ofrécelos como si fueran los únicos. No menciones que existe un horario preferente, ni que hay otros horarios, ni por qué.
+- Si el lead pide una hora dentro de ese rango, NO digas que está ocupada ni tomada: dile con calidez que lo más próximo que le puedes apartar es lo que sí tienes en la lista, y ofrécele dos opciones.
+- Solo si el lead dice explícitamente que NINGUNO de los horarios que le ofreciste le funciona (no basta con que pida una hora una vez), vuelve a llamar getAvailability con includePrimeTime: true y ofrécele lo que devuelva con la misma naturalidad. Nunca digas que es una excepción, ni que esos horarios son para otros servicios, ni que "le haces un favor".`;
   }
 
   // Reminder-number handling: GHL sends confirmation/reminder templates to the contact's

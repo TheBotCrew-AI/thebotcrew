@@ -21,7 +21,7 @@ await vi.hoisted(async () => {
   loadDotEnv();
 });
 
-const shared = vi.hoisted(() => ({ ghl: null as null | Record<string, unknown> }));
+const shared = vi.hoisted(() => ({ ghl: null as null | Record<string, unknown>, primeReleased: false }));
 
 vi.mock('../ghl/client.js', () => ({
   GhlClient: vi.fn(() => {
@@ -48,7 +48,11 @@ vi.mock('../db/queries.js', async (importOriginal) => {
   const real = await importOriginal<typeof import('../db/queries.js')>();
   const ghl = () => shared.ghl as unknown as import('./fake-ghl.js').FakeGhl;
   const stubs: Record<string, (...args: never[]) => unknown> = {
-    logBotEvent: async () => undefined,
+    // The one event a tool reads back (0066): the release of prime time to this conversation.
+    logBotEvent: async (_c: string, _conv: string, type: string) => {
+      if (type === 'prime_time_released') shared.primeReleased = true;
+    },
+    wasPrimeTimeReleased: async () => shared.primeReleased,
     logEvent: async () => ({ eventId: 'evt_fake' }),
     logLlmUsage: async () => undefined,
     getActiveDemoSession: async () => null,
@@ -120,7 +124,7 @@ const toolCallsOf = (res: { toolCalls?: ToolCallChunkLike[] }) =>
 /** Live config when Supabase env is present (what prod runs), else the eval fixture. */
 async function resolveTenant(): Promise<{ tenant: TenantContext; source: Transcript['tenant']['configSource'] }> {
   if (!bundle) throw new Error(`unknown battery tenant "${SLUG}" — known: ${Object.keys(TENANT_SCENARIOS).join(', ')}`);
-  if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  if (!bundle.offline && process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
     const live = await loadTenantConfig(bundle.ghlLocationId);
     if (!live) throw new Error(`tenant ${bundle.ghlLocationId} not found in Supabase`);
     return { tenant: live, source: 'supabase' };
@@ -150,6 +154,7 @@ async function runScenario(scenario: Scenario, order: number, tenant: TenantCont
   const config = parseFrontDeskConfig(tenant.config);
   const ghl = new FakeGhl({ timezone: config.timezone, hours: config.hours, phone: scenario.lead.phone });
   shared.ghl = ghl as unknown as Record<string, unknown>;
+  shared.primeReleased = false;
 
   if (scenario.preset?.appointment) {
     const { serviceName, daysAhead, time } = scenario.preset.appointment;

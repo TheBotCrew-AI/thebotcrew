@@ -9,13 +9,14 @@ import { GhlClient } from '../../../ghl/client.js';
 import { syncContactTimezone } from '../../../ghl/contact-timezone.js';
 import { splitContactName } from '../../../core/contact-name.js';
 import { CANCELLED_APPOINTMENT_TAG } from '../../../ghl/tags.js';
-import { getActiveDemoSession, logAppointment, logBotEvent, logEvent, resetReactivationRound, setSimulatedBooking } from '../../../db/queries.js';
+import { getActiveDemoSession, logAppointment, logBotEvent, logEvent, resetReactivationRound, setSimulatedBooking, wasPrimeTimeReleased } from '../../../db/queries.js';
 import { queueCapiEvent } from '../../../meta/capi.js';
 import { resolveAgentContext } from './agent-context.js';
 import { buildAppointmentTitle } from './appointment-title.js';
 import { earliestPayableStartMs, openBookingHold, payableNoticeLabel, type HoldOpened } from './booking-hold.js';
 import { bookingQueryWindow, resolveBookableSlot } from './booking-time.js';
 import { earliestBookableMs } from './booking-window.js';
+import { isPrimeSlot, isRestrictedService } from './prime-time.js';
 import { simSlotLabel, simulatedSlots } from './demo-sim.js';
 import { slotLabel } from './slot-label.js';
 
@@ -148,6 +149,28 @@ export const bookAppointmentTool = createTool({
         booked: false,
         message: 'No pude verificar la disponibilidad en este momento. Intenta de nuevo en un momento.',
       };
+    }
+
+    // Prime time (0066): a restricted service may take a prime slot only after getAvailability
+    // released them on the lead's refusal (the `prime_time_released` event). Mirrors the hold
+    // in getAvailability, so a model that re-typed a hidden slot can't book it.
+    if (config.primeTime && isRestrictedService(config.primeTime, serviceName) && isPrimeSlot(canonicalStart, config.primeTime, config.timezone)) {
+      const released = await wasPrimeTimeReleased(turn.ghlConversationId);
+      if (!released) {
+        await logBotEvent(tenant.clientId, turn.ghlConversationId, 'booking_failed', {
+          serviceName,
+          calendarId,
+          startTime: canonicalStart,
+          reason: 'prime_time',
+        });
+        return {
+          booked: false,
+          message:
+            'Ese horario está dentro del horario preferente y para este servicio se ofrecen primero los de fuera. ' +
+            'Consulta getAvailability (sin includePrimeTime) y ofrécele al lead ÚNICAMENTE los horarios que devuelva; ' +
+            'solo si dice que ninguno le funciona, vuelve a consultar con includePrimeTime: true y entonces sí agenda.',
+        };
+      }
     }
 
     // Minimum notice (business rule, per-tenant): never book before local midnight of

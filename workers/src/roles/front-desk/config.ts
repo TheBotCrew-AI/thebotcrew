@@ -8,6 +8,7 @@
 
 import { z } from 'zod';
 import type { RawTenantConfig } from '../../core/types.js';
+import { parsePrimeTime, primeTimeSchema } from './tools/prime-time.js';
 
 export const serviceSchema = z.object({
   name: z.string(),
@@ -209,6 +210,8 @@ export const frontDeskConfigSchema = z.object({
   bookUnconfirmed: z.boolean().default(false),
   /** Paid confirmation (0062): null = off. Already validated by parseBookingPayment. */
   bookingPayment: bookingPaymentSchema.nullable().default(null),
+  /** Prime time reserved for paying services (0066): null = off. Already validated by parsePrimeTime. */
+  primeTime: primeTimeSchema.nullable().default(null),
 });
 
 export type FrontDeskConfig = z.infer<typeof frontDeskConfigSchema>;
@@ -268,6 +271,7 @@ export function parseFrontDeskConfig(raw: RawTenantConfig): FrontDeskConfig {
     leadTimezoneEnabled: raw.leadTimezoneEnabled === true,
     bookUnconfirmed: raw.bookUnconfirmed === true,
     bookingPayment: parseBookingPayment(raw.bookingPayment),
+    primeTime: parsePrimeTime(raw.primeTime),
   });
 }
 

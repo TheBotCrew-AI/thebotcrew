@@ -1,0 +1,159 @@
+{
+  "tenant": {
+    "slug": "prime-time-demo",
+    "businessName": "Clínica Aura",
+    "assistantName": "Mariana",
+    "timezone": "America/Mexico_City",
+    "configSource": "fixture"
+  },
+  "scenario": {
+    "id": "botox-tarde-directo",
+    "order": 2,
+    "title": "Bótox — pide la tarde y la tiene de entrada",
+    "shows": "Ya sabe que quiere bótox (tratamiento pagado). Pide la tarde y se la ofrecen de inmediato: la regla no le aplica.",
+    "lead": {
+      "name": "Lucía",
+      "channel": "whatsapp"
+    }
+  },
+  "model": "gpt-5.6-luna",
+  "leadModel": "gpt-5.6-luna",
+  "generatedAt": "2026-10-08T14:09:50.133Z",
+  "messages": [
+    {
+      "from": "lead",
+      "text": "Buenas tardes, quiero agendar bótox, de preferencia saliendo del trabajo como a las 6",
+      "at": "2026-10-08T14:09:11.100Z"
+    },
+    {
+      "from": "bot",
+      "text": "Claro que sí, el bótox es desde $3,500 por zona. Para hoy te puedo ofrecer jueves, 8 de octubre, 5:00 p.m. o 7:00 p.m.; ¿cuál te acomoda mejor saliendo del trabajo?",
+      "at": "2026-10-08T14:09:59.100Z",
+      "turn": 1
+    },
+    {
+      "from": "lead",
+      "text": "el jueves 8 de octubre a las 7:00 p.m. me queda perfecto, sería bótox en frente y entrecejo.",
+      "at": "2026-10-08T14:12:13.100Z"
+    },
+    {
+      "from": "bot",
+      "text": "Qué bueno, te queda perfecto. Te aparto el jueves, 8 de octubre, a las 7:00 p.m. para bótox en frente y entrecejo. ¿A nombre de quién agendo la cita?",
+      "at": "2026-10-08T14:13:14.100Z",
+      "turn": 2
+    },
+    {
+      "from": "lead",
+      "text": "A nombre de Lucía.",
+      "at": "2026-10-08T14:16:05.100Z"
+    },
+    {
+      "from": "bot",
+      "text": "¡Listo, Lucía! Tu cita de bótox en frente y entrecejo quedó agendada para el jueves, 8 de octubre, 7:00 p.m. Te llegará la confirmación y los recordatorios por WhatsApp. ¡Qué gusto ayudarte!",
+      "at": "2026-10-08T14:16:49.100Z",
+      "turn": 3
+    },
+    {
+      "from": "lead",
+      "text": "Gracias, ahí estaré.",
+      "at": "2026-10-08T14:18:17.100Z"
+    },
+    {
+      "from": "bot",
+      "text": "Con mucho gusto, Lucía. Te esperamos el jueves a las 7:00 p.m. ¡Qué gusto ayudarte!",
+      "at": "2026-10-08T14:19:14.100Z",
+      "turn": 4
+    }
+  ],
+  "toolCalls": [
+    {
+      "turn": 1,
+      "name": "getAvailability",
+      "args": {
+        "serviceName": "Bótox",
+        "fromDate": "2026-10-08T08:09:11-06:00",
+        "toDate": "2026-10-15T08:09:11-06:00",
+        "includePrimeTime": false
+      }
+    },
+    {
+      "turn": 2,
+      "name": "getAvailability",
+      "args": {
+        "serviceName": "Bótox",
+        "fromDate": "2026-10-08T08:09:20-06:00",
+        "toDate": "2026-10-08T23:59:59-06:00",
+        "includePrimeTime": false
+      }
+    },
+    {
+      "turn": 3,
+      "name": "getAvailability",
+      "args": {
+        "serviceName": "Bótox",
+        "fromDate": "2026-10-08T08:09:29-06:00",
+        "toDate": "2026-10-08T23:59:59-06:00",
+        "includePrimeTime": false
+      }
+    },
+    {
+      "turn": 3,
+      "name": "bookAppointment",
+      "args": {
+        "serviceName": "Bótox",
+        "startTime": "2026-10-08T19:00:00-06:00",
+        "whatsappPhone": null,
+        "contactName": "Lucía",
+        "treatment": "Bótox en frente y entrecejo"
+      }
+    },
+    {
+      "turn": 3,
+      "name": "updateConversationStatus",
+      "args": {
+        "status": "completed",
+        "reason": ""
+      }
+    },
+    {
+      "turn": 3,
+      "name": "updateConversationStatus",
+      "args": {
+        "status": "completed",
+        "reason": "Cita agendada"
+      }
+    },
+    {
+      "turn": 4,
+      "name": "updateConversationStatus",
+      "args": {
+        "status": "completed",
+        "reason": ""
+      }
+    },
+    {
+      "turn": 4,
+      "name": "updateConversationStatus",
+      "args": {
+        "status": "completed",
+        "reason": "Cita de bótox agendada"
+      }
+    }
+  ],
+  "ghl": {
+    "appointments": [
+      {
+        "id": "appt_1",
+        "calendarId": "cal_aura_botox",
+        "serviceName": "Lucía — Bótox en frente y entrecejo",
+        "startTime": "2026-10-08T19:00:00-06:00",
+        "status": "confirmed"
+      }
+    ],
+    "tags": [
+      "bot-completed"
+    ],
+    "contactName": "Lucía"
+  },
+  "endedBy": "goal"
+}

@@ -561,3 +561,50 @@ describe('bookAppointment — paid confirmation (0062)', () => {
     expect(ghl.bookAppointment).toHaveBeenCalledWith(expect.objectContaining({ appointmentStatus: 'confirmed' }));
   });
 });
+
+// 0066: a prime slot for a restricted service books only after getAvailability released
+// the prime time to this conversation (the prime_time_released event).
+describe('bookAppointment — prime time (0066)', () => {
+  const PRIME = '2026-07-10T23:30:00.000Z'; // 17:30 Fri, America/Mexico_City
+  const primeCtx = (restricted: string[] = ['Consulta']) => {
+    const t = {
+      ...tenant,
+      config: {
+        ...(tenant.config as object),
+        primeTime: { windows: [{ days: ['mon', 'tue', 'wed', 'thu', 'fri'], start: '17:00', end: '20:00' }], restrictedServices: restricted },
+      },
+    } as unknown as TenantContext;
+    return { requestContext: { get: (k: string) => (k === 'tenant' ? t : k === 'turn' ? turn : undefined) } };
+  };
+  beforeEach(() => {
+    ghl.getAvailability.mockResolvedValue([{ start: PRIME, end: PRIME }, { start: START, end: START }]);
+  });
+
+  it('refuses a prime slot for a restricted service when nothing was released', async () => {
+    vi.mocked(q.wasPrimeTimeReleased).mockResolvedValue(false);
+    const res = await runWith({ serviceName: 'Consulta', startTime: PRIME }, primeCtx());
+    expect(res.booked).toBe(false);
+    expect(res.message).toContain('includePrimeTime');
+    expect(ghl.bookAppointment).not.toHaveBeenCalled();
+    expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'booking_failed', expect.objectContaining({ reason: 'prime_time' }));
+  });
+
+  it('books the prime slot once released', async () => {
+    vi.mocked(q.wasPrimeTimeReleased).mockResolvedValue(true);
+    const res = await runWith({ serviceName: 'Consulta', startTime: PRIME }, primeCtx());
+    expect(res.booked).toBe(true);
+    expect(ghl.bookAppointment).toHaveBeenCalledWith(expect.objectContaining({ startTime: PRIME }));
+  });
+
+  it('an off-peak slot for a restricted service never consults the release', async () => {
+    const res = await runWith({ serviceName: 'Consulta', startTime: START }, primeCtx());
+    expect(res.booked).toBe(true);
+    expect(q.wasPrimeTimeReleased).not.toHaveBeenCalled();
+  });
+
+  it('an unrestricted service books prime time freely', async () => {
+    const res = await runWith({ serviceName: 'Consulta', startTime: PRIME }, primeCtx(['Otro']));
+    expect(res.booked).toBe(true);
+    expect(q.wasPrimeTimeReleased).not.toHaveBeenCalled();
+  });
+});

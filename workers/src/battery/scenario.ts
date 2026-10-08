@@ -67,6 +67,11 @@ export interface TenantScenarios {
   ghlLocationId: string;
   /** Offline fallback (the eval fixture) when there is no Supabase env. */
   fixture: TenantContext;
+  /**
+   * Always run on `fixture`, never on Supabase — for a SYNTHETIC tenant that exists only to
+   * show a platform feature (no client, no row), so a demo never needs a real account.
+   */
+  offline?: boolean;
   /** The persona's first name as the prompt introduces it ("Soy Sofía…") — the report's title. */
   assistantName: string;
   scenarios: Scenario[];

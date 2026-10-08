@@ -168,6 +168,7 @@ workers/                       # Mastra + Cloudflare Worker package (@thebotcrew
                                #   lead-simulator.ts (un LLM juega al lead), battery.eval.ts (runner vitest, se
                                #   auto-salta sin BATTERY_TENANT), scenarios/<slug>.ts (personas por tenant)
   battery/<slug>/*.json        # transcripciones (SE COMMITEAN: son la evidencia); <slug>/render/ es gitignored
+                               #   un bundle `offline: true` corre sobre una fixture sintética (prime-time-demo: nadie lo tiene en prod)
   fixtures/                    # sample webhook payloads
   wrangler.jsonc, vitest.config.ts, tsconfig.json
 supabase/
@@ -309,7 +310,13 @@ supabase/
                                #      del hold y sacado de las quiet_hours en el reloj del lead: booking_holds.remind_at/reminded_at,
                                #      app_claim_due_hold_reminders (pending only, SKIP LOCKED) drenado por el cron de 5 min, texto fijo
                                #      con la liga corta, evento hold_reminder_sent. Vive en el hold y NO en follow_ups a propósito:
-                               #      un follow_up lo cancela cualquier inbound y exige status='active'. Ver business-logic §5e)
+                               #      un follow_up lo cancela cualquier inbound y exige status='active'. Ver business-logic §5e),
+                               # 0066 prime_time (tenant_config.prime_time jsonb, NULL = off: ventanas de horario preferente
+                               #      reservadas para servicios que pagan + restricted_services que las ven SOLO después de que el
+                               #      lead rechaza el resto. Determinista: getAvailability esconde los slots prime del servicio
+                               #      restringido, includePrimeTime:true los suelta y escribe el evento prime_time_released, y
+                               #      book/reschedule rechazan un slot prime sin ese evento (booking_failed prime_time). Nadie lo
+                               #      tiene prendido; demo sintético en `pnpm battery prime-time-demo`. Ver business-logic §5)
   clients.sql, seed-tenants.sql# seeds (run by `supabase db reset` per config.toml)
 sites/                         # client marketing sites: static HTML, no build step, no deps
   _template/                   # starting point for a new client

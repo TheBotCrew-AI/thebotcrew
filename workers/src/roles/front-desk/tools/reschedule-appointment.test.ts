@@ -356,3 +356,39 @@ describe('rescheduleAppointment — paid confirmation (0062)', () => {
     expect(q.getBookingHold).not.toHaveBeenCalled();
   });
 });
+
+// 0066: moving a restricted service INTO prime time needs the same release as booking.
+describe('rescheduleAppointment — prime time (0066)', () => {
+  const PRIME = '2026-07-10T23:30:00.000Z'; // 17:30 Fri, America/Mexico_City
+  const primeCtx = () => {
+    const base = makeCtx();
+    const t = base.requestContext.get('tenant') as TenantContext;
+    const tenant = {
+      ...t,
+      config: {
+        ...(t.config as object),
+        primeTime: { windows: [{ days: ['mon', 'tue', 'wed', 'thu', 'fri'], start: '17:00', end: '20:00' }], restrictedServices: ['Consulta'] },
+      },
+    } as unknown as TenantContext;
+    const turn = base.requestContext.get('turn');
+    return { requestContext: { get: (k: string) => (k === 'tenant' ? tenant : k === 'turn' ? turn : undefined) } };
+  };
+  let nowSpy: ReturnType<typeof vi.spyOn>;
+  beforeEach(() => {
+    nowSpy = vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-07-08T15:00:00Z'));
+    ghl.getAvailability.mockResolvedValue([{ start: PRIME, end: PRIME }]);
+  });
+  afterEach(() => nowSpy.mockRestore());
+
+  it('refuses without the release, moves with it', async () => {
+    vi.mocked(q.wasPrimeTimeReleased).mockResolvedValue(false);
+    const refused = await run(PRIME, primeCtx());
+    expect(refused.rescheduled).toBe(false);
+    expect(ghl.rescheduleAppointment).not.toHaveBeenCalled();
+    expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'booking_failed', expect.objectContaining({ reason: 'prime_time', stage: 'reschedule' }));
+
+    vi.mocked(q.wasPrimeTimeReleased).mockResolvedValue(true);
+    const moved = await run(PRIME, primeCtx());
+    expect(moved.rescheduled).toBe(true);
+  });
+});

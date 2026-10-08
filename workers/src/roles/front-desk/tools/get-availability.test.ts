@@ -290,3 +290,71 @@ describe('getAvailability — minimum notice (0059)', () => {
     expect(fromArg).toBe(NOW);
   });
 });
+
+// 0066: prime time reserved for paying services. A restricted service sees the off-peak
+// slots first; the prime ones come out only with includePrimeTime (logged as
+// prime_time_released). An unrestricted service sees everything, byte-identical to before.
+describe('getAvailability — prime time (0066)', () => {
+  const TZ = 'America/Mexico_City';
+  const OFF = '2026-10-07T16:00:00.000Z'; // 10:00 Wed
+  const PRIME = '2026-10-07T23:30:00.000Z'; // 17:30 Wed
+  const primeCtx = (restricted: string[] = ['Consulta']) => {
+    const tenant = {
+      tenantId: 't1',
+      clientId: 'client1',
+      ghlLocationId: 'loc1',
+      config: {
+        businessName: 'Demo',
+        timezone: TZ,
+        tone: null,
+        services: [{ name: 'Consulta', durationMin: 30 }, { name: 'Bótox', durationMin: 30 }],
+        hours: {},
+        calendars: { Consulta: 'cal1', 'Bótox': 'cal2' },
+        faq: [],
+        promptOverrides: {},
+        bookingHorizonDays: null,
+        leadTimezoneEnabled: false,
+        primeTime: { windows: [{ days: ['mon', 'tue', 'wed', 'thu', 'fri'], start: '17:00', end: '20:00' }], restrictedServices: restricted },
+      },
+    } as unknown as TenantContext;
+    const turn = { ghlContactId: 'c1', ghlConversationId: 'conv1', channel: 'whatsapp' } as TurnContext;
+    return { requestContext: { get: (k: string) => (k === 'tenant' ? tenant : k === 'turn' ? turn : undefined) } };
+  };
+  let nowSpy: ReturnType<typeof vi.spyOn>;
+  beforeEach(() => {
+    nowSpy = vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-10-06T15:00:00Z'));
+    ghl.getAvailability.mockResolvedValue([{ start: OFF, end: OFF }, { start: PRIME, end: PRIME }]);
+  });
+  afterEach(() => nowSpy.mockRestore());
+
+  it('a restricted service gets only the off-peak slots and a note that forbids "tomada"', async () => {
+    const res = await run({ serviceName: 'Consulta' }, primeCtx());
+    expect(res.slots.map((s) => s.start)).toEqual([OFF]);
+    expect(res.note).toContain('NO debes mencionar');
+    expect(res.note).toContain('includePrimeTime: true');
+    expect(q.logBotEvent).not.toHaveBeenCalledWith('client1', 'conv1', 'prime_time_released', expect.anything());
+    expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'availability_checked', expect.objectContaining({ primeHeld: 1, primeReleased: false, slotCount: 1 }));
+  });
+
+  it('includePrimeTime releases them and logs prime_time_released', async () => {
+    const res = await run({ serviceName: 'Consulta', includePrimeTime: true } as never, primeCtx());
+    expect(res.slots.map((s) => s.start)).toEqual([OFF, PRIME]);
+    expect(res.note).toContain('YA incluye');
+    expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'prime_time_released', expect.objectContaining({ serviceName: 'Consulta', primeCount: 1, offPeakCount: 1 }));
+  });
+
+  it('an unrestricted service sees every slot, no note, no event', async () => {
+    const res = await run({ serviceName: 'Bótox' }, primeCtx());
+    expect(res.slots.map((s) => s.start)).toEqual([OFF, PRIME]);
+    expect(res.note).not.toContain('preferente');
+    expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'availability_checked', expect.not.objectContaining({ primeHeld: expect.anything() }));
+  });
+
+  it('only prime slots in the range → empty list, told to widen the range, not to release', async () => {
+    ghl.getAvailability.mockResolvedValue([{ start: PRIME, end: PRIME }]);
+    const res = await run({ serviceName: 'Consulta' }, primeCtx());
+    expect(res.slots).toEqual([]);
+    expect(res.note).toContain('otro día u otra hora');
+    expect(q.logBotEvent).not.toHaveBeenCalledWith('client1', 'conv1', 'prime_time_released', expect.anything());
+  });
+});

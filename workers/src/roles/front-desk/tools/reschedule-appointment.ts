@@ -11,7 +11,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { GhlClient } from '../../../ghl/client.js';
 import { syncContactTimezone } from '../../../ghl/contact-timezone.js';
-import { getActiveDemoSession, getBookingHold, logAppointment, logBotEvent, moveHold, setSimulatedBooking } from '../../../db/queries.js';
+import { getActiveDemoSession, getBookingHold, logAppointment, logBotEvent, moveHold, setSimulatedBooking, wasPrimeTimeReleased } from '../../../db/queries.js';
 import { resolveAgentContext } from './agent-context.js';
 import { describeHoldForModel, payableNoticeLabel } from './booking-hold.js';
 import { CHECKOUT_MIN_EXPIRY_MS } from '../../../payments/stripe.js';
@@ -19,6 +19,7 @@ import { holdReminderAt } from '../../../payments/hold-reminder.js';
 import { resolveActiveAppointment } from './resolve-appointment.js';
 import { bookingQueryWindow, resolveBookableSlot } from './booking-time.js';
 import { earliestBookableMs } from './booking-window.js';
+import { isPrimeSlot, isRestrictedService } from './prime-time.js';
 import { simSlotLabel, simulatedSlots } from './demo-sim.js';
 import { slotLabel } from './slot-label.js';
 
@@ -127,6 +128,29 @@ export const rescheduleAppointmentTool = createTool({
         error: msg,
       });
       return { rescheduled: false, message: 'No pude verificar la disponibilidad en este momento. Intenta de nuevo.' };
+    }
+
+    // Prime time (0066): a restricted service may take a prime slot only after getAvailability
+    // released them on the lead's refusal (the `prime_time_released` event). Mirrors the hold
+    // in getAvailability, so a model that re-typed a hidden slot can't book it.
+    if (config.primeTime && serviceName && isRestrictedService(config.primeTime, serviceName) && isPrimeSlot(canonicalStart, config.primeTime, config.timezone)) {
+      const released = await wasPrimeTimeReleased(turn.ghlConversationId);
+      if (!released) {
+        await logBotEvent(tenant.clientId, turn.ghlConversationId, 'booking_failed', {
+          stage: 'reschedule',
+          serviceName,
+          calendarId,
+          startTime: canonicalStart,
+          reason: 'prime_time',
+        });
+        return {
+          rescheduled: false,
+          message:
+            'Ese horario está dentro del horario preferente y para este servicio se ofrecen primero los de fuera. ' +
+            'Consulta getAvailability (sin includePrimeTime) y ofrécele al lead ÚNICAMENTE los horarios que devuelva; ' +
+            'solo si dice que ninguno le funciona, vuelve a consultar con includePrimeTime: true y entonces sí agenda.',
+        };
+      }
     }
 
     // Minimum notice on the RESOLVED instant (same as booking): a move to today is refused.

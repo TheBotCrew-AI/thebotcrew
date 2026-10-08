@@ -89,6 +89,11 @@ Costo: ~6 turnos del agente a effort `high` + ~6 del lead por escenario → cent
 2. Regístralo en `scenarios/index.ts`.
 3. `pnpm battery <slug>`.
 
+Para enseñar una capacidad de la plataforma que ningún cliente tiene prendida, el bundle puede
+ser **sintético**: un `fixture` inventado en el mismo archivo de escenarios y `offline: true`,
+que lo obliga a correr sobre la fixture aunque haya env de Supabase (nada lee ni toca una cuenta
+real). Ejemplo: `scenarios/prime-time-demo.ts` (Clínica Aura, horario preferente, 0066).
+
 ## Escribir un escenario
 
 ```ts
