@@ -1,10 +1,11 @@
 /**
  * Regenerate the Heriberto eval fixture from PROD — HERIBERTO_PERSONA, _SERVICES, _HOURS, _FAQ
- * in src/roles/front-desk/evals/fixtures.ts — so the golden cases keep testing the text that
+ * and HERIBERTO_LASER_CIERRE (the laser closing-campaign variants) in src/roles/front-desk/evals/fixtures.ts — so the golden cases keep testing the text that
  * actually serves the tenant. Run after every edit to that tenant row (CLAUDE.md: "the eval
  * fixtures MIRROR prod"). Needs SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY in workers/.env.
  *
  *   node scripts/sync-heriberto-fixture.mjs        # then: git diff, pnpm typecheck, pnpm eval
+ *   node scripts/sync-heriberto-fixture.mjs --from new.json   # columns in the file override prod's
  */
 import { createClient } from '@supabase/supabase-js';
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -21,10 +22,12 @@ const FILE = `${ROOT}src/roles/front-desk/evals/fixtures.ts`;
 const sb = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 const { data, error } = await sb
   .from('tenant_config')
-  .select('prompt_overrides, services, hours, faq, tenants!inner(ghl_location_id)')
+  .select('prompt_overrides, services, hours, faq, prompt_variants, tenants!inner(ghl_location_id)')
   .eq('tenants.ghl_location_id', LOCATION)
   .single();
 if (error) throw error;
+const fromIdx = process.argv.indexOf('--from');
+if (fromIdx > 0) Object.assign(data, JSON.parse(readFileSync(process.argv[fromIdx + 1], 'utf8')));
 
 const tpl = (s) => '`' + String(s).replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$\{/g, '\\${') + '`';
 const po = data.prompt_overrides;
@@ -57,5 +60,29 @@ const hours = Object.fromEntries(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun
 swap('HERIBERTO_HOURS', `export const HERIBERTO_HOURS = ${JSON.stringify(hours, null, 2)};`);
 const faq = data.faq.map(({ q, a }) => ({ q, a })); // jsonb stores `a` before `q`; keep q first
 swap('HERIBERTO_FAQ', `export const HERIBERTO_FAQ = ${JSON.stringify(faq, null, 2)};`);
+// The laser closing campaign: lc7 is the template the others were cut from, so it is mirrored too.
+const LASER_CIERRE = ['lc7', 'lc10', 'lc11', 'lc12'];
+const VARIANT_KEYS = ['qualificationNotes', 'calendarLabel', 'toolInstructions', 'followUpAngles'];
+const laser = [
+  'export const HERIBERTO_LASER_CIERRE = {',
+  ...LASER_CIERRE.flatMap((k) => {
+    const v = data.prompt_variants[k];
+    if (!v) throw new Error(`prompt_variants.${k} missing`);
+    const extra = Object.keys(v).filter((f) => !VARIANT_KEYS.includes(f));
+    if (extra.length) throw new Error(`prompt_variants.${k} has keys this generator doesn't know: ${extra.join(', ')}`);
+    return [
+      `  ${k}: {`,
+      `    qualificationNotes:\n      ${tpl(v.qualificationNotes)},`,
+      `    calendarLabel: ${JSON.stringify(v.calendarLabel)},`,
+      '    toolInstructions: {',
+      ...Object.entries(v.toolInstructions).map(([t, text]) => `      ${t}:\n        ${tpl(text)},`),
+      '    },',
+      `    followUpAngles: ${JSON.stringify(v.followUpAngles, null, 2).replace(/\n/g, '\n    ')},`,
+      '  },',
+    ];
+  }),
+  '};',
+].join('\n');
+swap('HERIBERTO_LASER_CIERRE', laser);
 writeFileSync(FILE, src);
 console.log('fixtures.ts regenerated from prod — review with git diff');

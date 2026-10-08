@@ -52,14 +52,14 @@
  *     falla de prod fue cola de probabilidad con esa frase. Lo que sí discrimina es la
  *     respuesta seca "La paoada" al menú de zonas del opener de campaña: el modelo la
  *     encaja en la opción más parecida en la mitad de las corridas.
- *   MEDIDO 2026-09-03 (la promoción se dice completa):
- *   - precio de frente: con regla 3/3 · sin regla 0/3. RULE_OFF restaura el texto de prod de
- *     antes de hoy (la línea de bótox con los números de promoción a secas, sin el regular ni
- *     la fecha, y sin el párrafo que ordena los tres datos): las 3 corridas dan $2,125 y ya —
- *     el lead lee el precio de siempre y la promoción no existe para él. No discrimina "poco":
- *     sin el dato en la lista el modelo no tiene de dónde sacar el $2,500.
- *   - maseteros: 3/3 sin RULE_OFF (no tiene lado rojo — es la guardia de que la promoción
- *     no se derrame a la única zona sin descuento, inventándole un "regular").
+ *   MEDIDO 2026-10-08 (precios sin promo vencida): HERIBERTO_RULE_OFF=1 devuelve la promo de
+ *     septiembre a la lista y al FAQ, como estuvo en prod hasta hoy.
+ *   - "¿tienen promociones?": con la línea "Promociones: por ahora la única…" 5/5 · con la
+ *     promo quitada pero SIN esa línea 0/3 — "déjame confirmar con el equipo si hay alguna
+ *     promoción vigente para botox": quitar la promo dejó al modelo sin saber que no hay, y lo
+ *     mandaba a la cola. Con la promo vieja restaurada 2/3 (también nombraba el láser).
+ *   - frente $2,500: 8/8 · promo vieja 3/3 — no discrimina: el modelo sabe la fecha y ya no
+ *     citaba la promo vencida. Sculptra $18,000: 8/8 · promo vieja 1/3. Maseteros: guardia.
  *   MEDIDO 2026-09-04 (zonas por su nombre de calle):
  *   - antifaz: con el vocabulario 3/3 · sin él 0/3 — pregunta "¿te refieres a patas de
  *     gallo?" las tres veces, que es lo que le pasó a tres leads reales (uno contestó
@@ -220,19 +220,25 @@ const OLD_MORNING_WORDING = [
 ] as const;
 
 /**
- * The pre-2026-09-03 bótox pricing — the red side of the promo case. Back then the promo
- * numbers WERE the price: no regular to compare against, no deadline, and the campaign
- * variants were told not to call it a promotion at all.
+ * The September promo, as prod still carried it until 2026-10-08 — the red side of the
+ * "sin promo vencida" cases. Each pair is [now, before]: the list prices in `offering` and the
+ * two FAQ answers that quoted the promo. Every pair must be found, or the swap throws.
  */
-const PROMO_BOTOX_LINE =
-  '- Botox — precio de promoción de septiembre, por zona: frente $2,125 (regular $2,500), entrecejo $1,700 (regular $2,000), patas de gallo $1,700 (regular $2,000), maseteros $3,500 (su precio de siempre); full face (frente, entrecejo y patas de gallo) $4,200 (regular $6,000). La promoción aplica a las citas que se atienden a más tardar el miércoles 30 de septiembre.';
-const PLAIN_BOTOX_LINE =
-  '- Botox — por zona: frente $2,125, entrecejo $1,700, patas de gallo $1,700, maseteros $3,500; full face (frente, entrecejo y patas de gallo) $4,200.';
-const PROMO_SCULPTRA_LINE =
-  '- Sculptra — precio de promoción de septiembre: $12,499 por vial o sesión (regular $18,000); el tratamiento completo de 3 viales son $30,000.';
-const PLAIN_SCULPTRA_LINE = '- Sculptra — $12,500 por vial o sesión (tratamiento completo de 3 viales: $30,000).';
-const PROMO_PRICE_RULE_START =
-  'Con el bótox y Sculptra hay promoción de septiembre, y los tres datos van SIEMPRE juntos';
+const STALE_PROMO_SWAPS: Array<[string, string]> = [
+  [
+    '- Botox por zona: frente $2,500, entrecejo $2,000, patas de gallo $2,000, maseteros $3,500; full face (frente, entrecejo y patas de gallo) $6,000.',
+    '- Botox — precio de promoción de septiembre, por zona: frente $2,125 (regular $2,500), entrecejo $1,700 (regular $2,000), patas de gallo $1,700 (regular $2,000), maseteros $3,500 (su precio de siempre); full face (frente, entrecejo y patas de gallo) $4,200 (regular $6,000). La promoción aplica a las citas que se atienden a más tardar el miércoles 30 de septiembre.',
+  ],
+  [
+    '- Sculptra — $18,000 por vial o sesión; el tratamiento completo de 3 viales son $30,000.',
+    '- Sculptra — precio de promoción de septiembre: $12,499 por vial o sesión (regular $18,000); el tratamiento completo de 3 viales son $30,000.',
+  ],
+  ['El vial o sesión cuesta $18,000;', 'Durante septiembre el vial o sesión está en $12,499 (regular $18,000);'],
+  [
+    'Por ahora la única promoción es el precio especial del láser CO₂: $3,500 por sesión en todo el tratamiento en lugar de $4,500, si inicia dentro de los 14 días siguientes a su evaluación. Con tarjeta siempre hay 3 meses sin intereses.',
+    'En septiembre hay promoción en dos tratamientos, para citas que se atienden a más tardar el miércoles 30 de septiembre. Bótox: frente $2,125 (regular $2,500), entrecejo $1,700 (regular $2,000), patas de gallo $1,700 (regular $2,000) y full face $4,200 (regular $6,000); maseteros se queda en su precio de siempre, $3,500. Sculptra: $12,499 por vial (regular $18,000), y el tratamiento completo de 3 viales sale en $30,000. En láser CO₂ fraccionado hay precio especial: $3,500 por sesión (normal $4,500) si inicia dentro de los 14 días siguientes a su evaluación médica de láser. Los demás tratamientos mantienen su precio de lista, y siempre hay 3 meses sin intereses con tarjeta.',
+  ],
+];
 
 /** El láser: precio normal, precio especial a 14 días y evaluación de $500 (prod, 2026-10-05). */
 const LASER_OFFER_LINE =
@@ -321,7 +327,7 @@ const CONSULTA_500_SWAPS: Array<[string, string]> = [
 ];
 
 const tenantWithout = (
-  rule: 'afternoon-only' | 'morning-ask' | 'medical' | 'drip' | 'service-name' | 'next-step' | 'zone-list' | 'slot-contrast' | 'promo-price' | 'consulta-why' | 'first-time-fear' | 'negative-payments' | 'discovery-first' | 'city-split' | 'lada-faq' | 'zone-vocabulary' | 'walk-in' | 'laser-offer' | 'consulta-500',
+  rule: 'afternoon-only' | 'morning-ask' | 'medical' | 'drip' | 'service-name' | 'next-step' | 'zone-list' | 'slot-contrast' | 'stale-promo' | 'consulta-why' | 'first-time-fear' | 'negative-payments' | 'discovery-first' | 'city-split' | 'lada-faq' | 'zone-vocabulary' | 'walk-in' | 'laser-offer' | 'consulta-500',
 ): TenantContext => {
   const p = HERIBERTO_PERSONA;
   const cfg = heribertoTenant.config;
@@ -413,22 +419,17 @@ const tenantWithout = (
     if (offering === p.offering) throw new Error('pagos anchor not found');
     return { ...heribertoTenant, config: { ...cfg, promptOverrides: { ...p, offering } } };
   }
-  if (rule === 'promo-price') {
-    // Both halves go: the comparison in the price list AND the rule that orders the three
-    // data points. What's left is exactly what prod said before 2026-09-03.
-    const offering = p.offering
-      .replace(PROMO_BOTOX_LINE, PLAIN_BOTOX_LINE)
-      .replace(PROMO_SCULPTRA_LINE, PLAIN_SCULPTRA_LINE);
-    if (offering === p.offering) throw new Error('promo botox line not found');
-    for (const promo of [PROMO_BOTOX_LINE, PROMO_SCULPTRA_LINE]) {
-      if (offering.includes(promo)) throw new Error(`promo line not reverted: ${promo.slice(0, 40)}`);
-    }
-    const start = p.qualificationNotes.indexOf(PROMO_PRICE_RULE_START);
-    if (start < 0) throw new Error('promo price rule not found');
-    const end = p.qualificationNotes.indexOf('\n\n', start);
-    const qualificationNotes = (p.qualificationNotes.slice(0, start).trimEnd() + p.qualificationNotes.slice(end)).trim();
-    if (qualificationNotes.includes('promoción')) throw new Error('promo rule not fully stripped');
-    return { ...heribertoTenant, config: { ...cfg, promptOverrides: { ...p, offering, qualificationNotes } } };
+  if (rule === 'stale-promo') {
+    const swap = (text: string): string => {
+      let out = text;
+      for (const [now, before] of STALE_PROMO_SWAPS) out = out.split(now).join(before);
+      return out;
+    };
+    const offering = swap(p.offering);
+    const faq = HERIBERTO_FAQ.map((f) => ({ q: f.q, a: swap(f.a) }));
+    const seen = (now: string) => p.offering.includes(now) || HERIBERTO_FAQ.some((f) => f.a.includes(now));
+    for (const [now] of STALE_PROMO_SWAPS) if (!seen(now)) throw new Error(`stale-promo anchor not found: ${now.slice(0, 50)}`);
+    return { ...heribertoTenant, config: { ...cfg, faq, promptOverrides: { ...p, offering } } };
   }
   if (rule === 'consulta-500') {
     // Red side = the config as it was: free consulta (laser excepted) and the laser price
@@ -800,39 +801,56 @@ describe.skipIf(!evalApiKey)('Dr. Heriberto Valdivia — zona fuera de la lista'
 });
 
 /**
- * Un precio de bótox sin su precio regular al lado y sin la fecha se lee como el precio de
- * siempre: la promoción no existe para quien la lee. Los tres datos van juntos (prod,
- * 2026-09-03). Maseteros queda fuera a propósito — ahí no hay descuento que comparar.
+ * La promo de septiembre de bótox y Sculptra se quedó en la config hasta el 2026-10-08, y en
+ * octubre el modelo la seguía citando (o decía "la promoción de septiembre ya terminó"). Hoy
+ * la única promoción es el precio especial del láser: los demás tratamientos van a su precio
+ * de lista, sin comparación ni fecha. Maseteros es la guardia de que no se invente un "regular".
  */
-describe.skipIf(!evalApiKey)('Dr. Heriberto Valdivia — la promoción se dice completa', () => {
-  it('precio de frente → promoción, regular y fecha, los tres en el mismo mensaje', async () => {
+describe.skipIf(!evalApiKey)('Dr. Heriberto Valdivia — precios sin promo vencida', () => {
+  const STALE = /2[,.]?125|12[,.]?499|septiembre/;
+
+  it('precio de frente → $2,500, sin promoción de septiembre', async () => {
     const res = await buildFrontDeskAgent().generate(
       [
         { role: 'user', content: 'Hola, me interesa el botox' },
         { role: 'assistant', content: OPENER },
         { role: 'user', content: '¿Cuánto sale el de la frente?' },
       ],
-      { requestContext: rc(tenantFor('promo-price')) },
+      { requestContext: rc(tenantFor('stale-promo')) },
     );
     const text = reply(res);
-    expect(text, text).toMatch(/\$\s?2[,.]?125\b/);
     expect(text, text).toMatch(/\$\s?2[,.]?500\b/);
-    expect(text, text).toMatch(/30 de septiembre/);
+    expect(text, text).not.toMatch(STALE);
   }, 120_000);
 
-  it('Sculptra → promoción, regular y fecha', async () => {
+  it('Sculptra → $18,000 por vial, sin promoción de septiembre', async () => {
     const res = await buildFrontDeskAgent().generate(
       [
         { role: 'user', content: 'Hola, me interesa Sculptra' },
         { role: 'assistant', content: OPENER },
         { role: 'user', content: '¿Cuánto cuesta?' },
       ],
-      { requestContext: rc(tenantFor('promo-price')) },
+      { requestContext: rc(tenantFor('stale-promo')) },
     );
     const text = reply(res);
-    expect(text, text).toMatch(/\$\s?12[,.]?499\b/);
     expect(text, text).toMatch(/\$\s?18[,.]?000\b/);
-    expect(text, text).toMatch(/30 de septiembre/);
+    expect(text, text).not.toMatch(STALE);
+  }, 120_000);
+
+  it('"¿tienen promociones?" → el precio especial del láser, nada de bótox en promoción', async () => {
+    const res = await buildFrontDeskAgent().generate(
+      [
+        { role: 'user', content: 'Hola, me interesa el botox' },
+        { role: 'assistant', content: OPENER },
+        { role: 'user', content: '¿Tienen alguna promoción?' },
+      ],
+      { requestContext: rc(tenantFor('stale-promo')) },
+    );
+    const text = reply(res);
+    expect(text, text).toMatch(/l[aá]ser/);
+    expect(text, text).not.toMatch(STALE);
+    // Answered from the price list — not parked as a pending question for the team.
+    expect(text, text).not.toMatch(/confirm(ar|o)|consult(ar|o) con el equipo/);
   }, 120_000);
 
   it('maseteros no tiene descuento: da el precio, sin comparación inventada', async () => {
@@ -846,8 +864,6 @@ describe.skipIf(!evalApiKey)('Dr. Heriberto Valdivia — la promoción se dice c
     );
     const text = reply(res);
     expect(text, text).toMatch(/\$\s?3[,.]?500\b/);
-    // No hay precio regular de maseteros distinto de $3,500: cualquier otro número
-    // presentado como "regular" o "antes" sería inventado.
     expect(text, text).not.toMatch(/regular\s*\$?\s?(?!3[,.]?500)\d/);
   }, 120_000);
 });

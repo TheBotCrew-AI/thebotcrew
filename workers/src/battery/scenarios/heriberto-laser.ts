@@ -119,6 +119,57 @@ Tu objetivo es dejar la evaluación agendada. Cuando te la confirmen, agradeces 
       endWhen: { toolCalled: ['bookAppointment'] },
     },
     {
+      id: 'lc10-22',
+      title: 'C10 — 22% en todas las sesiones',
+      shows: 'Viene por el 22%: Sofía confirma que aplica a todas las sesiones, con la condición de los 14 días, y agenda.',
+      lead: {
+        name: 'Gabriela',
+        phone: '+526141110010',
+        persona: `Tienes 38 años. Viste el anuncio del 22% de descuento en láser CO₂ y quieres tratar manchas en las mejillas.
+Desconfías: preguntas si el descuento es solo en la primera sesión.
+Si te ofrecen horarios, eliges uno.
+Tu objetivo es dejar la evaluación agendada. Cuando te la confirmen, agradeces y terminas.`,
+      },
+      opener: adOpener('22% de descuento láser', 'Hola, quiero el 22% en mi tratamiento de láser CO2'),
+      promptVariant: 'lc10',
+      maxTurns: 8,
+      endWhen: { toolCalled: ['bookAppointment'] },
+    },
+    {
+      id: 'lc11-ahorro',
+      title: 'C11 — ahorrar en el tratamiento',
+      shows: 'Viene por el ahorro de $3,000: Sofía lo presenta como ejemplo de 3 sesiones, contesta cuánto sale y si se paga junto, y agenda.',
+      lead: {
+        name: 'Rocío',
+        phone: '+526141110011',
+        persona: `Tienes 46 años. Viste el anuncio de ahorrar $3,000 en láser CO₂; quieres tratar líneas finas y textura.
+Preguntas si tienes que pagar todo junto y cuánto te saldría el tratamiento completo.
+Si te ofrecen horarios, eliges uno.
+Tu objetivo es dejar la evaluación agendada. Cuando te la confirmen, agradeces y terminas.`,
+      },
+      opener: adOpener('Ahorra en tu láser', 'Hola, quiero ahorrar en mi tratamiento de láser CO2'),
+      promptVariant: 'lc11',
+      maxTurns: 8,
+      endWhen: { toolCalled: ['bookAppointment'] },
+    },
+    {
+      id: 'lc12-bonos',
+      title: 'C12 — láser con bonos incluidos',
+      shows: 'Viene por los bonos: Sofía lista lo que incluye (kit de $1,500, seguimiento, evaluación de $500 acreditada) y contesta por el precio de $2,999 del mes pasado.',
+      lead: {
+        name: 'Mariana',
+        phone: '+526141110012',
+        persona: `Tienes 35 años. Viste el anuncio del láser CO₂ con bonos; quieres tratar cicatrices de acné.
+Comentas que el mes pasado viste la sesión en $2,999 y preguntas si todavía aplica. Luego preguntas cuánto vale el kit.
+Si te ofrecen horarios, eliges uno.
+Tu objetivo es dejar la evaluación agendada. Cuando te la confirmen, agradeces y terminas.`,
+      },
+      opener: adOpener('Láser con bonos', 'Hola, quiero el láser CO2 con bonos incluidos'),
+      promptVariant: 'lc12',
+      maxTurns: 9,
+      endWhen: { toolCalled: ['bookAppointment'] },
+    },
+    {
       id: 'i01-laser',
       title: 'i01 — llega por armonización y quiere láser',
       shows: 'Su depósito de $500 es su evaluación de láser: se descuenta de la primera sesión, sin el crédito de $1,000 ni el "al doble".',

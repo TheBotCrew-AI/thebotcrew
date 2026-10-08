@@ -1,0 +1,163 @@
+{
+  "tenant": {
+    "slug": "heriberto-laser",
+    "businessName": "Dr. Heriberto Valdivia",
+    "assistantName": "Sofía",
+    "timezone": "America/Chihuahua",
+    "configSource": "supabase"
+  },
+  "scenario": {
+    "id": "lc12-bonos",
+    "order": 8,
+    "title": "C12 — láser con bonos incluidos",
+    "shows": "Viene por los bonos: Sofía lista lo que incluye (kit de $1,500, seguimiento, evaluación de $500 acreditada) y contesta por el precio de $2,999 del mes pasado.",
+    "lead": {
+      "name": "Mariana",
+      "channel": "whatsapp"
+    }
+  },
+  "model": "gpt-5.6-luna",
+  "leadModel": "gpt-5.6-luna",
+  "generatedAt": "2026-10-08T18:58:52.073Z",
+  "messages": [
+    {
+      "from": "lead",
+      "text": "*Headline:* Láser con bonos\n\nHola, quiero el láser CO2 con bonos incluidos",
+      "at": "2026-10-08T18:58:15.772Z"
+    },
+    {
+      "from": "bot",
+      "text": "¡Hola! Soy Sofía, del consultorio del Dr. Heriberto Valdivia. Tu láser CO₂ fraccionado incluye un precio especial de $3,500 por sesión en lugar de $4,500, si lo inicias dentro de los 14 días posteriores a tu evaluación; la evaluación cuesta $500 y se acredita completa a tu tratamiento.",
+      "at": "2026-10-08T18:59:03.772Z",
+      "turn": 1
+    },
+    {
+      "from": "bot",
+      "text": "También incluye un kit de recuperación con valor de $1,500 y seguimiento después de cada sesión. ¿Qué te gustaría mejorar de tu piel?",
+      "at": "2026-10-08T18:59:09.272Z",
+      "turn": 1
+    },
+    {
+      "from": "lead",
+      "text": "quiero tratar cicatrices de acné. el mes pasado vi la sesión en $2,999, ¿todavía aplica? y ¿cuánto vale el kit?",
+      "at": "2026-10-08T19:01:23.272Z"
+    },
+    {
+      "from": "bot",
+      "text": "Qué bueno que me dices lo de las cicatrices de acné. El precio de $2,999 ya no está vigente; ahora aplica el precio especial de $3,500 por sesión en todo tu tratamiento, en lugar de $4,500, si lo inicias dentro de los 14 días posteriores a tu evaluación. El kit vale $1,500 e incluye crema cicatrizante, emulsión y protector solar; va incluido por plan.",
+      "at": "2026-10-08T19:02:24.272Z",
+      "turn": 2
+    },
+    {
+      "from": "bot",
+      "text": "Para evaluar tu piel y definir cuántas sesiones necesitas, tengo el viernes, 9 de octubre, 3:45 p.m. o 5:45 p.m.; ¿cuál te acomoda?",
+      "at": "2026-10-08T19:02:29.772Z",
+      "turn": 2
+    },
+    {
+      "from": "lead",
+      "text": "el viernes, 9 de octubre, 3:45 p.m. me acomoda.",
+      "at": "2026-10-08T19:05:20.772Z"
+    },
+    {
+      "from": "bot",
+      "text": "Qué bien, te aparto el viernes, 9 de octubre, 3:45 p.m. ¿A nombre de quién agendo la evaluación?",
+      "at": "2026-10-08T19:06:04.772Z",
+      "turn": 3
+    },
+    {
+      "from": "lead",
+      "text": "Mariana.",
+      "at": "2026-10-08T19:07:32.772Z"
+    },
+    {
+      "from": "bot",
+      "text": "¡Listo, Mariana! Tu evaluación quedó agendada para el viernes, 9 de octubre, 3:45 p.m. Te llegará la confirmación y los recordatorios por WhatsApp.",
+      "at": "2026-10-08T19:08:29.772Z",
+      "turn": 4
+    },
+    {
+      "from": "lead",
+      "text": "gracias! nos vemos el viernes.",
+      "at": "2026-10-08T19:10:34.772Z"
+    },
+    {
+      "from": "bot",
+      "text": "¡Gracias a ti, Mariana! Nos vemos el viernes, 9 de octubre, 3:45 p.m. 😊",
+      "at": "2026-10-08T19:11:14.772Z",
+      "turn": 5
+    }
+  ],
+  "toolCalls": [
+    {
+      "turn": 2,
+      "name": "lookupFaq",
+      "args": {
+        "question": "La persona quiere tratar cicatrices de acné con láser CO₂ fraccionado. Pregunta si todavía aplica el precio de $2,999 que vio el mes pasado y cuánto vale el kit de recuperación."
+      }
+    },
+    {
+      "turn": 2,
+      "name": "getAvailability",
+      "args": {
+        "serviceName": "Consulta",
+        "fromDate": "2026-10-09T00:00:00-06:00",
+        "toDate": "2026-10-15T23:59:59-06:00",
+        "includePrimeTime": false
+      }
+    },
+    {
+      "turn": 4,
+      "name": "getAvailability",
+      "args": {
+        "serviceName": "Consulta",
+        "fromDate": "2026-10-09T00:00:00-06:00",
+        "toDate": "2026-10-10T00:00:00-06:00",
+        "includePrimeTime": false
+      }
+    },
+    {
+      "turn": 4,
+      "name": "bookAppointment",
+      "args": {
+        "serviceName": "Consulta",
+        "startTime": "2026-10-09T15:45:00-06:00",
+        "whatsappPhone": null,
+        "contactName": "Mariana",
+        "treatment": "Cicatrices de acné"
+      }
+    },
+    {
+      "turn": 4,
+      "name": "updateConversationStatus",
+      "args": {
+        "status": "completed",
+        "reason": ""
+      }
+    },
+    {
+      "turn": 4,
+      "name": "updateConversationStatus",
+      "args": {
+        "status": "completed",
+        "reason": "Cita agendada"
+      }
+    }
+  ],
+  "ghl": {
+    "appointments": [
+      {
+        "id": "appt_1",
+        "calendarId": "qh8yxxSnb4DAo72obVmG",
+        "serviceName": "Mariana — Cicatrices de acné — Láser C12 Bonos",
+        "startTime": "2026-10-09T15:45:00-06:00",
+        "status": "confirmed"
+      }
+    ],
+    "tags": [
+      "bot-completed"
+    ],
+    "contactName": "Mariana"
+  },
+  "endedBy": "goal"
+}
