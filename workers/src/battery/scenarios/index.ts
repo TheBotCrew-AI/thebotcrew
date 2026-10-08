@@ -4,6 +4,7 @@ import { heribertoLaser } from './heriberto-laser.js';
 import { heribertoSim } from './heriberto-sim.js';
 import { happyNaty } from './happynaty.js';
 import { primeTimeDemo } from './prime-time-demo.js';
+import { novobelle } from './novobelle.js';
 
 /** One entry per tenant with a battery; the key is what `pnpm battery <slug>` takes. */
 export const TENANT_SCENARIOS: Record<string, TenantScenarios> = {
@@ -12,4 +13,5 @@ export const TENANT_SCENARIOS: Record<string, TenantScenarios> = {
   [heribertoLaser.slug]: heribertoLaser,
   [happyNaty.slug]: happyNaty,
   [primeTimeDemo.slug]: primeTimeDemo,
+  [novobelle.slug]: novobelle,
 };
