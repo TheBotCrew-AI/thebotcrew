@@ -213,6 +213,29 @@ describe.skipIf(!evalApiKey)(`HappyNatyNat — live${OFF ? ` (SIN ${OFF})` : ''}
     expect(text).toContain('?');
   });
 
+  it('hair talk: Nat is a color consultant, not a stylist — the tone goes to her colorist', async () => {
+    // Real p4 thread, 2026-10-08: the bot offered that "Nat puede explicarte cómo integrar tus
+    // canas", which reads like a hair service.
+    const text = await run('p4', [
+      { role: 'user', content: '¿Qué color de tinte me favorece?' },
+      {
+        role: 'assistant',
+        content:
+          'Depende de tus características de color: hay tonos que iluminan tu rostro y otros que pueden marcar ojeras o endurecer tus facciones, aunque se vean preciosos en la foto. Por eso lo ideal es conocerlas con un Análisis de Color antes de teñirte 💛\n¿Estás pensando en cambiar de color o ya te pasó que un tinte no te quedó?',
+      },
+      { role: 'user', content: 'Cambiar de color esq tengo canas y no me gusta como se me ve' },
+      {
+        role: 'assistant',
+        content: 'Ay, claro, las canas pueden cambiar muchísimo cómo se refleja un tinte junto a tu rostro; a casi todas nos pasa y tiene solución ✨\n¿Buscas cubrirlas por completo o integrarlas con un tono más natural?',
+      },
+      { role: 'user', content: 'Me gustaria integrarlas xq estoy harta de teñir el cabello' },
+    ]);
+    // The point is an explicit line that Nat doesn't do hair — a passing "tu colorista" isn't it.
+    expect(text).toMatch(/no (es|somos) (estilista|colorista|un sal[oó]n)|no (ti[ñn]e|aplica|pinta|hace (el |tu )?tinte)/i);
+    expect(text).toMatch(/colorista|estilista/i);
+    expect(text).not.toMatch(/nat (te )?(puede )?(integra|ti[ñn]e|aplica|corrige|pinta)|c[oó]mo integrar tus canas/i);
+  });
+
   it('English in, English out', async () => {
     const text = await run('c3', [{ role: 'user', content: 'Hi! I want to see everything the session includes, I live in San Diego' }]);
     expect(text).toMatch(/\b(the|your|and|session|colors?|includes?)\b/i);
