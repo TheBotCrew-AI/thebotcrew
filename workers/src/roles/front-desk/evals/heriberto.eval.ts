@@ -42,6 +42,11 @@
  *   - estacionamiento con cita: 5/5 ambos lados — la sección de modo asistencia del prompt base ya
  *     lo cubre; queda como guardia de "sin pregunta cuando no se necesita".
  *   - agenda "Consulta":  con regla 3/3 · sin regla (toolInstructions.getAvailability fuera) 0/3
+ *   MEDIDO 2026-10-09 (gpt-5.6-luna, "El precio es el momento" → horarios en el mismo turno):
+ *   - precio de la valoración con el caso ya dicho: con el texto vivo 4/4 (getAvailability + $500 +
+ *     label real) · con el texto anterior (`HERIBERTO_RULE_OFF=1`) 1/4 — las 3 fallas contestan los
+ *     $500 y preguntan "¿te aparto un espacio?", el patrón exacto de los 8 hilos de lp5 que murieron
+ *     ahí en octubre. Tasa, no interruptor: el modelo a veces ya ofrecía horarios solo.
  *     — sin la instrucción inventa serviceName="Consulta de Medicina Estética", que no es
  *     llave de `calendars`, y la herramienta contesta "No hay un calendario configurado".
  *   MEDIDO 2026-09-01 (regla "Zona o tratamiento fuera de tu lista"):
@@ -326,11 +331,33 @@ const CONSULTA_500_SWAPS: Array<[string, string]> = [
   ],
 ];
 
+/**
+ * "El precio es el momento" (prod, 2026-10-09): [texto vivo, texto anterior]. El anterior
+ * pedía "la consulta" como siguiente paso y el modelo lo cumplía preguntando "¿te aparto un
+ * espacio?" — en octubre 8 de 16 leads calificados de láser preguntaron el precio de la
+ * evaluación, recibieron los $500 y esa pregunta, y no volvieron a escribir. El vivo exige
+ * getAvailability en ese mismo turno y los dos horarios pegados al precio.
+ */
+const OLD_PRICE_WORDING: [string, string] = [
+  'Cuando des un precio y ya sabes qué le interesa, ese MISMO mensaje lleva el siguiente paso, y el siguiente paso son HORARIOS: llama getAvailability en ese mismo turno y cierra con los DOS horarios concretos para su consulta con el Dr. Valdivia, en una línea, pegados al precio. No preguntes antes si quiere que le apartes un espacio ni si prefiere inicio o final de semana: un precio seguido de una pregunta de permiso deja la conversación muerta justo cuando más interesada está la persona; un precio seguido de dos horarios la convierte en una decisión. Esto adelanta el momento de ofrecer la consulta: si ya sabes qué le interesa, el precio ES ese momento (salvo en tu primer mensaje, que sigue su regla). Aplica igual cuando el precio que pregunta es el de la consulta o la evaluación: los $500 que se acreditan a su tratamiento y, en la misma línea, los dos horarios. Si pregunta un precio directo, dáselo — no lo aplaces ni lo condiciones a preguntas.',
+  'Cuando des un precio y ya sabes qué le interesa, ese MISMO mensaje lleva el siguiente paso: el número, amarrado a lo que te contó, y enseguida la consulta con el Dr. Valdivia. Un precio suelto deja la conversación muerta justo cuando más interesada está la persona. Si pregunta un precio directo, dáselo — no lo aplaces ni lo condiciones a preguntas.',
+];
+
 const tenantWithout = (
-  rule: 'afternoon-only' | 'morning-ask' | 'medical' | 'drip' | 'service-name' | 'next-step' | 'zone-list' | 'slot-contrast' | 'stale-promo' | 'consulta-why' | 'first-time-fear' | 'negative-payments' | 'discovery-first' | 'city-split' | 'lada-faq' | 'zone-vocabulary' | 'walk-in' | 'laser-offer' | 'consulta-500',
+  rule: 'afternoon-only' | 'morning-ask' | 'medical' | 'drip' | 'service-name' | 'next-step' | 'zone-list' | 'slot-contrast' | 'stale-promo' | 'consulta-why' | 'first-time-fear' | 'negative-payments' | 'discovery-first' | 'city-split' | 'lada-faq' | 'zone-vocabulary' | 'walk-in' | 'laser-offer' | 'consulta-500' | 'price-to-slots',
 ): TenantContext => {
   const p = HERIBERTO_PERSONA;
   const cfg = heribertoTenant.config;
+  if (rule === 'price-to-slots') {
+    if (!p.qualificationNotes.includes(OLD_PRICE_WORDING[0])) throw new Error('price wording not found');
+    return {
+      ...heribertoTenant,
+      config: {
+        ...cfg,
+        promptOverrides: { ...p, qualificationNotes: p.qualificationNotes.replace(OLD_PRICE_WORDING[0], OLD_PRICE_WORDING[1]) },
+      },
+    };
+  }
   if (rule === 'walk-in') {
     return {
       ...heribertoTenant,
@@ -650,6 +677,35 @@ describe.skipIf(!evalApiKey)('Dr. Heriberto Valdivia — agenda la consulta, con
     );
     expect(toolIds(res)).toContain('getAvailability');
     expect(toolArgs(res, 'getAvailability')?.serviceName).toBe('Consulta');
+    expect(usesRealLabel(reply(res))).toBe(true);
+  }, 120_000);
+
+  // El precio es el momento (2026-10-09). Historia tomada de los hilos de lp5 de octubre: la lead
+  // ya dijo qué le preocupa (marcas hundidas en mejillas) y pregunta el costo de la valoración.
+  // Con el texto anterior el bot contestaba "$500… ¿te aparto un espacio?" y 8 de 16 leads
+  // calificados no volvieron a escribir. El texto vivo exige los dos horarios en ese turno.
+  // Medición: ver la cabecera del archivo (HERIBERTO_RULE_OFF=1 restaura el texto anterior).
+  it('lead asks the consult price after saying her case → price AND two real slots, same turn', async () => {
+    const res = await buildFrontDeskAgent().generate(
+      [
+        { role: 'user', content: 'Hola, tengo cicatrices de acné y quiero saber cuánto pueden mejorar' },
+        {
+          role: 'assistant',
+          content:
+            '¡Hola! Gracias por escribir, soy Sofía, del consultorio del Dr. Valdivia 😊 Las cicatrices de acné sí se pueden mejorar, y cuánto depende del tipo de cicatriz. ¿Son marcas hundidas, manchas oscuras o las dos?',
+        },
+        { role: 'user', content: 'Marcas hundidas, en las mejillas' },
+        {
+          role: 'assistant',
+          content:
+            'Gracias, en las mejillas. Las marcas hundidas se revisan en consulta para que el Dr. Valdivia valore el tipo de cicatriz y te diga cuánto pueden mejorar. ¿Te gustaría apartar tu evaluación?',
+        },
+        { role: 'user', content: '¿Qué costo tiene la valoración?' },
+      ],
+      { requestContext: rc(tenantFor('price-to-slots')) },
+    );
+    expect(toolIds(res)).toContain('getAvailability');
+    expect(reply(res)).toMatch(/\$\s?500\b/);
     expect(usesRealLabel(reply(res))).toBe(true);
   }, 120_000);
 

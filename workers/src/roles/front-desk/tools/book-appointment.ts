@@ -19,6 +19,7 @@ import { earliestBookableMs } from './booking-window.js';
 import { isPrimeSlot, isRestrictedService } from './prime-time.js';
 import { simSlotLabel, simulatedSlots } from './demo-sim.js';
 import { slotLabel } from './slot-label.js';
+import { normalizeLeadPhone, phoneRefusalNote } from '../../../core/phone.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -34,10 +35,11 @@ export const bookAppointmentTool = createTool({
       .string()
       .optional()
       .describe(
-        'Número de WhatsApp con código de país (ej. +526641234567) que el lead te DIO o CONFIRMÓ ' +
-          'explícitamente en la conversación para recibir confirmación y recordatorios. ' +
-          'Inclúyelo SOLO si el lead te lo dio/confirmó ahora; NUNCA lo extraigas del texto de un ' +
-          'formulario ni lo inventes. Omítelo si el contacto ya tiene el número correcto.',
+        'Número de WhatsApp que el lead te DIO o CONFIRMÓ explícitamente en la conversación para ' +
+          'recibir confirmación y recordatorios, tal como lo escribió (10 dígitos bastan: se asume México; ' +
+          'si dijo que es de otro país, con su código, ej. +16195550100). Inclúyelo SOLO si el lead te lo ' +
+          'dio/confirmó ahora; NUNCA lo extraigas del texto de un formulario ni lo inventes. Omítelo si el ' +
+          'contacto ya tiene el número correcto.',
       ),
     contactName: z
       .string()
@@ -102,6 +104,54 @@ export const bookAppointmentTool = createTool({
     }
 
     const ghl = new GhlClient(tenant.tenantId);
+
+    // The reminder number, saved ONLY as part of booking (never earlier) and ONLY when the
+    // contact has NO phone yet (the FB/IG case). We NEVER overwrite an existing phone: changing
+    // a WhatsApp contact's number breaks the 24h messaging window — GHL/Meta treat it as a new
+    // number with no lead interaction, so the bot can no longer reply (templates only).
+    // A bare 10-digit number is read as Mexican when its LADA is one (`core/phone.ts`); a number
+    // that can't be read that way REFUSES the booking so the bot asks the lead which country it
+    // is from — guessing would send the confirmation and reminders to a stranger. A GHL failure
+    // while saving is logged and does NOT block the booking.
+    if (whatsappPhone) {
+      let current: string | null | undefined;
+      let lookupFailed = false;
+      try {
+        current = await ghl.getContactPhone(turn.ghlContactId);
+      } catch (err) {
+        lookupFailed = true;
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error('[bookAppointment] phone lookup failed (non-blocking):', msg);
+        await logBotEvent(tenant.clientId, turn.ghlConversationId, 'db_error', {
+          stage: 'update_contact_phone',
+          error: msg,
+        });
+      }
+      if (!current && !lookupFailed) {
+        const phone = normalizeLeadPhone(whatsappPhone);
+        if (!phone.ok) {
+          await logBotEvent(tenant.clientId, turn.ghlConversationId, 'booking_failed', {
+            serviceName,
+            calendarId,
+            startTime,
+            reason: 'phone_unclear',
+            phoneReason: phone.reason,
+          });
+          return { booked: false, message: phoneRefusalNote(phone.reason) };
+        }
+        try {
+          await ghl.updateContactPhone(turn.ghlContactId, phone.e164);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.error('[bookAppointment] phone save failed (non-blocking):', msg);
+          await logBotEvent(tenant.clientId, turn.ghlConversationId, 'db_error', {
+            stage: 'update_contact_phone',
+            error: msg,
+          });
+        }
+      }
+      // else: already has a number — leave it untouched (see comment above).
+    }
 
     // Validate + normalize the requested time against REAL availability BEFORE anything else.
     // The model builds `startTime` and is not reliable at preserving the timezone offset (it
@@ -229,31 +279,6 @@ export const bookAppointmentTool = createTool({
           `Ese horario queda fuera de la ventana de agendado (${horizon} días). ` +
           'Ofrécele al lead un horario más cercano.',
       };
-    }
-
-    // Save the reminder number ONLY as part of booking (never earlier), and ONLY when the
-    // contact has NO phone yet (the FB/IG case). We NEVER overwrite an existing phone:
-    // changing a WhatsApp contact's number breaks the 24h messaging window — GHL/Meta treat it
-    // as a new number with no lead interaction, so the bot can no longer reply (templates only).
-    // A failure here is logged but does NOT block the booking.
-    if (whatsappPhone) {
-      const cleaned = whatsappPhone.replace(/[^\d+]/g, '');
-      if (cleaned.replace(/\D/g, '').length >= 8) {
-        try {
-          const current = await ghl.getContactPhone(turn.ghlContactId);
-          if (!current) {
-            await ghl.updateContactPhone(turn.ghlContactId, cleaned);
-          }
-          // else: already has a number — leave it untouched (see comment above).
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          console.error('[bookAppointment] phone save failed (non-blocking):', msg);
-          await logBotEvent(tenant.clientId, turn.ghlConversationId, 'db_error', {
-            stage: 'update_contact_phone',
-            error: msg,
-          });
-        }
-      }
     }
 
     // The name the lead gave, written BEFORE the booking POST for the same reason as the

@@ -485,7 +485,14 @@ slots. Rules (also reinforced in the front-desk prompt):
   no phone**. The turn resolves the number on file (`parsed.phone ?? getContactPhone(contactId)`)
   and the front-desk prompt is injected accordingly: **if the contact already has a phone, the
   agent leaves it untouched** — it does NOT ask, confirm, or offer to change it, just books; **if
-  there's no phone (typical FB/IG lead), it asks for it** (with country code) at booking. The
+  there's no phone (typical FB/IG lead), it asks for it** at booking — **10 digits, no country
+  code** (2026-10-09: a Heriberto lead who had already picked her slot went silent on "con código
+  de país (+52)"). The tool reads a bare 10-digit number as Mexican **only when its first digits
+  are a Mexican LADA** (`core/phone.ts`, the national list; `52`/`521` prefixes are accepted too,
+  an explicit `+` is kept as given). A number it can't read that way **refuses the booking**
+  (`booking_failed` reason `phone_unclear`) and tells the model to ask the lead which country the
+  number is from, then retry with `+<code>…` — never guess: a wrong guess sends the confirmation
+  and reminders to a stranger, a question costs one message. The
   number is written **only as the `whatsappPhone` argument of `bookAppointment`**
   (`updateContactPhone`, needs `contacts.write`) — no standalone save tool, so it can't be stored
   before an actual booking. **The tool NEVER overwrites an existing phone** (writes only when the

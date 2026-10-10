@@ -544,6 +544,10 @@ cualquier Chrome headless recibe SIGTERM a los ~2 s (ver cabecera de `render-bat
   leads arrive as their handle), and passes it as `contactName` to `bookAppointment`, which writes
   the contact **before** the booking POST (GHL greets `{{contact.first_name}}` in the confirmation).
   `core/contact-name.ts` is the one first/last split. Platform-wide; see docs/business-logic.md §5.
+- Phone at booking (2026-10-09): an FB/IG lead is asked for **10 digits, no country code**; `bookAppointment`
+  reads them as Mexican only when the first digits are a Mexican LADA (`core/phone.ts`, national list) and
+  **refuses the booking** (`booking_failed` `phone_unclear`) when it can't, so the bot asks which country —
+  never a guess, a wrong one sends the reminders to a stranger. See docs/business-logic.md §5.
 - Contact-merge recovery on send: GHL dedups contacts by phone/email, which can **merge away**
   the `contactId` a webhook gave us (Instant-Form lead whose number already exists as another
   contact) → send fails `CONVERSATIONS_CONTACT_NOT_FOUND`. Crucially the merge **also destroys the

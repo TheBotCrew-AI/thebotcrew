@@ -238,11 +238,33 @@ describe('bookAppointment', () => {
     expect(res.booked).toBe(true);
   });
 
-  it('phone too short (<8 digits) → ignored, no phone lookup, still books', async () => {
-    await run({ serviceName: 'Consulta', startTime: START, whatsappPhone: '12345' });
-    expect(ghl.getContactPhone).not.toHaveBeenCalled();
+  it('bare 10-digit Mexican number + contact has NO phone → saved as +52…, books', async () => {
+    const res = await run({ serviceName: 'Consulta', startTime: START, whatsappPhone: '664 123 4567' });
+    expect(ghl.updateContactPhone).toHaveBeenCalledWith('c1', '+526641234567');
+    expect(res.booked).toBe(true);
+  });
+
+  // The number can't be read as Mexican (too short / unknown LADA / US shape) → the booking is
+  // REFUSED so the bot asks the lead which country it is from. Guessing would send the
+  // confirmation and reminders to a stranger; the slot is re-validated on the retry anyway.
+  it.each([
+    ['12345', 'too_short'],
+    ['6195550100', 'unknown_area_code'],
+    ['16195550100', 'not_mexican_shape'],
+  ])('phone %s not readable as Mexican → NOT booked, booking_failed phone_unclear (%s), no phone saved', async (phone, reason) => {
+    const res = await run({ serviceName: 'Consulta', startTime: START, whatsappPhone: phone });
+    expect(res.booked).toBe(false);
+    expect(res.message).toMatch(/de México/);
     expect(ghl.updateContactPhone).not.toHaveBeenCalled();
-    expect(ghl.bookAppointment).toHaveBeenCalledOnce();
+    expect(ghl.bookAppointment).not.toHaveBeenCalled();
+    expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'booking_failed', expect.objectContaining({ reason: 'phone_unclear', phoneReason: reason }));
+  });
+
+  it('unreadable phone but contact ALREADY has one → ignored, still books', async () => {
+    ghl.getContactPhone.mockResolvedValue('+5211111111');
+    const res = await run({ serviceName: 'Consulta', startTime: START, whatsappPhone: '12345' });
+    expect(res.booked).toBe(true);
+    expect(ghl.updateContactPhone).not.toHaveBeenCalled();
   });
 
   it('phone save failure is non-blocking → booking still succeeds + event logged', async () => {

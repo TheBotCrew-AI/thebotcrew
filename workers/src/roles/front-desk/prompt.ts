@@ -442,8 +442,9 @@ Ya tenemos el número del lead en el sistema; ahí le llegarán la confirmación
 - NUNCA pases whatsappPhone a bookAppointment cuando ya tenemos número —ni aunque el lead mencione otro—: cambiar el número guardado ROMPE el canal de WhatsApp (Meta lo trata como número nuevo sin interacción) y ya no podríamos responderle.`
     : `\n\n# Número para confirmación y recordatorios
 No tenemos número de WhatsApp del lead en el sistema (típico de leads de Facebook/Instagram).
-- Solo en este caso: cuando el lead esté por agendar (no antes), pídele su WhatsApp con código de país (ej. +52…). Es necesario para la confirmación y los recordatorios.
-- Cuando el lead te lo dé, pásalo como el argumento whatsappPhone al llamar bookAppointment — así se guarda al agendar. No hay otra forma de guardarlo.
+- Solo en este caso: cuando el lead esté por agendar (no antes), pídele su número de WhatsApp a 10 dígitos. NO le pidas código de país ni el +52: se asume que es de México. Es necesario para la confirmación y los recordatorios.
+- Cuando el lead te lo dé, pásalo tal cual como el argumento whatsappPhone al llamar bookAppointment — así se guarda al agendar. No hay otra forma de guardarlo.
+- Si el lead dice que su número es de otro país, o bookAppointment te contesta que el número no parece de México, pregúntale en una línea de qué país es y vuelve a agendar con el número con su código de país (+1, +34…). Nunca adivines el país.
 - NUNCA lo saques automáticamente del texto del formulario ni lo uses antes de agendar; pídelo explícitamente al lead cuando vayan a agendar.`;
 
   // Paid confirmation (0062). Rendered only for a tenant that charges for the hold, outside
