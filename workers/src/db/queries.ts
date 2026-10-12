@@ -8,7 +8,7 @@
 
 import { getSupabase } from './client.js';
 import type { AiProvider, Channel, ConversationMessage, ConversationStatus, FollowUpKind, QuietHours, TenantContext } from '../core/types.js';
-import { LEAD_STAGES, type LeadStage } from '../core/stage.js';
+import { asLeadStage, type LeadStage } from '../core/lead-stage.js';
 import { isLegacyPoolKey } from '../core/followup-playbook.js';
 import { DEMO_REMINDER_ROLE } from '../core/types.js';
 import { clampToActiveHours, DEFAULT_QUIET_HOURS } from '../core/active-hours.js';
@@ -293,10 +293,6 @@ export async function getConversationPersona(conversationId: string): Promise<Co
     stage: asLeadStage(row?.stage),
     interest: row?.interest ?? null,
   };
-}
-
-function asLeadStage(raw: unknown): LeadStage | null {
-  return typeof raw === 'string' && (LEAD_STAGES as readonly string[]).includes(raw) ? (raw as LeadStage) : null;
 }
 
 // ── Demo sessions (0038): budgeted per-lead self-demos (the lead-magnet funnel) ──

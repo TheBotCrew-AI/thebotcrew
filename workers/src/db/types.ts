@@ -6,7 +6,7 @@
  */
 
 import type { Channel, Direction, FollowUpKind, SenderType } from '../core/types.js';
-import type { LeadStage } from '../core/stage.js';
+import type { LeadStage } from '../core/lead-stage.js';
 
 /** Row shape from `tenant_config` (jsonb columns arrive parsed). */
 export interface TenantConfigRow {

@@ -16,11 +16,9 @@
 
 import { messageMatchesTrigger } from './tenant.js';
 import type { ConversationMessage } from './types.js';
+import { LEAD_STAGES, STAGE_RANK as RANK, type LeadStage } from './lead-stage.js';
 
-export type LeadStage = 'NI' | 'I' | 'A' | 'C';
-export const LEAD_STAGES: readonly LeadStage[] = ['NI', 'I', 'A', 'C'];
-
-const RANK: Record<LeadStage, number> = { NI: 1, I: 2, A: 3, C: 4 };
+export { LEAD_STAGES, type LeadStage } from './lead-stage.js';
 
 export interface StageSignals {
   /** The thread so far, in order, INCLUDING the inbound just answered. */

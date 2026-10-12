@@ -26,7 +26,7 @@
  */
 
 import { resolveAnglePool } from '../roles/reactivation/angle-select.js';
-import { LEAD_STAGES, type LeadStage } from './stage.js';
+import { LEAD_STAGES, type LeadStage } from './lead-stage.js';
 
 export interface StagePlan {
   cadence?: number[];

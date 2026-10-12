@@ -9,7 +9,7 @@
 
 import { RequestContext } from '@mastra/core/request-context';
 import type { AiProvider, TenantContext, TurnContext } from './types.js';
-import type { LeadStage } from './stage.js';
+import type { LeadStage } from './lead-stage.js';
 
 export interface AgentRequestValues {
   tenant: TenantContext;
