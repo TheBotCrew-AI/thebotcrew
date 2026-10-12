@@ -8,6 +8,8 @@
 
 import { getSupabase } from './client.js';
 import type { AiProvider, Channel, ConversationMessage, ConversationStatus, FollowUpKind, QuietHours, TenantContext } from '../core/types.js';
+import { LEAD_STAGES, type LeadStage } from '../core/stage.js';
+import { isLegacyPoolKey } from '../core/followup-playbook.js';
 import { DEMO_REMINDER_ROLE } from '../core/types.js';
 import { clampToActiveHours, DEFAULT_QUIET_HOURS } from '../core/active-hours.js';
 import type { TokenUsage } from '../core/llm-usage.js';
@@ -60,7 +62,7 @@ export async function loadTenantConfig(ghlLocationId: string): Promise<TenantCon
   const { data, error } = await supabase
     .from('tenant_config')
     .select(
-      'business_name, timezone, tone, services, hours, calendars, faq, enabled_roles, prompt_overrides, ai_provider, ai_model, ai_key_ref, awaiting_human_tag, pending_info_tag, follow_up_tiers, follow_up_cadence, follow_up_angles, follow_up_rounds, quiet_hours, booking_horizon_days, booking_min_notice_days, human_pause_minutes, enabled_channels, test_contact_ids, trigger_keywords, demo_on_keywords, demo_off_keywords, demo_prompt_overrides, keyword_variants, prompt_variants, demo_sessions_enabled, meta_capi, lead_timezone_enabled, interest_tags, book_unconfirmed, booking_payment, prime_time,' +
+      'business_name, timezone, tone, services, hours, calendars, faq, enabled_roles, prompt_overrides, ai_provider, ai_model, ai_key_ref, awaiting_human_tag, pending_info_tag, follow_up_tiers, follow_up_cadence, follow_up_angles, follow_up_rounds, follow_up_playbook, quiet_hours, booking_horizon_days, booking_min_notice_days, human_pause_minutes, enabled_channels, test_contact_ids, trigger_keywords, demo_on_keywords, demo_off_keywords, demo_prompt_overrides, keyword_variants, prompt_variants, demo_sessions_enabled, meta_capi, lead_timezone_enabled, interest_tags, book_unconfirmed, booking_payment, prime_time,' +
         'tenants!inner(id, client_id, ghl_location_id, is_active)',
     )
     .eq('tenants.ghl_location_id', ghlLocationId)
@@ -110,6 +112,7 @@ export async function loadTenantConfig(ghlLocationId: string): Promise<TenantCon
         ? (row.follow_up_angles as unknown[]).filter((s): s is string => typeof s === 'string' && s.length > 0)
         : null,
       followUpRounds: parseFollowUpRounds(row.follow_up_rounds),
+      followUpPlaybook: row.follow_up_playbook ?? null,
       quietHours: parseQuietHours(row.quiet_hours),
       bookingHorizonDays:
         typeof row.booking_horizon_days === 'number' && row.booking_horizon_days > 0
@@ -255,6 +258,10 @@ export interface ConversationPersona {
   reactivationRound: number;
   /** The lead's IANA zone (0057), or null when unknown. See core/lead-timezone.ts. */
   leadTimezone: string | null;
+  /** How far the lead got (0067); null until the first turn records it. */
+  stage: LeadStage | null;
+  /** The configured service the lead asked about (0067 persists the 0058 pick). */
+  interest: string | null;
 }
 
 /** Read the conversation's persona (null activeRole = normal front-desk; 'demo' = demo persona). */
@@ -262,7 +269,7 @@ export async function getConversationPersona(conversationId: string): Promise<Co
   const supabase = getSupabase();
   const { data, error } = await supabase
     .from('conversations')
-    .select('active_role, role_started_at, demo_started_at, prompt_variant, reactivation_round, lead_timezone')
+    .select('active_role, role_started_at, demo_started_at, prompt_variant, reactivation_round, lead_timezone, stage, interest')
     .eq('id', conversationId)
     .maybeSingle();
   fail('getConversationPersona', error);
@@ -273,6 +280,8 @@ export async function getConversationPersona(conversationId: string): Promise<Co
     prompt_variant: string | null;
     reactivation_round: number | null;
     lead_timezone: string | null;
+    stage?: string | null;
+    interest?: string | null;
   } | null;
   return {
     activeRole: row?.active_role ?? null,
@@ -281,7 +290,13 @@ export async function getConversationPersona(conversationId: string): Promise<Co
     promptVariant: row?.prompt_variant ?? null,
     reactivationRound: row?.reactivation_round ?? 0,
     leadTimezone: row?.lead_timezone ?? null,
+    stage: asLeadStage(row?.stage),
+    interest: row?.interest ?? null,
   };
+}
+
+function asLeadStage(raw: unknown): LeadStage | null {
+  return typeof raw === 'string' && (LEAD_STAGES as readonly string[]).includes(raw) ? (raw as LeadStage) : null;
 }
 
 // ── Demo sessions (0038): budgeted per-lead self-demos (the lead-magnet funnel) ──
@@ -1185,6 +1200,7 @@ export async function scheduleFollowUp(
   quietHours?: QuietHours | null,
   kind: FollowUpKind = 'cadence',
   round = 0,
+  stage: LeadStage | null = null,
 ): Promise<string | null> {
   const base = new Date(Date.now() + delayMinutes * 60_000);
   const scheduledFor = clampToActiveHours(base, timezone, quietHours ?? DEFAULT_QUIET_HOURS);
@@ -1195,6 +1211,7 @@ export async function scheduleFollowUp(
     p_scheduled_for: scheduledFor.toISOString(),
     p_kind: kind,
     p_round: round,
+    p_stage: stage,
   });
   fail('scheduleFollowUp', error);
   return (data as string | null) ?? null;
@@ -1262,6 +1279,7 @@ export async function loadDueFollowUps(limit = 20): Promise<DueFollowUp[]> {
     kind: string | null;
     last_inbound_message_id: string | null;
     round: number | null;
+    stage?: string | null;
   };
   return ((data ?? []) as Row[]).map((r) => ({
     followUpId: r.follow_up_id,
@@ -1278,6 +1296,7 @@ export async function loadDueFollowUps(limit = 20): Promise<DueFollowUp[]> {
     lastInboundMessageId: r.last_inbound_message_id ?? null,
     // Same defensive default for 0049: no round = scheduled under round 0.
     round: typeof r.round === 'number' ? r.round : 0,
+    stage: asLeadStage(r.stage),
   }));
 }
 
@@ -1314,12 +1333,18 @@ export async function resetReactivationRound(ghlConversationId: string): Promise
   fail('resetReactivationRound', error);
 }
 
-/** Mark a follow-up as successfully sent. */
-export async function markFollowUpSent(followUpId: string, angleIndex: number | null = null): Promise<void> {
+/** Mark a follow-up as successfully sent. `anglePool` names the pool `angleIndex`
+ *  indexes into (0068) — the cursor is per pool. */
+export async function markFollowUpSent(
+  followUpId: string,
+  angleIndex: number | null = null,
+  anglePool: string | null = null,
+): Promise<void> {
   const supabase = getSupabase();
   const { error } = await supabase.rpc('app_mark_follow_up_sent', {
     p_follow_up_id: followUpId,
     p_angle_index: angleIndex,
+    p_angle_pool: anglePool,
   });
   fail('markFollowUpSent', error);
 }
@@ -1330,14 +1355,20 @@ export async function markFollowUpSent(followUpId: string, angleIndex: number | 
  * count, so an angle scheduled but not delivered stays available. Free-formed
  * nudges (angle_index NULL) occupy no pool slot and are excluded.
  */
-export async function loadSentAngleIndexes(conversationId: string): Promise<number[]> {
+export async function loadSentAngleIndexes(conversationId: string, poolKey = 'tenant'): Promise<number[]> {
   const supabase = getSupabase();
-  const { data, error } = await supabase
+  // Per pool (0068): an index only means something inside the pool it was picked from.
+  // Rows written before 0068 carry NULL and belong to the legacy (tenant/variant) pool.
+  let query = supabase
     .from('follow_ups')
     .select('angle_index')
     .eq('conversation_id', conversationId)
     .eq('status', 'sent')
     .not('angle_index', 'is', null);
+  query = isLegacyPoolKey(poolKey)
+    ? query.or(`angle_pool.is.null,angle_pool.eq.${poolKey}`)
+    : query.eq('angle_pool', poolKey);
+  const { data, error } = await query;
   fail('loadSentAngleIndexes', error);
   return ((data ?? []) as { angle_index: number | null }[])
     .map((r) => r.angle_index)

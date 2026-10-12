@@ -9,6 +9,7 @@
 
 import { RequestContext } from '@mastra/core/request-context';
 import type { AiProvider, TenantContext, TurnContext } from './types.js';
+import type { LeadStage } from './stage.js';
 
 export interface AgentRequestValues {
   tenant: TenantContext;
@@ -24,6 +25,17 @@ export interface AgentRequestValues {
   /** Which reactivation round this nudge runs under (0049). Round 1+ softens the
    *  prompt; the final touch of the final round becomes the farewell message. */
   reactivationRound?: { round: number; isFinalTouch: boolean; reentryKeyword: string };
+  /** The lead's stage + what this nudge is for (0068). Only set when the tenant has a
+   *  playbook; absent = the pre-0068 prompt, byte-identical. */
+  stageContext?: StageContext;
+}
+
+export interface StageContext {
+  stage: LeadStage;
+  /** The nudge's job at this stage (tenant's text or the platform default). */
+  objective: string;
+  /** The configured service the lead asked about, with the ONLY facts the nudge may state. */
+  service: { name: string; description: string | null } | null;
 }
 
 export type AgentRequestContext = RequestContext<AgentRequestValues>;
@@ -43,6 +55,9 @@ export function buildAgentRequestContext(values: AgentRequestValues): AgentReque
   }
   if (values.reactivationRound !== undefined) {
     ctx.set('reactivationRound', values.reactivationRound);
+  }
+  if (values.stageContext !== undefined) {
+    ctx.set('stageContext', values.stageContext);
   }
   return ctx;
 }

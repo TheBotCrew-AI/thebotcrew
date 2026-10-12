@@ -6,6 +6,7 @@
  */
 
 import type { Channel, Direction, FollowUpKind, SenderType } from '../core/types.js';
+import type { LeadStage } from '../core/stage.js';
 
 /** Row shape from `tenant_config` (jsonb columns arrive parsed). */
 export interface TenantConfigRow {
@@ -28,6 +29,8 @@ export interface TenantConfigRow {
   /** Cadences for reactivation rounds 1+ as an array of arrays of minutes (0049).
    *  NULL = platform default taper; [] = round 0 only. */
   follow_up_rounds: unknown;
+  /** Per-stage follow-up ladder (0068); NULL = flat ladder. */
+  follow_up_playbook?: unknown;
   /** Quiet (DND) window for follow-ups as {start,end} local hours. NULL = platform default. */
   quiet_hours: unknown;
   /** Max days ahead the bot may offer appointment slots. NULL = no cap. */
@@ -87,6 +90,8 @@ export interface DueFollowUp {
   /** The reactivation round this row was scheduled under (0049) — resolves the
    *  cadence shape for rung progression. Rows written before 0049 read 0. */
   round: number;
+  /** The lead stage this row was ARMED under (0068); null = flat ladder / pre-0068 row. */
+  stage: LeadStage | null;
   /**
    * The conversation's last inbound as of the CLAIM. The runner hands it back to
    * `app_commit_follow_up_send` right before sending: if it no longer matches, the

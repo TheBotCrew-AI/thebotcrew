@@ -1,5 +1,7 @@
 import { CLOSED_QUESTION_RULE, VOICE_RULE, WARM_NO_RULE } from '../../core/prompt-rules.js';
 import { HUMAN_REPLY_PREFIX } from '../../core/model-messages.js';
+import { STAGE_LABELS } from '../../core/followup-playbook.js';
+import type { StageContext } from '../../core/runtime-context.js';
 
 export interface DemoContext {
   businessName?: string;
@@ -22,6 +24,7 @@ export function buildReactivationInstructions(
   candidates: string[],
   demo?: DemoContext,
   roundCtx?: RoundContext,
+  stageCtx?: StageContext,
 ): string {
   const toneDesc = tone?.trim() || 'cálido, natural y cercano';
   const hasCandidates = candidates.length > 0;
@@ -69,6 +72,21 @@ ${CLOSED_QUESTION_RULE}
 - PERO si el ÚLTIMO mensaje del bot en el historial ya le ofreció horarios concretos y el lead no contestó, no arranques de cero: lo único que falta es que elija. Esta regla manda sobre los ángulos de abajo — preguntarle otra vez si quiere que le aparten un espacio la regresa un paso, porque eso ya lo dijo.
   Retoma esa elección SIN repetir el día ni la hora (pudieron ocuparse desde entonces): alude a los horarios que ya le pasaste y pregúntale si alguno le sirve o si le buscas otro. Esa alusión es la ÚNICA forma en que puedes tocar el tema de horarios; sigue prohibido repetirlos, confirmarlos o proponer uno nuevo.`;
 
+  // The stage (0068): where the lead stopped and what THIS nudge is for. The service
+  // block is the one place the nudge may take facts from — the agent has no tools and
+  // the pre-0068 prompt forbade stating any business fact at all, which is right for a
+  // lead who already heard them and wrong for one who never got past the ad's opener.
+  // Off (no playbook) = this section is absent and the prompt is byte-identical.
+  const stageSection = stageCtx && !isFinalTouch
+    ? `\n\n# Etapa del lead: ${stageCtx.stage} — ${STAGE_LABELS[stageCtx.stage]}
+Objetivo de ESTE mensaje: ${stageCtx.objective}
+Esta etapa manda sobre los ángulos: si un ángulo pide algo que el objetivo prohíbe (p. ej. pedir cita a un lead NI), adapta el ángulo al objetivo.${stageCtx.service
+      ? `\n\n# Lo que le interesa
+Tratamiento: ${stageCtx.service.name}.${stageCtx.service.description ? `\nLo ÚNICO que puedes afirmar sobre él (datos de la clínica, cítalos tal cual, sin redondear ni completar): ${stageCtx.service.description}` : '\nNo hay datos del tratamiento en la config: no afirmes nada sobre él.'}
+Si el historial ya le dio uno de estos datos, usa OTRO; nunca repitas el mismo.`
+      : ''}`
+    : '';
+
   // The angle is chosen HYBRIDLY: the model picks the most fitting unused angle for
   // the current conversation state and reports its choice via a machine-readable tag
   // (parsed + stripped in code). When the pool is exhausted it free-forms a fresh nudge.
@@ -99,7 +117,7 @@ Escribe ÚNICAMENTE el mensaje para el lead.`;
 ${shapeRule}
 - Tono: ${toneDesc}.
 - NUNCA uses markdown, listas, negritas ni links.
-- NUNCA inventes precios, horarios ni información del negocio.
+- NUNCA inventes precios, horarios ni información del negocio.${stageCtx ? ' Los únicos datos del negocio que puedes citar son los de "Lo que le interesa".' : ''}
 ${noDatesRule}
 - No menciones que eres un bot ni que estás siguiendo un proceso automático.
 ${closingRules}
@@ -110,5 +128,5 @@ Revisa TODOS los mensajes anteriores del bot en el historial antes de escribir.
 - Si el historial ya contiene información del servicio (descripción, precio, condiciones, etc.), NO la repitas. El lead ya la vio; repetirla se siente como spam.
 - Tu mensaje DEBE explorar un ángulo distinto a los ya enviados — diferente pregunta, diferente tema, diferente enfoque.
 
-${angleSection}${lateRoundSection}${demoSection}`;
+${angleSection}${stageSection}${lateRoundSection}${demoSection}`;
 }

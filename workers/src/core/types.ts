@@ -78,6 +78,9 @@ export interface RawTenantConfig {
    *  first runs a shorter, softer ladder (0049). null = platform default taper;
    *  [] = round 0 only. Round 0 always runs followUpCadence. */
   followUpRounds?: number[][] | null;
+  /** Per-stage ladder + angle pools (0068), raw jsonb; null = the flat ladder. Parsed by
+   *  core/followup-playbook.ts. */
+  followUpPlaybook?: unknown;
   /** Quiet window for follow-ups; null/absent uses the platform default (21:00–08:00). */
   quietHours?: QuietHours | null;
   /** Max days ahead the bot may look for / offer appointment slots; null = no cap. */

@@ -39,11 +39,14 @@ import {
   updateConversationContact,
   loadRecentMessages,
 } from '../db/queries.js';
-import { parseAngleSelection, resolveAnglePool } from '../roles/reactivation/angle-select.js';
+import { parseAngleSelection } from '../roles/reactivation/angle-select.js';
 import { buildAgentRequestContext } from '../core/runtime-context.js';
 import { toModelMessages } from '../core/model-messages.js';
 import { DEFAULT_QUIET_HOURS, isQuietNow } from '../core/active-hours.js';
 import { cadenceForRound, isFinalRound, REENTRY_KEYWORD, totalRounds, variantAllowsFollowUps } from '../core/reactivation-rounds.js';
+import { parseFollowUpPlaybook, resolveStagePlan, serviceFacts } from '../core/followup-playbook.js';
+import type { LeadStage } from '../core/stage.js';
+import type { StageContext } from '../core/runtime-context.js';
 import type { AiProvider, Channel, TenantContext } from '../core/types.js';
 import { DEMO_REMINDER_CADENCE, DEMO_REMINDER_ROLE } from '../core/types.js';
 import type { DueFollowUp } from '../db/types.js';
@@ -193,7 +196,7 @@ async function processDemoReminder(
 
   const text = buildDemoReminder(rung, tenant.demoOffKeywords?.[0]);
   await deliverNudge(followUp, tenant, text, DEMO_REMINDER_ROLE, null);
-  await markFollowUpSent(followUp.followUpId, null);
+  await markFollowUpSent(followUp.followUpId, null, null);
   await logBotEvent(tenant.clientId, followUp.ghlConversationId, 'demo_reminder_sent', {
     rung,
     followUpId: followUp.followUpId,
@@ -203,7 +206,7 @@ async function processDemoReminder(
   if (nextDelay !== undefined) {
     await scheduleFollowUp(
       followUp.conversationId, rung + 1, nextDelay,
-      tenant.config.timezone, tenant.config.quietHours, 'demo', 0,
+      tenant.config.timezone, tenant.config.quietHours, 'demo', 0, null,
     );
     return 'ok';
   }
@@ -242,7 +245,7 @@ async function processDemoReminder(
     if (firstDelay !== undefined) {
       await scheduleFollowUp(
         followUp.conversationId, 1, firstDelay,
-        tenant.config.timezone, tenant.config.quietHours, 'cadence', reactivationRound,
+        tenant.config.timezone, tenant.config.quietHours, 'cadence', reactivationRound, null,
       );
     }
   }
@@ -265,8 +268,11 @@ async function processOne(
   let activeRole: string | null = null;
   let roleStartedAt: string | null = null;
   let reactivationRound = 0;
+  let convStage: LeadStage | null = null;
+  let interest: string | null = null;
   try {
-    ({ promptVariant, activeRole, roleStartedAt, reactivationRound } = await getConversationPersona(followUp.conversationId));
+    ({ promptVariant, activeRole, roleStartedAt, reactivationRound, stage: convStage, interest } =
+      await getConversationPersona(followUp.conversationId));
   } catch (e) {
     console.error('[followup] persona read failed (using tenant angle pool):', e instanceof Error ? e.message : String(e));
   }
@@ -293,7 +299,13 @@ async function processOne(
   // cycle's shape comes from the round the row was SCHEDULED under (0049) — not from
   // whatever the conversation's counter says now — so a mid-cycle config or counter
   // change can't re-shape a ladder that's already running.
-  const cadence = cadenceForRound(tenant.config, followUp.round);
+  // The playbook (0068): the row's stage (sealed at arming; a pre-0068 row falls back
+  // to the conversation's) picks round 0's cadence, the angle pool and the nudge's
+  // objective. No playbook = the flat ladder, and the prompt stays byte-identical.
+  const playbook = parseFollowUpPlaybook(tenant.config.followUpPlaybook);
+  const stage: LeadStage | null = followUp.stage ?? convStage ?? null;
+  const plan = resolveStagePlan(playbook, stage, interest, tenant.config, promptVariant);
+  const cadence = followUp.round === 0 ? plan.cadence : cadenceForRound(tenant.config, followUp.round);
   const position = followUp.tier;
   if (position < 1 || position > cadence.length) {
     console.warn(`[followup] cadence position ${position} out of range (len=${cadence.length}, round=${followUp.round}) tenant=${tenant.tenantId}`);
@@ -319,7 +331,7 @@ async function processOne(
     await cancelFollowUps(followUp.conversationId);
     await scheduleFollowUp(
       followUp.conversationId, position, 0,
-      tenant.config.timezone, tenant.config.quietHours, 'cadence', followUp.round,
+      tenant.config.timezone, tenant.config.quietHours, 'cadence', followUp.round, followUp.stage ?? null,
     );
     await logBotEvent(tenant.clientId, followUp.ghlConversationId, 'followup_aborted', {
       followUpId: followUp.followUpId, kind: followUp.kind, tier: followUp.tier, reason: 'quiet_hours', rescheduled: true,
@@ -355,18 +367,18 @@ async function processOne(
   // a goodbye, not an angle, and letting it fall through the "no valid tag → consume
   // remaining[0]" fallback below would silently burn an angle on a message that
   // deliberately isn't one.
+  // With a playbook the pool is per stage (and per treatment) and the cursor is per
+  // pool (0068) — `plan` already applied the variant-then-tenant fallback.
   let remaining: Array<{ text: string; index: number }> = [];
   if (!finalTouch) {
-    const { pool: anglePool } = resolveAnglePool(
-      tenant.config.promptVariants,
-      promptVariant,
-      tenant.config.followUpAngles ?? [],
-    );
-    const usedIndexes = await loadSentAngleIndexes(followUp.conversationId);
-    remaining = anglePool
+    const usedIndexes = await loadSentAngleIndexes(followUp.conversationId, plan.poolKey);
+    remaining = plan.angles
       .map((text, index) => ({ text, index }))
       .filter((a) => !usedIndexes.includes(a.index));
   }
+  const stageContext: StageContext | undefined = playbook && stage
+    ? { stage, objective: plan.objective ?? '', service: serviceFacts(tenant.config.services, interest) }
+    : undefined;
 
   const provider = (tenant.config.provider ?? DEFAULT_PROVIDER) as AiProvider;
   const model = tenant.config.model ?? DEFAULT_MODEL;
@@ -417,6 +429,7 @@ async function processOne(
     reactivationCandidates: remaining.map((a) => a.text),
     demoContext,
     reactivationRound: { round: followUp.round, isFinalTouch: finalTouch, reentryKeyword: REENTRY_KEYWORD },
+    stageContext,
   });
 
   // Same clean-start rule as a live turn: read history from when the CURRENT persona
@@ -468,7 +481,12 @@ async function processOne(
   // rung's send is its own attempt, and a transient error must not end the cycle.
   const delivered = await deliverNudge(followUp, tenant, reply, REACTIVATION_ROLE, model);
   if (delivered) {
-    await markFollowUpSent(followUp.followUpId, chosenAngleIndex);
+    await markFollowUpSent(followUp.followUpId, chosenAngleIndex, chosenAngleIndex != null ? plan.poolKey : null);
+    await logBotEvent(tenant.clientId, followUp.ghlConversationId, 'follow_up_sent', {
+      followUpId: followUp.followUpId, tier: position, round: followUp.round,
+      stage, interest, pool: plan.poolKey, angleSource: plan.angleSource, angleIndex: chosenAngleIndex,
+      playbook: playbook !== null,
+    });
   } else {
     await markFollowUpFailed(followUp.followUpId);
   }
@@ -482,7 +500,7 @@ async function processOne(
   if (nextDelay !== undefined) {
     await scheduleFollowUp(
       followUp.conversationId, nextPosition, nextDelay,
-      tenant.config.timezone, tenant.config.quietHours, 'cadence', followUp.round,
+      tenant.config.timezone, tenant.config.quietHours, 'cadence', followUp.round, followUp.stage ?? null,
     );
   } else {
     await updateConversationStatus(followUp.ghlConversationId, 'standby');

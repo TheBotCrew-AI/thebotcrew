@@ -323,7 +323,15 @@ supabase/
                                #      stage_changed; conversations.interest persiste el pick de 0058; vista stage_at_silence.
                                #      Mismo release: el runner re-checa pausa humana y quiet hours al enviar, y un envío que
                                #      GHL rechaza queda `failed` + delivery_error, no `sent`. Es la fase 1 del playbook de
-                               #      seguimientos por etapa — ver business-logic §4.4)
+                               #      seguimientos por etapa — ver business-logic §4.4),
+                               # 0068 follow_up_playbook (la escalera POR ETAPA: tenant_config.follow_up_playbook jsonb, NULL =
+                               #      escalera plana byte-idéntica. Por etapa y por tratamiento (interest) elige cadencia de la
+                               #      ronda 0, pool de ángulos y OBJETIVO del nudge; el agente de reactivación recibe la etapa +
+                               #      los hechos del servicio (services[].description) como lo ÚNICO que puede afirmar.
+                               #      follow_ups.stage sella la etapa al armar; follow_ups.angle_pool hace el cursor de ángulos
+                               #      por pool. app_schedule_follow_up pasa a 6 args (se DROPEA la de 5, como en 0063),
+                               #      app_mark_follow_up_sent gana p_angle_pool. follow_up_cadence sigue siendo el switch.
+                               #      Playbook de Heriberto en docs/playbooks/. Ver business-logic §4.5)
   clients.sql, seed-tenants.sql# seeds (run by `supabase db reset` per config.toml)
 sites/                         # client marketing sites: static HTML, no build step, no deps
   _template/                   # starting point for a new client

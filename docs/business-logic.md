@@ -379,12 +379,12 @@ the tag stays manual). When a lead holds several upcoming citas, "their appointm
 the **soonest** one (`soonestUpcomingAppointment` collapses the append-only log: latest action
 per cita wins, then earliest start time) — both for the prompt and for lookup/reschedule/cancel.
 
-### 4.4 The lead's stage — NI / I / A / C (0067, shadow mode)
+### 4.4 The lead's stage — NI / I / A / C (0067)
 
 How far a conversation got before the lead went quiet, read from the thread and stored on
 `conversations.stage` (+ `stage_source`, `stage_at`). It is the key the **follow-up playbook**
-(next release) will use to pick a ladder per lead instead of one flat angle pool for everyone.
-This release only computes and records it: **nothing the lead receives changes.**
+(§4.5, 0068) uses to pick a ladder per lead instead of one flat angle pool for everyone. For a
+tenant with no playbook it is only recorded: nothing the lead receives changes.
 
 | Stage | Meaning | Deterministic floor (`core/stage.ts`) |
 |---|---|---|
@@ -426,6 +426,56 @@ current ladder lost at that stage.
   `sent` — the 28–36% of FB/IG nudges lost to Meta's 24-hour window used to look delivered.
   The ladder still advances (the next rung is its own attempt). Demo reminders keep their
   unconditional `sent` (the rung counter depends on it).
+
+### 4.5 The follow-up playbook — a ladder per stage (0068)
+
+`tenant_config.follow_up_playbook` (jsonb, **NULL = the flat ladder of §4, byte-identical**)
+lets the stage (§4.4) and the treatment (`conversations.interest`) choose three things for
+round 0: the **cadence**, the **angle pool** and the nudge's **objective**. The point: until
+0068 every pool asked for commitment ("¿te aparto tu lugar?") because one pool served every
+lead — and 50 of 59 bótox leads were NI ghosts who had never been told the price. The eval
+`roles/reactivation/evals/stage-playbook.eval.ts` measured it: with the same slot-asking angle,
+a NI nudge asked for the appointment 3/3 without the stage section and 0/3 with it (and cited
+a configured fact 3/3). Reference playbook: `docs/playbooks/heriberto-follow-up-playbook.sql`.
+
+```
+{ "stages":     { "NI": { "cadence": [10,60,240,1200], "objective": "…", "angles": ["…"] }, "I": …, "A": …, "C": … },
+  "byInterest": { "<services[].name>": { "NI": { "angles": ["…"] }, … } } }
+```
+
+Resolution (`core/followup-playbook.ts`, pure), most specific first, **per field**:
+
+| Field | Order |
+|---|---|
+| cadence (round 0 only) | `byInterest[interest][stage]` → `stages[stage]` → `follow_up_cadence` |
+| objective | `byInterest` → `stages` → platform default per stage (`DEFAULT_STAGE_OBJECTIVES`) |
+| angles | `byInterest` → `stages` → variant `followUpAngles` → `follow_up_angles` |
+
+- **`follow_up_cadence` stays the opt-in switch** (no cadence = no rounds = no nudges), and
+  rounds 1+ keep the 0049 taper untouched: the playbook reshapes the first, hard cycle only.
+- **The row is sealed at arming** (`follow_ups.stage`, same rule as `round`): the rung shape
+  follows the row even if the conversation's stage moves. A stage only rises on a lead
+  message, which cancels the row anyway, so this never holds a lead back. A row armed before
+  0068 (NULL) falls back to the conversation's current stage.
+- **The angle cursor is per pool** (`follow_ups.angle_pool`, keys `tenant` / `variant:<k>` /
+  `stage:<S>` / `interest:<name>/<S>`): indexes are positions inside one pool, and a lead who
+  rises from NI to A switches pools, so "never repeat" is scoped to the pool. Rows written
+  before 0068 carry NULL and count against the legacy (tenant/variant) pools only.
+- **What the reactivation agent now sees** (`stageContext`, only with a playbook): the stage
+  and its objective — which the prompt says **outranks the angle** — plus "Lo que le
+  interesa": the configured service's `description`, declared the ONLY business facts it may
+  state. Before 0068 the agent could state nothing (right for a lead who heard it all, wrong
+  for one who never got past the opener). With an interest but no description it is told to
+  state nothing. The farewell carries no stage section. No playbook → the prompt is the
+  pre-0068 text, byte-for-byte (`prompt.test.ts` asserts it).
+- A sent nudge now logs `follow_up_sent {stage, interest, pool, angleSource, angleIndex,
+  playbook}` — the read that tells which pool/stage converts.
+
+Heriberto's v1 (2026-10-12): every NI/I touch inside Meta's 24 h window (10 min, 1 h, 4 h,
+20 h for NI), bótox/láser/Sculptra pools for NI, I and A, shared C pool. Leo's decisions: a
+nudge MAY state the configured price to a lead who never asked (that is the NI job), and the
+days-2–3 taper keeps failing on FB/IG as `delivery_error` until the WhatsApp-template /
+retargeting phase.
 
 ## 5. Availability & booking
 

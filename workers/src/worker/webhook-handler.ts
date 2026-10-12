@@ -19,6 +19,7 @@ import { channelEnabled, hasTriggerKeywords, inTestMode, matchesDemoOff, matches
 import { buildAgentRequestContext } from '../core/runtime-context.js';
 import { PHOTO_DESCRIPTION_PREFIX, hasHumanReplies, photoDescriptionLine, toModelMessages } from '../core/model-messages.js';
 import { cadenceForRound, totalRounds, variantAllowsFollowUps } from '../core/reactivation-rounds.js';
+import { parseFollowUpPlaybook, resolveStagePlan } from '../core/followup-playbook.js';
 import { auxReasoningEffort } from '../core/reasoning.js';
 import { timezoneFromPhone } from '../core/lead-timezone.js';
 import { syncContactTimezone } from '../ghl/contact-timezone.js';
@@ -380,7 +381,9 @@ async function recordLeadStage(args: {
   askedSomething: boolean;
   llmStage: unknown;
   interest: string | null;
-}): Promise<void> {
+  /** What the row already holds — returned when this turn's write doesn't rise above it. */
+  storedStage: LeadStage | null;
+}): Promise<LeadStage | null> {
   const { tenant, parsed } = args;
   try {
     if (args.interest) await setConversationInterest(parsed.conversationId, args.interest);
@@ -400,9 +403,13 @@ async function recordLeadStage(args: {
       await logBotEvent(tenant.clientId, parsed.conversationId, 'stage_changed', {
         from: res.from, to: stage, source, reasons: floor.reasons,
       });
+      return stage;
     }
+    // Not written = the row is already at or above this turn's stage.
+    return raiseStage(stage, res.from ?? args.storedStage);
   } catch (e) {
     console.error('[stage] failed (non-blocking):', e instanceof Error ? e.message : String(e));
+    return args.storedStage;
   }
 }
 
@@ -760,9 +767,11 @@ export async function runAgentTurn({
   // Fails open to round 0 with the rest of the persona: a transient read failure
   // costs at most one extra round-0 cycle, never a silenced lead.
   let reactivationRound = 0;
+  let storedStage: LeadStage | null = null;
+  let storedInterest: string | null = null;
   try {
-    ({ activeRole, roleStartedAt, demoStartedAt, promptVariant, reactivationRound, leadTimezone } =
-      await getConversationPersona(conversationId));
+    ({ activeRole, roleStartedAt, demoStartedAt, promptVariant, reactivationRound, leadTimezone,
+      stage: storedStage, interest: storedInterest } = await getConversationPersona(conversationId));
   } catch (e) {
     console.error('[demo] getConversationPersona failed:', e instanceof Error ? e.message : String(e));
   }
@@ -1283,18 +1292,21 @@ export async function runAgentTurn({
     }
   }
 
-  // The lead's stage (0067), shadow mode: computed and recorded on every real turn,
-  // read by nothing yet. The rules set the floor; the classifier's word can only raise
-  // it; the RPC keeps it from ever falling. Never blocks the reply.
+  // The lead's stage (0067): computed and recorded on every real turn. The rules set
+  // the floor; the classifier's word can only raise it; the RPC keeps it from ever
+  // falling. Never blocks the reply. The playbook (0068) reads it below when arming.
+  let leadStage: LeadStage | null = storedStage ?? null;
   if (activeRole !== 'demo' && !forcedReply) {
-    await recordLeadStage({
+    leadStage = await recordLeadStage({
       tenant, parsed, conversationId, history, reply,
       slotsOffered: offeredSlotsThisTurn,
       askedSomething: lookedUpFaqThisTurn || !!classified.interest,
       llmStage: classified.stage,
       interest: classified.interest,
+      storedStage,
     });
   }
+  const leadInterest = classified.interest ?? storedInterest ?? null;
 
   // Split into separate messages on paragraph breaks; send each with a short
   // human-like gap. Each part is its own logged + tracked outbound message.
@@ -1397,6 +1409,7 @@ export async function runAgentTurn({
   let followUpKind: FollowUpKind = 'cadence';
   let followUpTier = 1;
   let followUpRound = 0;
+  let followUpStage: LeadStage | null = null;
   if (inDemo && !activeDemoSession) {
     // Manual keyword demo: no nudge of either kind (firstDelay stays undefined).
   } else if (inDemo) {
@@ -1418,14 +1431,20 @@ export async function runAgentTurn({
     // Rounds (0049): each ghost cycle runs the cadence for the CURRENT round —
     // round 0 is the tenant's own ladder, later rounds taper. A lead past the last
     // round is never pursued again (only a real booking resets the counter).
-    firstDelay = cadenceForRound(tenant.config, reactivationRound)[0];
+    // The playbook (0068) reshapes round 0 by the lead's stage; with none, or on a
+    // later round, this is the tenant cadence exactly as before.
+    const plan = resolveStagePlan(
+      parseFollowUpPlaybook(tenant.config.followUpPlaybook), leadStage, leadInterest, tenant.config, promptVariant,
+    );
+    firstDelay = reactivationRound === 0 ? plan.cadence[0] : cadenceForRound(tenant.config, reactivationRound)[0];
     followUpRound = reactivationRound;
+    followUpStage = leadStage ?? null;
   }
   if (firstDelay !== undefined) {
     try {
       await scheduleFollowUp(
         conversationId, followUpTier, firstDelay,
-        tenant.config.timezone, tenant.config.quietHours, followUpKind, followUpRound,
+        tenant.config.timezone, tenant.config.quietHours, followUpKind, followUpRound, followUpStage,
       );
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
