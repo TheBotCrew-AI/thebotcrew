@@ -37,6 +37,9 @@ ALTER TABLE public.follow_ups ADD CONSTRAINT follow_ups_stage_check
   CHECK (stage IS NULL OR stage IN ('NI', 'I', 'A', 'C'));
 
 -- ---------- app_schedule_follow_up: + p_stage ----------
+-- Also the CONTRACT step 0049 left pending: the 4-arg overload (0043) has had no
+-- caller since the 0049 Worker shipped; prod still carried it.
+DROP FUNCTION IF EXISTS public.app_schedule_follow_up(uuid, integer, timestamptz, text);
 DROP FUNCTION IF EXISTS public.app_schedule_follow_up(uuid, integer, timestamptz, text, integer);
 
 CREATE FUNCTION public.app_schedule_follow_up(

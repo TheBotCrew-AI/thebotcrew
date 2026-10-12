@@ -53,9 +53,9 @@ BEGIN
   ASSERT v_status = 'opted_out', format('un inbound reactivó a la lead: %s', v_status);
 
   -- ---------- 4. y no se le puede agendar un nudge ----------
-  ASSERT public.app_schedule_follow_up(v_conv, 1, now() + interval '1 hour', 'cadence') IS NULL,
+  ASSERT public.app_schedule_follow_up(v_conv, 1, now() + interval '1 hour', 'cadence', 0) IS NULL,
     'se agendó un follow-up a una lead en opted_out';
-  ASSERT public.app_schedule_follow_up(v_conv, 1, now() + interval '1 hour', 'demo') IS NULL,
+  ASSERT public.app_schedule_follow_up(v_conv, 1, now() + interval '1 hour', 'demo', 0) IS NULL,
     'se agendó un recordatorio de demo a una lead en opted_out';
 
   -- ---------- 5. quitar el tag es la vuelta atrás ----------

@@ -59,7 +59,7 @@ BEGIN
   ASSERT v_status = 'awaiting_human', format('un mensaje entrante la reactivó a %s', v_status);
 
   -- ---------- 4. y por lo tanto no se le puede agendar un nudge ----------
-  ASSERT public.app_schedule_follow_up(v_conv, 1, now() + interval '1 hour', 'cadence') IS NULL,
+  ASSERT public.app_schedule_follow_up(v_conv, 1, now() + interval '1 hour', 'cadence', 0) IS NULL,
     'se agendó un follow-up a una lead en awaiting_human';
 
   -- ---------- 5. las señales más fuertes SÍ pasan ----------

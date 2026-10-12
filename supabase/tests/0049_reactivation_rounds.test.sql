@@ -103,7 +103,7 @@ BEGIN
   ASSERT v_round = 1, format('reactivar la conversación tocó el contador (%s)', v_round);
 
   -- ---------- 7. contrato de overloads: 4 args vive (ronda 0), 3 args murió ----------
-  v_fu := public.app_schedule_follow_up(v_conv, 1, now(), 'cadence');
+  v_fu := public.app_schedule_follow_up(v_conv, 1, now(), 'cadence', 0);
   ASSERT v_fu IS NOT NULL, 'el overload de 4 args dejó de funcionar (el Worker desplegado lo usa)';
   SELECT round INTO v_fu_round FROM public.follow_ups WHERE id = v_fu;
   ASSERT v_fu_round = 0, format('el overload de 4 args debió insertar ronda 0, insertó %s', v_fu_round);
