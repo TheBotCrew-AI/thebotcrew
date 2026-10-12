@@ -77,6 +77,7 @@ beforeEach(() => {
     activeRole: null, roleStartedAt: null, demoStartedAt: null, promptVariant: null, reactivationRound: 0, leadTimezone: null,
   });
   vi.mocked(findUpcomingAppointment).mockResolvedValue(null);
+  vi.mocked(q.isBotSuppressed).mockResolvedValue(false);
   vi.mocked(agent.generate).mockResolvedValue({ text: 'te esperamos 👋' } as never);
   ghl.sendMessage.mockResolvedValue({ ghlMessageId: 'g1' });
   ghl.addContactTags.mockResolvedValue(undefined);
@@ -500,5 +501,51 @@ describe('runPendingFollowUps — reactivation rounds (0049)', () => {
     await runPendingFollowUps(agent);
     expect(q.setActiveRole).toHaveBeenCalledWith('conv1', 'closer'); // the rescue still happens
     expect(q.scheduleFollowUp).not.toHaveBeenCalled();               // but pursuit stays over
+  });
+});
+
+describe('runPendingFollowUps — send-time gates and truthful delivery (0067)', () => {
+  it('a human pause opened after the arming aborts the nudge instead of talking over them', async () => {
+    vi.mocked(q.isBotSuppressed).mockResolvedValue(true);
+    const res = await runPendingFollowUps(agent);
+    expect(agent.generate).not.toHaveBeenCalled();
+    expect(ghl.sendMessage).not.toHaveBeenCalled();
+    expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'followup_aborted', expect.objectContaining({ reason: 'human_active' }));
+    expect(res.skipped).toBe(1);
+  });
+
+  it('a row claimed inside quiet hours is pushed to the window end, not sent and not lost', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-10-10T09:00:00Z')); // 03:00 in Mexico City — quiet
+      const res = await runPendingFollowUps(agent);
+      expect(ghl.sendMessage).not.toHaveBeenCalled();
+      expect(q.cancelFollowUps).toHaveBeenCalledWith('cv1');
+      expect(q.scheduleFollowUp).toHaveBeenCalledWith('cv1', 1, 0, 'America/Mexico_City', null, 'cadence', 0);
+      expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'followup_aborted', expect.objectContaining({ reason: 'quiet_hours', rescheduled: true }));
+      expect(res.skipped).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('outside quiet hours the same row sends normally', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-10-10T18:00:00Z')); // 12:00 in Mexico City
+      await runPendingFollowUps(agent);
+      expect(ghl.sendMessage).toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a send GHL refused is marked FAILED with a delivery_error, and the ladder still advances', async () => {
+    ghl.sendMessage.mockRejectedValue(new Error('window closed'));
+    await runPendingFollowUps(agent);
+    expect(q.markFollowUpSent).not.toHaveBeenCalled();
+    expect(q.markFollowUpFailed).toHaveBeenCalledWith('fu1');
+    expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'delivery_error', expect.objectContaining({ error: 'window closed', channel: 'whatsapp' }));
+    expect(q.scheduleFollowUp).toHaveBeenCalledWith('cv1', 2, 1440, 'America/Mexico_City', null, 'cadence', 0);
   });
 });

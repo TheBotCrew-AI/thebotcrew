@@ -298,7 +298,9 @@ export type BotEventType =
   | 'turn_answered'
   /** getAvailability handed a restricted service its prime-time slots (0066): the lead refused
    *  every off-peak option. The key bookAppointment checks before it books a prime slot. */
-  | 'prime_time_released';
+  | 'prime_time_released'
+  /** The lead's stage rose ({from, to, source, reasons}, 0067). Shadow data for the playbook. */
+  | 'stage_changed';
 
 export interface LogAppointmentParams {
   p_client_id: string;

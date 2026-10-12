@@ -316,7 +316,14 @@ supabase/
                                #      lead rechaza el resto. Determinista: getAvailability esconde los slots prime del servicio
                                #      restringido, includePrimeTime:true los suelta y escribe el evento prime_time_released, y
                                #      book/reschedule rechazan un slot prime sin ese evento (booking_failed prime_time). Nadie lo
-                               #      tiene prendido; demo sintético en `pnpm battery prime-time-demo`. Ver business-logic §5)
+                               #      tiene prendido; demo sintético en `pnpm battery prime-time-demo`. Ver business-logic §5),
+                               # 0067 lead_stage (la etapa del lead NI/I/A/C en conversations.stage — en SOMBRA: se calcula y
+                               #      registra en cada turno, nada lo lee todavía. Piso determinista en core/stage.ts, el
+                               #      clasificador sólo puede SUBIRLA, el RPC app_set_conversation_stage nunca la baja; evento
+                               #      stage_changed; conversations.interest persiste el pick de 0058; vista stage_at_silence.
+                               #      Mismo release: el runner re-checa pausa humana y quiet hours al enviar, y un envío que
+                               #      GHL rechaza queda `failed` + delivery_error, no `sent`. Es la fase 1 del playbook de
+                               #      seguimientos por etapa — ver business-logic §4.4)
   clients.sql, seed-tenants.sql# seeds (run by `supabase db reset` per config.toml)
 sites/                         # client marketing sites: static HTML, no build step, no deps
   _template/                   # starting point for a new client

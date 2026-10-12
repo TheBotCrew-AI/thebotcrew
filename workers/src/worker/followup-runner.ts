@@ -23,6 +23,7 @@ import {
   getConversationPersona,
   getFollowUpStatus,
   getLatestDemoSession,
+  isBotSuppressed,
   loadDueFollowUps,
   loadSentAngleIndexes,
   logBotEvent,
@@ -41,6 +42,7 @@ import {
 import { parseAngleSelection, resolveAnglePool } from '../roles/reactivation/angle-select.js';
 import { buildAgentRequestContext } from '../core/runtime-context.js';
 import { toModelMessages } from '../core/model-messages.js';
+import { DEFAULT_QUIET_HOURS, isQuietNow } from '../core/active-hours.js';
 import { cadenceForRound, isFinalRound, REENTRY_KEYWORD, totalRounds, variantAllowsFollowUps } from '../core/reactivation-rounds.js';
 import type { AiProvider, Channel, TenantContext } from '../core/types.js';
 import { DEMO_REMINDER_CADENCE, DEMO_REMINDER_ROLE } from '../core/types.js';
@@ -93,7 +95,7 @@ async function deliverNudge(
   text: string,
   agentRole: string,
   model: string | null,
-): Promise<void> {
+): Promise<boolean> {
   let outboundMessageId: string | null = null;
   try {
     ({ messageId: outboundMessageId } = await logMessage({
@@ -132,7 +134,11 @@ async function deliverNudge(
       );
     }
   } catch (err) {
-    console.error('[followup] sendMessage failed:', err instanceof Error ? err.message : String(err));
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('[followup] sendMessage failed:', msg);
+    await logBotEvent(tenant.clientId, followUp.ghlConversationId, 'delivery_error', {
+      followUpId: followUp.followUpId, kind: followUp.kind, tier: followUp.tier, channel: followUp.channel, error: msg,
+    });
   }
 
   if (ghlMessageId && outboundMessageId) {
@@ -143,6 +149,7 @@ async function deliverNudge(
       console.error('[followup] markDelivered failed:', e instanceof Error ? e.message : String(e));
     });
   }
+  return ghlMessageId !== null;
 }
 
 /**
@@ -300,6 +307,26 @@ async function processOne(
     return abortFollowUp(followUp, tenant, 'lead_replied');
   }
 
+  // Send-time gates (0067). Both were only checked when the row was ARMED:
+  //  - a human who stepped into the thread after the arming (their reply cancels the
+  //    row, but a pause opened by a tag or a hand-off does not) — don't talk over them;
+  //  - a row armed before a quiet-hours config edit, or claimed late by a stalled cron,
+  //    fires inside the window — push it to the window's end instead of dropping it.
+  if (await isBotSuppressed(followUp.ghlConversationId)) {
+    return abortFollowUp(followUp, tenant, 'human_active');
+  }
+  if (isQuietNow(new Date(), tenant.config.timezone, tenant.config.quietHours ?? DEFAULT_QUIET_HOURS)) {
+    await cancelFollowUps(followUp.conversationId);
+    await scheduleFollowUp(
+      followUp.conversationId, position, 0,
+      tenant.config.timezone, tenant.config.quietHours, 'cadence', followUp.round,
+    );
+    await logBotEvent(tenant.clientId, followUp.ghlConversationId, 'followup_aborted', {
+      followUpId: followUp.followUpId, kind: followUp.kind, tier: followUp.tier, reason: 'quiet_hours', rescheduled: true,
+    });
+    return 'skip';
+  }
+
   // Help mode (0049): a lead holding an upcoming appointment is a customer, not a
   // pursuit target. GHL is always consulted when the store says no, because the
   // appointment this must catch is exactly the one our store can never see — the
@@ -435,8 +462,16 @@ async function processOne(
     return abortFollowUp(followUp, tenant, 'lead_replied');
   }
 
-  await deliverNudge(followUp, tenant, reply, REACTIVATION_ROLE, model);
-  await markFollowUpSent(followUp.followUpId, chosenAngleIndex);
+  // A send GHL refused (a closed FB/IG window, a dead contact) is recorded as `failed`,
+  // not `sent` — the row used to read as delivered either way, which is how 28–36% of
+  // FB/IG nudges went missing without a trace. The ladder still advances: the next
+  // rung's send is its own attempt, and a transient error must not end the cycle.
+  const delivered = await deliverNudge(followUp, tenant, reply, REACTIVATION_ROLE, model);
+  if (delivered) {
+    await markFollowUpSent(followUp.followUpId, chosenAngleIndex);
+  } else {
+    await markFollowUpFailed(followUp.followUpId);
+  }
 
   // Advance the cadence cycle: schedule the next attempt, or stop (standby) when the
   // cycle is exhausted with no reply — the "freno". The angle cursor persists across

@@ -88,6 +88,10 @@ beforeEach(() => {
   vi.mocked(q.setConversationAttribution).mockResolvedValue(undefined);
   vi.mocked(q.updateConversationContact).mockResolvedValue(undefined);
   vi.mocked(findUpcomingAppointment).mockResolvedValue(null);
+  // Stage (0067) defaults: a fresh conversation, nothing offered yet.
+  vi.mocked(q.setConversationStage).mockResolvedValue({ written: true, from: null });
+  vi.mocked(q.setConversationInterest).mockResolvedValue(undefined);
+  vi.mocked(q.hasBotEvent).mockResolvedValue(false);
   ghl.getContactPhone.mockResolvedValue(undefined);
   ghl.getContact.mockResolvedValue(undefined);
   ghl.updateContactName.mockResolvedValue(undefined);
@@ -2235,6 +2239,72 @@ describe('handleInboundWebhook — interest tags (0058)', () => {
     vi.mocked(q.loadTenantConfig).mockResolvedValue(withInterest());
     ghl.addContactTags.mockRejectedValueOnce(new Error('ghl down'));
     await expect(handleInboundWebhook(inbound, agentReplying('¿Primera vez?'))).resolves.not.toThrow();
+    expect(ghl.sendMessage).toHaveBeenCalled();
+  });
+});
+
+describe('handleInboundWebhook — lead stage, shadow mode (0067)', () => {
+  const msg = (senderType: 'lead' | 'bot', content: string) =>
+    ({ direction: senderType === 'lead' ? 'inbound' : 'outbound', senderType, content, sentAt: '' }) as const;
+  const classifierReturning = (json: string) =>
+    vi.fn().mockResolvedValue({ ok: true, json: async () => ({ choices: [{ message: { content: json } }] }) });
+
+  it('a PRECIO ghost answered with a question is NI, recorded with its reasons', async () => {
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(tenant({ triggerKeywords: ['PRECIO'] }));
+    vi.mocked(q.loadRecentMessages).mockResolvedValue([msg('lead', 'PRECIO')]);
+    await handleInboundWebhook({ ...inbound, body: 'PRECIO' }, agentReplying('¿Es tu primera vez con bótox?'));
+    expect(q.setConversationStage).toHaveBeenCalledWith('conv1', 'NI', 'rules');
+    expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'stage_changed', expect.objectContaining({ from: null, to: 'NI', source: 'rules' }));
+  });
+
+  it('a price in the reply makes it I; the stage question rides on the classifier call', async () => {
+    const fetchSpy = classifierReturning('{"status":"active","stage":"I"}');
+    vi.stubGlobal('fetch', fetchSpy);
+    vi.mocked(q.loadRecentMessages).mockResolvedValue([msg('lead', 'hola')]);
+    await handleInboundWebhook(inbound, agentReplying('El bótox está en $3,500 por zona.'));
+    const body = JSON.parse((fetchSpy.mock.calls[0]![1] as { body: string }).body) as { messages: { content: string }[] };
+    expect(body.messages[0]!.content).toContain('"stage"');
+    expect(q.setConversationStage).toHaveBeenCalledWith('conv1', 'I', 'rules');
+  });
+
+  it('the classifier can RAISE the floor ("sí quiero" with no slots → C), recorded as llm', async () => {
+    vi.stubGlobal('fetch', classifierReturning('{"status":"active","stage":"C"}'));
+    vi.mocked(q.loadRecentMessages).mockResolvedValue([msg('lead', 'hola'), msg('bot', 'Son $500.'), msg('lead', 'sí quiero, apúntame')]);
+    await handleInboundWebhook({ ...inbound, body: 'sí quiero, apúntame' }, agentReplying('Perfecto, te agendo.'));
+    expect(q.setConversationStage).toHaveBeenCalledWith('conv1', 'C', 'llm');
+  });
+
+  it('the classifier can never LOWER it: an engaged lead who saw slots stays C', async () => {
+    vi.stubGlobal('fetch', classifierReturning('{"status":"active","stage":"NI"}'));
+    vi.mocked(q.hasBotEvent).mockResolvedValue(true); // availability_checked on an earlier turn
+    vi.mocked(q.loadRecentMessages).mockResolvedValue([msg('lead', 'hola'), msg('bot', 'Mañana 10:00 o 12:00'), msg('lead', 'mejor el jueves')]);
+    await handleInboundWebhook({ ...inbound, body: 'mejor el jueves' }, agentReplying('Jueves listo.'));
+    expect(q.setConversationStage).toHaveBeenCalledWith('conv1', 'C', 'rules');
+  });
+
+  it('no event when the RPC did not write (the stage was already as high)', async () => {
+    vi.mocked(q.setConversationStage).mockResolvedValue({ written: false, from: 'A' });
+    await handleInboundWebhook(inbound, agentReplying());
+    expect(q.logBotEvent).not.toHaveBeenCalledWith('client1', 'conv1', 'stage_changed', expect.anything());
+  });
+
+  it('persists the interest pick on the row (0058 used to drop it)', async () => {
+    vi.stubGlobal('fetch', classifierReturning('{"status":"active","interest":"Botox","stage":"A"}'));
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(tenant({ config: { ...tenant().config, services: [{ name: 'Botox' }], interestTags: true } }));
+    await handleInboundWebhook(inbound, agentReplying('¿Primera vez con bótox?'));
+    expect(q.setConversationInterest).toHaveBeenCalledWith('conv1', 'Botox');
+  });
+
+  it('demo turns record nothing — the roleplay is not the lead', async () => {
+    vi.mocked(q.getConversationPersona).mockResolvedValue({ activeRole: 'demo', roleStartedAt: null, demoStartedAt: null, promptVariant: null, reactivationRound: 0, leadTimezone: null });
+    await handleInboundWebhook(inbound, agentReplying());
+    expect(q.setConversationStage).not.toHaveBeenCalled();
+  });
+
+  it('a stage write failure never blocks the reply', async () => {
+    vi.mocked(q.setConversationStage).mockRejectedValue(new Error('db down'));
+    const res = await handleInboundWebhook(inbound, agentReplying());
+    expect(res.status).toBe(200);
     expect(ghl.sendMessage).toHaveBeenCalled();
   });
 });

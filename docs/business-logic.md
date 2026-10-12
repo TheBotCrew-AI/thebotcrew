@@ -379,6 +379,54 @@ the tag stays manual). When a lead holds several upcoming citas, "their appointm
 the **soonest** one (`soonestUpcomingAppointment` collapses the append-only log: latest action
 per cita wins, then earliest start time) — both for the prompt and for lookup/reschedule/cancel.
 
+### 4.4 The lead's stage — NI / I / A / C (0067, shadow mode)
+
+How far a conversation got before the lead went quiet, read from the thread and stored on
+`conversations.stage` (+ `stage_source`, `stage_at`). It is the key the **follow-up playbook**
+(next release) will use to pick a ladder per lead instead of one flat angle pool for everyone.
+This release only computes and records it: **nothing the lead receives changes.**
+
+| Stage | Meaning | Deterministic floor (`core/stage.ts`) |
+|---|---|---|
+| `NI` | no information — only the ad's opener, never answered the bot | one lead message that is an ad keyword / ≤4 words, and no price in any bot message |
+| `I` | has the basics (price/offer), stopped there | the bot wrote a price (`$…`, `… pesos`), OR the lead wrote anything beyond the opener |
+| `A` | asked their own questions / told their case | engaged AND (a `?` in a lead message, `lookupFaq` ran, or the classifier named a service) |
+| `C` | saw slots or said they want it | engaged AND `getAvailability` ran (this turn or any earlier `availability_checked`) |
+
+Two rules make it safe to trust:
+
+- **The rules set the floor; the classifier can only raise it.** The status classifier (the aux
+  call that already runs — no extra call) is asked for a `stage` too, for the one signal with
+  no event: "sí quiero" with no slots offered yet. `raiseStage` ignores anything lower or
+  unparseable. Prompt: `stagePromptAddendum`.
+- **The DB only lets it rise** (`app_set_conversation_stage`, NULL < NI < I < A < C). The
+  floor is recomputed each turn from a 20-message window, so a late turn carries FEWER signals
+  than an early one; without this a C lead would fall back to I when the slots scrolled out.
+  A write logs `stage_changed {from, to, source, reasons}`; a no-op logs nothing.
+
+Why C needs engagement: the price→slots rule (2026-10-09) makes the bot offer slots on turn 1
+to a one-tap PRECIO opener. Slots the bot offered say nothing about the lead — C is about the
+lead's commitment, so the lead must have written something of their own.
+
+`interest` (0058) is now also persisted on the row (`conversations.interest`, last non-null),
+since the playbook's A-stage touch is "value about what THEY asked".
+
+Demo turns and the forced handover record nothing. Read the distribution with the
+`stage_at_silence` view (per tenant/channel/stage/status) — a `standby` row is a lead the
+current ladder lost at that stage.
+
+**Fixed in the same release (the runner's send-time gates):**
+- `isBotSuppressed` is re-checked right before generation → `followup_aborted {reason:'human_active'}`.
+  A human reply cancels the row, but a pause opened by a tag or hand-off did not, and the nudge
+  talked over the team.
+- Quiet hours are re-checked at send time → the row is cancelled and re-armed at the window's
+  end (`followup_aborted {reason:'quiet_hours', rescheduled:true}`) instead of firing at 3 a.m.
+  because it was armed before a config edit or claimed late by a stalled cron.
+- A send GHL refused now marks the row **`failed`** with a `delivery_error` event instead of
+  `sent` — the 28–36% of FB/IG nudges lost to Meta's 24-hour window used to look delivered.
+  The ladder still advances (the next rung is its own attempt). Demo reminders keep their
+  unconditional `sent` (the rung counter depends on it).
+
 ## 5. Availability & booking
 
 > **Opt-out per tenant:** `prompt_overrides.bookingEnabled = false` turns this entire

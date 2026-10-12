@@ -43,6 +43,9 @@ import {
   wasAnsweredByRun,
   isBotSuppressed,
   isHumanActive,
+  hasBotEvent,
+  setConversationInterest,
+  setConversationStage,
   isLatestInboundMessage,
   loadRecentMessages,
   logBotEvent,
@@ -73,6 +76,7 @@ import { describeImages } from '../core/describe-image.js';
 import { phoneFromFormText } from '../core/form-phone.js';
 import { demoEndTag, interestTag, STATUS_TAGS } from '../ghl/tags.js';
 import { interestPromptAddendum, matchInterest, serviceNames } from '../core/interest.js';
+import { raiseStage, stageFloor, stagePromptAddendum, type LeadStage } from '../core/stage.js';
 import type { GhlInboundWebhook, InboundAttachment, ParsedInbound } from '../ghl/types.js';
 import { DEFAULT_MODEL, DEFAULT_PROVIDER, FRONT_DESK_ROLE } from '../roles/front-desk/index.js';
 import { buildDemoEndAnnouncement, buildDemoStartAnnouncement } from '../roles/front-desk/prompt.js';
@@ -235,7 +239,7 @@ function typingDelayMs(text: string): number {
 
 // `services` is passed ONLY for tenants with interest tags on (0058): the prompt every
 // other tenant sends stays byte-identical to what it was before that feature.
-const CLASSIFY_PROMPT = (leadMessage: string, botReply: string, services?: string[]) =>
+const CLASSIFY_PROMPT = (leadMessage: string, botReply: string, services?: string[], withStage = false) =>
   `Clasifica el estado de esta conversación de ventas tras el último intercambio.
 
 Lead dijo: "${leadMessage.slice(0, 200)}"
@@ -247,7 +251,7 @@ Elige UNO:
 - opted_out: el lead dijo EXPLÍCITAMENTE que no quiere más mensajes, que pare, que no le interesa, o pidió que no lo contacten. Requiere una expresión directa de rechazo, no solo no calificar.
 - completed: el lead completó el proceso (agendó, se registró, pagó).
 
-Responde SOLO con JSON: {"status":"active"} o {"status":"standby"} o {"status":"opted_out"} o {"status":"completed"}. Sin explicaciones.${services?.length ? interestPromptAddendum(services) : ''}`;
+Responde SOLO con JSON: {"status":"active"} o {"status":"standby"} o {"status":"opted_out"} o {"status":"completed"}. Sin explicaciones.${services?.length ? interestPromptAddendum(services) : ''}${withStage ? stagePromptAddendum() : ''}`;
 
 const VALID_STATUSES = new Set(['active', 'standby', 'opted_out', 'completed']);
 
@@ -256,8 +260,10 @@ const VALID_STATUSES = new Set(['active', 'standby', 'opted_out', 'completed']);
 interface ClassifyResult {
   status: Exclude<ConversationStatus, 'active' | 'handed_off'> | null;
   interest: string | null;
+  /** The classifier's read of the lead's stage (0067), raw — only ever RAISES the rules' floor. */
+  stage: unknown;
 }
-const NO_CLASSIFY: ClassifyResult = { status: null, interest: null };
+const NO_CLASSIFY: ClassifyResult = { status: null, interest: null, stage: null };
 
 /**
  * Provider, model and key for this tenant's model calls. The tenant's own key when it
@@ -296,11 +302,13 @@ async function classifyConversationOutcome(
   botReply: string,
   llm: AuxLlmCall,
   services?: string[],
+  withStage = false,
 ): Promise<ClassifyResult> {
   const wantStatus = !botReply.includes('?'); // has a question → still active
   const wantInterest = !!services?.length;
   if (!wantStatus && !wantInterest) return NO_CLASSIFY;
-  const prompt = CLASSIFY_PROMPT(leadMessage, botReply, wantInterest ? services : undefined);
+  // The stage question (0067) rides on a call that already runs — it never adds one.
+  const prompt = CLASSIFY_PROMPT(leadMessage, botReply, wantInterest ? services : undefined, withStage);
 
   try {
     let raw: string;
@@ -342,17 +350,59 @@ async function classifyConversationOutcome(
       raw = data.choices[0]?.message?.content ?? '';
     }
 
-    const parsed = JSON.parse(raw) as { status?: string; interest?: unknown };
+    const parsed = JSON.parse(raw) as { status?: string; interest?: unknown; stage?: unknown };
     // Only a CONFIGURED service name gets through — the model picks from a closed list.
     const interest = wantInterest ? matchInterest(services!, parsed.interest) : null;
+    const stage = withStage ? parsed.stage ?? null : null;
     const status = parsed.status;
     if (!wantStatus || !status || !VALID_STATUSES.has(status) || status === 'active') {
-      return { status: null, interest };
+      return { status: null, interest, stage };
     }
-    return { status: status as Exclude<ConversationStatus, 'active' | 'handed_off'>, interest };
+    return { status: status as Exclude<ConversationStatus, 'active' | 'handed_off'>, interest, stage };
   } catch (err) {
     console.error('[classify] failed:', err instanceof Error ? err.message : String(err));
     return NO_CLASSIFY; // fail safe: never block the main flow
+  }
+}
+
+/**
+ * Compute + persist the lead's stage (0067). `slotsOffered` is widened with the
+ * conversation's own `availability_checked` history, so a lead who engages AFTER the
+ * slots were offered still reads as C. Errors are logged, never thrown.
+ */
+async function recordLeadStage(args: {
+  tenant: TenantContext;
+  parsed: ParsedInbound;
+  conversationId: string;
+  history: ConversationMessage[];
+  reply: string;
+  slotsOffered: boolean;
+  askedSomething: boolean;
+  llmStage: unknown;
+  interest: string | null;
+}): Promise<void> {
+  const { tenant, parsed } = args;
+  try {
+    if (args.interest) await setConversationInterest(parsed.conversationId, args.interest);
+    const slotsOffered = args.slotsOffered || (await hasBotEvent(args.conversationId, 'availability_checked'));
+    const floor = stageFloor({
+      history: args.history,
+      reply: args.reply,
+      openerKeywords: [...(tenant.triggerKeywords ?? []), ...Object.keys(tenant.keywordVariants ?? {})],
+      slotsOffered,
+      askedSomething: args.askedSomething,
+    });
+    const stage: LeadStage = raiseStage(floor.stage, args.llmStage);
+    const source = stage === floor.stage ? 'rules' : 'llm';
+    const res = await setConversationStage(parsed.conversationId, stage, source);
+    console.log(`[stage] conv=${parsed.conversationId} floor=${floor.stage} stage=${stage} source=${source} written=${res.written}`);
+    if (res.written) {
+      await logBotEvent(tenant.clientId, parsed.conversationId, 'stage_changed', {
+        from: res.from, to: stage, source, reasons: floor.reasons,
+      });
+    }
+  } catch (e) {
+    console.error('[stage] failed (non-blocking):', e instanceof Error ? e.message : String(e));
   }
 }
 
@@ -996,6 +1046,9 @@ export async function runAgentTurn({
   let reply: string;
   // Whether the agent closed the conversation itself this turn (see the classifier below).
   let agentSetStatus = false;
+  // Stage signals (0067): which read tools ran this turn.
+  let offeredSlotsThisTurn = false;
+  let lookedUpFaqThisTurn = false;
   // Whether this reply can be dropped for a newer one: model-written, and nothing but reads
   // behind it (see the newer-inbound guard below).
   let replyIsDisposable = false;
@@ -1025,6 +1078,8 @@ export async function runAgentTurn({
     console.log(`[agent] reply conv=${parsed.conversationId} replyLen=${result.text?.length ?? 0}`);
     agentSetStatus = calledTool(result, 'updateConversationStatus');
     replyIsDisposable = [...calledToolNames(result)].every((name) => READ_ONLY_TOOLS.has(name));
+    offeredSlotsThisTurn = calledTool(result, 'getAvailability');
+    lookedUpFaqThisTurn = calledTool(result, 'lookupFaq');
     // The agent turn is the bulk of the spend — record it before any of the
     // early-return paths below (human takeover, etc.) can skip it. The tokens were
     // burned whether or not we end up sending the reply.
@@ -1176,7 +1231,7 @@ export async function runAgentTurn({
   if (agentSetStatus) console.log(`[classify] status skipped: the agent set it conv=${parsed.conversationId}`);
   const classified = activeRole === 'demo' || forcedReply || endedByBooking || (agentSetStatus && !interestServices)
     ? NO_CLASSIFY
-    : await classifyConversationOutcome(parsed.text, reply, aux, interestServices);
+    : await classifyConversationOutcome(parsed.text, reply, aux, interestServices, true);
   const outcome = agentSetStatus ? undefined : classified.status;
   console.log(`[classify] outcome=${outcome ?? 'null (active or error)'} interest=${classified.interest ?? 'null'}`);
   if (classified.interest) {
@@ -1226,6 +1281,19 @@ export async function runAgentTurn({
     } catch (e) {
       console.error('[conv] updateConversationStatus failed:', e instanceof Error ? e.message : String(e));
     }
+  }
+
+  // The lead's stage (0067), shadow mode: computed and recorded on every real turn,
+  // read by nothing yet. The rules set the floor; the classifier's word can only raise
+  // it; the RPC keeps it from ever falling. Never blocks the reply.
+  if (activeRole !== 'demo' && !forcedReply) {
+    await recordLeadStage({
+      tenant, parsed, conversationId, history, reply,
+      slotsOffered: offeredSlotsThisTurn,
+      askedSomething: lookedUpFaqThisTurn || !!classified.interest,
+      llmStage: classified.stage,
+      interest: classified.interest,
+    });
   }
 
   // Split into separate messages on paragraph breaks; send each with a short

@@ -78,3 +78,8 @@ export function clampToActiveHours(
 
   return zonedWallToUtc(resume.getUTCFullYear(), resume.getUTCMonth() + 1, resume.getUTCDate(), quiet.end, timeZone);
 }
+
+/** True when `instant` falls inside the tenant's quiet window — the send-time check. */
+export function isQuietNow(instant: Date, timeZone: string, quiet: QuietHours = DEFAULT_QUIET_HOURS): boolean {
+  return inQuietWindow(localHour(instant, timeZone), quiet);
+}

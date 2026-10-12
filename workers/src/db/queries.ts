@@ -537,6 +537,49 @@ export async function setLeadTimezone(
   return data === true;
 }
 
+/**
+ * The lead's stage (0067, app_set_conversation_stage). The RPC only writes a HIGHER
+ * stage (NULL < NI < I < A < C), so a turn with fewer signals can't demote a lead.
+ * Returns whether it wrote and the stage it replaced.
+ */
+export async function setConversationStage(
+  ghlConversationId: string,
+  stage: 'NI' | 'I' | 'A' | 'C',
+  source: 'rules' | 'llm',
+): Promise<{ written: boolean; from: string | null }> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase.rpc('app_set_conversation_stage', {
+    p_ghl_conversation_id: ghlConversationId,
+    p_stage: stage,
+    p_source: source,
+  });
+  fail('setConversationStage', error);
+  const row = (data ?? {}) as { written?: boolean; from?: string | null };
+  return { written: row.written === true, from: row.from ?? null };
+}
+
+/** Persist the classifier's interest pick on the conversation (0067); last non-null wins. */
+export async function setConversationInterest(ghlConversationId: string, interest: string): Promise<void> {
+  const supabase = getSupabase();
+  const { error } = await supabase.rpc('app_set_conversation_interest', {
+    p_ghl_conversation_id: ghlConversationId,
+    p_interest: interest,
+  });
+  fail('setConversationInterest', error);
+}
+
+/** Whether a bot event of this type was ever logged on the conversation (internal uuid). */
+export async function hasBotEvent(conversationId: string, eventType: BotEventType): Promise<boolean> {
+  const supabase = getSupabase();
+  const { count, error } = await supabase
+    .from('bot_events')
+    .select('id', { count: 'exact', head: true })
+    .eq('conversation_id', conversationId)
+    .eq('event_type', eventType);
+  fail('hasBotEvent', error);
+  return (count ?? 0) > 0;
+}
+
 /** Persist a corrected GHL contact id on a conversation (after a merge re-resolve on send). */
 export async function updateConversationContact(ghlConversationId: string, ghlContactId: string): Promise<void> {
   const supabase = getSupabase();
