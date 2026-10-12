@@ -42,6 +42,12 @@ const SCOPES = [
   'contacts.readonly',
   // Required to write the `bot-off` / status tags back onto the GHL contact.
   'contacts.write',
+  // Media library (fase 3 del playbook, 2026-10-12): POST /medias/upload-file + GET /medias/files.
+  // A WhatsApp attachment sent as an external URL was accepted (201, "delivered") but never
+  // reached the phone — Twilio fetches the file and drops it silently — so the file has to be
+  // uploaded to GHL first and sent by ITS URL. Adding a scope means tenants re-authorize.
+  'medias.write',
+  'medias.readonly',
 ].join(' ');
 
 export interface GhlTokenResponse {
