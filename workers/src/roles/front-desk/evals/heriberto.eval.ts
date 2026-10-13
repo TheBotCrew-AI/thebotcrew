@@ -318,8 +318,8 @@ const CONSULTA_500_SWAPS: Array<[string, string]> = [
   ],
   ['¿Cuánto cuesta la valoración?', '¿La valoración es gratis?'],
   [
-    ' Precio normal: $4,500 por sesión; precio especial: $3,500 por sesión en todo el tratamiento si lo inicia dentro de los 14 días siguientes a su evaluación médica ($500, que se descuenta de la primera sesión).',
-    ' $4,500 por sesión, o $3,500 por sesión si asiste a su primera sesión dentro de los 14 días siguientes a su evaluación médica de láser ($500).',
+    'Segunda burbuja: que su evaluación con el Dr. Valdivia es sin costo y ahí el doctor define cuántas sesiones necesita, seguido de los dos horarios',
+    'Segunda burbuja: que su evaluación con el Dr. Valdivia cuesta $500 y se le descuenta de la primera sesión, y que ahí el doctor define cuántas sesiones necesita, seguido de los dos horarios',
   ],
   [
     'El precio normal del láser es de $4,500 por sesión. Si inicia su tratamiento dentro de los 14 días siguientes a su evaluación, aplica el precio especial de $3,500 por sesión en todo su tratamiento. La evaluación con el Dr. Valdivia cuesta $500 y se descuenta de su primera sesión. El número de sesiones lo define el Dr. Valdivia en la evaluación.',
