@@ -582,10 +582,15 @@ slots. Rules (also reinforced in the front-desk prompt):
   dates like "next week"). Enforced in the front-desk prompt (§ Disponibilidad).
 - **Booking horizon (deterministic, per-tenant):** `tenant_config.booking_horizon_days` (int,
   NULL = no cap) is enforced in the tool via the pure `resolveBookingWindow`
-  (`tools/booking-window.ts`): the requested range is clamped to `now + N days`, and a range
-  starting entirely beyond it returns an `out_of_horizon` note the agent relays to the lead.
-  This does **not** rely on the model — the tool never even queries GHL past the horizon. The
-  horizon date is also **surfaced in the prompt** (`# Fecha y hora actuales`, pre-computed — no
+  (`tools/booking-window.ts`): the requested range is clamped to the **end of the tenant's local
+  day today + N** (`latestBookableMs`), and a range starting entirely beyond it returns an
+  `out_of_horizon` note the agent relays to the lead. A calendar-day cap, not `now + N × 24 h`:
+  until 2026-10-13 the last day ended at the minute the lead wrote, so the prompt said "hasta el
+  martes 20" while every Tuesday-afternoon slot was outside the window — the tool got an empty
+  list and the model told the lead (Heriberto, Perla, FB) "el martes 20 ya quedó completo".
+  bookAppointment / rescheduleAppointment enforce the same bound. This does **not** rely on the
+  model — the tool never even queries GHL past the horizon. The last bookable day is also
+  **surfaced in the prompt** (`# Fecha y hora actuales`, pre-computed in the tenant's clock — no
   model date math), so the agent sets expectations up front instead of silently offering
   near-term slots when a lead asks for a later date.
 - **Minimum notice (deterministic, per-tenant, 0059):** `tenant_config.booking_min_notice_days`

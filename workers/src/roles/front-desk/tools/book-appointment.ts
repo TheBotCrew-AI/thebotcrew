@@ -15,13 +15,11 @@ import { resolveAgentContext } from './agent-context.js';
 import { buildAppointmentTitle } from './appointment-title.js';
 import { earliestPayableStartMs, openBookingHold, payableNoticeLabel, type HoldOpened } from './booking-hold.js';
 import { bookingQueryWindow, resolveBookableSlot } from './booking-time.js';
-import { earliestBookableMs } from './booking-window.js';
+import { earliestBookableMs, latestBookableMs } from './booking-window.js';
 import { isPrimeSlot, isRestrictedService } from './prime-time.js';
 import { simSlotLabel, simulatedSlots } from './demo-sim.js';
 import { slotLabel } from './slot-label.js';
 import { normalizeLeadPhone, phoneRefusalNote } from '../../../core/phone.js';
-
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 export const bookAppointmentTool = createTool({
   id: 'bookAppointment',
@@ -262,10 +260,11 @@ export const bookAppointmentTool = createTool({
       };
     }
 
-    // Deterministic booking horizon (business rule, per-tenant): never book past now + horizon,
+    // Deterministic booking horizon (business rule, per-tenant): never book past the end of the local day today + horizon,
     // even if GHL still offers the slot. Mirrors the clamp in getAvailability.
     const horizon = config.bookingHorizonDays ?? null;
-    if (horizon != null && Date.parse(canonicalStart) > now + horizon * DAY_MS) {
+    const horizonEndMs = latestBookableMs(now, horizon, config.timezone);
+    if (horizon != null && horizonEndMs != null && Date.parse(canonicalStart) >= horizonEndMs) {
       await logBotEvent(tenant.clientId, turn.ghlConversationId, 'booking_failed', {
         serviceName,
         calendarId,

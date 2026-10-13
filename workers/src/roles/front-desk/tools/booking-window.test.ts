@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { earliestBookableMs, resolveBookingWindow, SEVEN_DAYS_MS } from './booking-window.js';
+import { earliestBookableMs, latestBookableMs, resolveBookingWindow, SEVEN_DAYS_MS } from './booking-window.js';
 
 const NOW = Date.parse('2026-07-01T00:00:00Z');
 const DAY = 24 * 60 * 60 * 1000;
@@ -32,23 +32,23 @@ describe('resolveBookingWindow', () => {
     expect(w.toMs).toBe(NOW + SEVEN_DAYS_MS);
   });
 
-  it('clamps `to` down to the horizon and flags it', () => {
+  it('clamps `to` down to the horizon (end of the last day) and flags it', () => {
     const w = resolveBookingWindow(NOW, undefined, '2026-07-10T00:00:00Z', 3);
-    expect(w.toMs).toBe(NOW + 3 * DAY);
+    expect(w.toMs).toBe(Date.parse('2026-07-05T00:00:00Z'));
     expect(w.clamped).toBe(true);
     expect(w.outOfHorizon).toBe(false);
   });
 
   it('clamps the default +7d window to the horizon', () => {
     const w = resolveBookingWindow(NOW, undefined, undefined, 3);
-    expect(w.toMs).toBe(NOW + 3 * DAY);
+    expect(w.toMs).toBe(Date.parse('2026-07-05T00:00:00Z'));
     expect(w.clamped).toBe(true);
   });
 
   it('flags outOfHorizon when the whole range starts past the horizon', () => {
     const w = resolveBookingWindow(NOW, '2026-07-06T00:00:00Z', '2026-07-08T00:00:00Z', 3);
     expect(w.outOfHorizon).toBe(true);
-    expect(w.maxMs).toBe(NOW + 3 * DAY);
+    expect(w.maxMs).toBe(Date.parse('2026-07-05T00:00:00Z'));
   });
 
   it('leaves a range fully within the horizon untouched', () => {
@@ -145,7 +145,7 @@ describe('resolveBookingWindow — minimum notice (0059)', () => {
   it('composes with the horizon: floor on the near side, cap on the far side', () => {
     const w = resolveBookingWindow(NOW, undefined, undefined, 3, CDMX, 1);
     expect(w.fromMs).toBe(TOMORROW_MIDNIGHT);
-    expect(w.toMs).toBe(NOW + 3 * DAY);
+    expect(w.toMs).toBe(Date.parse('2026-09-06T06:00:00Z')); // end of Saturday CDMX
     expect(w.clamped).toBe(true);
   });
 
@@ -170,5 +170,43 @@ describe('resolveBookingWindow — minimum notice (0059)', () => {
     expect(w.fromMs).toBe(NOW);
     expect(w.minMs).toBeNull();
     expect(w.liftedFrom).toBe(false);
+  });
+});
+
+// The horizon is a calendar-day cap, the far-side twin of the minimum notice. Measured as
+// now + N × 24 h it ended the last day at the minute the lead wrote: a clinic open from
+// 3:45 p.m. had no slot left on "el martes 20" for a lead writing at 11:33 a.m., and the
+// model told her Tuesday was full.
+describe('resolveBookingWindow — horizon ends at the end of the local day', () => {
+  const CHIH = 'America/Chihuahua'; // UTC-6, no DST
+  const NOW = Date.parse('2026-10-13T17:36:00Z'); // Tue 11:36 Chihuahua
+  const END_OF_TUE_20 = Date.parse('2026-10-21T06:00:00Z'); // Wed 21 00:00 Chihuahua
+
+  it('latestBookableMs: 7 days = local midnight closing day +7, not now + 7 × 24 h', () => {
+    expect(latestBookableMs(NOW, 7, CHIH)).toBe(END_OF_TUE_20);
+    expect(latestBookableMs(NOW, 7, CHIH)).not.toBe(NOW + 7 * DAY);
+  });
+
+  it('latestBookableMs: null → no cap; 0 → end of today', () => {
+    expect(latestBookableMs(NOW, null, CHIH)).toBeNull();
+    expect(latestBookableMs(NOW, 0, CHIH)).toBe(Date.parse('2026-10-14T06:00:00Z'));
+  });
+
+  it('latestBookableMs: the local day is what counts, even late at night', () => {
+    // 23:30 Tue Chihuahua is already Wednesday in UTC — the cap must still close Tue 20.
+    expect(latestBookableMs(Date.parse('2026-10-14T05:30:00Z'), 7, CHIH)).toBe(END_OF_TUE_20);
+  });
+
+  it("the last day's afternoon is inside the window (the Perla case)", () => {
+    // The model asks for Tuesday 20; its 3:45 p.m. slot must be in the queried range.
+    const w = resolveBookingWindow(NOW, '2026-10-20T00:00:00', '2026-10-20T23:59:00', 7, CHIH);
+    expect(w.outOfHorizon).toBe(false);
+    expect(w.clamped).toBe(false);
+    expect(w.toMs).toBeGreaterThan(Date.parse('2026-10-20T15:45:00-06:00'));
+  });
+
+  it('the day after the last one is out of the horizon', () => {
+    const w = resolveBookingWindow(NOW, '2026-10-21T00:00:00', '2026-10-21T23:59:00', 7, CHIH);
+    expect(w.outOfHorizon).toBe(true);
   });
 });

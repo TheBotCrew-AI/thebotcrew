@@ -82,7 +82,7 @@ export const getAvailabilityTool = createTool({
     const label = (iso: string): string => slotLabel(iso, frameTz, config.timezone);
 
     // Deterministic booking horizon (business rule, per-tenant): the tool never looks
-    // past now + bookingHorizonDays. Does NOT rely on the model behaving — the range is
+    // past the end of the local day today + bookingHorizonDays. Does NOT rely on the model behaving — the range is
     // clamped here, or (if it starts entirely beyond the horizon) we return that fact so
     // the agent redirects the lead to the valid window.
     const horizon = config.bookingHorizonDays ?? null;
@@ -133,8 +133,12 @@ export const getAvailabilityTool = createTool({
       };
     }
 
+    // The horizon ends at midnight AFTER the last bookable day: name that day, not the instant.
+    const lastDayLabel = (maxMs: number): string =>
+      new Intl.DateTimeFormat('es-MX', { timeZone: frameTz, weekday: 'long', day: 'numeric', month: 'long' }).format(new Date(maxMs - 1));
+
     if (window.outOfHorizon && window.maxMs != null) {
-      const maxLabel = label(new Date(window.maxMs).toISOString());
+      const maxLabel = lastDayLabel(window.maxMs);
       await logBotEvent(tenant.clientId, turn.ghlConversationId, 'availability_checked', {
         serviceName,
         calendarId,
@@ -146,7 +150,7 @@ export const getAvailabilityTool = createTool({
       return {
         slots: [],
         note:
-          `Solo se pueden agendar horarios dentro de los próximos ${horizon} días (hasta ${maxLabel}). ` +
+          `Solo se pueden agendar horarios dentro de los próximos ${horizon} días (hasta el ${maxLabel}). ` +
           'El rango que pediste queda fuera de esa ventana; dile al lead esa limitación y ofrécele un horario dentro de ella.',
       };
     }
@@ -181,7 +185,7 @@ export const getAvailabilityTool = createTool({
 
     const horizonNote =
       window.clamped && window.maxMs != null
-        ? ` IMPORTANTE: el rango pedido excede la ventana de agendado. Solo hay cupo hasta ${label(new Date(window.maxMs).toISOString())} (próximos ${horizon} días). Si el lead pidió una fecha posterior, díselo explícitamente y ofrécele ÚNICAMENTE estos horarios.`
+        ? ` IMPORTANTE: el rango pedido excede la ventana de agendado. Solo hay cupo hasta el ${lastDayLabel(window.maxMs)} (próximos ${horizon} días). Si el lead pidió una fecha posterior, díselo explícitamente y ofrécele ÚNICAMENTE estos horarios.`
         : undefined;
     const noticeNote =
       window.liftedFrom && window.minMs != null

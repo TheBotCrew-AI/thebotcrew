@@ -64,6 +64,15 @@ describe('buildFrontDeskInstructions', () => {
     expect(out).toContain('Solo puedes agendar dentro de los próximos 7 días');
   });
 
+  it("booking horizon → names the last day in the tenant's clock, the same cap the tools enforce", () => {
+    // 23:30 Tue Oct 13 in Chihuahua is already Wednesday in UTC: the line must still say Tuesday 20.
+    const out = buildFrontDeskInstructions(
+      cfg({ bookingHorizonDays: 7, timezone: 'America/Chihuahua' }),
+      '2026-10-14T05:30:00Z',
+    );
+    expect(out).toContain('hasta el martes, 20 de octubre');
+  });
+
   // The horizon is OUR cap and the demo branch of getAvailability never applies it: the
   // simulator's own window bounds a demo. Left in, the line states a limit in our calendar's
   // terms — a 3-day cap can name a Sunday the roleplayed business has closed.

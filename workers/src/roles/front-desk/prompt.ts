@@ -11,7 +11,7 @@ import { HUMAN_REPLY_PREFIX, PHOTO_DESCRIPTION_PREFIX } from '../../core/model-m
 import type { DemoHandoff } from '../../core/types.js';
 import { frameTimeZone, zoneLabel, zoneSuffix } from '../../core/lead-timezone.js';
 import { zonedWallClockToMs } from './tools/booking-time.js';
-import { earliestBookableMs } from './tools/booking-window.js';
+import { earliestBookableMs, latestBookableMs } from './tools/booking-window.js';
 import { openDaysEs, openWeekdays, WEEKDAY_LABEL } from './tools/open-days.js';
 import { primeWindowsEs } from './tools/prime-time.js';
 import { slotLabel } from './tools/slot-label.js';
@@ -380,8 +380,11 @@ Hay ${config.faq.length} respuestas oficiales cargadas y NO están en este promp
   if (config.bookingHorizonDays != null && bookingEnabled && !usingDemo) {
     let maxReadable = '';
     try {
-      const maxDate = new Date(new Date(nowIso).getTime() + config.bookingHorizonDays * 24 * 60 * 60 * 1000);
-      maxReadable = new Intl.DateTimeFormat('es-MX', { weekday: 'long', day: 'numeric', month: 'long' }).format(maxDate);
+      // The same calendar-day cap the tools enforce: the named day is bookable all day long.
+      const endMs = latestBookableMs(new Date(nowIso).getTime(), config.bookingHorizonDays, config.timezone);
+      if (endMs != null) {
+        maxReadable = new Intl.DateTimeFormat('es-MX', { weekday: 'long', day: 'numeric', month: 'long', timeZone: config.timezone }).format(new Date(endMs - 1));
+      }
     } catch {
       /* fall back to the day count without a date */
     }

@@ -18,14 +18,12 @@ import { CHECKOUT_MIN_EXPIRY_MS } from '../../../payments/stripe.js';
 import { holdReminderAt } from '../../../payments/hold-reminder.js';
 import { resolveActiveAppointment } from './resolve-appointment.js';
 import { bookingQueryWindow, resolveBookableSlot } from './booking-time.js';
-import { earliestBookableMs } from './booking-window.js';
+import { earliestBookableMs, latestBookableMs } from './booking-window.js';
 import { isPrimeSlot, isRestrictedService } from './prime-time.js';
 import { simSlotLabel, simulatedSlots } from './demo-sim.js';
 import { slotLabel } from './slot-label.js';
 
 const HOUR_MS = 60 * 60 * 1000;
-
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 export const rescheduleAppointmentTool = createTool({
   id: 'rescheduleAppointment',
@@ -172,7 +170,8 @@ export const rescheduleAppointmentTool = createTool({
 
     // Horizon is enforced on the RESOLVED instant, not the model's string (same as booking).
     const horizon = config.bookingHorizonDays ?? null;
-    if (horizon != null && Date.parse(canonicalStart) > now + horizon * DAY_MS) {
+    const horizonEndMs = latestBookableMs(now, horizon, config.timezone);
+    if (horizon != null && horizonEndMs != null && Date.parse(canonicalStart) >= horizonEndMs) {
       await logBotEvent(tenant.clientId, turn.ghlConversationId, 'booking_failed', {
         stage: 'reschedule',
         serviceName,

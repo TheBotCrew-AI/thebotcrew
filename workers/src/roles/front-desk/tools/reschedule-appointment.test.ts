@@ -82,6 +82,23 @@ describe('rescheduleAppointment', () => {
       expect.objectContaining({ reason: 'out_of_horizon' }));
   });
 
+  // The horizon is a calendar-day cap: "hasta el martes" is all of Tuesday. Measured as
+  // now + 7 × 24 h it ended Tuesday at the minute the lead wrote, so Tuesday's afternoon
+  // slots were refused and the model told the lead the day was full.
+  it('a slot on the last horizon day, later in the day than now → accepted', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-13T17:33:00Z')); // Tue 11:33 CDMX
+    try {
+      const lastDay = '2026-10-20T15:45:00-06:00'; // Tue +7, 3:45 p.m.
+      ghl.getAvailability.mockResolvedValue([{ start: lastDay, end: lastDay }]);
+      const res = await run(lastDay, makeCtx(7));
+      expect(res.rescheduled).toBe(true);
+      expect(ghl.rescheduleAppointment).toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('requested time is not a real free slot → rejected', async () => {
     ghl.getAvailability.mockResolvedValue([{ start: inDays(5), end: inDays(5) }]); // different time
     const res = await run(START);

@@ -6,8 +6,8 @@
  * - Clamps `from` up to the minimum notice (the near-side business rule): with
  *   `minNoticeDays = 1` nothing before local midnight of tomorrow is ever queried, so
  *   the bot cannot offer a same-day slot no matter what the model asks for.
- * - Clamps `to` to `now + horizonDays` (the far-side business rule), so the tool never
- *   even asks GHL for slots past the horizon.
+ * - Clamps `to` to the end of the tenant's local day `today + horizonDays` (the far-side
+ *   business rule), so the tool never even asks GHL for slots past the horizon.
  * - Flags `tooSoon` when the whole requested range ends before the minimum notice, and
  *   `outOfHorizon` when it starts past the horizon, so the tool can tell the agent to
  *   redirect the lead instead of querying.
@@ -16,14 +16,13 @@
 import { requestedInstantMs, slotWallKey, zonedWallClockToMs } from './booking-time.js';
 
 export const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 export interface BookingWindow {
   fromMs: number;
   toMs: number;
   /** True when the requested start is already past the horizon → nothing to offer. */
   outOfHorizon: boolean;
-  /** Horizon boundary in ms, or null when the tenant has no cap. */
+  /** Horizon boundary in ms (exclusive: local midnight after the last bookable day), or null when the tenant has no cap. */
   maxMs: number | null;
   /** True when `to` was clamped down to the horizon. */
   clamped: boolean;
@@ -56,6 +55,24 @@ export function earliestBookableMs(now: number, minNoticeDays: number | null | u
   }
   // Date.UTC normalises day overflow (Sept 31 → Oct 1), so month ends need no special case.
   return zonedWallClockToMs(+m[1]!, +m[2]!, +m[3]! + minNoticeDays, 0, 0, timeZone);
+}
+
+/**
+ * The end of the booking horizon: local midnight, in `timeZone`, that closes the day
+ * today + `horizonDays` — an exclusive bound. A calendar-day cap, not `now + N × 24 h`:
+ * "hasta el martes" must mean all of Tuesday, not Tuesday up to the minute the lead
+ * happened to write, which hid every afternoon slot of the last day and left the model
+ * calling an open day "lleno". null when the tenant has no cap.
+ */
+export function latestBookableMs(now: number, horizonDays: number | null | undefined, timeZone: string): number | null {
+  if (horizonDays == null) return null;
+  const key = slotWallKey(new Date(now).toISOString(), timeZone);
+  const m = key ? /^(\d{4})-(\d{2})-(\d{2})T/.exec(key) : null;
+  if (!m) {
+    const d = new Date(now);
+    return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + horizonDays + 1);
+  }
+  return zonedWallClockToMs(+m[1]!, +m[2]!, +m[3]! + horizonDays + 1, 0, 0, timeZone);
 }
 
 export function resolveBookingWindow(
@@ -101,12 +118,12 @@ export function resolveBookingWindow(
   if (Number.isNaN(toMs)) toMs = fromMs + SEVEN_DAYS_MS;
 
   const base = { fromMs, toMs, tooSoon, minMs, liftedFrom, tooSoonToPay, liftedForPay };
-  if (horizonDays == null) {
+  const maxMs = latestBookableMs(now, horizonDays, timeZone);
+  if (maxMs == null) {
     return { ...base, outOfHorizon: false, maxMs: null, clamped: false };
   }
 
-  const maxMs = now + horizonDays * DAY_MS;
-  if (fromMs > maxMs) {
+  if (fromMs >= maxMs) {
     return { ...base, outOfHorizon: true, maxMs, clamped: false };
   }
   if (toMs > maxMs) {
