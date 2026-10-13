@@ -151,7 +151,7 @@ The agent runtime is a pnpm workspace package in `workers/` (the monorepo also h
 workers/                       # Mastra + Cloudflare Worker package (@thebotcrew/workers)
   src/
     mastra/index.ts            # Mastra instance: agents + GHL webhook route + CloudflareDeployer
-    core/                      # role interface + registry, tenant resolver, request-context, env (incl. per-tenant AI key resolution), llm-usage (token normalization), prompt-rules (wording bans shared by every role — see business-logic §6c — and VOICE_RULE, the voice every role speaks in, §6d), transcribe + describe-image (a lead's voice note / photo → text at ingest, business-logic §7), types
+    core/                      # role interface + registry, tenant resolver, request-context, env (incl. per-tenant AI key resolution), llm-usage (token normalization), followup-playbook + media-assets (0068/0069: the per-stage ladder and the files a touch delivers), prompt-rules (wording bans shared by every role — see business-logic §6c — and VOICE_RULE, the voice every role speaks in, §6d), transcribe + describe-image (a lead's voice note / photo → text at ingest, business-logic §7), types
     roles/
       front-desk/              # config (zod), prompt (es template), agent, tools/, evals/
       reactivation/            # text-only follow-up/reactivation agent (no tools)
@@ -331,7 +331,13 @@ supabase/
                                #      follow_ups.stage sella la etapa al armar; follow_ups.angle_pool hace el cursor de ángulos
                                #      por pool. app_schedule_follow_up pasa a 6 args (se DROPEA la de 5, como en 0063),
                                #      app_mark_follow_up_sent gana p_angle_pool. follow_up_cadence sigue siendo el switch.
-                               #      Playbook de Heriberto en docs/playbooks/. Ver business-logic §4.5)
+                               #      Playbook de Heriberto en docs/playbooks/. Ver business-logic §4.5),
+                               # 0069 media_assets (toques que ENTREGAN un archivo: un ángulo del playbook puede ser
+                               #      {"asset":"<slot>","text":"…"} y el nudge manda la tabla de precios / el PDF / la foto con
+                               #      el texto como pie. Tabla media_assets por (client, slot, interest), escrita a mano, sin RPC.
+                               #      Sin archivo = el ángulo NO se ofrece y el pool sigue en texto (omisión, no sustitución).
+                               #      WhatsApp SÓLO entrega por el objeto `whatsapp.media` (el `attachments` genérico se marca
+                               #      delivered y nunca se ve); FB img+PDF e IG sólo img por `attachments`. Ver business-logic §4.6)
   clients.sql, seed-tenants.sql# seeds (run by `supabase db reset` per config.toml)
 sites/                         # client marketing sites: static HTML, no build step, no deps
   _template/                   # starting point for a new client

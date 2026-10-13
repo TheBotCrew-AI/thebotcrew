@@ -477,6 +477,37 @@ nudge MAY state the configured price to a lead who never asked (that is the NI j
 days-2–3 taper keeps failing on FB/IG as `delivery_error` until the WhatsApp-template /
 retargeting phase.
 
+### 4.6 Touches that deliver a file — media assets (0069)
+
+Leo's objection to 0068 (2026-10-12): text angles "son más preguntas, sin mucho valor
+agregado". A nudge that only asks gives the lead nothing new to react to. So a playbook angle
+may now be an object, `{ "asset": "<slot>", "text": "<directive>" }`, and the touch SENDS a
+file — a price sheet, a what-to-expect PDF, a before/after image, the clinic — with the
+model's text as its caption.
+
+- **`media_assets`** (table, `client_id` + `slot` + `kind` image|document + `url` + `name` +
+  optional `interest`): the tenant's files by slot. Written by hand (operator SQL, no RPC —
+  the GHL media library URL works: `assets.cdn.filesafe.space/…`), read by the runner.
+  One row per (client, slot, interest); the treatment row wins over the generic (NULL) row.
+  The URL must be public and **direct** (a redirecting host like picsum fails on WhatsApp).
+- **Fallback is omission, not substitution** (`core/media-assets.ts` `pickAsset`): an asset
+  angle whose slot the tenant lacks — or whose file the lead's channel can't carry — is simply
+  **not offered** to the model, and not consumed, so the pool's text angles carry the touch.
+  A tenant onboarded before it has testimonials runs the same playbook as text, and the day a
+  row lands the file starts going out. Nothing in the playbook changes.
+- **Per channel** (measured 2026-10-12 on Leo's threads): WhatsApp delivers image + document
+  **only** through the channel-specific `whatsapp.media` object of `POST /conversations/messages`
+  (the generic `attachments` field is accepted, marked delivered and never shown — the trap
+  the spike fell into first); Facebook delivers image + document via `attachments`; Instagram
+  delivers images only. `GhlClient.sendMessage({ media })` builds the right payload; the
+  channel filter lives in `channelDelivers`. Audio/video are not in the `kind` catalogue yet
+  (the doctor's voice notes are the next phase).
+- **What the model sees**: the asset angle's directive plus a note naming the file and asking
+  for a caption, never a description of the file or a promise to send it later. The outbound
+  row stores the URL in `messages.attachments`; `follow_up_sent` gains `asset: <slot>|null`.
+- A file sent this way arrives on the outbound webhook as `source: 'api'`, like any bot
+  reply — it does not open the human pause.
+
 ## 5. Availability & booking
 
 > **Opt-out per tenant:** `prompt_overrides.bookingEnabled = false` turns this entire

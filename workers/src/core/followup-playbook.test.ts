@@ -33,7 +33,7 @@ describe('parseFollowUpPlaybook', () => {
   });
   it('keeps only valid stage keys, case-tolerant, and drops empty fields', () => {
     const p = parseFollowUpPlaybook({ stages: { ni: { angles: ['x', '', 3] }, I: { cadence: [-1, 0, 15] } } });
-    expect(p?.stages.NI?.angles).toEqual(['x']);
+    expect(p?.stages.NI?.angles).toEqual([{ text: 'x' }]);
     expect(p?.stages.I?.cadence).toEqual([0, 15]);
   });
 });
@@ -41,7 +41,7 @@ describe('parseFollowUpPlaybook', () => {
 describe('resolveStagePlan', () => {
   it('no playbook → tenant cadence, variant-then-tenant pool, no objective (pre-0068)', () => {
     const r = resolveStagePlan(null, 'NI', 'Botox', tenant, 'lc3');
-    expect(r).toEqual({ cadence: [30, 360, 720], angles: ['variant A'], poolKey: 'variant:lc3', objective: null, angleSource: 'variant' });
+    expect(r).toEqual({ cadence: [30, 360, 720], angles: [{ text: 'variant A' }], poolKey: 'variant:lc3', objective: null, angleSource: 'variant' });
     expect(resolveStagePlan(null, 'C', null, tenant, null).poolKey).toBe('tenant');
   });
 
@@ -54,7 +54,7 @@ describe('resolveStagePlan', () => {
   it('stage plan wins over the variant pool and reshapes round 0', () => {
     const r = resolveStagePlan(playbook, 'NI', null, tenant, 'lc3');
     expect(r.cadence).toEqual([10, 60, 240, 1200]);
-    expect(r.angles).toEqual(['ni 1', 'ni 2']);
+    expect(r.angles).toEqual([{ text: 'ni 1' }, { text: 'ni 2' }]);
     expect(r.poolKey).toBe('stage:NI');
     expect(r.objective).toBe('informa');
     expect(r.angleSource).toBe('stage');
@@ -62,7 +62,7 @@ describe('resolveStagePlan', () => {
 
   it('a treatment pool wins over the stage pool, accent- and case-tolerant', () => {
     const r = resolveStagePlan(playbook, 'NI', 'bótox', tenant, 'lc3');
-    expect(r.angles).toEqual(['botox ni 1']);
+    expect(r.angles).toEqual([{ text: 'botox ni 1' }]);
     expect(r.poolKey).toBe('interest:bótox/NI');
     expect(r.cadence).toEqual([10, 60, 240, 1200]); // cadence falls through to the stage
     expect(r.angleSource).toBe('interest');
@@ -71,13 +71,13 @@ describe('resolveStagePlan', () => {
   it('per-field fallback: interest cadence, stage angles', () => {
     const r = resolveStagePlan(playbook, 'C', 'Botox', tenant, null);
     expect(r.cadence).toEqual([5]);
-    expect(r.angles).toEqual(['c 1']);
+    expect(r.angles).toEqual([{ text: 'c 1' }]);
     expect(r.poolKey).toBe('stage:C');
   });
 
   it('a stage with only an objective keeps the legacy pool and cadence but gains the objective', () => {
     const r = resolveStagePlan(playbook, 'A', null, tenant, 'lc3');
-    expect(r.angles).toEqual(['variant A']);
+    expect(r.angles).toEqual([{ text: 'variant A' }]);
     expect(r.poolKey).toBe('variant:lc3');
     expect(r.cadence).toEqual([30, 360, 720]);
     expect(r.objective).toBe('retoma su caso');
@@ -103,5 +103,19 @@ describe('helpers', () => {
     expect(serviceFacts(services, 'Botox')).toEqual({ name: 'Botox', description: null });
     expect(serviceFacts(services, 'Sculptra')).toBeNull();
     expect(serviceFacts(null, 'Botox')).toBeNull();
+  });
+});
+
+describe('asset angles (0069)', () => {
+  it('parses {asset, text} next to plain strings and keeps the pool order', () => {
+    const p = parseFollowUpPlaybook({
+      stages: { NI: { angles: ['solo texto', { asset: 'precios', text: 'manda la tabla' }, { asset: 'x' }, { text: '  ' }] } },
+    });
+    expect(p?.stages.NI?.angles).toEqual([{ text: 'solo texto' }, { asset: 'precios', text: 'manda la tabla' }]);
+  });
+
+  it('an asset without text is not an angle; a text without asset is a text angle', () => {
+    const p = parseFollowUpPlaybook({ stages: { I: { angles: [{ asset: 'precios' }, { text: 'hola', asset: '' }] } } });
+    expect(p?.stages.I?.angles).toEqual([{ text: 'hola' }]);
   });
 });

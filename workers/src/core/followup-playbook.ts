@@ -13,6 +13,11 @@
  *     }
  *   }
  *
+ * An angle is a directive string, or (0069) `{ "asset": "<slot>", "text": "<directive>" }`
+ * — a touch that DELIVERS a file from media_assets with the message. The runner
+ * drops an asset angle whose file the tenant lacks (or the channel can't carry),
+ * so the pool degrades to its text angles rather than to a file-less promise.
+ *
  * Every key is optional. NULL playbook = the flat ladder exactly as before 0068.
  * Resolution, most specific first:
  *   cadence   byInterest[interest][stage] → stages[stage] → tenant follow_up_cadence
@@ -28,10 +33,17 @@
 import { resolveAnglePool } from '../roles/reactivation/angle-select.js';
 import { LEAD_STAGES, type LeadStage } from './lead-stage.js';
 
+/** One angle of a pool: what to say, and optionally which file to send with it. */
+export interface AngleSpec {
+  text: string;
+  /** media_assets.slot this angle delivers; absent = text-only angle. */
+  asset?: string;
+}
+
 export interface StagePlan {
   cadence?: number[];
   objective?: string;
-  angles?: string[];
+  angles?: AngleSpec[];
 }
 
 export interface FollowUpPlaybook {
@@ -58,6 +70,16 @@ function isStage(s: string): s is LeadStage {
   return (LEAD_STAGES as readonly string[]).includes(s);
 }
 
+function parseAngle(raw: unknown): AngleSpec | null {
+  if (typeof raw === 'string') return raw.trim() ? { text: raw.trim() } : null;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const { text, asset } = raw as { text?: unknown; asset?: unknown };
+  if (typeof text !== 'string' || !text.trim()) return null;
+  const spec: AngleSpec = { text: text.trim() };
+  if (typeof asset === 'string' && asset.trim()) spec.asset = asset.trim();
+  return spec;
+}
+
 function parsePlan(raw: unknown): StagePlan | null {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
   const r = raw as Record<string, unknown>;
@@ -68,7 +90,7 @@ function parsePlan(raw: unknown): StagePlan | null {
   }
   if (typeof r.objective === 'string' && r.objective.trim()) plan.objective = r.objective.trim();
   if (Array.isArray(r.angles)) {
-    const a = r.angles.filter((s): s is string => typeof s === 'string' && s.trim().length > 0);
+    const a = r.angles.map(parseAngle).filter((x): x is AngleSpec => x !== null);
     if (a.length) plan.angles = a;
   }
   return Object.keys(plan).length ? plan : null;
@@ -105,8 +127,8 @@ export function parseFollowUpPlaybook(raw: unknown): FollowUpPlaybook | null {
 export interface ResolvedPlan {
   /** Round-0 cadence (minutes per rung). */
   cadence: number[];
-  /** Angle directives for this lead; may be the legacy variant/tenant pool. */
-  angles: string[];
+  /** Angle directives for this lead; may be the legacy variant/tenant pool (text-only). */
+  angles: AngleSpec[];
   /** Identity of the pool `angles` came from — the sent-angle cursor is per pool. */
   poolKey: string;
   /** Instruction for the nudge; null when the playbook is off (prompt unchanged). */
@@ -147,7 +169,7 @@ export function resolveStagePlan(
   const legacy = resolveAnglePool(config.promptVariants, variantKey, config.followUpAngles ?? []);
   const base: ResolvedPlan = {
     cadence: config.followUpCadence ?? [],
-    angles: legacy.pool,
+    angles: legacy.pool.map((text) => ({ text })),
     poolKey: legacy.source === 'variant' ? `variant:${variantKey}` : 'tenant',
     objective: null,
     angleSource: legacy.source,

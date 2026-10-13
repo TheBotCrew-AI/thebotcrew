@@ -228,6 +228,37 @@ describe('GhlClient — sendMessage', () => {
     expect(res).toEqual({ ghlMessageId: 'm5', resolvedContactId: 'fromConv' });
   });
 
+  it('media on WhatsApp → the whatsapp.media object, never the generic attachments field (0069)', async () => {
+    const f = stubFetch();
+    f.mockResolvedValue(ok({ messageId: 'm1' }));
+    await new GhlClient().sendMessage({
+      contactId: 'c1', channel: 'whatsapp', text: 'pie',
+      media: { kind: 'document', url: 'https://x/p.pdf', name: 'precios.pdf' },
+    });
+    const body = bodyOf(f);
+    expect(body.whatsapp).toEqual({ type: 'media', media: { type: 'document', url: 'https://x/p.pdf', name: 'precios.pdf' } });
+    expect(body.attachments).toBeUndefined();
+    expect(body.message).toBe('pie');
+  });
+
+  it.each(['facebook', 'instagram'] as const)('media on %s → attachments, no whatsapp object', async (channel) => {
+    const f = stubFetch();
+    f.mockResolvedValue(ok({ messageId: 'm1' }));
+    await new GhlClient().sendMessage({
+      contactId: 'c1', channel, text: 'pie', media: { kind: 'image', url: 'https://x/p.png', name: 'p.png' },
+    });
+    const body = bodyOf(f);
+    expect(body.attachments).toEqual(['https://x/p.png']);
+    expect(body.whatsapp).toBeUndefined();
+  });
+
+  it('no media → the body is exactly what it was before 0069', async () => {
+    const f = stubFetch();
+    f.mockResolvedValue(ok({ messageId: 'm1' }));
+    await new GhlClient().sendMessage({ contactId: 'c1', channel: 'whatsapp', text: 'hola' });
+    expect(bodyOf(f)).toEqual({ type: 'WhatsApp', contactId: 'c1', message: 'hola' });
+  });
+
   it('resolveContactByPhoneOrEmail: no keys → returns undefined without any network call', async () => {
     const f = stubFetch();
     expect(await new GhlClient('t1').resolveContactByPhoneOrEmail({})).toBeUndefined();

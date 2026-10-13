@@ -10,6 +10,7 @@ import { getSupabase } from './client.js';
 import type { AiProvider, Channel, ConversationMessage, ConversationStatus, FollowUpKind, QuietHours, TenantContext } from '../core/types.js';
 import { asLeadStage, type LeadStage } from '../core/lead-stage.js';
 import { isLegacyPoolKey } from '../core/followup-playbook.js';
+import type { MediaAsset } from '../core/media-assets.js';
 import { DEMO_REMINDER_ROLE } from '../core/types.js';
 import { clampToActiveHours, DEFAULT_QUIET_HOURS } from '../core/active-hours.js';
 import type { TokenUsage } from '../core/llm-usage.js';
@@ -1369,6 +1370,27 @@ export async function loadSentAngleIndexes(conversationId: string, poolKey = 'te
   return ((data ?? []) as { angle_index: number | null }[])
     .map((r) => r.angle_index)
     .filter((n): n is number => typeof n === 'number');
+}
+
+/**
+ * The files a tenant's playbook angles may deliver (0069), active rows only.
+ * Config read-layer, like loadTenantConfig: no RPC. A read error returns [] —
+ * a nudge without its file is a text nudge, not a missed one.
+ */
+export async function loadMediaAssets(clientId: string): Promise<MediaAsset[]> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from('media_assets')
+    .select('slot, kind, url, name, interest')
+    .eq('client_id', clientId)
+    .eq('active', true);
+  if (error) {
+    console.error('[db] loadMediaAssets failed:', error.message);
+    return [];
+  }
+  return ((data ?? []) as Array<{ slot: string; kind: string; url: string; name: string; interest: string | null }>)
+    .filter((r) => r.kind === 'image' || r.kind === 'document')
+    .map((r) => ({ slot: r.slot, kind: r.kind as MediaAsset['kind'], url: r.url, name: r.name, interest: r.interest ?? null }));
 }
 
 /** Mark a follow-up as permanently failed. */

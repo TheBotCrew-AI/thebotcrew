@@ -25,6 +25,7 @@ import {
   getLatestDemoSession,
   isBotSuppressed,
   loadDueFollowUps,
+  loadMediaAssets,
   loadSentAngleIndexes,
   logBotEvent,
   logLlmUsage,
@@ -45,6 +46,7 @@ import { toModelMessages } from '../core/model-messages.js';
 import { DEFAULT_QUIET_HOURS, isQuietNow } from '../core/active-hours.js';
 import { cadenceForRound, isFinalRound, REENTRY_KEYWORD, totalRounds, variantAllowsFollowUps } from '../core/reactivation-rounds.js';
 import { parseFollowUpPlaybook, resolveStagePlan, serviceFacts } from '../core/followup-playbook.js';
+import { pickAsset, type MediaAsset, type OutboundMedia } from '../core/media-assets.js';
 import type { LeadStage } from '../core/stage.js';
 import type { StageContext } from '../core/runtime-context.js';
 import type { AiProvider, Channel, TenantContext } from '../core/types.js';
@@ -56,6 +58,10 @@ import { demoEndTag, REACTIVATION_EXHAUSTED_TAG } from '../ghl/tags.js';
 import { REACTIVATION_ROLE } from '../roles/reactivation/index.js';
 import { buildDemoReminder } from '../roles/front-desk/prompt.js';
 import { DEFAULT_MODEL, DEFAULT_PROVIDER } from '../roles/front-desk/index.js';
+
+/** Appended to an asset angle's directive: the model writes the file's caption, not a promise. */
+const ASSET_CAPTION_NOTE = (name: string): string =>
+  `(Este mensaje va ACOMPAÑADO del archivo "${name}", que se envía junto con tu texto: escribe el texto como el pie de ese archivo. No lo describas, no digas que lo mandas después ni que lo adjuntas.)`;
 
 export interface FollowUpRunResult {
   processed: number;
@@ -98,6 +104,7 @@ async function deliverNudge(
   text: string,
   agentRole: string,
   model: string | null,
+  media: OutboundMedia | null = null,
 ): Promise<boolean> {
   let outboundMessageId: string | null = null;
   try {
@@ -114,6 +121,7 @@ async function deliverNudge(
       p_human_agent_id: null,
       p_model: model,
       p_sent_at: null,
+      p_attachments: media ? [media.url] : null,
     }));
   } catch (err) {
     console.error('[followup] logMessage failed:', err instanceof Error ? err.message : String(err));
@@ -128,6 +136,7 @@ async function deliverNudge(
       text,
       phone: followUp.contactPhone ?? undefined,
       conversationId: followUp.ghlConversationId,
+      media: media ?? undefined,
     });
     ghlMessageId = sent.ghlMessageId;
     // Recovered a merged-away contact: persist the survivor so future sends skip recovery.
@@ -369,12 +378,29 @@ async function processOne(
   // deliberately isn't one.
   // With a playbook the pool is per stage (and per treatment) and the cursor is per
   // pool (0068) — `plan` already applied the variant-then-tenant fallback.
-  let remaining: Array<{ text: string; index: number }> = [];
+  // An asset angle (0069) is offered only when the tenant HAS the file for this lead's
+  // treatment and channel; otherwise it is left out (not consumed) and the text angles
+  // carry the touch. The model sees the file's name so the message reads as its caption.
+  let remaining: Array<{ text: string; index: number; media: OutboundMedia | null; slot: string | null }> = [];
   if (!finalTouch) {
     const usedIndexes = await loadSentAngleIndexes(followUp.conversationId, plan.poolKey);
-    remaining = plan.angles
-      .map((text, index) => ({ text, index }))
-      .filter((a) => !usedIndexes.includes(a.index));
+    const wantsAssets = plan.angles.some((a) => a.asset);
+    const assets: MediaAsset[] = wantsAssets ? await loadMediaAssets(tenant.clientId) : [];
+    for (const [index, angle] of plan.angles.entries()) {
+      if (usedIndexes.includes(index)) continue;
+      if (!angle.asset) {
+        remaining.push({ text: angle.text, index, media: null, slot: null });
+        continue;
+      }
+      const file = pickAsset(assets, angle.asset, interest, followUp.channel as Channel);
+      if (!file) continue;
+      remaining.push({
+        text: `${angle.text} ${ASSET_CAPTION_NOTE(file.name)}`,
+        index,
+        media: { kind: file.kind, url: file.url, name: file.name },
+        slot: file.slot,
+      });
+    }
   }
   const stageContext: StageContext | undefined = playbook && stage
     ? { stage, objective: plan.objective ?? '', service: serviceFacts(tenant.config.services, interest) }
@@ -439,6 +465,8 @@ async function processOne(
 
   let reply: string;
   let chosenAngleIndex: number | null = null;
+  let chosenMedia: OutboundMedia | null = null;
+  let chosenSlot: string | null = null;
   try {
     const result = await reactivationAgent.generate(messages, { requestContext, maxSteps: 3 });
     const usage = usageFromAgentResult(result);
@@ -458,7 +486,11 @@ async function processOne(
     const picked = selection.angleChoice != null
       ? remaining[selection.angleChoice - 1]
       : remaining[0]; // no valid tag but angles remain → consume the first unused one
-    if (picked) chosenAngleIndex = picked.index;
+    if (picked) {
+      chosenAngleIndex = picked.index;
+      chosenMedia = picked.media;
+      chosenSlot = picked.slot;
+    }
   } catch (err) {
     console.error(
       `[followup] agent generate failed followUpId=${followUp.followUpId}:`,
@@ -479,13 +511,13 @@ async function processOne(
   // not `sent` — the row used to read as delivered either way, which is how 28–36% of
   // FB/IG nudges went missing without a trace. The ladder still advances: the next
   // rung's send is its own attempt, and a transient error must not end the cycle.
-  const delivered = await deliverNudge(followUp, tenant, reply, REACTIVATION_ROLE, model);
+  const delivered = await deliverNudge(followUp, tenant, reply, REACTIVATION_ROLE, model, chosenMedia);
   if (delivered) {
     await markFollowUpSent(followUp.followUpId, chosenAngleIndex, chosenAngleIndex != null ? plan.poolKey : null);
     await logBotEvent(tenant.clientId, followUp.ghlConversationId, 'follow_up_sent', {
       followUpId: followUp.followUpId, tier: position, round: followUp.round,
       stage, interest, pool: plan.poolKey, angleSource: plan.angleSource, angleIndex: chosenAngleIndex,
-      playbook: playbook !== null,
+      playbook: playbook !== null, asset: chosenSlot,
     });
   } else {
     await markFollowUpFailed(followUp.followUpId);

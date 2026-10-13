@@ -11,6 +11,7 @@
 
 import { getGhlEnv } from '../core/env.js';
 import type { Channel } from '../core/types.js';
+import type { OutboundMedia } from '../core/media-assets.js';
 import { getOAuthToken, getTenantGhlLocationId, upsertOAuthToken } from '../db/queries.js';
 import { ghlAppointmentInstant } from './appointment-time.js';
 import { refreshAccessToken } from './oauth.js';
@@ -72,6 +73,13 @@ export class GhlClient {
    * Send a message. Returns the GHL message ID; `resolvedContactId` is set when the
    * original contactId was stale (merged away in GHL) and we recovered the current one
    * from the conversation — the caller should persist it.
+   *
+   * `media` (0069) attaches ONE file, with `text` as its caption. The payload differs
+   * per channel: WhatsApp only renders the channel-specific `whatsapp.media` object
+   * (the generic `attachments` field is accepted, marked delivered, and never shown —
+   * measured 2026-10-12), while Facebook and Instagram take `attachments`. The URL
+   * must be public and direct (no redirect). Which kinds a channel can carry is the
+   * caller's filter (`core/media-assets.ts`).
    */
   async sendMessage(params: {
     contactId: string;
@@ -80,12 +88,20 @@ export class GhlClient {
     phone?: string;
     email?: string;
     conversationId?: string;
+    media?: OutboundMedia;
   }): Promise<{ ghlMessageId: string; resolvedContactId?: string }> {
     const token = await this.getAccessToken();
     const ghlType = params.channel === 'instagram' ? 'IG' : params.channel === 'facebook' ? 'FB' : 'WhatsApp';
     const post = (contactId: string): Promise<Response> => {
-      const body: Record<string, string> = { type: ghlType, contactId, message: params.text };
+      const body: Record<string, unknown> = { type: ghlType, contactId, message: params.text };
       if (params.phone) body.phone = params.phone;
+      if (params.media) {
+        if (params.channel === 'whatsapp') {
+          body.whatsapp = { type: 'media', media: { type: params.media.kind, url: params.media.url, name: params.media.name } };
+        } else {
+          body.attachments = [params.media.url];
+        }
+      }
       return fetch(`${this.apiBase}/conversations/messages`, {
         method: 'POST',
         headers: {

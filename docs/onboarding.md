@@ -708,3 +708,30 @@ select tc.business_name, tc.enabled_channels, tc.test_contact_ids, tc.trigger_ke
        tc.ai_key_ref, tc.prompt_overrides ? 'houseRules' as house_rules, t.ghl_location_id
 from tenant_config tc join tenants t on t.id = tc.tenant_id order by tc.business_name;
 ```
+
+## 10. Media assets — the files a follow-up delivers (0069)
+
+A playbook angle (`follow_up_playbook`, business-logic §4.5/§4.6) may name a **slot**
+(`{"asset": "precios", "text": "…"}`). The file for that slot lives in `media_assets`; with
+no row the angle is skipped and the touch goes out as text, so load files whenever they
+arrive — nothing else changes.
+
+1. Upload the file to the subaccount's **Media Library** in GHL (or any host that serves a
+   public, direct URL — no redirects). Copy the URL (`https://assets.cdn.filesafe.space/…`).
+2. Insert the row. `kind` is `image` or `document`; `name` is the filename the lead sees on
+   WhatsApp; `interest` is a `services[].name` when the file is for one treatment (NULL =
+   any treatment; a treatment row wins over the generic one):
+
+```sql
+insert into media_assets (client_id, slot, kind, url, name, interest) values
+  ('<client_id>', 'precios',     'image',    'https://assets.cdn.filesafe.space/<loc>/media/<id>.png', 'precios-botox.png', 'Botox'),
+  ('<client_id>', 'que-esperar', 'document', 'https://assets.cdn.filesafe.space/<loc>/media/<id>.pdf', 'que-esperar-laser.pdf', 'Láser CO₂ Fraccionado'),
+  ('<client_id>', 'consultorio', 'image',    'https://assets.cdn.filesafe.space/<loc>/media/<id>.png', 'consultorio.png', null);
+```
+
+3. Replace a file: `update media_assets set url = …, name = … where client_id = … and slot = … and interest is not distinct from …`.
+   Retire one without deleting: `active = false`.
+
+Channel limits the runner applies on its own: Instagram carries images only (a PDF slot is
+skipped there), WhatsApp and Facebook carry both. Slot names are kebab-case; the platform's
+suggested set is `precios`, `que-esperar`, `antes-despues`, `testimonio`, `consultorio`.

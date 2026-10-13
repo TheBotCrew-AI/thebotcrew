@@ -17,6 +17,8 @@ vi.mock('../ghl/client.js', () => ({ GhlClient: vi.fn(() => ghl) }));
 vi.mock('../db/upcoming-appointment.js', () => ({ findUpcomingAppointment: vi.fn() }));
 
 import { getAiApiKey, resolveAiApiKey } from '../core/env.js';
+import { buildAgentRequestContext } from '../core/runtime-context.js';
+import { parseAngleSelection } from '../roles/reactivation/angle-select.js';
 import * as q from '../db/queries.js';
 import { findUpcomingAppointment } from '../db/upcoming-appointment.js';
 import { runPendingFollowUps } from './followup-runner.js';
@@ -57,6 +59,7 @@ beforeEach(() => {
   vi.mocked(q.loadDueFollowUps).mockResolvedValue([due()]);
   vi.mocked(q.loadTenantConfig).mockResolvedValue(tenant());
   vi.mocked(q.loadSentAngleIndexes).mockResolvedValue([]);
+  vi.mocked(q.loadMediaAssets).mockResolvedValue([]);
   vi.mocked(q.loadRecentMessages).mockResolvedValue([]);
   vi.mocked(q.logMessage).mockResolvedValue({ conversationId: 'cv1', messageId: 'msg1' });
   vi.mocked(q.setGhlMessageId).mockResolvedValue(undefined);
@@ -630,5 +633,54 @@ describe('runPendingFollowUps — the playbook: a ladder per stage (0068)', () =
     await runPendingFollowUps(agent);
     expect((await ctxArg()).reactivationCandidates).toEqual([]);
     expect(q.markFollowUpSent).toHaveBeenCalledWith('fu1', null, null);
+  });
+});
+
+describe('runPendingFollowUps — asset angles (0069)', () => {
+  const pb = {
+    stages: { NI: { cadence: [10, 60], angles: [{ asset: 'precios', text: 'manda la tabla' }, 'texto plano'] } },
+  };
+  const file = { slot: 'precios', kind: 'document' as const, url: 'https://x/precios.pdf', name: 'precios.pdf', interest: null };
+  const ctx = () => vi.mocked(buildAgentRequestContext).mock.calls.at(-1)![0] as { reactivationCandidates: string[] };
+
+  beforeEach(() => {
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(tenant({ followUpPlaybook: pb }));
+    vi.mocked(q.loadDueFollowUps).mockResolvedValue([due({ stage: 'NI' })]);
+    vi.mocked(parseAngleSelection).mockReturnValue({ message: 'aquí la tabla', angleChoice: 1 });
+  });
+
+  it('the tenant has the file → the chosen angle sends it with the text as caption, logs the attachment, stamps the event', async () => {
+    vi.mocked(q.loadMediaAssets).mockResolvedValue([file]);
+    await runPendingFollowUps(agent);
+    expect(ctx().reactivationCandidates).toHaveLength(2);
+    expect(ctx().reactivationCandidates[0]).toContain('precios.pdf');
+    expect(ghl.sendMessage).toHaveBeenCalledWith(expect.objectContaining({
+      text: 'aquí la tabla', media: { kind: 'document', url: 'https://x/precios.pdf', name: 'precios.pdf' },
+    }));
+    expect(q.logMessage).toHaveBeenCalledWith(expect.objectContaining({ p_attachments: ['https://x/precios.pdf'] }));
+    expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'follow_up_sent', expect.objectContaining({ asset: 'precios', angleIndex: 0 }));
+  });
+
+  it('no file for the slot → the asset angle is NOT offered nor consumed; the text angle carries the touch', async () => {
+    vi.mocked(q.loadMediaAssets).mockResolvedValue([]);
+    await runPendingFollowUps(agent);
+    expect(ctx().reactivationCandidates).toEqual(['texto plano']);
+    expect(ghl.sendMessage).toHaveBeenCalledWith(expect.not.objectContaining({ media: expect.anything() }));
+    expect(q.logMessage).toHaveBeenCalledWith(expect.objectContaining({ p_attachments: null }));
+    // angleChoice 1 now points at 'texto plano' = pool index 1, so the asset angle stays unused.
+    expect(q.markFollowUpSent).toHaveBeenCalledWith('fu1', 1, 'stage:NI');
+  });
+
+  it('a document on Instagram is not offered (the channel cannot carry it)', async () => {
+    vi.mocked(q.loadMediaAssets).mockResolvedValue([file]);
+    vi.mocked(q.loadDueFollowUps).mockResolvedValue([due({ stage: 'NI', channel: 'instagram' })]);
+    await runPendingFollowUps(agent);
+    expect(ctx().reactivationCandidates).toEqual(['texto plano']);
+  });
+
+  it('a pool with no asset angles never reads media_assets', async () => {
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(tenant({ followUpPlaybook: { stages: { NI: { angles: ['a', 'b'] } } } }));
+    await runPendingFollowUps(agent);
+    expect(q.loadMediaAssets).not.toHaveBeenCalled();
   });
 });
