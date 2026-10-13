@@ -34,6 +34,7 @@ import {
   HAPPYNATY_PERSONA,
   HAPPYNATY_VARIANTS,
   HERIBERTO_LASER_CIERRE,
+  HERIBERTO_LASER_PRESENTACION,
   HERIBERTO_PERSONA,
   HERIBERTO_PLAN_VARIANT,
   MADI_HOUSE_RULES,
@@ -78,6 +79,13 @@ const MIRRORED_PERSONAS: {
   { label: 'Dr. Heriberto Valdivia — variante i01 (PLAN)', locationId: 'rfL7uM3c5mpfIUGxCR3C', column: 'prompt_variants', variant: 'i01', fixture: HERIBERTO_PLAN_VARIANT },
   ...Object.entries(HERIBERTO_LASER_CIERRE).map(([variant, fixture]) => ({
     label: `Dr. Heriberto Valdivia — variante ${variant} (láser, cierre)`,
+    locationId: 'rfL7uM3c5mpfIUGxCR3C',
+    column: 'prompt_variants' as const,
+    variant,
+    fixture,
+  })),
+  ...Object.entries(HERIBERTO_LASER_PRESENTACION).map(([variant, fixture]) => ({
+    label: `Dr. Heriberto Valdivia — variante ${variant} (láser, presentación)`,
     locationId: 'rfL7uM3c5mpfIUGxCR3C',
     column: 'prompt_variants' as const,
     variant,

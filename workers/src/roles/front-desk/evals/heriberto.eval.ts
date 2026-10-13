@@ -1217,7 +1217,7 @@ describe.skipIf(!evalApiKey)('Dr. Heriberto Valdivia — las zonas por su nombre
 
   it('"Zona de antifaz" → es el full face, con su precio, sin preguntar a qué se refiere', async () => {
     const text = await preguntarZona('Zona de antifaz');
-    expect(text, text).toMatch(/\$\s?4[,.]?200\b/);
+    expect(text, text).toMatch(/\$\s?6[,.]?000\b/);
     expect(text, text).not.toMatch(/te refieres|a qué zona|cuál zona/);
   }, 120_000);
 

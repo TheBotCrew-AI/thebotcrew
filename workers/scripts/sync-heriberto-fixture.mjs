@@ -62,10 +62,12 @@ const faq = data.faq.map(({ q, a }) => ({ q, a })); // jsonb stores `a` before `
 swap('HERIBERTO_FAQ', `export const HERIBERTO_FAQ = ${JSON.stringify(faq, null, 2)};`);
 // The laser closing campaign: lc7 is the template the others were cut from, so it is mirrored too.
 const LASER_CIERRE = ['lc7', 'lc10', 'lc11', 'lc12'];
+// The laser presentation campaign: lp5 (acne scars) carries the shared presentation trunk.
+const LASER_PRESENTACION = ['lp5'];
 const VARIANT_KEYS = ['qualificationNotes', 'calendarLabel', 'toolInstructions', 'followUpAngles'];
-const laser = [
-  'export const HERIBERTO_LASER_CIERRE = {',
-  ...LASER_CIERRE.flatMap((k) => {
+const variantsBlock = (name, keys) => [
+  `export const ${name} = {`,
+  ...keys.flatMap((k) => {
     const v = data.prompt_variants[k];
     if (!v) throw new Error(`prompt_variants.${k} missing`);
     const extra = Object.keys(v).filter((f) => !VARIANT_KEYS.includes(f));
@@ -83,6 +85,7 @@ const laser = [
   }),
   '};',
 ].join('\n');
-swap('HERIBERTO_LASER_CIERRE', laser);
+swap('HERIBERTO_LASER_CIERRE', variantsBlock('HERIBERTO_LASER_CIERRE', LASER_CIERRE));
+swap('HERIBERTO_LASER_PRESENTACION', variantsBlock('HERIBERTO_LASER_PRESENTACION', LASER_PRESENTACION));
 writeFileSync(FILE, src);
 console.log('fixtures.ts regenerated from prod — review with git diff');
