@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { CLOSED_QUESTION_RULE, VOICE_RULE, WARM_NO_RULE } from '../../core/prompt-rules.js';
+import { BUBBLES_RULE, CLOSED_QUESTION_RULE, VOICE_RULE, WARM_NO_RULE } from '../../core/prompt-rules.js';
 import { PHOTO_DESCRIPTION_PREFIX } from '../../core/model-messages.js';
 import type { DemoHandoff } from '../../core/types.js';
 import { parseFrontDeskConfig } from './config.js';
@@ -399,7 +399,7 @@ describe('buildFrontDeskInstructions', () => {
     );
     expect(out).toContain('SOY SOFÍA DE LA CLÍNICA');
     // Demo formatting: chat-length replies, no brochure dumps (1 emoji allowed).
-    expect(out).toContain('UN solo mensaje por turno');
+    expect(out).toContain('UNA pregunta por burbuja');
     expect(out).toContain('PROHIBIDO: listas');
     expect(out).toContain('Máximo 1 emoji');
   });
@@ -861,5 +861,23 @@ describe('buildFrontDeskInstructions — la voz (VOICE_RULE)', () => {
     expect(VOICE_RULE).toContain('No repitas frases');
     expect(VOICE_RULE).toContain('PROHIBIDO el lenguaje de bot');
     expect(VOICE_RULE).toMatch(/Mal: .*\n.*Bien: /);
+  });
+});
+
+describe('buildFrontDeskInstructions — burbujas (BUBBLES_RULE, 2026-10-12)', () => {
+  it('rides on every prompt, demo included, and the demo no longer says "UN solo mensaje por turno"', () => {
+    const base = buildFrontDeskInstructions(cfg(), NOW);
+    expect(base).toContain(BUBBLES_RULE);
+    const demo = buildFrontDeskInstructions(cfg({ demoPromptOverrides: { identity: 'demo' } }), NOW, undefined, 'demo');
+    expect(demo).toContain(BUBBLES_RULE);
+    expect(demo).not.toContain('UN solo mensaje por turno');
+  });
+  it('teaches the blank-line device, caps a bubble, and re-reads "MISMO mensaje" as the same turn', () => {
+    expect(BUBBLES_RULE).toContain('línea en blanco');
+    expect(BUBBLES_RULE).toContain('160 caracteres');
+    expect(BUBBLES_RULE).toContain('se refiere al mismo TURNO');
+    expect(BUBBLES_RULE).toMatch(/Mal: .*\n\s*Bien: /);
+    // The "Bien" example is itself two bubbles.
+    expect(BUBBLES_RULE.split('Bien: ')[1]).toMatch(/\n\n/);
   });
 });

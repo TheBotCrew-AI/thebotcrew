@@ -1646,6 +1646,32 @@ Rows unsent after 48h expire: the click id's attribution value decays in days.
 Setup per tenant: the SOP [`capi-setup-sop.md`](capi-setup-sop.md) (config reference in
 [`onboarding.md` §7](onboarding.md)).
 
+## 6e. Bubbles — a turn is one or two short messages, not a block (2026-10-12)
+
+`core/prompt-rules.ts` `BUBBLES_RULE`, rendered by the front-desk prompt (demo included).
+
+The sender has split a reply on blank lines since the demo era (`splitIntoMessages` in
+`webhook-handler.ts`: each paragraph is its own logged + delivered message, a typing pause of
+0.8–3 s between them, capped at 4 with the overflow merged into the last). The device existed;
+no prompt taught it. Heriberto's last 30 days: 10 of 1,038 front-desk replies had a line break,
+100 were over 300 characters, and the long ones were all the same thing — a rule stacking price
++ why-the-consult + two slots "en el MISMO mensaje", or address + next step. Leo: "manda
+mensajes muy largos … en vez de partirlo en líneas y varios mensajes".
+
+What the rule says: a turn is 1–2 bubbles (3 if truly needed), each one idea of one or two
+lines (~160 chars), a fact and the next step in separate bubbles, the question closing the last
+one. And the re-reading that makes it platform-wide without touching twenty campaign variants:
+**"en el MISMO mensaje", "en la misma línea", "pegado a" mean the same TURN — the next bubble**.
+Heriberto's base + variants were also edited directly where the dump was explicit (the laser
+price rule, the four cierre-campaign openers, i01's price list), so the examples the model
+copies show two bubbles.
+
+Follow-up nudges do NOT split: a nudge is one idea by construction (`NUDGE_MAX_CHARS`, §4.7),
+and the sender in `followup-runner.ts` sends one message.
+
+Not done, deliberately: a deterministic re-split of a long paragraph at a sentence boundary.
+The prompt should get there; if a week of replies says otherwise, that is the next lever.
+
 ## 7. Known incidents & rationale
 
 Short log of *why* certain rules exist, so they aren't "simplified away" later.

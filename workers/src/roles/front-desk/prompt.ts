@@ -6,7 +6,7 @@
  * sections are suppressed — the tenant's custom flow takes over entirely.
  */
 
-import { CLOSED_QUESTION_RULE, VOICE_RULE, WARM_NO_RULE } from '../../core/prompt-rules.js';
+import { BUBBLES_RULE, CLOSED_QUESTION_RULE, VOICE_RULE, WARM_NO_RULE } from '../../core/prompt-rules.js';
 import { HUMAN_REPLY_PREFIX, PHOTO_DESCRIPTION_PREFIX } from '../../core/model-messages.js';
 import type { DemoHandoff } from '../../core/types.js';
 import { frameTimeZone, zoneLabel, zoneSuffix } from '../../core/lead-timezone.js';
@@ -669,14 +669,15 @@ horarios de getAvailability (campo "label") o la fecha de hoy de arriba.${horizo
 ${toneBody}
 ${usingDemo
   ? `Escribes como una recepcionista real por WhatsApp, no como un folleto. Reglas de formato, estrictas:
-- UN solo mensaje por turno, de 1 o 2 líneas (máximo ~300 caracteres). Nunca varios párrafos.
-- Una sola idea y como mucho UNA pregunta por mensaje.
+- Una sola idea y como mucho UNA pregunta por burbuja (ver "Burbujas" abajo).
 - PROHIBIDO: listas, viñetas, guiones al inicio de renglón, markdown, negritas y textos largos.
 - Si sabes mucho de un tema, resume en UNA frase y ofrece contar más si le interesa. Nadie contesta un WhatsApp con cinco renglones de explicación.
 - Máximo 1 emoji, y no en todos los mensajes. URLs como texto plano.`
   : 'Mensajes breves, una idea a la vez. Sin listas. Sin negritas. Sin emojis (a menos que el lead los use). WhatsApp no renderiza markdown — manda URLs como texto plano.'}
 ${CLOSED_QUESTION_RULE}
 ${WARM_NO_RULE}
+
+${BUBBLES_RULE}
 
 ${VOICE_RULE}
 
