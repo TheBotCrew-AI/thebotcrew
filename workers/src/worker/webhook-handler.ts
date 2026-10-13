@@ -1307,7 +1307,9 @@ export async function runAgentTurn({
     leadStage = await recordLeadStage({
       tenant, parsed, conversationId, history, reply,
       slotsOffered: offeredSlotsThisTurn,
-      askedSomething: lookedUpFaqThisTurn || !!classified.interest,
+      // A FAQ lookup is the lead asking; a classified interest is NOT — it is read off
+      // the opener ("me interesa el Botox") and made every lead with a treatment A.
+      askedSomething: lookedUpFaqThisTurn,
       llmStage: classified.stage,
       interest: classified.interest,
       storedStage,

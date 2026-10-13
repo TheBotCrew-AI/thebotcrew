@@ -72,7 +72,7 @@ describe('stageFloor', () => {
     expect(r.stage).toBe('A');
   });
 
-  it('lookupFaq / a classified interest counts as asking even without a question mark → A', () => {
+  it('lookupFaq counts as asking even without a question mark → A', () => {
     const r = stageFloor(signals({
       history: [lead('PRECIO'), bot('¿Primera vez?'), lead('me interesa el sculptra')],
       reply: 'Claro.',
@@ -99,6 +99,15 @@ describe('stageFloor', () => {
       slotsOffered: true,
     }));
     expect(r.stage).toBe('A');
+  });
+
+  it('an interest named in the opener is not a question: "me interesa el Botox" → "Las tres" stays I', () => {
+    const r = stageFloor(signals({
+      history: [lead('Hola me interesa el Botox'), bot('¿Una zona o las tres?'), lead('Las tres')],
+      reply: 'Full face $6,000.',
+      askedSomething: false,
+    }));
+    expect(r.stage).toBe('I');
   });
 
   it("Leo's thread 2026-10-12: engaged, no question, price + slots in this reply → I (saw the price, stopped)", () => {

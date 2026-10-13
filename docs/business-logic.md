@@ -390,7 +390,7 @@ tenant with no playbook it is only recorded: nothing the lead receives changes.
 |---|---|---|
 | `NI` | no information — only the ad's opener, never answered the bot | one lead message that is an ad keyword / ≤4 words, and no price in any bot message |
 | `I` | has the basics (price/offer), stopped there | the bot wrote a price (`$…`, `… pesos`), OR the lead wrote anything beyond the opener |
-| `A` | asked their own questions / told their case | engaged AND (a `?` in a lead message, `lookupFaq` ran, or the classifier named a service) |
+| `A` | asked their own questions / told their case | engaged AND (a `?` in a lead message or `lookupFaq` ran). A classified interest does NOT count since 2026-10-12: it is read off the opener ("me interesa el Botox") and made every lead with a treatment A. |
 | `C` | reacted to slots or said they want it | engaged AND an `availability_checked` from BEFORE this turn's inbound (the lead wrote again after seeing times). Slots shown in this very reply don't count — since 2026-10-12: "Hola, me interesa el Botox" → "Las tres" → price + slots landed as C although the lead never saw a time. The classifier can still raise to C on "sí quiero". |
 
 Two rules make it safe to trust:

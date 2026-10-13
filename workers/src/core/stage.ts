@@ -35,7 +35,7 @@ export interface StageSignals {
    * (the price→slots rule offers them on the first real answer): that lead is I, not C.
    */
   slotsBeforeInbound: boolean;
-  /** lookupFaq ran this turn, or the classifier named a configured service. */
+  /** lookupFaq ran this turn (a classified interest does NOT count: it comes from the opener). */
   askedSomething: boolean;
 }
 
