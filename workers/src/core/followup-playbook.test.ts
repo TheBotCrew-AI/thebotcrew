@@ -41,7 +41,7 @@ describe('parseFollowUpPlaybook', () => {
 describe('resolveStagePlan', () => {
   it('no playbook → tenant cadence, variant-then-tenant pool, no objective (pre-0068)', () => {
     const r = resolveStagePlan(null, 'NI', 'Botox', tenant, 'lc3');
-    expect(r).toEqual({ cadence: [30, 360, 720], angles: [{ text: 'variant A' }], poolKey: 'variant:lc3', objective: null, angleSource: 'variant' });
+    expect(r).toEqual({ cadence: [30, 360, 720], angles: [{ text: 'variant A' }], sequence: null, poolKey: 'variant:lc3', objective: null, angleSource: 'variant' });
     expect(resolveStagePlan(null, 'C', null, tenant, null).poolKey).toBe('tenant');
   });
 
@@ -117,5 +117,54 @@ describe('asset angles (0069)', () => {
   it('an asset without text is not an angle; a text without asset is a text angle', () => {
     const p = parseFollowUpPlaybook({ stages: { I: { angles: [{ asset: 'precios' }, { text: 'hola', asset: '' }] } } });
     expect(p?.stages.I?.angles).toEqual([{ text: 'hola' }]);
+  });
+});
+
+describe('sequence mode + presets (0070)', () => {
+  const step = (covers: string, text = 'x') => ({ covers, text });
+
+  it('parses a sequence, drops steps with an unknown mark or no text', () => {
+    const p = parseFollowUpPlaybook({ stages: { NI: { sequence: [step('precio'), step('horarios'), { covers: 'quien' }, { covers: 'OFERTA', text: 'y', asset: 'precios' }] } } });
+    expect(p?.stages.NI?.sequence).toEqual([{ covers: 'precio', text: 'x' }, { covers: 'oferta', text: 'y', asset: 'precios' }]);
+  });
+
+  it('resolves to sequence mode, and the sequence wins over a pool at the same level', () => {
+    const p = parseFollowUpPlaybook({
+      stages: { NI: { cadence: [1], angles: ['a'], sequence: [step('precio')] } },
+      byInterest: { Botox: { NI: { sequence: [step('quien')] } } },
+    });
+    expect(resolveStagePlan(p, 'NI', null, tenant, null)).toMatchObject({ sequence: [step('precio')], angles: [], poolKey: 'stage:NI', angleSource: 'stage' });
+    expect(resolveStagePlan(p, 'NI', 'botox', tenant, null)).toMatchObject({ sequence: [step('quien')], poolKey: 'interest:botox/NI', angleSource: 'interest' });
+    expect(resolveStagePlan(p, 'A', null, tenant, null).sequence).toBeNull();
+  });
+
+  it('{"preset": "medicina-estetica"} alone is a complete playbook: four stages, each a sequence', () => {
+    const p = parseFollowUpPlaybook({ preset: 'medicina-estetica' });
+    expect(p?.preset).toBe('medicina-estetica');
+    for (const s of ['NI', 'I', 'A', 'C'] as const) {
+      expect(p?.stages[s]?.sequence?.length).toBe(4);
+      expect(p?.stages[s]?.cadence?.length).toBe(4);
+    }
+    expect(p?.stages.NI?.sequence?.map((s) => s.covers)).toEqual(['precio', 'quien', 'que-esperar', 'oferta']);
+    expect(p?.stages.C?.sequence?.map((s) => s.covers)).toEqual(['cierre', 'duda', 'cierre', 'cierre']);
+  });
+
+  it('the tenant overrides the preset per stage and FIELD; untouched fields stay', () => {
+    const p = parseFollowUpPlaybook({
+      preset: 'medicina-estetica',
+      stages: { NI: { cadence: [5, 50] } },
+      byInterest: { 'Láser CO₂ Fraccionado': { I: { sequence: [step('oferta', 'precio especial')] } } },
+    });
+    expect(p?.stages.NI?.cadence).toEqual([5, 50]);
+    expect(p?.stages.NI?.sequence?.length).toBe(4);
+    const laserI = resolveStagePlan(p, 'I', 'láser co₂ fraccionado', tenant, null);
+    expect(laserI.sequence).toEqual([step('oferta', 'precio especial')]);
+    expect(laserI.cadence).toEqual([20, 180, 600, 1320]); // the preset's I cadence rides along
+    expect(resolveStagePlan(p, 'I', 'Botox', tenant, null).sequence?.length).toBe(4);
+  });
+
+  it('an unknown preset is ignored: the tenant text runs, or nothing', () => {
+    expect(parseFollowUpPlaybook({ preset: 'dentista' })).toBeNull();
+    expect(parseFollowUpPlaybook({ preset: 'dentista', stages: { C: { cadence: [1] } } })?.preset).toBeNull();
   });
 });

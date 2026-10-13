@@ -1349,14 +1349,56 @@ export async function markFollowUpSent(
   followUpId: string,
   angleIndex: number | null = null,
   anglePool: string | null = null,
+  step: string | null = null,
 ): Promise<void> {
   const supabase = getSupabase();
   const { error } = await supabase.rpc('app_mark_follow_up_sent', {
     p_follow_up_id: followUpId,
     p_angle_index: angleIndex,
     p_angle_pool: anglePool,
+    p_step: step,
   });
   fail('markFollowUpSent', error);
+}
+
+/**
+ * Sequence cursor (0070): the cover marks of the nudges already SENT on this
+ * conversation, in send order. Cancelled/failed rows never count.
+ */
+export async function loadSentSteps(conversationId: string): Promise<string[]> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from('follow_ups')
+    .select('step')
+    .eq('conversation_id', conversationId)
+    .eq('status', 'sent')
+    .not('step', 'is', null)
+    .order('sent_at', { ascending: true });
+  fail('loadSentSteps', error);
+  return ((data ?? []) as { step: string | null }[])
+    .map((r) => r.step)
+    .filter((s): s is string => typeof s === 'string' && s.length > 0);
+}
+
+/**
+ * Every attachment URL already sent OUT on this conversation (a nudge's file, a
+ * front-desk send) — so a sequence step never re-sends a file the lead has.
+ */
+export async function loadOutboundAttachmentUrls(conversationId: string): Promise<string[]> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from('messages')
+    .select('attachments')
+    .eq('conversation_id', conversationId)
+    .eq('direction', 'outbound')
+    .not('attachments', 'is', null);
+  fail('loadOutboundAttachmentUrls', error);
+  const urls: string[] = [];
+  for (const row of (data ?? []) as { attachments: unknown }[]) {
+    if (!Array.isArray(row.attachments)) continue;
+    for (const u of row.attachments) if (typeof u === 'string' && u) urls.push(u);
+  }
+  return urls;
 }
 
 /**

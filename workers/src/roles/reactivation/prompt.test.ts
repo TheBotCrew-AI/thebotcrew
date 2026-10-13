@@ -170,3 +170,27 @@ describe('buildReactivationInstructions — the stage section (0068)', () => {
     expect(out).toContain('Mensaje FINAL de despedida');
   });
 });
+
+describe('buildReactivationInstructions — sequence mode (0070)', () => {
+  const stageCtx = { stage: 'NI' as const, objective: 'informa', service: null };
+
+  it('with a step: the directive replaces the angle list, and no ANGULO tag is asked for', () => {
+    const out = buildReactivationInstructions('Clínica Luz', null, [], undefined, undefined, { ...stageCtx, step: 'di el precio y pregunta la zona' });
+    expect(out).toContain('# Este mensaje\ndi el precio y pregunta la zona');
+    expect(out).not.toContain('ANGULO: n');
+    expect(out).not.toContain('Sin ángulos predefinidos');
+    expect(out).toContain('Etapa del lead: NI');
+  });
+
+  it('without a step the prompt is byte-identical to the 0068 one', () => {
+    const before = buildReactivationInstructions('Clínica Luz', null, ['a'], undefined, undefined, stageCtx);
+    const after = buildReactivationInstructions('Clínica Luz', null, ['a'], undefined, undefined, { ...stageCtx, step: undefined });
+    expect(after).toBe(before);
+  });
+
+  it('the farewell ignores the step', () => {
+    const out = buildReactivationInstructions('Clínica Luz', null, [], undefined, { round: 2, isFinalTouch: true, reentryKeyword: 'CITA' }, { ...stageCtx, step: 'di el precio' });
+    expect(out).not.toContain('Este mensaje');
+    expect(out).toContain('Mensaje FINAL');
+  });
+});

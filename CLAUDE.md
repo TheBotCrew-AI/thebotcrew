@@ -151,7 +151,7 @@ The agent runtime is a pnpm workspace package in `workers/` (the monorepo also h
 workers/                       # Mastra + Cloudflare Worker package (@thebotcrew/workers)
   src/
     mastra/index.ts            # Mastra instance: agents + GHL webhook route + CloudflareDeployer
-    core/                      # role interface + registry, tenant resolver, request-context, env (incl. per-tenant AI key resolution), llm-usage (token normalization), followup-playbook + media-assets (0068/0069: the per-stage ladder and the files a touch delivers), prompt-rules (wording bans shared by every role — see business-logic §6c — and VOICE_RULE, the voice every role speaks in, §6d), transcribe + describe-image (a lead's voice note / photo → text at ingest, business-logic §7), types
+    core/                      # role interface + registry, tenant resolver, request-context, env (incl. per-tenant AI key resolution), llm-usage (token normalization), followup-playbook + media-assets + followup-steps + playbooks/ (0068–0070: the per-stage ladder, the files a touch delivers, the sequence cursor and the platform presets), prompt-rules (wording bans shared by every role — see business-logic §6c — and VOICE_RULE, the voice every role speaks in, §6d), transcribe + describe-image (a lead's voice note / photo → text at ingest, business-logic §7), types
     roles/
       front-desk/              # config (zod), prompt (es template), agent, tools/, evals/
       reactivation/            # text-only follow-up/reactivation agent (no tools)
@@ -337,7 +337,16 @@ supabase/
                                #      el texto como pie. Tabla media_assets por (client, slot, interest), escrita a mano, sin RPC.
                                #      Sin archivo = el ángulo NO se ofrece y el pool sigue en texto (omisión, no sustitución).
                                #      WhatsApp SÓLO entrega por el objeto `whatsapp.media` (el `attachments` genérico se marca
-                               #      delivered y nunca se ve); FB img+PDF e IG sólo img por `attachments`. Ver business-logic §4.6)
+                               #      delivered y nunca se ve); FB img+PDF e IG sólo img por `attachments`. Ver business-logic §4.6),
+                               # 0070 follow_up_steps (modo SECUENCIA del playbook + presets: una etapa puede traer
+                               #      `sequence: [{covers, text, asset?}]` en vez de un pool — el runner manda el primer paso cuya
+                               #      marca (precio|quien|que-esperar|prueba|oferta|duda|cierre) la conversación NO ha cubierto y
+                               #      el modelo sólo escribe el texto. Marcas POR CONVERSACIÓN (follow_ups.step + precio detectado
+                               #      en mensajes del bot + archivo ya en attachments); `cierre` es la única repetible; `prueba` sin
+                               #      archivo se salta. `{"preset":"medicina-estetica"}` = playbook de plataforma en core/playbooks/,
+                               #      el tenant sobreescribe por etapa y campo. app_mark_follow_up_sent gana p_step (DROP de la de 3).
+                               #      Vista follow_up_step_outcomes = la métrica del arco. Heriberto corre el preset + 2 excepciones.
+                               #      Ver business-logic §4.7)
   clients.sql, seed-tenants.sql# seeds (run by `supabase db reset` per config.toml)
 sites/                         # client marketing sites: static HTML, no build step, no deps
   _template/                   # starting point for a new client

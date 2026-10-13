@@ -90,7 +90,18 @@ Si el historial ya le dio uno de estos datos, usa OTRO; nunca repitas el mismo.`
   // The angle is chosen HYBRIDLY: the model picks the most fitting unused angle for
   // the current conversation state and reports its choice via a machine-readable tag
   // (parsed + stripped in code). When the pool is exhausted it free-forms a fresh nudge.
-  const angleSection = isFinalTouch
+  // Sequence mode (0070) replaces the pick: the runner already chose the step and the
+  // model only writes it — no tag, no list.
+  const stepSection = stageCtx?.step && !isFinalTouch
+    ? `# Este mensaje
+${stageCtx.step}
+
+# Formato de salida
+Escribe ÚNICAMENTE el mensaje para el lead.`
+    : null;
+  const angleSection = stepSection !== null
+    ? stepSection
+    : isFinalTouch
     ? `# Mensaje FINAL de despedida
 Este es el ÚLTIMO seguimiento que este lead va a recibir. Tu trabajo es cerrar con calidez, no reabrir la conversación.
 - Despídete breve y amable: entendemos que no es el momento y dejamos de escribirle para no molestar.

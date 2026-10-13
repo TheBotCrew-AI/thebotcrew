@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { Agent } from '@mastra/core/agent';
 import type { TenantContext } from '../core/types.js';
 import type { DueFollowUp } from '../db/types.js';
@@ -54,12 +54,19 @@ const agent = { generate: vi.fn() } as unknown as Agent;
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // The send-time quiet-hours gate (0067) reads the wall clock: without a pinned
+  // daytime the whole suite fails after 21:00 Mexico City. Cases that test the gate
+  // set their own time on top of this.
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-10-10T18:00:00Z')); // 12:00 in Mexico City
   vi.mocked(getAiApiKey).mockReturnValue('test-key');
   vi.mocked(resolveAiApiKey).mockReturnValue({ apiKey: 'test-key', source: 'platform', fellBack: false });
   vi.mocked(q.loadDueFollowUps).mockResolvedValue([due()]);
   vi.mocked(q.loadTenantConfig).mockResolvedValue(tenant());
   vi.mocked(q.loadSentAngleIndexes).mockResolvedValue([]);
   vi.mocked(q.loadMediaAssets).mockResolvedValue([]);
+  vi.mocked(q.loadSentSteps).mockResolvedValue([]);
+  vi.mocked(q.loadOutboundAttachmentUrls).mockResolvedValue([]);
   vi.mocked(q.loadRecentMessages).mockResolvedValue([]);
   vi.mocked(q.logMessage).mockResolvedValue({ conversationId: 'cv1', messageId: 'msg1' });
   vi.mocked(q.setGhlMessageId).mockResolvedValue(undefined);
@@ -87,6 +94,10 @@ beforeEach(() => {
   ghl.addContactTags.mockResolvedValue(undefined);
 });
 
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 describe('runPendingFollowUps', () => {
   it('nothing due → no-op', async () => {
     vi.mocked(q.loadDueFollowUps).mockResolvedValue([]);
@@ -107,7 +118,7 @@ describe('runPendingFollowUps', () => {
   it('happy path → sends, marks sent, schedules the next tier', async () => {
     const res = await runPendingFollowUps(agent);
     expect(ghl.sendMessage).toHaveBeenCalledWith(expect.objectContaining({ contactId: 'c1', text: 'te esperamos 👋' }));
-    expect(q.markFollowUpSent).toHaveBeenCalledWith('fu1', expect.anything(), 'tenant');
+    expect(q.markFollowUpSent).toHaveBeenCalledWith('fu1', expect.anything(), 'tenant', null);
     expect(q.scheduleFollowUp).toHaveBeenCalledWith('cv1', 2, 1440, 'America/Mexico_City', null, 'cadence', 0, null);
     expect(q.updateConversationStatus).not.toHaveBeenCalled();
     expect(res).toEqual({ processed: 1, failed: 0, skipped: 0 });
@@ -240,7 +251,7 @@ describe('runPendingFollowUps — demo reminders', () => {
 
   it('they burn no angle — the pool is intact for the closer', async () => {
     await runPendingFollowUps(agent);
-    expect(q.markFollowUpSent).toHaveBeenCalledWith('fu1', null, null);
+    expect(q.markFollowUpSent).toHaveBeenCalledWith('fu1', null, null, null);
   });
 
   it('rungs 1 and 2 arm the next rung on the demo ladder', async () => {
@@ -455,7 +466,7 @@ describe('runPendingFollowUps — reactivation rounds (0049)', () => {
     expect(ctx.reactivationCandidates).toEqual([]);
     expect(ctx.reactivationRound).toEqual({ round: 2, isFinalTouch: true, reentryKeyword: 'CITA' });
     // The remaining[0] fallback must not burn an angle on a message that isn't one.
-    expect(q.markFollowUpSent).toHaveBeenCalledWith('fu1', null, null);
+    expect(q.markFollowUpSent).toHaveBeenCalledWith('fu1', null, null, null);
   });
 
   it('help mode: an upcoming appointment aborts the nudge before generating (store or GHL)', async () => {
@@ -519,29 +530,19 @@ describe('runPendingFollowUps — send-time gates and truthful delivery (0067)',
   });
 
   it('a row claimed inside quiet hours is pushed to the window end, not sent and not lost', async () => {
-    vi.useFakeTimers();
-    try {
-      vi.setSystemTime(new Date('2026-10-10T09:00:00Z')); // 03:00 in Mexico City — quiet
-      const res = await runPendingFollowUps(agent);
-      expect(ghl.sendMessage).not.toHaveBeenCalled();
-      expect(q.cancelFollowUps).toHaveBeenCalledWith('cv1');
-      expect(q.scheduleFollowUp).toHaveBeenCalledWith('cv1', 1, 0, 'America/Mexico_City', null, 'cadence', 0, null);
-      expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'followup_aborted', expect.objectContaining({ reason: 'quiet_hours', rescheduled: true }));
-      expect(res.skipped).toBe(1);
-    } finally {
-      vi.useRealTimers();
-    }
+    vi.setSystemTime(new Date('2026-10-10T09:00:00Z')); // 03:00 in Mexico City — quiet
+    const res = await runPendingFollowUps(agent);
+    expect(ghl.sendMessage).not.toHaveBeenCalled();
+    expect(q.cancelFollowUps).toHaveBeenCalledWith('cv1');
+    expect(q.scheduleFollowUp).toHaveBeenCalledWith('cv1', 1, 0, 'America/Mexico_City', null, 'cadence', 0, null);
+    expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'followup_aborted', expect.objectContaining({ reason: 'quiet_hours', rescheduled: true }));
+    expect(res.skipped).toBe(1);
   });
 
   it('outside quiet hours the same row sends normally', async () => {
-    vi.useFakeTimers();
-    try {
-      vi.setSystemTime(new Date('2026-10-10T18:00:00Z')); // 12:00 in Mexico City
-      await runPendingFollowUps(agent);
-      expect(ghl.sendMessage).toHaveBeenCalled();
-    } finally {
-      vi.useRealTimers();
-    }
+    vi.setSystemTime(new Date('2026-10-10T18:00:00Z')); // 12:00 in Mexico City
+    await runPendingFollowUps(agent);
+    expect(ghl.sendMessage).toHaveBeenCalled();
   });
 
   it('a send GHL refused is marked FAILED with a delivery_error, and the ladder still advances', async () => {
@@ -592,7 +593,7 @@ describe('runPendingFollowUps — the playbook: a ladder per stage (0068)', () =
     expect(ctx.stageContext).toEqual({ stage: 'NI', objective: 'informa, no pidas cita', service: { name: 'Botox', description: 'Por zona: frente $2,500.' } });
     expect(ctx.reactivationCandidates).toEqual(['botox ni 1']);
     expect(q.loadSentAngleIndexes).toHaveBeenCalledWith('cv1', 'interest:Botox/NI');
-    expect(q.markFollowUpSent).toHaveBeenCalledWith('fu1', 0, 'interest:Botox/NI');
+    expect(q.markFollowUpSent).toHaveBeenCalledWith('fu1', 0, 'interest:Botox/NI', null);
     expect(q.scheduleFollowUp).toHaveBeenCalledWith('cv1', 2, 60, 'America/Mexico_City', null, 'cadence', 0, 'NI');
     expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'follow_up_sent', expect.objectContaining({ stage: 'NI', pool: 'interest:Botox/NI', angleSource: 'interest', playbook: true }));
   });
@@ -632,7 +633,7 @@ describe('runPendingFollowUps — the playbook: a ladder per stage (0068)', () =
     vi.mocked(q.loadDueFollowUps).mockResolvedValue([due({ stage: 'NI', round: 2 })]);
     await runPendingFollowUps(agent);
     expect((await ctxArg()).reactivationCandidates).toEqual([]);
-    expect(q.markFollowUpSent).toHaveBeenCalledWith('fu1', null, null);
+    expect(q.markFollowUpSent).toHaveBeenCalledWith('fu1', null, null, null);
   });
 });
 
@@ -669,7 +670,7 @@ describe('runPendingFollowUps — asset angles (0069)', () => {
     expect(ghl.sendMessage).toHaveBeenCalledWith(expect.not.objectContaining({ media: expect.anything() }));
     expect(q.logMessage).toHaveBeenCalledWith(expect.objectContaining({ p_attachments: null }));
     // angleChoice 1 now points at 'texto plano' = pool index 1, so the asset angle stays unused.
-    expect(q.markFollowUpSent).toHaveBeenCalledWith('fu1', 1, 'stage:NI');
+    expect(q.markFollowUpSent).toHaveBeenCalledWith('fu1', 1, 'stage:NI', null);
   });
 
   it('a document on Instagram is not offered (the channel cannot carry it)', async () => {
@@ -700,5 +701,118 @@ describe('runPendingFollowUps — asset angles (0069)', () => {
     vi.mocked(q.loadTenantConfig).mockResolvedValue(tenant({ followUpPlaybook: { stages: { NI: { angles: ['a', 'b'] } } } }));
     await runPendingFollowUps(agent);
     expect(q.loadMediaAssets).not.toHaveBeenCalled();
+  });
+});
+
+describe('runPendingFollowUps — sequence mode (0070): the runner picks the step, the model writes it', () => {
+  const seq = [
+    { covers: 'precio', asset: 'precios', text: 'di el precio' },
+    { covers: 'quien', asset: 'consultorio', text: 'quién lo atiende' },
+    { covers: 'prueba', asset: 'antes-despues', text: 'caso real' },
+    { covers: 'oferta', text: 'la valoración' },
+  ];
+  const pb = { stages: { NI: { cadence: [10, 60, 240, 1200], sequence: seq } } };
+  const precios = { slot: 'precios', kind: 'image' as const, url: 'https://x/precios.png', name: 'precios.png', interest: null };
+  const ctx = () => vi.mocked(buildAgentRequestContext).mock.calls.at(-1)![0] as {
+    reactivationCandidates: string[];
+    stageContext?: { step?: string };
+  };
+
+  beforeEach(() => {
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(tenant({ followUpPlaybook: pb }));
+    vi.mocked(q.loadDueFollowUps).mockResolvedValue([due({ stage: 'NI' })]);
+    vi.mocked(parseAngleSelection).mockReturnValue({ message: 'texto del paso', angleChoice: null });
+  });
+
+  it('rung 1 on a fresh thread → step 1 with its file; no candidates, no angle, step stamped', async () => {
+    vi.mocked(q.loadMediaAssets).mockResolvedValue([precios]);
+    await runPendingFollowUps(agent);
+    expect(ctx().reactivationCandidates).toEqual([]);
+    expect(ctx().stageContext?.step).toContain('di el precio');
+    expect(ctx().stageContext?.step).toContain('precios.png');
+    expect(ghl.sendMessage).toHaveBeenCalledWith(expect.objectContaining({
+      text: 'texto del paso', media: { kind: 'image', url: 'https://x/precios.png', name: 'precios.png' },
+    }));
+    expect(q.markFollowUpSent).toHaveBeenCalledWith('fu1', null, null, 'precio');
+    expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'follow_up_sent', expect.objectContaining({
+      step: 'precio', stepIndex: 0, asset: 'precios', angleIndex: null, preset: null,
+    }));
+    expect(q.loadSentAngleIndexes).not.toHaveBeenCalled();
+  });
+
+  it('the bot already stated a price → the precio step is skipped, never repeated', async () => {
+    vi.mocked(q.loadRecentMessages).mockResolvedValue([
+      { direction: 'outbound', senderType: 'bot', content: 'La frente son $2,500.', sentAt: '' } as never,
+    ]);
+    await runPendingFollowUps(agent);
+    expect(ctx().stageContext?.step).toContain('quién lo atiende');
+    expect(q.markFollowUpSent).toHaveBeenCalledWith('fu1', null, null, 'quien');
+  });
+
+  it('a mark already sent on this thread (any stage) is skipped → marks are per conversation', async () => {
+    vi.mocked(q.loadSentSteps).mockResolvedValue(['precio', 'quien']);
+    vi.mocked(q.loadMediaAssets).mockResolvedValue([
+      { slot: 'antes-despues', kind: 'image' as const, url: 'https://x/ad.png', name: 'ad.png', interest: null },
+    ]);
+    await runPendingFollowUps(agent);
+    expect(ctx().stageContext?.step).toContain('caso real');
+    expect(q.markFollowUpSent).toHaveBeenCalledWith('fu1', null, null, 'prueba');
+  });
+
+  it('prueba without its file is skipped; a text step with a missing file goes out as text', async () => {
+    vi.mocked(q.loadSentSteps).mockResolvedValue(['precio', 'quien']);
+    vi.mocked(q.loadMediaAssets).mockResolvedValue([]);
+    await runPendingFollowUps(agent);
+    expect(ctx().stageContext?.step).toBe('la valoración');
+    expect(ghl.sendMessage).toHaveBeenCalledWith(expect.not.objectContaining({ media: expect.anything() }));
+    expect(q.markFollowUpSent).toHaveBeenCalledWith('fu1', null, null, 'oferta');
+  });
+
+  it('a file the thread already received (front-desk send, old angle) is not sent again', async () => {
+    vi.mocked(q.loadMediaAssets).mockResolvedValue([precios]);
+    vi.mocked(q.loadOutboundAttachmentUrls).mockResolvedValue(['https://x/precios.png']);
+    await runPendingFollowUps(agent);
+    expect(ctx().stageContext?.step).toContain('quién lo atiende');
+  });
+
+  it('the story told → free-form nudge, no step stamped', async () => {
+    vi.mocked(q.loadSentSteps).mockResolvedValue(['precio', 'quien', 'prueba', 'oferta']);
+    await runPendingFollowUps(agent);
+    expect(ctx().stageContext?.step).toBeUndefined();
+    expect(ctx().reactivationCandidates).toEqual([]);
+    expect(q.markFollowUpSent).toHaveBeenCalledWith('fu1', null, null, null);
+  });
+
+  it('cierre repeats: a C sequence of closes keeps sending after one went out', async () => {
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(tenant({
+      followUpPlaybook: { stages: { C: { cadence: [10, 60], sequence: [{ covers: 'cierre', text: 'cierra' }, { covers: 'duda', text: 'qué lo detiene' }] } } },
+    }));
+    vi.mocked(q.loadDueFollowUps).mockResolvedValue([due({ stage: 'C', tier: 2 })]);
+    vi.mocked(q.loadSentSteps).mockResolvedValue(['cierre']);
+    await runPendingFollowUps(agent);
+    expect(ctx().stageContext?.step).toBe('cierra');
+  });
+
+  it('the preset runs a tenant with no text of its own, and the event names it', async () => {
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(tenant({
+      followUpPlaybook: { preset: 'medicina-estetica' },
+      services: [{ name: 'Botox', description: 'Frente $2,500.' }],
+    }));
+    vi.mocked(q.getConversationPersona).mockResolvedValue({
+      activeRole: null, roleStartedAt: null, demoStartedAt: null, promptVariant: null, reactivationRound: 0, leadTimezone: null, stage: 'NI', interest: 'Botox',
+    });
+    await runPendingFollowUps(agent);
+    expect(ctx().stageContext?.step).toContain('Dato del anuncio');
+    expect(q.scheduleFollowUp).toHaveBeenCalledWith('cv1', 2, 60, 'America/Mexico_City', null, 'cadence', 0, 'NI');
+    expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'follow_up_sent', expect.objectContaining({ preset: 'medicina-estetica', step: 'precio' }));
+  });
+
+  it('the farewell ignores the sequence: no step, no file', async () => {
+    vi.mocked(q.loadDueFollowUps).mockResolvedValue([due({ stage: 'NI', round: 2 })]);
+    vi.mocked(q.loadMediaAssets).mockResolvedValue([precios]);
+    await runPendingFollowUps(agent);
+    expect(ctx().stageContext?.step).toBeUndefined();
+    expect(q.loadSentSteps).not.toHaveBeenCalled();
+    expect(q.markFollowUpSent).toHaveBeenCalledWith('fu1', null, null, null);
   });
 });

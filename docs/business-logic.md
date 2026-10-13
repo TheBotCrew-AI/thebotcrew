@@ -513,6 +513,43 @@ model's text as its caption.
   when an asset angle is available at NI/I the runner offers ONLY the asset angles; at A/C
   the conversation decides and text angles stay on the table.
 
+### 4.7 Sequence mode and presets — the arc as a story (0070)
+
+Leo's objection to the pools (2026-10-12): the model picked the angle, so the 24-hour arc had
+no shape — a lead could get "¿alguna duda?" at 10 min and the price sheet at 20 h. Sequence
+mode replaces the pick: a stage carries `"sequence": [{ "covers", "text", "asset"? }]`, rung N
+sends the first step the conversation hasn't **covered**, and the model only writes the
+step's text (and the file's caption). `core/followup-steps.ts`, pure.
+
+- **Cover marks**, a closed catalogue: `precio`, `quien`, `que-esperar`, `prueba`, `oferta`,
+  `duda`, `cierre`. **Per conversation, not per stage** — a lead who saw the price at NI is
+  never sent the price at I. What counts as covered is deterministic: `precio` when a bot
+  message states a price (the stage floor's detector); the rest when a sent nudge carries
+  that mark (`follow_ups.step`, 0070) or the step's file is already in an outbound
+  `messages.attachments` (a front-desk send, a v2 angle); `cierre` never — it is the one
+  repeatable step. Story told → free-form, like an exhausted pool.
+- **Files**: a step with an `asset` the tenant lacks goes out as **text**, except `prueba` —
+  a "trust me" without the before/after is noise, so it is skipped (Leo, 2026-10-12).
+  Channel filter as in §4.6.
+- **Resolution** (`resolveStagePlan`): `sequence` is a field like `angles`, resolved
+  `byInterest → stages`, and **wins over a pool at the same level**. Cadence and objective
+  resolve as in §4.5. The farewell ignores the sequence.
+- **Presets**: `"preset": "medicina-estetica"` loads the platform playbook in
+  `core/playbooks/` (code = the product) and the tenant's own `stages` / `byInterest` override
+  it **per stage and per field**. `{"preset": "medicina-estetica"}` alone is a complete tenant:
+  facts from `services[].description`, files from `media_assets`. Unknown preset = ignored.
+  The default arc: NI `precio → quien → que-esperar → oferta`; I `quien → que-esperar →
+  prueba → oferta`; A `que-esperar → prueba → oferta → cierre`; C `cierre → duda → cierre →
+  cierre`. Onboarding a clinic = service descriptions + files, no playbook text.
+- **Prompt**: with a step, "# Este mensaje" carries the one directive and no `ANGULO:` tag is
+  asked for; without one the prompt is byte-identical to 0068 (`prompt.test.ts`).
+- **The metric**: `follow_up_sent` gains `step`, `stepIndex`, `preset`; the view
+  `follow_up_step_outcomes` (per client, stage, step: `sent`, `replied` = the lead wrote back
+  before the next rung) is what decides a reorder. One week of it before touching the order.
+
+Heriberto runs the preset plus two overrides (láser I: the 14-day price; bótox A: same-day
+evaluation + application) — `docs/playbooks/heriberto-follow-up-playbook.sql` v3.
+
 ## 5. Availability & booking
 
 > **Opt-out per tenant:** `prompt_overrides.bookingEnabled = false` turns this entire

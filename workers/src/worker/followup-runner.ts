@@ -26,7 +26,9 @@ import {
   isBotSuppressed,
   loadDueFollowUps,
   loadMediaAssets,
+  loadOutboundAttachmentUrls,
   loadSentAngleIndexes,
+  loadSentSteps,
   logBotEvent,
   logLlmUsage,
   logMessage,
@@ -47,6 +49,7 @@ import { DEFAULT_QUIET_HOURS, isQuietNow } from '../core/active-hours.js';
 import { cadenceForRound, isFinalRound, REENTRY_KEYWORD, totalRounds, variantAllowsFollowUps } from '../core/reactivation-rounds.js';
 import { parseFollowUpPlaybook, resolveStagePlan, serviceFacts } from '../core/followup-playbook.js';
 import { pickAsset, type MediaAsset, type OutboundMedia } from '../core/media-assets.js';
+import { coveredMarks, nextStep, type StepPick } from '../core/followup-steps.js';
 import type { LeadStage } from '../core/stage.js';
 import type { StageContext } from '../core/runtime-context.js';
 import type { AiProvider, Channel, TenantContext } from '../core/types.js';
@@ -205,7 +208,7 @@ async function processDemoReminder(
 
   const text = buildDemoReminder(rung, tenant.demoOffKeywords?.[0]);
   await deliverNudge(followUp, tenant, text, DEMO_REMINDER_ROLE, null);
-  await markFollowUpSent(followUp.followUpId, null, null);
+  await markFollowUpSent(followUp.followUpId, null, null, null);
   await logBotEvent(tenant.clientId, followUp.ghlConversationId, 'demo_reminder_sent', {
     rung,
     followUpId: followUp.followUpId,
@@ -366,6 +369,11 @@ async function processOne(
     console.error('[followup] upcoming-appointment check failed (fails open):', e instanceof Error ? e.message : String(e));
   }
 
+  // Same clean-start rule as a live turn: read history from when the CURRENT persona
+  // took over, so a post-demo nudge sees the closer's conversation, not the roleplay.
+  // Loaded here because the sequence cursor (below) reads the bot's own messages.
+  const history = await loadRecentMessages(followUp.conversationId, 20, roleStartedAt ?? undefined);
+
   // Hybrid angle selection: offer only the pool angles not yet SENT on this
   // conversation, so angles never repeat even as the cadence cycle resets. An empty
   // pool (all used) → the agent free-forms a fresh nudge (chosenAngleIndex stays null).
@@ -381,8 +389,33 @@ async function processOne(
   // An asset angle (0069) is offered only when the tenant HAS the file for this lead's
   // treatment and channel; otherwise it is left out (not consumed) and the text angles
   // carry the touch. The model sees the file's name so the message reads as its caption.
+  // Sequence mode (0070): the stage is an ordered story and the runner, not the model,
+  // picks the step — the first one whose cover mark this conversation hasn't covered
+  // (a price already stated, a mark already sent, a file already delivered). The model
+  // gets exactly one directive and writes it. The story told → free-form, like an
+  // exhausted pool.
   let remaining: Array<{ text: string; index: number; media: OutboundMedia | null; slot: string | null }> = [];
-  if (!finalTouch) {
+  let stepPick: StepPick | null = null;
+  let stepDirective: string | undefined;
+  if (!finalTouch && plan.sequence) {
+    const [sentSteps, sentUrls] = await Promise.all([
+      loadSentSteps(followUp.conversationId),
+      loadOutboundAttachmentUrls(followUp.conversationId),
+    ]);
+    const assets: MediaAsset[] = plan.sequence.some((st) => st.asset) ? await loadMediaAssets(tenant.clientId) : [];
+    const covered = coveredMarks(
+      history.filter((m) => m.senderType === 'bot').map((m) => m.content),
+      sentSteps,
+    );
+    stepPick = nextStep(plan.sequence, {
+      covered, sentUrls: new Set(sentUrls), assets, interest, channel: followUp.channel as Channel,
+    });
+    if (stepPick) {
+      stepDirective = stepPick.file
+        ? `${stepPick.step.text} ${ASSET_CAPTION_NOTE(stepPick.file.name)}`
+        : stepPick.step.text;
+    }
+  } else if (!finalTouch) {
     const usedIndexes = await loadSentAngleIndexes(followUp.conversationId, plan.poolKey);
     const wantsAssets = plan.angles.some((a) => a.asset);
     const assets: MediaAsset[] = wantsAssets ? await loadMediaAssets(tenant.clientId) : [];
@@ -410,7 +443,12 @@ async function processOne(
     }
   }
   const stageContext: StageContext | undefined = playbook && stage
-    ? { stage, objective: plan.objective ?? '', service: serviceFacts(tenant.config.services, interest) }
+    ? {
+        stage,
+        objective: plan.objective ?? '',
+        service: serviceFacts(tenant.config.services, interest),
+        ...(stepDirective ? { step: stepDirective } : {}),
+      }
     : undefined;
 
   const provider = (tenant.config.provider ?? DEFAULT_PROVIDER) as AiProvider;
@@ -465,15 +503,13 @@ async function processOne(
     stageContext,
   });
 
-  // Same clean-start rule as a live turn: read history from when the CURRENT persona
-  // took over, so a post-demo nudge sees the closer's conversation, not the roleplay.
-  const history = await loadRecentMessages(followUp.conversationId, 20, roleStartedAt ?? undefined);
   const messages = toModelMessages(history);
 
   let reply: string;
   let chosenAngleIndex: number | null = null;
   let chosenMedia: OutboundMedia | null = null;
   let chosenSlot: string | null = null;
+  let chosenStep: string | null = null;
   try {
     const result = await reactivationAgent.generate(messages, { requestContext, maxSteps: 3 });
     const usage = usageFromAgentResult(result);
@@ -490,13 +526,19 @@ async function processOne(
     }
     const selection = parseAngleSelection(result.text, remaining.length);
     reply = selection.message;
-    const picked = selection.angleChoice != null
-      ? remaining[selection.angleChoice - 1]
-      : remaining[0]; // no valid tag but angles remain → consume the first unused one
-    if (picked) {
-      chosenAngleIndex = picked.index;
-      chosenMedia = picked.media;
-      chosenSlot = picked.slot;
+    if (stepPick) {
+      chosenStep = stepPick.step.covers;
+      chosenMedia = stepPick.file ? { kind: stepPick.file.kind, url: stepPick.file.url, name: stepPick.file.name } : null;
+      chosenSlot = stepPick.file?.slot ?? null;
+    } else {
+      const picked = selection.angleChoice != null
+        ? remaining[selection.angleChoice - 1]
+        : remaining[0]; // no valid tag but angles remain → consume the first unused one
+      if (picked) {
+        chosenAngleIndex = picked.index;
+        chosenMedia = picked.media;
+        chosenSlot = picked.slot;
+      }
     }
   } catch (err) {
     console.error(
@@ -520,11 +562,12 @@ async function processOne(
   // rung's send is its own attempt, and a transient error must not end the cycle.
   const delivered = await deliverNudge(followUp, tenant, reply, REACTIVATION_ROLE, model, chosenMedia);
   if (delivered) {
-    await markFollowUpSent(followUp.followUpId, chosenAngleIndex, chosenAngleIndex != null ? plan.poolKey : null);
+    await markFollowUpSent(followUp.followUpId, chosenAngleIndex, chosenAngleIndex != null ? plan.poolKey : null, chosenStep);
     await logBotEvent(tenant.clientId, followUp.ghlConversationId, 'follow_up_sent', {
       followUpId: followUp.followUpId, tier: position, round: followUp.round,
       stage, interest, pool: plan.poolKey, angleSource: plan.angleSource, angleIndex: chosenAngleIndex,
       playbook: playbook !== null, asset: chosenSlot,
+      step: chosenStep, stepIndex: stepPick?.index ?? null, preset: playbook?.preset ?? null,
     });
   } else {
     await markFollowUpFailed(followUp.followUpId);

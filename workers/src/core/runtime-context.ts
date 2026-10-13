@@ -36,6 +36,9 @@ export interface StageContext {
   objective: string;
   /** The configured service the lead asked about, with the ONLY facts the nudge may state. */
   service: { name: string; description: string | null } | null;
+  /** Sequence mode (0070): the one step this nudge writes — the model picks nothing.
+   *  Absent = angle mode (candidates) or free-form. */
+  step?: string;
 }
 
 export type AgentRequestContext = RequestContext<AgentRequestValues>;

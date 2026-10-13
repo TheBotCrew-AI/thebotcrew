@@ -735,3 +735,31 @@ insert into media_assets (client_id, slot, kind, url, name, interest) values
 Channel limits the runner applies on its own: Instagram carries images only (a PDF slot is
 skipped there), WhatsApp and Facebook carry both. Slot names are kebab-case; the platform's
 suggested set is `precios`, `que-esperar`, `antes-despues`, `testimonio`, `consultorio`.
+
+## 11. Follow-up playbook — start from the preset (0070)
+
+A new aesthetic-medicine tenant needs **no playbook text**. Set:
+
+```sql
+update tenant_config set follow_up_playbook = '{"preset": "medicina-estetica"}'::jsonb
+where business_name = '<name>';
+```
+
+and make sure `follow_up_cadence` is set (it is still the on/off switch). The preset runs
+four stages as ordered sequences (business-logic §4.7); every fact it states comes from
+`services[].description`, so **write the description as the sentence the nudge may say**
+(price, what it includes, what to expect, whether the evaluation is free). Load files per
+§10 as they arrive — until then the steps go out as text and `prueba` (before/after) is
+skipped.
+
+Clinic-specific lines (a same-day application, a price-if-you-start-soon) go as overrides
+on top, per stage and treatment — the preset keeps the rest:
+
+```json
+{ "preset": "medicina-estetica",
+  "byInterest": { "Láser CO₂ Fraccionado": { "I": { "sequence": [ { "covers": "oferta", "text": "…" } ] } } } }
+```
+
+An override replaces that stage's whole `sequence` (not one step). Marks:
+`precio`, `quien`, `que-esperar`, `prueba`, `oferta`, `duda`, `cierre`. Reference:
+`docs/playbooks/heriberto-follow-up-playbook.sql`.

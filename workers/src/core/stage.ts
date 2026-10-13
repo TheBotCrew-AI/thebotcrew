@@ -48,6 +48,11 @@ export interface StageFloor {
 /** A price in Mexican pesos as the bot writes it: "$500", "$ 3,500", "500 pesos", "500 MXN". */
 const PRICE_RE = /\$\s?\d|\d\s?(pesos|mxn)\b/i;
 
+/** Whether a bot message states a price — shared with the sequence cursor (0070). */
+export function mentionsPrice(text: string): boolean {
+  return PRICE_RE.test(text);
+}
+
 /** The ad opener, or a one-tap message: ≤4 words with no question mark. */
 export function isAdOpener(text: string, openerKeywords: string[]): boolean {
   const t = text.trim();
@@ -67,7 +72,7 @@ export function stageFloor(s: StageSignals): StageFloor {
   const engaged = ownMessages >= 1;
   if (engaged) reasons.push(`lead_messages:${ownMessages}`);
 
-  const priceGiven = bot.some((t) => PRICE_RE.test(t));
+  const priceGiven = bot.some(mentionsPrice);
   if (priceGiven) reasons.push('price_given');
 
   const leadAsked = s.askedSomething || lead.some((t, i) => t.includes('?') && (i > 0 || !openerIsPrefill));

@@ -18,11 +18,21 @@
  * drops an asset angle whose file the tenant lacks (or the channel can't carry),
  * so the pool degrades to its text angles rather than to a file-less promise.
  *
+ * Sequence mode (0070): a stage may carry `"sequence": [{ "covers", "text", "asset"? }]`
+ * instead of (or besides — the sequence wins) `angles`: an ordered story whose
+ * steps are skipped once the conversation covered their mark. See followup-steps.ts.
+ *
+ * Presets (0070): `"preset": "medicina-estetica"` loads the platform playbook of
+ * core/playbooks/ and the tenant's own `stages` / `byInterest` override it per
+ * stage and per field. `{"preset": "…"}` alone is a complete tenant.
+ *
  * Every key is optional. NULL playbook = the flat ladder exactly as before 0068.
  * Resolution, most specific first:
  *   cadence   byInterest[interest][stage] → stages[stage] → tenant follow_up_cadence
  *   objective byInterest[interest][stage] → stages[stage] → the platform default
+ *   sequence  byInterest[interest][stage] → stages[stage]            (mode 'sequence')
  *   angles    byInterest[interest][stage] → stages[stage] → variant pool → tenant pool
+ * (the tenant's level is looked at before the preset's, field by field.)
  * Only round 0 takes the playbook cadence; rounds 1+ keep the 0049 taper.
  *
  * Angle indexes are positions within ONE pool, so each resolved pool carries a
@@ -31,7 +41,9 @@
  */
 
 import { resolveAnglePool } from '../roles/reactivation/angle-select.js';
+import { parseStep, type StepSpec } from './followup-steps.js';
 import { LEAD_STAGES, type LeadStage } from './lead-stage.js';
+import { presetPlaybook } from './playbooks/index.js';
 
 /** One angle of a pool: what to say, and optionally which file to send with it. */
 export interface AngleSpec {
@@ -44,11 +56,15 @@ export interface StagePlan {
   cadence?: number[];
   objective?: string;
   angles?: AngleSpec[];
+  /** Sequence mode (0070): the ordered steps; present = this stage runs as a story. */
+  sequence?: StepSpec[];
 }
 
 export interface FollowUpPlaybook {
   stages: Partial<Record<LeadStage, StagePlan>>;
   byInterest: Record<string, Partial<Record<LeadStage, StagePlan>>>;
+  /** The platform preset this playbook sits on, if any (for the event). */
+  preset: string | null;
 }
 
 /** What the lead at each stage still needs — the nudge's job when the tenant wrote none. */
@@ -93,6 +109,10 @@ function parsePlan(raw: unknown): StagePlan | null {
     const a = r.angles.map(parseAngle).filter((x): x is AngleSpec => x !== null);
     if (a.length) plan.angles = a;
   }
+  if (Array.isArray(r.sequence)) {
+    const seq = r.sequence.map(parseStep).filter((x): x is StepSpec => x !== null);
+    if (seq.length) plan.sequence = seq;
+  }
   return Object.keys(plan).length ? plan : null;
 }
 
@@ -108,8 +128,7 @@ function parseStageMap(raw: unknown): Partial<Record<LeadStage, StagePlan>> {
   return out;
 }
 
-/** The jsonb as stored → a typed playbook, or null when absent/unusable. */
-export function parseFollowUpPlaybook(raw: unknown): FollowUpPlaybook | null {
+function parseOwn(raw: unknown): Omit<FollowUpPlaybook, 'preset'> | null {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
   const r = raw as Record<string, unknown>;
   const stages = parseStageMap(r.stages);
@@ -124,11 +143,46 @@ export function parseFollowUpPlaybook(raw: unknown): FollowUpPlaybook | null {
   return { stages, byInterest };
 }
 
+/** Field-level merge: what `over` sets wins, per stage; the rest comes from `base`. */
+function mergeStageMaps(
+  base: Partial<Record<LeadStage, StagePlan>>,
+  over: Partial<Record<LeadStage, StagePlan>>,
+): Partial<Record<LeadStage, StagePlan>> {
+  const out: Partial<Record<LeadStage, StagePlan>> = { ...base };
+  for (const [k, plan] of Object.entries(over) as [LeadStage, StagePlan][]) {
+    out[k] = { ...(base[k] ?? {}), ...plan };
+  }
+  return out;
+}
+
+/**
+ * The jsonb as stored → a typed playbook, or null when absent/unusable.
+ * With a `preset` (0070) the platform playbook is the base and the tenant's own
+ * keys override it per stage and field; an unknown preset name is ignored.
+ */
+export function parseFollowUpPlaybook(raw: unknown): FollowUpPlaybook | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const r = raw as Record<string, unknown>;
+  const presetName = typeof r.preset === 'string' && r.preset.trim() ? r.preset.trim().toLowerCase() : null;
+  const base = presetName ? parseOwn(presetPlaybook(presetName)) : null;
+  const own = parseOwn(raw);
+  if (!base && !own) return null;
+  if (!base) return { ...own!, preset: null };
+  if (!own) return { ...base, preset: presetName };
+  const byInterest: FollowUpPlaybook['byInterest'] = { ...base.byInterest };
+  for (const [name, m] of Object.entries(own.byInterest)) {
+    byInterest[name] = mergeStageMaps(base.byInterest[name] ?? {}, m);
+  }
+  return { stages: mergeStageMaps(base.stages, own.stages), byInterest, preset: presetName };
+}
+
 export interface ResolvedPlan {
   /** Round-0 cadence (minutes per rung). */
   cadence: number[];
   /** Angle directives for this lead; may be the legacy variant/tenant pool (text-only). */
   angles: AngleSpec[];
+  /** Sequence mode (0070): the stage's ordered steps; null = angle mode. */
+  sequence: StepSpec[] | null;
   /** Identity of the pool `angles` came from — the sent-angle cursor is per pool. */
   poolKey: string;
   /** Instruction for the nudge; null when the playbook is off (prompt unchanged). */
@@ -170,6 +224,7 @@ export function resolveStagePlan(
   const base: ResolvedPlan = {
     cadence: config.followUpCadence ?? [],
     angles: legacy.pool.map((text) => ({ text })),
+    sequence: null,
     poolKey: legacy.source === 'variant' ? `variant:${variantKey}` : 'tenant',
     objective: null,
     angleSource: legacy.source,
@@ -182,11 +237,18 @@ export function resolveStagePlan(
   const cadence = byInt?.cadence ?? byStage?.cadence ?? base.cadence;
   const objective = byInt?.objective ?? byStage?.objective ?? DEFAULT_STAGE_OBJECTIVES[stage];
 
+  // Sequence mode wins over a pool at the same resolution: the story is the point.
+  if (byInt?.sequence) {
+    return { cadence, objective, angles: [], sequence: byInt.sequence, poolKey: `interest:${interest}/${stage}`, angleSource: 'interest' };
+  }
   if (byInt?.angles) {
-    return { cadence, objective, angles: byInt.angles, poolKey: `interest:${interest}/${stage}`, angleSource: 'interest' };
+    return { cadence, objective, angles: byInt.angles, sequence: null, poolKey: `interest:${interest}/${stage}`, angleSource: 'interest' };
+  }
+  if (byStage?.sequence) {
+    return { cadence, objective, angles: [], sequence: byStage.sequence, poolKey: `stage:${stage}`, angleSource: 'stage' };
   }
   if (byStage?.angles) {
-    return { cadence, objective, angles: byStage.angles, poolKey: `stage:${stage}`, angleSource: 'stage' };
+    return { cadence, objective, angles: byStage.angles, sequence: null, poolKey: `stage:${stage}`, angleSource: 'stage' };
   }
   return { ...base, cadence, objective };
 }
