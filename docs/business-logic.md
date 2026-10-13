@@ -391,7 +391,7 @@ tenant with no playbook it is only recorded: nothing the lead receives changes.
 | `NI` | no information — only the ad's opener, never answered the bot | one lead message that is an ad keyword / ≤4 words, and no price in any bot message |
 | `I` | has the basics (price/offer), stopped there | the bot wrote a price (`$…`, `… pesos`), OR the lead wrote anything beyond the opener |
 | `A` | asked their own questions / told their case | engaged AND (a `?` in a lead message, `lookupFaq` ran, or the classifier named a service) |
-| `C` | saw slots or said they want it | engaged AND `getAvailability` ran (this turn or any earlier `availability_checked`) |
+| `C` | reacted to slots or said they want it | engaged AND an `availability_checked` from BEFORE this turn's inbound (the lead wrote again after seeing times). Slots shown in this very reply don't count — since 2026-10-12: "Hola, me interesa el Botox" → "Las tres" → price + slots landed as C although the lead never saw a time. The classifier can still raise to C on "sí quiero". |
 
 Two rules make it safe to trust:
 
@@ -507,6 +507,11 @@ model's text as its caption.
   row stores the URL in `messages.attachments`; `follow_up_sent` gains `asset: <slot>|null`.
 - A file sent this way arrives on the outbound webhook as `source: 'api'`, like any bot
   reply — it does not open the human pause.
+- **Mandatory in NI and I, free pick in A and C** (2026-10-12): the first live run offered
+  the price sheet next to three text angles and the model picked a text one, reasoning the
+  thread already carried a price. For a lead with nothing in hand the file IS the touch, so
+  when an asset angle is available at NI/I the runner offers ONLY the asset angles; at A/C
+  the conversation decides and text angles stay on the table.
 
 ## 5. Availability & booking
 

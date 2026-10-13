@@ -4,7 +4,7 @@
  *   NI  only the ad's pre-filled opener; the lead never answered the bot
  *   I   the bot gave the offer/price; the lead stopped there
  *   A   the lead asked their own questions (we know what they care about)
- *   C   the lead saw slots or said they want it
+ *   C   the lead REACTED to slots (wrote after seeing them) or said they want it
  *
  * Two halves. `stageFloor` is deterministic — counts and markers on the thread,
  * no model — and is what the playbook will trust. `raiseStage` lets the status
@@ -29,6 +29,12 @@ export interface StageSignals {
   openerKeywords: string[];
   /** getAvailability ran on this conversation (this turn or any earlier one). */
   slotsOffered: boolean;
+  /**
+   * Slots were offered BEFORE this turn's inbound — i.e. the lead wrote again after
+   * seeing them. Slots the bot shows in this very reply say nothing about the lead yet
+   * (the price→slots rule offers them on the first real answer): that lead is I, not C.
+   */
+  slotsBeforeInbound: boolean;
   /** lookupFaq ran this turn, or the classifier named a configured service. */
   askedSomething: boolean;
 }
@@ -67,10 +73,12 @@ export function stageFloor(s: StageSignals): StageFloor {
   const leadAsked = s.askedSomething || lead.some((t, i) => t.includes('?') && (i > 0 || !openerIsPrefill));
   if (leadAsked) reasons.push('lead_asked');
   if (s.slotsOffered) reasons.push('slots_offered');
+  if (s.slotsBeforeInbound) reasons.push('lead_wrote_after_slots');
 
-  // C needs the lead's own engagement: slots the bot offered to a one-tap opener
-  // say nothing about the lead (the price→slots rule offers them on turn 1).
-  if (engaged && s.slotsOffered) return { stage: 'C', reasons };
+  // C needs the lead's reaction to the slots, not just the bot showing them: on
+  // 2026-10-12 "Hola, me interesa el Botox" → "Las tres" → price + slots landed as C
+  // although the lead never saw a time. Engagement + slots shown this turn stays below.
+  if (engaged && s.slotsBeforeInbound) return { stage: 'C', reasons };
   if (engaged && leadAsked) return { stage: 'A', reasons };
   if (engaged || priceGiven) return { stage: 'I', reasons };
   return { stage: 'NI', reasons };

@@ -92,6 +92,7 @@ beforeEach(() => {
   vi.mocked(q.setConversationStage).mockResolvedValue({ written: true, from: null });
   vi.mocked(q.setConversationInterest).mockResolvedValue(undefined);
   vi.mocked(q.hasBotEvent).mockResolvedValue(false);
+  vi.mocked(q.hasBotEventBefore).mockResolvedValue(false);
   ghl.getContactPhone.mockResolvedValue(undefined);
   ghl.getContact.mockResolvedValue(undefined);
   ghl.updateContactName.mockResolvedValue(undefined);
@@ -2245,7 +2246,7 @@ describe('handleInboundWebhook — interest tags (0058)', () => {
 
 describe('handleInboundWebhook — lead stage, shadow mode (0067)', () => {
   const msg = (senderType: 'lead' | 'bot', content: string) =>
-    ({ direction: senderType === 'lead' ? 'inbound' : 'outbound', senderType, content, sentAt: '' }) as const;
+    ({ direction: senderType === 'lead' ? 'inbound' : 'outbound', senderType, content, sentAt: '2026-10-12T20:00:00Z' }) as const;
   const classifierReturning = (json: string) =>
     vi.fn().mockResolvedValue({ ok: true, json: async () => ({ choices: [{ message: { content: json } }] }) });
 
@@ -2277,9 +2278,20 @@ describe('handleInboundWebhook — lead stage, shadow mode (0067)', () => {
   it('the classifier can never LOWER it: an engaged lead who saw slots stays C', async () => {
     vi.stubGlobal('fetch', classifierReturning('{"status":"active","stage":"NI"}'));
     vi.mocked(q.hasBotEvent).mockResolvedValue(true); // availability_checked on an earlier turn
+    vi.mocked(q.hasBotEventBefore).mockResolvedValue(true); // …and before this inbound: the lead reacted to the slots
     vi.mocked(q.loadRecentMessages).mockResolvedValue([msg('lead', 'hola'), msg('bot', 'Mañana 10:00 o 12:00'), msg('lead', 'mejor el jueves')]);
     await handleInboundWebhook({ ...inbound, body: 'mejor el jueves' }, agentReplying('Jueves listo.'));
     expect(q.setConversationStage).toHaveBeenCalledWith('conv1', 'C', 'rules');
+    expect(q.hasBotEventBefore).toHaveBeenCalledWith('cv-uuid', 'availability_checked', '2026-10-12T20:00:00Z');
+  });
+
+  it('slots offered only in THIS turn do not make C: an engaged lead who has not seen them yet is I', async () => {
+    vi.stubGlobal('fetch', classifierReturning('{"status":"active"}'));
+    vi.mocked(q.hasBotEvent).mockResolvedValue(true);        // this turn's availability_checked
+    vi.mocked(q.hasBotEventBefore).mockResolvedValue(false); // none before the inbound
+    vi.mocked(q.loadRecentMessages).mockResolvedValue([msg('lead', 'Hola, me interesa el Botox'), msg('bot', '¿Una zona o las tres?'), msg('lead', 'Las tres')]);
+    await handleInboundWebhook({ ...inbound, body: 'Las tres' }, agentReplying('Full face $6,000. Tengo martes 3:45 o 5:45, ¿cuál te acomoda?'));
+    expect(q.setConversationStage).toHaveBeenCalledWith('conv1', 'I', 'rules');
   });
 
   it('no event when the RPC did not write (the stage was already as high)', async () => {

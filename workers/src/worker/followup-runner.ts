@@ -401,6 +401,13 @@ async function processOne(
         slot: file.slot,
       });
     }
+    // NI and I are the stages where the lead has nothing in hand yet, and a file is the
+    // whole point of the touch — so when one is available it is the ONLY choice offered
+    // (Leo, 2026-10-12: the model skipped the price sheet for a text angle). A and C
+    // keep the free pick: there the conversation, not the file, decides.
+    if ((stage === 'NI' || stage === 'I') && remaining.some((a) => a.media)) {
+      remaining = remaining.filter((a) => a.media);
+    }
   }
   const stageContext: StageContext | undefined = playbook && stage
     ? { stage, objective: plan.objective ?? '', service: serviceFacts(tenant.config.services, interest) }

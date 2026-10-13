@@ -45,6 +45,7 @@ import {
   isBotSuppressed,
   isHumanActive,
   hasBotEvent,
+  hasBotEventBefore,
   setConversationInterest,
   setConversationStage,
   isLatestInboundMessage,
@@ -368,8 +369,10 @@ async function classifyConversationOutcome(
 
 /**
  * Compute + persist the lead's stage (0067). `slotsOffered` is widened with the
- * conversation's own `availability_checked` history, so a lead who engages AFTER the
- * slots were offered still reads as C. Errors are logged, never thrown.
+ * conversation's own `availability_checked` history; C additionally needs an
+ * `availability_checked` from BEFORE this turn's inbound — the lead wrote after seeing
+ * the slots — so price + slots on the first real answer leaves them at I, not C.
+ * Errors are logged, never thrown.
  */
 async function recordLeadStage(args: {
   tenant: TenantContext;
@@ -388,11 +391,15 @@ async function recordLeadStage(args: {
   try {
     if (args.interest) await setConversationInterest(parsed.conversationId, args.interest);
     const slotsOffered = args.slotsOffered || (await hasBotEvent(args.conversationId, 'availability_checked'));
+    const inboundAt = [...args.history].reverse().find((m) => m.senderType === 'lead')?.sentAt || null;
+    const slotsBeforeInbound = slotsOffered && inboundAt !== null
+      && (await hasBotEventBefore(args.conversationId, 'availability_checked', inboundAt));
     const floor = stageFloor({
       history: args.history,
       reply: args.reply,
       openerKeywords: [...(tenant.triggerKeywords ?? []), ...Object.keys(tenant.keywordVariants ?? {})],
       slotsOffered,
+      slotsBeforeInbound,
       askedSomething: args.askedSomething,
     });
     const stage: LeadStage = raiseStage(floor.stage, args.llmStage);

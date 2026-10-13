@@ -592,6 +592,19 @@ export async function hasBotEvent(conversationId: string, eventType: BotEventTyp
   return (count ?? 0) > 0;
 }
 
+/** Whether an event of this type was logged on the conversation BEFORE `before` (ISO instant). */
+export async function hasBotEventBefore(conversationId: string, eventType: BotEventType, before: string): Promise<boolean> {
+  const supabase = getSupabase();
+  const { count, error } = await supabase
+    .from('bot_events')
+    .select('id', { count: 'exact', head: true })
+    .eq('conversation_id', conversationId)
+    .eq('event_type', eventType)
+    .lt('created_at', before);
+  fail('hasBotEventBefore', error);
+  return (count ?? 0) > 0;
+}
+
 /** Persist a corrected GHL contact id on a conversation (after a merge re-resolve on send). */
 export async function updateConversationContact(ghlConversationId: string, ghlContactId: string): Promise<void> {
   const supabase = getSupabase();

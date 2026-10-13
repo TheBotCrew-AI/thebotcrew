@@ -652,7 +652,8 @@ describe('runPendingFollowUps — asset angles (0069)', () => {
   it('the tenant has the file → the chosen angle sends it with the text as caption, logs the attachment, stamps the event', async () => {
     vi.mocked(q.loadMediaAssets).mockResolvedValue([file]);
     await runPendingFollowUps(agent);
-    expect(ctx().reactivationCandidates).toHaveLength(2);
+    // NI: the file is mandatory when available, so the asset angle is the only candidate.
+    expect(ctx().reactivationCandidates).toHaveLength(1);
     expect(ctx().reactivationCandidates[0]).toContain('precios.pdf');
     expect(ghl.sendMessage).toHaveBeenCalledWith(expect.objectContaining({
       text: 'aquí la tabla', media: { kind: 'document', url: 'https://x/precios.pdf', name: 'precios.pdf' },
@@ -676,6 +677,23 @@ describe('runPendingFollowUps — asset angles (0069)', () => {
     vi.mocked(q.loadDueFollowUps).mockResolvedValue([due({ stage: 'NI', channel: 'instagram' })]);
     await runPendingFollowUps(agent);
     expect(ctx().reactivationCandidates).toEqual(['texto plano']);
+  });
+
+  it('NI/I with a file available → ONLY the asset angles are offered (mandatory delivery)', async () => {
+    vi.mocked(q.loadMediaAssets).mockResolvedValue([file]);
+    await runPendingFollowUps(agent);
+    expect(ctx().reactivationCandidates).toHaveLength(1);
+    expect(ctx().reactivationCandidates[0]).toContain('precios.pdf');
+  });
+
+  it('A with a file available → free pick: text angles stay on the table', async () => {
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(tenant({
+      followUpPlaybook: { stages: { A: { angles: [{ asset: 'precios', text: 'manda la tabla' }, 'texto plano'] } } },
+    }));
+    vi.mocked(q.loadDueFollowUps).mockResolvedValue([due({ stage: 'A' })]);
+    vi.mocked(q.loadMediaAssets).mockResolvedValue([file]);
+    await runPendingFollowUps(agent);
+    expect(ctx().reactivationCandidates).toHaveLength(2);
   });
 
   it('a pool with no asset angles never reads media_assets', async () => {

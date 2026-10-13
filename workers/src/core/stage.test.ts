@@ -12,6 +12,7 @@ const signals = (o: Partial<StageSignals>): StageSignals => ({
   reply: '',
   openerKeywords: ['PRECIO', 'quiero información'],
   slotsOffered: false,
+  slotsBeforeInbound: false,
   askedSomething: false,
   ...o,
 });
@@ -80,23 +81,42 @@ describe('stageFloor', () => {
     expect(r.stage).toBe('A');
   });
 
-  it('engaged lead + slots offered → C', () => {
+  it('the lead wrote AFTER seeing slots → C', () => {
+    const r = stageFloor(signals({
+      history: [lead('PRECIO'), bot('Son $500. Jueves 10:00 o 12:00.'), lead('mejor el viernes')],
+      reply: 'Viernes 11:00.',
+      slotsOffered: true,
+      slotsBeforeInbound: true,
+    }));
+    expect(r.stage).toBe('C');
+    expect(r.reasons).toContain('lead_wrote_after_slots');
+  });
+
+  it('slots shown in THIS reply are not a reaction: the lead asked, so A — not C', () => {
     const r = stageFloor(signals({
       history: [lead('PRECIO'), bot('Son $500'), lead('¿tienes algo el jueves?')],
       reply: 'Jueves 10:00 o 12:00.',
       slotsOffered: true,
     }));
-    expect(r.stage).toBe('C');
-    expect(r.reasons).toContain('slots_offered');
+    expect(r.stage).toBe('A');
   });
 
-  it('a lead who opened with a full sentence is engaged from message one', () => {
+  it("Leo's thread 2026-10-12: engaged, no question, price + slots in this reply → I (saw the price, stopped)", () => {
+    const r = stageFloor(signals({
+      history: [lead('Hola, me interesa el Botox'), bot('¿Te interesa más una zona o las tres?'), lead('Las tres')],
+      reply: 'Para las tres zonas el full face cuesta $6,000. Tengo martes 3:45 p.m. o 5:45 p.m., ¿cuál te acomoda?',
+      slotsOffered: true,
+    }));
+    expect(r.stage).toBe('I');
+  });
+
+  it('a lead who opened with a full sentence is engaged from message one (slots this turn → I)', () => {
     const r = stageFloor(signals({
       history: [lead('tengo flacidez en el cuello y quiero una valoración lo antes posible')],
       reply: 'Tengo mañana 10:00.',
       slotsOffered: true,
     }));
-    expect(r.stage).toBe('C');
+    expect(r.stage).toBe('I');
   });
 });
 
