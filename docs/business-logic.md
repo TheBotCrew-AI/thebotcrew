@@ -1400,7 +1400,7 @@ short code + deadline move: `supabase/tests/0063_hold_short_code.test.sql`.
 
 ## 6. Models & factual grounding
 
-- **Platform default: `openai` / `gpt-5.6-luna`** (`DEFAULT_PROVIDER` / `DEFAULT_MODEL` in
+- **Platform default: `openai` / `gpt-6-luna`** (`DEFAULT_PROVIDER` / `DEFAULT_MODEL` in
   `roles/front-desk/agent.ts`). Per-tenant override in `tenant_config.ai_provider` /
   `ai_model`; `NULL` inherits the default.
 - **Reasoning effort per role:** front-desk `high`, reactivation `low`, the auxiliary

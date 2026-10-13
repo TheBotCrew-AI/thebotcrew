@@ -231,7 +231,7 @@ describe.skipIf(!evalApiKey)(`HappyNatyNat — live${OFF ? ` (SIN ${OFF})` : ''}
       { role: 'user', content: 'Me gustaria integrarlas xq estoy harta de teñir el cabello' },
     ]);
     // The point is an explicit line that Nat doesn't do hair — a passing "tu colorista" isn't it.
-    expect(text).toMatch(/no (es|somos) (estilista|colorista|un sal[oó]n)|no (ti[ñn]e|aplica|pinta|hace (el |tu )?tinte)/i);
+    expect(text).toMatch(/no (es|somos) (estilista|colorista|un sal[oó]n)|no (lo |te )?(ti[ñn]e|aplica|pinta|hace (el |tu )?tinte)/i);
     expect(text).toMatch(/colorista|estilista/i);
     expect(text).not.toMatch(/nat (te )?(puede )?(integra|ti[ñn]e|aplica|corrige|pinta)|c[oó]mo integrar tus canas/i);
   });

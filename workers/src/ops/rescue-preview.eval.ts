@@ -13,6 +13,10 @@
  * horarios que proponga son plausibles, no los de la agenda de verdad — lo que
  * se revisa aquí es el TONO y el CONTENIDO, no el slot.
  *
+ * RESCUE_LEAD_SAYS="<texto>" agrega al final del historial un mensaje HIPOTÉTICO del
+ * lead (sólo en memoria) — para ver qué contestaría el bot a una respuesta que el lead
+ * todavía no ha mandado, p. ej. después de un mensaje enviado con bot-outreach.
+ *
  * Es un archivo de vitest sólo para poder mockear; se auto-salta sin RESCUE_CONV.
  */
 
@@ -69,6 +73,7 @@ vi.mock('../db/queries.js', async (importOriginal) => {
 
 const CONV = process.env.RESCUE_CONV;
 const LOCATION = process.env.RESCUE_LOCATION;
+const LEAD_SAYS = process.env.RESCUE_LEAD_SAYS;
 
 describe.skipIf(!CONV || !LOCATION)('vista previa del rescate', () => {
   it('genera la respuesta sin enviarla', { timeout: 300_000 }, async () => {
@@ -101,6 +106,9 @@ describe.skipIf(!CONV || !LOCATION)('vista previa del rescate', () => {
       20,
       (conv.role_started_at as string | null) ?? undefined,
     );
+    if (LEAD_SAYS) {
+      history.push({ direction: 'inbound', senderType: 'lead', content: LEAD_SAYS, sentAt: new Date().toISOString() });
+    }
     const last = history[history.length - 1];
     if (!last || last.senderType !== 'lead') {
       throw new Error(`el último mensaje es de "${last?.senderType ?? 'nadie'}" — no hay nada que previsualizar`);

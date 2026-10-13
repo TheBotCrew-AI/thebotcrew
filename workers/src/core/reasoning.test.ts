@@ -13,6 +13,13 @@ describe('supportsReasoningEffort', () => {
     expect(supportsReasoningEffort('gpt-5-mini')).toBe(true);
   });
 
+  // The rules are exceptions, not an allowlist: a release newer than the code is
+  // assumed to take the parameter, so a model swap needs no edit here.
+  it('accepts releases newer than the code', () => {
+    expect(supportsReasoningEffort('gpt-6-luna')).toBe(true);
+    expect(supportsReasoningEffort('gpt-7')).toBe(true);
+  });
+
   it('rejects models that 400 on the parameter', () => {
     expect(supportsReasoningEffort('gpt-4o-mini')).toBe(false);
     expect(supportsReasoningEffort('claude-sonnet-5')).toBe(false);
@@ -27,7 +34,10 @@ describe('supportsReasoningEffort', () => {
 describe('supportsEffortNone', () => {
   it('needs a minor version — flat gpt-5 rejects none', () => {
     expect(supportsEffortNone('gpt-5.6-luna')).toBe(true);
+    expect(supportsEffortNone('gpt-6-luna')).toBe(true);
+    expect(supportsEffortNone('gpt-5')).toBe(false);
     expect(supportsEffortNone('gpt-5-mini')).toBe(false);
+    expect(supportsEffortNone('gpt-5-chat-latest')).toBe(false);
     expect(supportsEffortNone('gpt-4o-mini')).toBe(false);
   });
 });

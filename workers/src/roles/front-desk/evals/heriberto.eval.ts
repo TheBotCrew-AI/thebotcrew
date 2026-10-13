@@ -42,6 +42,9 @@
  *   - estacionamiento con cita: 5/5 ambos lados — la sección de modo asistencia del prompt base ya
  *     lo cubre; queda como guardia de "sin pregunta cuando no se necesita".
  *   - agenda "Consulta":  con regla 3/3 · sin regla (toolInstructions.getAvailability fuera) 0/3
+ *   MEDIDO 2026-10-12 (consulta y evaluación de láser sin costo, regla `consulta-free`):
+ *   - los dos casos de consulta + el precio del láser: con el texto vivo 3/3 cada uno · con la
+ *     consulta a $500 restaurada (`HERIBERTO_RULE_OFF=1`) 0/3 cada uno — el rojo cobra los $500.
  *   MEDIDO 2026-10-09 (gpt-5.6-luna, "El precio es el momento" → horarios en el mismo turno):
  *   - precio de la valoración con el caso ya dicho: con el texto vivo 4/4 (getAvailability + $500 +
  *     label real) · con el texto anterior (`HERIBERTO_RULE_OFF=1`) 1/4 — las 3 fallas contestan los
@@ -297,37 +300,41 @@ Las "líneas de ventrílocuo" (o líneas de marioneta) son los surcos que bajan 
 `;
 
 /**
- * La consulta a $500 parejo y el láser presentado como precio normal → precio especial
- * (prod, 2026-10-06). Cada par es [texto vivo, texto anterior]: el lado rojo restaura el
- * anterior, que es el que le dijo a una lead de lp5 "la consulta de valoración no tiene costo".
+ * La consulta es sin costo, la evaluación del láser también (prod, 2026-10-12). Cada par es
+ * [texto vivo, texto anterior]: el lado rojo restaura la consulta a $500 que se acredita.
  */
-const CONSULTA_500_SWAPS: Array<[string, string]> = [
+const CONSULTA_FREE_SWAPS: Array<[string, string]> = [
   [
-    `- La consulta con el Dr. Valdivia cuesta $500, se paga en el consultorio el día de la cita y se acredita completa al tratamiento que se haga. Para el láser CO₂, esa consulta es la evaluación médica. La consulta de bariatría es otra: $1,500. Dilo cuando pregunten por el costo de la consulta y, en media línea, la primera vez que le ofrezcas horarios, para que llegue sin sorpresas. Si tu campaña trae su propia forma de apartar la consulta, sigue esa.`,
-    `- El costo de la consulta de valoración NO se menciona salvo que el lead pregunte explícitamente cuánto cuesta la consulta. PROHIBIDO decir "sin costo", "no tiene costo" o "gratis" de la consulta al explicar el flujo o al dar el precio de un tratamiento, aunque lookupFaq te lo traiga: ese dato existe solo para contestar esa pregunta.
-- La evaluación médica de láser CO₂ es distinta: cuesta $500 y es parte de la oferta del láser, así que se dice cada vez que das el precio del láser. De esa evaluación NUNCA digas que es gratis, sin costo o de cortesía.`,
-  ],
-  [' La consulta cuesta $500 y se acredita completa al tratamiento que se haga.', ''],
-  [
-    '- Cuando pregunten el precio del láser, preséntalo en este orden, y el $3,500 SIEMPRE con las palabras "precio especial" (dicho como "queda en $3,500" se lee como un número más, y lo que tiene que quedar claro es que es un beneficio): primero el precio normal, $4,500 por sesión; luego el precio especial: si inicia su tratamiento dentro de los 14 días siguientes a su evaluación, le aplicamos $3,500 por sesión en todo su tratamiento; y al final, que su evaluación con el Dr. Valdivia cuesta $500 y se le descuenta de la primera sesión, y que ahí el doctor define cuántas sesiones necesita. Ejemplo del tono (no lo copies literal): "El precio normal del láser es de $4,500 por sesión. Pero si inicias tu tratamiento dentro de los 14 días siguientes a tu evaluación, te aplicamos un precio especial de $3,500 por sesión en todo tu tratamiento 😊 Tu evaluación con el Dr. Valdivia cuesta $500 y se te descuenta de la primera sesión; ahí el doctor define cuántas sesiones necesitas." El resto (qué pasa si inicia después, el plazo de 4 meses, el kit) va por goteo, cuando lo pregunte.',
-    '- Cuando pregunten el precio del láser, la respuesta es: la evaluación cuesta $500; las sesiones cuestan $4,500, o $3,500 si inicia en los 14 días siguientes a su evaluación; el número de sesiones lo define el doctor en la evaluación. El resto (cómo se acreditan los $500, el plazo de 4 meses, el kit) va por goteo, cuando lo pregunte.',
+    '- La consulta con el Dr. Valdivia es sin costo. Para el láser CO₂, esa consulta es la evaluación médica, también sin costo. La consulta de bariatría es otra: $1,500. Dilo cuando pregunten por el costo de la consulta y, en media línea, la primera vez que le ofrezcas horarios.',
+    '- La consulta con el Dr. Valdivia cuesta $500, se paga en el consultorio el día de la cita y se acredita completa al tratamiento que se haga. Para el láser CO₂, esa consulta es la evaluación médica. La consulta de bariatría es otra: $1,500. Dilo cuando pregunten por el costo de la consulta y, en media línea, la primera vez que le ofrezcas horarios, para que llegue sin sorpresas.',
   ],
   [
-    'La consulta con el Dr. Valdivia cuesta $500, se paga en el consultorio el día de la cita y se acredita completa al tratamiento que se haga. Para el láser CO₂, esa consulta es la evaluación médica. La consulta de bariatría es otra: $1,500, e incluye valoración médica y seguimiento para control de peso.',
-    'Solo si el lead pregunta por el costo de la consulta: la consulta de valoración estética no tiene costo, excepto la evaluación médica de láser CO₂, que cuesta $500 y siempre se acredita a su tratamiento. La consulta de bariatría sí tiene costo: $1,500, e incluye valoración médica y seguimiento para control de peso.',
+    ' La consulta es sin costo.',
+    ' La consulta cuesta $500 y se acredita completa al tratamiento que se haga.',
   ],
-  ['¿Cuánto cuesta la valoración?', '¿La valoración es gratis?'],
+  [
+    'la evaluación médica con el Dr. Valdivia, y es sin costo.',
+    'la evaluación médica con el Dr. Valdivia: cuesta $500 y se paga en el consultorio el día de la cita.',
+  ],
   [
     'Segunda burbuja: que su evaluación con el Dr. Valdivia es sin costo y ahí el doctor define cuántas sesiones necesita, seguido de los dos horarios',
     'Segunda burbuja: que su evaluación con el Dr. Valdivia cuesta $500 y se le descuenta de la primera sesión, y que ahí el doctor define cuántas sesiones necesita, seguido de los dos horarios',
   ],
   [
-    'El precio normal del láser es de $4,500 por sesión. Si inicia su tratamiento dentro de los 14 días siguientes a su evaluación, aplica el precio especial de $3,500 por sesión en todo su tratamiento. La evaluación con el Dr. Valdivia cuesta $500 y se descuenta de su primera sesión. El número de sesiones lo define el Dr. Valdivia en la evaluación.',
-    'La evaluación médica de láser cuesta $500. Las sesiones cuestan $4,500, o $3,500 si asiste a su primera sesión dentro de los 14 días siguientes a su evaluación. El número de sesiones lo define el Dr. Valdivia en la evaluación.',
+    'Tu evaluación con el Dr. Valdivia es sin costo, y ahí define cuántas sesiones necesitas. Tengo …, ¿cuál te acomoda?',
+    'Tu evaluación con el Dr. Valdivia cuesta $500 y se te descuenta de la primera sesión; ahí define cuántas sesiones necesitas. Tengo …, ¿cuál te acomoda?',
   ],
   [
-    'Precio normal $4,500 por sesión; precio especial de $3,500 por sesión en todo el tratamiento si lo inicia dentro de los 14 días siguientes a su evaluación médica ($500, que se descuenta de la primera sesión).',
-    '$4,500 por sesión, o $3,500 por sesión si inicia dentro de los 14 días siguientes a su evaluación médica de láser ($500).',
+    'La consulta con el Dr. Valdivia es sin costo. Para el láser CO₂, esa consulta es la evaluación médica, también sin costo.',
+    'La consulta con el Dr. Valdivia cuesta $500, se paga en el consultorio el día de la cita y se acredita completa al tratamiento que se haga. Para el láser CO₂, esa consulta es la evaluación médica.',
+  ],
+  [
+    ' La evaluación con el Dr. Valdivia es sin costo.',
+    ' La evaluación con el Dr. Valdivia cuesta $500 y se descuenta de su primera sesión.',
+  ],
+  [
+    ' (sin costo)',
+    ' ($500, que se descuenta de la primera sesión)',
   ],
 ];
 
@@ -345,7 +352,7 @@ const OLD_PRICE_WORDING: [string, string] = [
 ];
 
 const tenantWithout = (
-  rule: 'afternoon-only' | 'morning-ask' | 'medical' | 'drip' | 'service-name' | 'next-step' | 'zone-list' | 'slot-contrast' | 'stale-promo' | 'consulta-why' | 'first-time-fear' | 'negative-payments' | 'discovery-first' | 'city-split' | 'lada-faq' | 'zone-vocabulary' | 'walk-in' | 'laser-offer' | 'consulta-500' | 'price-to-slots',
+  rule: 'afternoon-only' | 'morning-ask' | 'medical' | 'drip' | 'service-name' | 'next-step' | 'zone-list' | 'slot-contrast' | 'stale-promo' | 'consulta-why' | 'first-time-fear' | 'negative-payments' | 'discovery-first' | 'city-split' | 'lada-faq' | 'zone-vocabulary' | 'walk-in' | 'laser-offer' | 'consulta-free' | 'price-to-slots',
 ): TenantContext => {
   const p = HERIBERTO_PERSONA;
   const cfg = heribertoTenant.config;
@@ -459,12 +466,12 @@ const tenantWithout = (
     for (const [now] of STALE_PROMO_SWAPS) if (!seen(now)) throw new Error(`stale-promo anchor not found: ${now.slice(0, 50)}`);
     return { ...heribertoTenant, config: { ...cfg, faq, promptOverrides: { ...p, offering } } };
   }
-  if (rule === 'consulta-500') {
-    // Red side = the config as it was: free consulta (laser excepted) and the laser price
-    // read as "$4,500, o $3,500 si…". Every [new, old] pair must be found, or it throws.
+  if (rule === 'consulta-free') {
+    // Red side = the consulta at $500, credited to the treatment. Every [new, old] pair must
+    // be found, or it throws.
     const swap = (s: string): string => {
       let out = s;
-      for (const [now, before] of CONSULTA_500_SWAPS) out = out.split(now).join(before);
+      for (const [now, before] of CONSULTA_FREE_SWAPS) out = out.split(now).join(before);
       return out;
     };
     const houseRules = swap(p.houseRules);
@@ -473,9 +480,9 @@ const tenantWithout = (
     const services = cfg.services ? (cfg.services as Array<Record<string, unknown>>).map((sv) =>
       typeof sv.description === 'string' ? { ...sv, description: swap(sv.description) } : sv) : cfg.services;
     const all = JSON.stringify([houseRules, offering, faq, services]);
-    for (const [now] of CONSULTA_500_SWAPS) if (all.includes(now)) throw new Error(`consulta-500 swap left: ${now.slice(0, 40)}`);
+    for (const [now] of CONSULTA_FREE_SWAPS) if (all.includes(now)) throw new Error(`consulta-free swap left: ${now.slice(0, 40)}`);
     if (JSON.stringify([houseRules, offering, faq, services]) === JSON.stringify([p.houseRules, p.offering, HERIBERTO_FAQ, cfg.services]))
-      throw new Error('consulta-500: nothing swapped');
+      throw new Error('consulta-free: nothing swapped');
     return { ...heribertoTenant, config: { ...cfg, faq, services, promptOverrides: { ...p, houseRules, offering } } };
   }
   if (rule === 'laser-offer') {
@@ -706,7 +713,7 @@ describe.skipIf(!evalApiKey)('Dr. Heriberto Valdivia — agenda la consulta, con
       { requestContext: rc(tenantFor('price-to-slots')) },
     );
     expect(toolIds(res)).toContain('getAvailability');
-    expect(reply(res)).toMatch(/\$\s?500\b/);
+    expect(reply(res)).toMatch(/sin costo|no tiene costo|gratis|gratuita/);
     expect(usesRealLabel(reply(res))).toBe(true);
   }, 120_000);
 
@@ -926,12 +933,12 @@ describe.skipIf(!evalApiKey)('Dr. Heriberto Valdivia — precios sin promo venci
 });
 
 /**
- * El láser tiene un precio normal y uno especial, y el especial depende de una evaluación
- * de $500: los tres números van juntos cuando preguntan el precio, sin importar de qué
- * anuncio venga la persona (prod, 2026-10-05).
+ * El láser tiene un precio normal y uno especial, y el especial cuenta desde la evaluación
+ * (sin costo): van juntos cuando preguntan el precio, sin importar de qué anuncio venga la
+ * persona (prod, 2026-10-05; evaluación sin costo desde 2026-10-12).
  */
 describe.skipIf(!evalApiKey)('Dr. Heriberto Valdivia — oferta del láser', () => {
-  it('precio de sesión → $4,500, $3,500 a 14 días y evaluación de $500', async () => {
+  it('precio de sesión → $4,500, $3,500 a 14 días, evaluación sin costo', async () => {
     const res = await buildFrontDeskAgent().generate(
       [
         { role: 'user', content: 'Hola, me interesa el láser CO2' },
@@ -944,29 +951,24 @@ describe.skipIf(!evalApiKey)('Dr. Heriberto Valdivia — oferta del láser', () 
     expect(text, text).toMatch(/\$\s?4[,.]?500\b/);
     expect(text, text).toMatch(/\$\s?3[,.]?500\b/);
     expect(text, text).toMatch(/14 d[ií]as/);
-    expect(text, text).toMatch(/\$\s?500\b/);
-    expect(text, text).not.toMatch(/gratis|sin costo|cortes[ií]a/);
+    expect(text, text).not.toMatch(/\$\s?500\b/);
   }, 120_000);
 });
 
 /**
- * La consulta cuesta $500 parejo y el láser se presenta como precio normal → precio especial
- * (prod, 2026-10-06). El hilo real (lp5, Facebook): una lead de cicatrices de acné preguntó
- * "Dónde se ubica" y "Y el costo", y el bot copió la entrada de FAQ que decía que la consulta
- * no tenía costo salvo la del láser: "La consulta de valoración estética no tiene costo. Si el
- * doctor considera láser CO₂, la evaluación médica cuesta $500; las sesiones son de $4,500, o
- * $3,500 si…". Dos fallas: una consulta gratis que no existe para ella, y un precio que se lee
- * como dos números sueltos en vez de un precio especial.
+ * La consulta es sin costo, la del láser también (prod, 2026-10-12), y el láser se presenta
+ * como precio normal → precio especial. Historia del hilo real de lp5 (Facebook): una lead de
+ * cicatrices de acné preguntó "Dónde se ubica" y "Y el costo".
  */
-const NO_FREE = /sin costo|no tiene costo|gratis|gratuita|cortes[ií]a|sin cargo/;
+const FREE = /sin costo|no tiene costo|gratis|gratuita/;
 const normalBeforeSpecial = (text: string): boolean => {
   const normal = text.search(/\$\s?4[,.]?500\b/);
   const special = text.search(/\$\s?3[,.]?500\b/);
   return normal >= 0 && special > normal;
 };
 
-describe.skipIf(!evalApiKey)('Dr. Heriberto Valdivia — consulta a $500 y el láser como precio especial', () => {
-  it('hilo de lp5: "Dónde se ubica" + "Y el costo" → precio normal, luego especial; nada gratis', async () => {
+describe.skipIf(!evalApiKey)('Dr. Heriberto Valdivia — consulta sin costo y el láser como precio especial', () => {
+  it('hilo de lp5: "Dónde se ubica" + "Y el costo" → precio normal, luego especial; evaluación sin costo', async () => {
     const res = await buildFrontDeskAgent().generate(
       [
         { role: 'user', content: 'Hola, tengo cicatrices de acné y quiero saber cuánto pueden mejorar' },
@@ -978,28 +980,27 @@ describe.skipIf(!evalApiKey)('Dr. Heriberto Valdivia — consulta a $500 y el l�
         { role: 'user', content: 'Dónde se ubica' },
         { role: 'user', content: 'Y el costo' },
       ],
-      { requestContext: rc(tenantFor('consulta-500')) },
+      { requestContext: rc(tenantFor('consulta-free')) },
     );
     const text = reply(res);
-    expect(text, text).not.toMatch(NO_FREE);
     expect(normalBeforeSpecial(text), text).toBe(true);
     expect(text, text).toMatch(/especial/);
-    expect(text, text).toMatch(/\$\s?500\b/);
+    expect(text, text).toMatch(FREE);
+    expect(text, text).not.toMatch(/\$\s?500\b/);
   }, 120_000);
 
-  it('"¿la consulta tiene costo?" → $500 que se acreditan; nada gratis', async () => {
+  it('"¿la consulta tiene costo?" → sin costo, sin $500', async () => {
     const res = await buildFrontDeskAgent().generate(
       [
         { role: 'user', content: 'Hola, me interesa el botox' },
         { role: 'assistant', content: OPENER },
         { role: 'user', content: 'Botox para la frente. ¿La consulta tiene costo?' },
       ],
-      { requestContext: rc(tenantFor('consulta-500')) },
+      { requestContext: rc(tenantFor('consulta-free')) },
     );
     const text = reply(res);
-    expect(text, text).not.toMatch(NO_FREE);
-    expect(text, text).toMatch(/\$\s?500\b/);
-    expect(text, text).toMatch(/acredit|descuent|abona/);
+    expect(text, text).toMatch(FREE);
+    expect(text, text).not.toMatch(/\$\s?500\b/);
     expect(toolIds(res)).not.toContain('flagPendingInfo');
   }, 120_000);
 });

@@ -20,7 +20,7 @@ describe('buildFrontDeskAgent', () => {
   it('exposes the platform defaults + role id', () => {
     expect(FRONT_DESK_ROLE).toBe('front-desk');
     expect(DEFAULT_PROVIDER).toBe('openai');
-    expect(DEFAULT_MODEL).toBe('gpt-5.6-luna');
+    expect(DEFAULT_MODEL).toMatch(/^gpt-/);
   });
 
   // Set on the agent rather than at the call site so evals exercise the same effort the

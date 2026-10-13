@@ -25,6 +25,7 @@ import { getAiApiKey, resolveAiApiKey } from '../core/env.js';
 import { queueCapiEvent, queueCapiStatusEvent } from '../meta/capi.js';
 import { handleInboundWebhook, isUnresolvedMedia, runAgentTurn, splitIntoMessages, calledTool } from './webhook-handler.js';
 import { parseInboundWebhook } from '../ghl/webhook.js';
+import { DEFAULT_MODEL } from '../roles/front-desk/agent.js';
 
 function tenant(overrides: Partial<TenantContext> = {}): TenantContext {
   return {
@@ -175,7 +176,7 @@ describe('handleInboundWebhook — per-tenant AI key & token accounting', () => 
         clientId: 'client1',
         ghlConversationId: 'conv1',
         callKind: 'front-desk',
-        model: 'gpt-5.6-luna',
+        model: DEFAULT_MODEL,
         keySource: 'MADI',
         usage: { inputTokens: 1500, outputTokens: 40, cachedInputTokens: 0 },
       }),

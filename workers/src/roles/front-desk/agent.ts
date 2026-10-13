@@ -30,7 +30,7 @@ import { startDemoTool } from './tools/start-demo.js';
 export const FRONT_DESK_ROLE = 'front-desk';
 
 export const DEFAULT_PROVIDER: AiProvider = 'openai';
-export const DEFAULT_MODEL = 'gpt-5.6-luna';
+export const DEFAULT_MODEL = 'gpt-6-luna';
 
 /**
  * Reasoning effort for a front-desk turn: this agent picks the tool, decides whether the

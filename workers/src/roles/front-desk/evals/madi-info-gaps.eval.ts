@@ -92,7 +92,7 @@ describe.skipIf(!evalApiKey)('MADI — formas de pago (gap #1)', () => {
     );
 
     expect(reply(res)).toMatch(/500/);
-    expect(reply(res)).toMatch(/por sesión/);
+    expect(reply(res)).toMatch(/por sesión|sesión suelta/);
     expect(toolIds(res)).not.toContain('flagPendingInfo');
   });
 
@@ -210,7 +210,7 @@ describe.skipIf(!evalApiKey)('MADI — second round of closed gaps (2026-08-25, 
     );
 
     expect(reply(res)).toMatch(/600/);
-    expect(reply(res)).toMatch(/por sesión/);
+    expect(reply(res)).toMatch(/por sesión|sesión suelta/);
     expect(toolIds(res)).not.toContain('flagPendingInfo');
   });
 

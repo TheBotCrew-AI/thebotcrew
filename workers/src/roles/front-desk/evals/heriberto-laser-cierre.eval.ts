@@ -4,8 +4,7 @@
  * `lc7` (misma sección de cierre), cambia sólo el ángulo de entrada. El primer mensaje tiene que
  * decir lo que prometió el anuncio, sin perder las reglas de la oferta:
  *  - el precio normal $4,500 y el especial $3,500, con la condición de los 14 días;
- *  - la evaluación de $500, que se acredita — nunca "gratis", ni siquiera en C12, que la lista
- *    entre los bonos;
+ *  - la evaluación con el médico, sin costo (C12 la lista entre los bonos);
  *  - C11: los $3,000 de ahorro son un EJEMPLO de 3 sesiones, no una garantía;
  *  - C12: el kit con su valor de $1,500 y el seguimiento.
  *
@@ -63,8 +62,8 @@ const expectTheOffer = (text: string) => {
   expect(text).toMatch(/4,?500/);
   expect(text).toMatch(/3,?500/);
   expect(text).toMatch(/14 d[ií]as/);
-  expect(text).toMatch(/\$\s?500\b/);
-  expect(text).not.toMatch(/gratis|sin costo|de cortes[ií]a|2,?999/i);
+  expect(text).toMatch(/sin costo|no tiene costo|gratis|gratuita/i);
+  expect(text).not.toMatch(/\$\s?500\b|2,?999/);
 };
 
 beforeEach(() => {
@@ -89,7 +88,7 @@ describe.skipIf(!evalApiKey)(`Heriberto — láser, anuncios de cierre C10–C12
     expect(text).toMatch(/por ejemplo|ejemplo|depende|define/i);
   });
 
-  it('C12 "bonos": kit con valor de $1,500 y seguimiento — la evaluación con su precio', async () => {
+  it('C12 "bonos": kit con valor de $1,500, seguimiento y evaluación sin costo', async () => {
     const text = await run('lc12', 'Hola, quiero el láser CO2 con bonos incluidos');
     expectTheOffer(text);
     expect(text).toMatch(/1,?500/);

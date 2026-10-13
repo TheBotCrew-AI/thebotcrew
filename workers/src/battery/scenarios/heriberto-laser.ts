@@ -37,12 +37,12 @@ Tu objetivo es dejar la evaluación agendada. Cuando te la confirmen, agradeces 
     {
       id: 'lp5-acne',
       title: 'P5 — cicatrices de acné',
-      shows: 'Pregunta cuánto puede mejorar y si pierde los $500 si no es candidata.',
+      shows: 'Pregunta cuánto puede mejorar, cuánto cuesta la evaluación y qué pasa si no es candidata.',
       lead: {
         name: 'Andrea',
         phone: '+526141110002',
         persona: `Tienes 27 años. Tienes cicatrices de acné hundidas en las mejillas desde la prepa. Te las tapas con maquillaje.
-Quieres saber cuánto pueden mejorar. Cuando te digan que hay una evaluación con costo, preguntas qué pasa con tu dinero si el láser no es para ti.
+Quieres saber cuánto pueden mejorar. Preguntas cuánto cuesta la evaluación y qué pasa si el láser no es para ti.
 Si te convence la respuesta, agendas y eliges uno de los horarios.
 Tu objetivo es dejar la evaluación agendada. Cuando te la confirmen, agradeces y terminas.`,
       },
@@ -86,7 +86,7 @@ Tu objetivo es dejar la evaluación agendada. Cuando te la confirmen, agradeces 
     },
     {
       id: 'lc6-sin-riesgo',
-      title: 'C6 — sus $500 están seguros',
+      title: 'C6 — evaluación sin costo',
       shows: 'Pregunta si puede empezar en dos meses: Sofía le explica el plazo de 14 días sin inventar nada.',
       lead: {
         name: 'Gabriela',
@@ -155,7 +155,7 @@ Tu objetivo es dejar la evaluación agendada. Cuando te la confirmen, agradeces 
     {
       id: 'lc12-bonos',
       title: 'C12 — láser con bonos incluidos',
-      shows: 'Viene por los bonos: Sofía lista lo que incluye (kit de $1,500, seguimiento, evaluación de $500 acreditada) y contesta por el precio de $2,999 del mes pasado.',
+      shows: 'Viene por los bonos: Sofía lista lo que incluye (kit de $1,500, seguimiento, evaluación sin costo) y contesta por el precio de $2,999 del mes pasado.',
       lead: {
         name: 'Mariana',
         phone: '+526141110012',

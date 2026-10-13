@@ -64,16 +64,17 @@ const LEAKS = /ocupad|tomad|preferente|excepci[óo]n|favor|reservad[oa]s? para|s
 /** Una hora de la tarde (5–8 p.m.) en el texto. */
 const EVENING = /\b(?:5|6|7):[0-5]\d\s*p\.?\s?m\.|\b(?:17|18|19):[0-5]\d/;
 
-let nowSpy: ReturnType<typeof vi.spyOn>;
+// Fake the Date constructor too: the prompt's "Hoy es …" comes from `new Date()` (agent.ts), which a
+// Date.now spy leaves on the real clock — and a model that reads the slots as past refuses them.
 beforeEach(() => {
+  vi.useFakeTimers({ now: NOW, toFake: ['Date'] });
   vi.clearAllMocks();
   vi.mocked(q.logBotEvent).mockResolvedValue(undefined);
   vi.mocked(q.getActiveDemoSession).mockResolvedValue(null);
   vi.mocked(q.wasPrimeTimeReleased).mockResolvedValue(false);
   getAvailability.mockResolvedValue(SLOTS);
-  nowSpy = vi.spyOn(Date, 'now').mockReturnValue(NOW);
 });
-afterEach(() => nowSpy.mockRestore());
+afterEach(() => vi.useRealTimers());
 
 describe.skipIf(!evalApiKey)('horario preferente — la valoración gratis', () => {
   it('"¿tienen a las 6?" en la primera consulta → sin includePrimeTime, sin tarde, sin "ocupada"', async () => {

@@ -34,7 +34,7 @@
  * Live-only (needs an API key); `pnpm eval`, excluded from the CI gate.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 vi.mock('../../../db/queries.js');
 const ghl = {
@@ -75,17 +75,26 @@ const reply = (res: { text: string }) => res.text.toLowerCase();
 
 // A lead who has already passed the fit filter and is asking for a time — the shape
 // where availability gets offered.
+/** The three pilot conditions already cleared (treatments, pauta, who decides) — the verdict is given. */
 const qualifiedHistory = [
   { role: 'user' as const, content: 'Hola, tengo una clínica estética en Polanco, aplicamos bótox y nos escriben por WhatsApp e Instagram todo el día.' },
-  { role: 'assistant' as const, content: 'Perfecto, sí les puede servir. En una videollamada de 20 minutos, Leo te muestra el sistema funcionando con el caso de tu clínica. ¿Te aparto un espacio con Leo?' },
+  { role: 'assistant' as const, content: 'Qué bien. Para llenar tu agenda de bótox, Leo arma y maneja los anuncios; la pauta va directo a Meta, unos $200 diarios. ¿Es algo que podrían destinar?' },
+  { role: 'user' as const, content: 'Sí, sin problema, yo soy la dueña y lo decido yo.' },
+  { role: 'assistant' as const, content: 'Entonces tu clínica sí califica. Lo que sigue es una llamada de 20 minutos con Leo para revisar tu caso. ¿Te aparto un espacio?' },
 ];
+
+/** Tuesday 2026-09-01, 9:00 in Tijuana — the fixture slot is that Thursday. The prompt's "Hoy es …"
+ *  comes from `new Date()`, so the whole Date is faked; on the real clock the slot is in the past. */
+const NOW = Date.parse('2026-09-01T16:00:00Z');
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.useFakeTimers({ now: NOW, toFake: ['Date'] });
   vi.mocked(q.logBotEvent).mockResolvedValue(undefined);
   vi.mocked(q.setLeadTimezone).mockResolvedValue(true);
   ghl.getAvailability.mockResolvedValue([{ start: '2026-09-03T18:00:00.000Z', end: '2026-09-03T18:20:00.000Z' }]);
 });
+afterEach(() => vi.useRealTimers());
 
 describe.skipIf(!evalApiKey)('lead timezone — the label is the contract', () => {
   it('offers the slot in the lead\'s clock, suffix included, and never the calendar\'s hour', async () => {
@@ -128,7 +137,7 @@ describe.skipIf(!evalApiKey)('lead timezone — the label is the contract', () =
       { requestContext: rc(undefined) },
     );
 
-    expect(reply(res)).toMatch(/ciudad|d[oó]nde (est[aá]s|se encuentran|est[aá]n)|de d[oó]nde/);
+    expect(reply(res)).toMatch(/ciudad|estado|d[oó]nde (est[aá]s|se encuentran|est[aá]n)|de d[oó]nde/);
     expect(toolIds(res)).not.toContain('getAvailability');
     expect(reply(res)).not.toMatch(/\d{1,2}(:\d{2})?\s*(a\.?\s?m|p\.?\s?m)/);
   });
