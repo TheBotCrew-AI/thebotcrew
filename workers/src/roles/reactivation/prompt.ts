@@ -18,6 +18,28 @@ export interface RoundContext {
   reentryKeyword: string;
 }
 
+/** Hard cap on a nudge's length (prompt-level; the model honours a number far better
+ *  than "corto"). ~One WhatsApp line and a question. */
+export const NUDGE_MAX_CHARS = 160;
+
+/**
+ * How a nudge opens. VOICE_RULE's "react to what the person just said" is right for a
+ * live reply and wrong here: nobody said anything — the lead has been silent for hours,
+ * and reacting to yesterday's message ("Qué bueno que me cuentas…") is exactly what
+ * reads as a script. So the nudge enters directly, and the literal openers the thread
+ * already carries are listed as banned (core/nudge-openers.ts): a principle the model
+ * ignored for weeks; a list it respects.
+ */
+export const NUDGE_OPENING_RULE = `# Cómo arranca un seguimiento
+Este mensaje NO es una respuesta: la persona lleva horas sin escribir. No reacciones a nada que dijo antes, no celebres que escribió, no saludes con fórmula. Entra directo a lo que vienes a decir o a preguntar, como quien retoma un chat con alguien de confianza.
+- Si sabes su nombre por el historial, puedes abrir con él de vez en cuando ("Ana, ¿…?"); no en todos.
+- Nunca empieces con "Qué bueno que", "Qué gusto", "Hola, qué gusto", "Espero que", "Solo para", "Te escribo para", "Quería saber si".`;
+
+function bannedOpeners(used: readonly string[]): string {
+  if (used.length === 0) return '';
+  return `\n- PROHIBIDO empezar con cualquiera de estos arranques, que ya se usaron en esta conversación: ${used.map((o) => `"${o}"`).join(', ')}. Empieza con otras palabras.`;
+}
+
 export function buildReactivationInstructions(
   businessName: string,
   tone: string | null | undefined,
@@ -25,6 +47,7 @@ export function buildReactivationInstructions(
   demo?: DemoContext,
   roundCtx?: RoundContext,
   stageCtx?: StageContext,
+  usedOpeners: readonly string[] = [],
 ): string {
   const toneDesc = tone?.trim() || 'cálido, natural y cercano';
   const hasCandidates = candidates.length > 0;
@@ -57,10 +80,14 @@ Este lead ya dejó pasar una ronda completa de seguimientos sin responder.
   // The farewell is the ONE nudge whose job is to close, not to bait a reply —
   // so the question-mandate rules and the angle machinery are swapped out, not
   // contradicted. The angle pool is bypassed by the runner (candidates = []).
+  // The nudge's shape (2026-10-12). Before: "máximo 2 oraciones + la pregunta" — and the
+  // model wrote exactly that, every time: reaction + fact + question, 130–170 chars,
+  // a semicolon in the middle. 851 nudges with the same silhouette read as a program.
+  // A person following up on WhatsApp writes "¿Pudiste ver lo del láser?" and stops.
   const shapeRule = (isFinalTouch
     ? '- Escribe exactamente UN mensaje corto y natural: máximo 2-3 oraciones. Sin párrafos largos.'
-    : '- Escribe exactamente UN mensaje corto y natural: máximo 2 oraciones + la pregunta final. Sin párrafos largos.') +
-    `\n${WARM_NO_RULE}\n\n${VOICE_RULE}`;
+    : `- Escribe exactamente UN mensaje, de ${NUDGE_MAX_CHARS} caracteres como máximo. Una sola idea: o SOLO la pregunta, o una frase corta y la pregunta. Nunca dos datos, nunca punto y coma para encadenar.`) +
+    `\n${WARM_NO_RULE}\n\n${VOICE_RULE}${isFinalTouch ? '' : `\n\n${NUDGE_OPENING_RULE}${bannedOpeners(usedOpeners)}`}`;
   const closingRules = isFinalTouch
     ? `- NO termines con una pregunta y NO pidas respuesta. Es una despedida: cero presión y cero reproche.`
     : `- SIEMPRE termina con una pregunta directa y fácil de responder.

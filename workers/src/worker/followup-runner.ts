@@ -50,6 +50,7 @@ import { cadenceForRound, isFinalRound, REENTRY_KEYWORD, totalRounds, variantAll
 import { parseFollowUpPlaybook, resolveStagePlan, serviceFacts } from '../core/followup-playbook.js';
 import { pickAsset, type MediaAsset, type OutboundMedia } from '../core/media-assets.js';
 import { coveredMarks, nextStep, type StepPick } from '../core/followup-steps.js';
+import { usedOpeners } from '../core/nudge-openers.js';
 import type { LeadStage } from '../core/stage.js';
 import type { StageContext } from '../core/runtime-context.js';
 import type { AiProvider, Channel, TenantContext } from '../core/types.js';
@@ -501,6 +502,7 @@ async function processOne(
     demoContext,
     reactivationRound: { round: followUp.round, isFinalTouch: finalTouch, reentryKeyword: REENTRY_KEYWORD },
     stageContext,
+    usedOpeners: usedOpeners(history.filter((m) => m.senderType === 'bot').map((m) => m.content)),
   });
 
   const messages = toModelMessages(history);

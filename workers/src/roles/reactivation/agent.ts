@@ -26,8 +26,9 @@ export function buildReactivationAgent(): Agent {
       const demo = requestContext.get('demoContext') as { businessName?: string; booked?: boolean } | undefined;
       const roundCtx = requestContext.get('reactivationRound') as RoundContext | undefined;
       const stageCtx = requestContext.get('stageContext') as StageContext | undefined;
+      const usedOpeners = (requestContext.get('usedOpeners') as string[] | undefined) ?? [];
       const config = parseReactivationConfig(tenant.config);
-      return buildReactivationInstructions(config.businessName, config.tone, candidates, demo, roundCtx, stageCtx);
+      return buildReactivationInstructions(config.businessName, config.tone, candidates, demo, roundCtx, stageCtx, usedOpeners);
     },
     model: ({ requestContext }) => {
       const provider = requestContext.get('provider') as AiProvider;

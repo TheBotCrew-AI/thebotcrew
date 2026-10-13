@@ -28,6 +28,9 @@ export interface AgentRequestValues {
   /** The lead's stage + what this nudge is for (0068). Only set when the tenant has a
    *  playbook; absent = the pre-0068 prompt, byte-identical. */
   stageContext?: StageContext;
+  /** Openers the bot already used on this conversation (core/nudge-openers.ts), so the
+   *  nudge is told, literally, how NOT to start. Reactivation only. */
+  usedOpeners?: string[];
 }
 
 export interface StageContext {

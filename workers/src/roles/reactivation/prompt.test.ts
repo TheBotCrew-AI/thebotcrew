@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { CLOSED_QUESTION_RULE, VOICE_RULE, WARM_NO_RULE } from '../../core/prompt-rules.js';
-import { buildReactivationInstructions } from './prompt.js';
+import { buildReactivationInstructions, NUDGE_MAX_CHARS, NUDGE_OPENING_RULE } from './prompt.js';
 
 describe('buildReactivationInstructions', () => {
   it('with candidates → numbered list + mandatory ANGULO output format', () => {
@@ -192,5 +192,33 @@ describe('buildReactivationInstructions — sequence mode (0070)', () => {
     const out = buildReactivationInstructions('Clínica Luz', null, [], undefined, { round: 2, isFinalTouch: true, reentryKeyword: 'CITA' }, { ...stageCtx, step: 'di el precio' });
     expect(out).not.toContain('Este mensaje');
     expect(out).toContain('Mensaje FINAL');
+  });
+});
+
+describe('buildReactivationInstructions — how a nudge opens and how long it is (2026-10-12)', () => {
+  it('a nudge enters directly: no reaction, no "Qué bueno que", a hard char cap', () => {
+    const out = buildReactivationInstructions('Clínica Luz', null, ['angle A']);
+    expect(out).toContain(NUDGE_OPENING_RULE);
+    expect(out).toContain(`${NUDGE_MAX_CHARS} caracteres como máximo`);
+    expect(out).toContain('o SOLO la pregunta, o una frase corta y la pregunta');
+    expect(NUDGE_OPENING_RULE).toContain('No reacciones a nada que dijo antes');
+    expect(NUDGE_OPENING_RULE).toContain('"Qué bueno que"');
+  });
+
+  it('the openers the thread already used are listed, literally, as banned', () => {
+    const out = buildReactivationInstructions('Clínica Luz', null, ['angle A'], undefined, undefined, undefined, ['qué bueno que', 'hola soy sofía']);
+    expect(out).toContain('PROHIBIDO empezar con cualquiera de estos arranques');
+    expect(out).toContain('"qué bueno que", "hola soy sofía"');
+  });
+
+  it('no used openers → no banned list', () => {
+    expect(buildReactivationInstructions('Clínica Luz', null, ['angle A'])).not.toContain('PROHIBIDO empezar con cualquiera');
+  });
+
+  it('the farewell keeps its own shape and carries neither the opening rule nor the list', () => {
+    const out = buildReactivationInstructions('Clínica Luz', null, [], undefined, { round: 2, isFinalTouch: true, reentryKeyword: 'CITA' }, undefined, ['qué bueno que']);
+    expect(out).not.toContain(NUDGE_OPENING_RULE);
+    expect(out).not.toContain('PROHIBIDO empezar con cualquiera');
+    expect(out).toContain('máximo 2-3 oraciones');
   });
 });

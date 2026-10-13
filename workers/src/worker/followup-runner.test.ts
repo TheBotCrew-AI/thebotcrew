@@ -287,6 +287,20 @@ describe('runPendingFollowUps — demo reminders', () => {
   });
 });
 
+describe('runPendingFollowUps — the openers the thread already used ride to the prompt', () => {
+  it('passes the bot messages\' openers so the nudge is told how not to start', async () => {
+    vi.mocked(q.loadRecentMessages).mockResolvedValue([
+      { senderType: 'bot', content: 'Qué bueno que me cuentas; las cicatrices…', sentAt: '2026-10-10T18:00:00Z' },
+      { senderType: 'lead', content: 'ok', sentAt: '2026-10-10T18:01:00Z' },
+      { senderType: 'bot', content: 'Hola, qué bueno que retomamos.', sentAt: '2026-10-10T19:00:00Z' },
+    ] as never);
+    await runPendingFollowUps(agent);
+    const { buildAgentRequestContext } = await import('../core/runtime-context.js');
+    const ctx = vi.mocked(buildAgentRequestContext).mock.calls[0]?.[0] as { usedOpeners?: string[] };
+    expect(ctx.usedOpeners).toEqual(['qué bueno que', 'hola qué bueno']);
+  });
+});
+
 describe('runPendingFollowUps — campaign-aware angle pools', () => {
   // buildAgentRequestContext is mocked at module level; assert the candidates it receives.
   const candidatesArg = async () => {

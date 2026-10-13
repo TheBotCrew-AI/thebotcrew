@@ -102,9 +102,14 @@ preset's cadence and objective ride along.
 
 - The `byInterest` key must equal `services[].name` (accent- and case-tolerant, but spell it
   the same). A key that matches no service is dead config.
-- `text` is a **directive**, not copy: "di en una línea que …, y pregunta si …. Una sola
-  pregunta." Facts must be in the description or named in the directive — the model has no
-  tools and may state nothing else.
+- `text` is a **directive**, not copy. Facts must be in the description or named in the
+  directive — the model has no tools and may state nothing else.
+- **Vary the silhouette.** The prompt already caps a nudge at 160 characters, one question, no
+  reaction, no "Qué bueno que…"; what the directive decides is the shape. Write some steps as
+  "SOLO la pregunta: …" and others as "<dato>, en media línea; y pregunta …". Four steps of
+  "di en una línea X y pregunta Y" come out as four identical messages, and that is what reads
+  as a bot whatever the words. Say what NOT to add ("sin explicar el tratamiento", "sin el
+  precio normal") — the model pads otherwise.
 - Keep the four-step shape and the marks; reorder only after reading the outcomes view (A8).
 - Reference: `docs/playbooks/heriberto-follow-up-playbook.sql` (láser I, bótox A).
 
@@ -225,4 +230,4 @@ Per service:
 
 | Tenant | Since | Playbook | Files |
 |---|---|---|---|
-| Dr. Heriberto Valdivia | 2026-10-12 | preset + láser I + bótox A | none yet (sample rows inactive) |
+| Dr. Heriberto Valdivia | 2026-10-12 | preset + láser I + bótox A (v4, short-form) | none yet (sample rows inactive) |

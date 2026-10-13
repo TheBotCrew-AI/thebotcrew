@@ -15,8 +15,11 @@
  *   C   cierre → duda → cierre → cierre             (asked for slots; only close)
  *
  * Directives are deliberately generic: no doctor's name, no clinic-specific
- * promise. Shape rules (one line + one closed question, no dates) live in the
- * reactivation prompt, not here.
+ * promise. Shape rules (≤160 chars, one closed question, no dates, how a nudge
+ * opens) live in the reactivation prompt, not here — but the SILHOUETTE varies on
+ * purpose from step to step: some are "SOLO la pregunta", some "a short fact and
+ * the question". Four touches cut from the same mould (reaction + fact + question)
+ * are what read as a program, whatever the words.
  */
 
 export const MEDICINA_ESTETICA_PLAYBOOK = {
@@ -29,21 +32,21 @@ export const MEDICINA_ESTETICA_PLAYBOOK = {
         {
           covers: 'precio',
           asset: 'precios',
-          text: 'Dato del anuncio: di en una línea el precio o qué incluye el tratamiento, tomado de "Lo que le interesa", y pregunta si es para una zona o inquietud en particular. Una sola pregunta.',
+          text: 'Dato del anuncio: el precio o qué incluye, tomado de "Lo que le interesa", en una frase corta; y pregunta para qué zona o inquietud lo quiere.',
         },
         {
           covers: 'quien',
           asset: 'consultorio',
-          text: 'Quién lo atiende: di en una línea que la valoración y el tratamiento los hace el médico en persona, en el consultorio, y pregunta qué le gustaría mejorar. Una sola pregunta.',
+          text: 'Quién lo atiende: que el médico lo hace en persona, en el consultorio, dicho de paso; y pregunta qué le gustaría mejorar.',
         },
         {
           covers: 'que-esperar',
           asset: 'que-esperar',
-          text: 'Qué esperar: di en una línea qué se siente, cuánto dura o qué cuidados pide el tratamiento, con datos de "Lo que le interesa" (si no los hay, el resultado que busca), y pregunta si sería su primera vez. Una sola pregunta.',
+          text: 'Qué esperar: SOLO una pregunta, sobre lo que más frena (si le preocupa que duela, la recuperación o cuánto dura), eligiendo según "Lo que le interesa". Sin dato antes.',
         },
         {
           covers: 'oferta',
-          text: 'Último toque del día: di en una línea que el primer paso es la valoración con el médico, donde le dice con franqueza si es candidata o candidato, y pregunta si quiere saberlo. Si "Lo que le interesa" dice que la valoración es sin costo, dilo; si no lo dice, no afirmes nada sobre su costo. Una sola pregunta.',
+          text: 'Último toque del día: pregunta si quiere saber si es candidata o candidato, y que eso se lo dice el médico en la valoración. Si "Lo que le interesa" dice que la valoración es sin costo, dilo en dos palabras; si no lo dice, nada sobre su costo.',
         },
       ],
     },
@@ -55,21 +58,21 @@ export const MEDICINA_ESTETICA_PLAYBOOK = {
         {
           covers: 'quien',
           asset: 'consultorio',
-          text: 'Quién lo atiende: di en una línea que la valoración y el tratamiento los hace el médico en persona, en el consultorio, y pregunta qué le gustaría mejorar. Una sola pregunta.',
+          text: 'Quién lo atiende: SOLO pregunta qué le gustaría mejorar, mencionando de paso que el médico lo valora en persona.',
         },
         {
           covers: 'que-esperar',
           asset: 'que-esperar',
-          text: 'Qué esperar: di en una línea qué se siente, cuánto dura o qué cuidados pide el tratamiento, con datos de "Lo que le interesa" (si no los hay, el resultado que busca), y pregunta si eso le acomoda. Una sola pregunta.',
+          text: 'Qué esperar: un dato corto de "Lo que le interesa" (qué se siente, cuánto dura o qué cuidados pide) y pregunta si eso le acomoda.',
         },
         {
           covers: 'prueba',
           asset: 'antes-despues',
-          text: 'Resultados: di en una línea que es un caso real de la clínica con el mismo tratamiento, sin prometer el mismo resultado, y pregunta si eso es lo que busca. Una sola pregunta.',
+          text: 'Resultados: que es un caso real de la clínica con el mismo tratamiento, sin prometer el mismo resultado; y pregunta si eso es lo que busca.',
         },
         {
           covers: 'oferta',
-          text: 'Último toque del día: di en una línea que en la valoración el médico le dice con franqueza si el tratamiento es para su caso, y pregunta si quiere saberlo. Si "Lo que le interesa" dice que la valoración es sin costo, dilo; si no lo dice, no afirmes nada sobre su costo. Una sola pregunta.',
+          text: 'Último toque del día: SOLO pregunta si quiere saber si el tratamiento es para su caso, que es lo que el médico le dice en la valoración. Si "Lo que le interesa" dice que es sin costo, dilo en dos palabras; si no, nada sobre su costo.',
         },
       ],
     },
@@ -81,20 +84,20 @@ export const MEDICINA_ESTETICA_PLAYBOOK = {
         {
           covers: 'que-esperar',
           asset: 'que-esperar',
-          text: 'Su caso: retoma en una línea lo que contó (zona, molestia, meta) y di qué puede esperar del tratamiento en su caso con datos de "Lo que le interesa"; pregunta si quiere que le aparten su valoración. Una sola pregunta, en neutro.',
+          text: 'Su caso: nombra lo que contó (zona, molestia, meta) con sus palabras, en media línea, y pregunta si quiere que le aparten su valoración. En neutro. Sin explicar el tratamiento.',
         },
         {
           covers: 'prueba',
           asset: 'antes-despues',
-          text: 'Resultados: di en una línea que es un caso real de la clínica parecido a lo que contó, sin prometer el mismo resultado, y pregunta si quiere que le aparten su valoración. Una sola pregunta.',
+          text: 'Resultados: que es un caso real de la clínica parecido a lo que contó, sin prometer el mismo resultado; y pregunta si le aparta su valoración.',
         },
         {
           covers: 'oferta',
-          text: 'Valoración: di en una línea que en la valoración el médico revisa su caso y le arma un plan claro antes de decidir, y pregunta si le aparta un espacio. Si "Lo que le interesa" dice que la valoración es sin costo, dilo. Una sola pregunta.',
+          text: 'Valoración: SOLO pregunta si le aparta un espacio para que el médico revise su caso. Si "Lo que le interesa" dice que la valoración es sin costo, dilo en dos palabras.',
         },
         {
           covers: 'cierre',
-          text: 'Cierre suave: di en una línea que sólo falta que diga que sí para apartarle su lugar, y pregunta si se lo apartan. Sin días ni horas. Una sola pregunta.',
+          text: 'Cierre suave: una pregunta y ya: si le aparta su lugar. Sin días ni horas, sin dato antes.',
         },
       ],
     },
@@ -105,19 +108,19 @@ export const MEDICINA_ESTETICA_PLAYBOOK = {
       sequence: [
         {
           covers: 'cierre',
-          text: 'Cierre: pregunta en una línea si le aparta alguno de los horarios que ya le compartiste o le busca otro. Sin repetir día ni hora. Una sola pregunta.',
+          text: 'Cierre: SOLO la pregunta: si le aparta alguno de los horarios que ya vio o le busca otro. Sin repetir día ni hora.',
         },
         {
           covers: 'duda',
-          text: 'Obstáculo: pregunta directo si hay algo que le impida tomar el horario, para ayudarle a resolverlo. Una sola pregunta.',
+          text: 'Obstáculo: SOLO la pregunta, directa y sin rodeo: si algo le impide tomar el horario.',
         },
         {
           covers: 'cierre',
-          text: 'Un paso: di en una línea que sólo falta que elija y el resto lo resuelve el equipo, y pregunta cuál le acomoda mejor de los que vio, sin repetirlos. Una sola pregunta.',
+          text: 'Un paso: que sólo falta que elija, en media línea, y pregunta cuál le acomoda de los que vio, sin repetirlos.',
         },
         {
           covers: 'cierre',
-          text: 'Cierre: pregunta en una línea si le aparta alguno de los horarios que ya le compartiste o le busca otro. Sin repetir día ni hora. Una sola pregunta.',
+          text: 'Cierre: SOLO la pregunta, con otras palabras que la vez anterior: si le aparta uno de los horarios que vio o le busca otro. Sin repetir día ni hora.',
         },
       ],
     },

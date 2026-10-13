@@ -550,6 +550,25 @@ step's text (and the file's caption). `core/followup-steps.ts`, pure.
 Heriberto runs the preset plus two overrides (láser I: the 14-day price; bótox A: same-day
 evaluation + application) — `docs/playbooks/heriberto-follow-up-playbook.sql` v3.
 
+**How a nudge reads (2026-10-12).** Leo, after reading a month of Heriberto's ladder: "se lee como
+bot … 'Qué bueno que nos escribes' varias veces … mensajes más cortos". The data agreed: ~200 of
+851 nudges opened with a "Qué bueno que…" variant, three in a row on one thread, every one of
+them the same silhouette (reaction + fact + question, 130–170 chars, a semicolon). Three causes,
+three fixes, no migration:
+- **We wrote the opener.** `VOICE_RULE` offered "qué bueno que me dices" as an example reaction and
+  the model copied it. The bullet is now a principle with no phrase to copy, and bans that family
+  outright. For a nudge the whole idea is wrong — nobody just said anything — so the reactivation
+  prompt adds `NUDGE_OPENING_RULE`: enter directly, no reaction, no greeting formula.
+- **"Never start alike" was ignored for weeks**, so it is now deterministic: the runner takes the
+  first three words of every bot message on the thread (`core/nudge-openers.ts`) and the prompt
+  lists them, literally, as banned openers. A list the model respects; a principle it didn't.
+- **One silhouette.** The cap is now a number (`NUDGE_MAX_CHARS` = 160: either only the question,
+  or one short sentence and the question), and the preset's directives vary on purpose — some are
+  "SOLO la pregunta", some "a short fact and the question". Heriberto's overrides are v4 in the
+  same style.
+Pending, same thread: several bubbles per turn (the sender splits on a blank line) and trimming
+the laser variants' opener, which dumps price + special + kit in the first message.
+
 ## 5. Availability & booking
 
 > **Opt-out per tenant:** `prompt_overrides.bookingEnabled = false` turns this entire
