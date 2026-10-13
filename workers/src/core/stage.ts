@@ -16,6 +16,7 @@
 
 import { messageMatchesTrigger } from './tenant.js';
 import type { ConversationMessage } from './types.js';
+import { mentionsPrice } from './price-mention.js';
 import { LEAD_STAGES, STAGE_RANK as RANK, type LeadStage } from './lead-stage.js';
 
 export { LEAD_STAGES, type LeadStage } from './lead-stage.js';
@@ -45,13 +46,6 @@ export interface StageFloor {
   reasons: string[];
 }
 
-/** A price in Mexican pesos as the bot writes it: "$500", "$ 3,500", "500 pesos", "500 MXN". */
-const PRICE_RE = /\$\s?\d|\d\s?(pesos|mxn)\b/i;
-
-/** Whether a bot message states a price — shared with the sequence cursor (0070). */
-export function mentionsPrice(text: string): boolean {
-  return PRICE_RE.test(text);
-}
 
 /** The ad opener, or a one-tap message: ≤4 words with no question mark. */
 export function isAdOpener(text: string, openerKeywords: string[]): boolean {

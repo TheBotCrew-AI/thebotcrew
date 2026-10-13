@@ -21,7 +21,7 @@
  */
 
 import { pickAsset, type MediaAsset } from './media-assets.js';
-import { mentionsPrice } from './stage.js';
+import { mentionsPrice } from './price-mention.js';
 import type { Channel } from './types.js';
 
 export const COVER_MARKS = ['precio', 'quien', 'que-esperar', 'prueba', 'oferta', 'duda', 'cierre'] as const;
