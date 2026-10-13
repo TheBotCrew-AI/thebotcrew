@@ -738,28 +738,11 @@ suggested set is `precios`, `que-esperar`, `antes-despues`, `testimonio`, `consu
 
 ## 11. Follow-up playbook — start from the preset (0070)
 
-A new aesthetic-medicine tenant needs **no playbook text**. Set:
+> Full procedure per tenant and per service, with checks: [`docs/followup-sop.md`](followup-sop.md).
 
-```sql
-update tenant_config set follow_up_playbook = '{"preset": "medicina-estetica"}'::jsonb
-where business_name = '<name>';
-```
-
-and make sure `follow_up_cadence` is set (it is still the on/off switch). The preset runs
-four stages as ordered sequences (business-logic §4.7); every fact it states comes from
-`services[].description`, so **write the description as the sentence the nudge may say**
-(price, what it includes, what to expect, whether the evaluation is free). Load files per
-§10 as they arrive — until then the steps go out as text and `prueba` (before/after) is
-skipped.
-
-Clinic-specific lines (a same-day application, a price-if-you-start-soon) go as overrides
-on top, per stage and treatment — the preset keeps the rest:
-
-```json
-{ "preset": "medicina-estetica",
-  "byInterest": { "Láser CO₂ Fraccionado": { "I": { "sequence": [ { "covers": "oferta", "text": "…" } ] } } } }
-```
-
-An override replaces that stage's whole `sequence` (not one step). Marks:
-`precio`, `quien`, `que-esperar`, `prueba`, `oferta`, `duda`, `cierre`. Reference:
+Short version: `follow_up_cadence` set, `interest_tags = true`, then
+`update tenant_config set follow_up_playbook = '{"preset": "medicina-estetica"}'::jsonb`.
+Write every `services[].description` as the sentences the nudge may say (price with unit,
+what it includes, what to expect, evaluation cost); load files per §10 as they arrive.
+Overrides per treatment only when there is a hook the preset can't say — reference
 `docs/playbooks/heriberto-follow-up-playbook.sql`.

@@ -12,6 +12,11 @@
 > assembly order, and the gates — is diagrammed in [`docs/config-model.md`](docs/config-model.md).
 > Read that before adding a config field, a campaign variant, or a persona.
 >
+> **Follow-ups for a client** — the per-stage playbook (0067–0070) has its own SOP,
+> [`docs/followup-sop.md`](docs/followup-sop.md): per tenant (cadence, `interest_tags`,
+> preset, test, metric) and per service (the description as the script, the files per slot).
+> Use it instead of re-deriving from business-logic §4.
+>
 > **Meta CAPI for a client** — follow [`docs/capi-setup-sop.md`](docs/capi-setup-sop.md)
 > step by step; it carries every Meta-side rejection we've hit and its fix. Don't re-derive
 > the setup from `onboarding.md` §7 (config reference only).
