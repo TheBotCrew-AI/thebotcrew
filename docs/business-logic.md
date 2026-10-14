@@ -189,8 +189,11 @@ Hybrid human ↔ AI. Enforced by `isBotSuppressed`, re-checked again right befor
   reply re-arms whatever the new script decides). In the history the model reads it carries the
   `[Mensaje de campaña que mandó el equipo]` prefix (`CAMPAIGN_MESSAGE_PREFIX`), and the
   front-desk prompt renders a section (only when one is in the window) that makes its offer the
-  one on the table: prices and promotions earlier in the thread no longer apply, and a bare
-  "sí"/"info" after it is interest in THAT offer. It is NOT a `human_agent` message on purpose:
+  one on the table: prices and promotions earlier in the thread no longer apply, a bare
+  "sí"/"info" after it is interest in THAT offer, and a reply asking for the cita/valoración
+  (the template's quick-reply button) is NOT a first message — the bot goes straight to the
+  booking sequence (`getAvailability` + two slots for the treatment the template names) instead
+  of the ARRANQUE's "¿qué te gustaría mejorar?". Golden: `evals/heriberto-recovery.eval.ts`. It is NOT a `human_agent` message on purpose:
   0054's pending-info resolution counts human answers, and a template answers nothing.
   GHL fires the webhook twice per send (a status update) — `ghl_message_id` dedup absorbs it.
 - **Resume after the pause (0053).** A lead message that lands while the pause is running

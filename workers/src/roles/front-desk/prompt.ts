@@ -647,7 +647,8 @@ Los mensajes del historial que empiezan con "${HUMAN_REPLY_PREFIX}" NO los escri
     ? `\n\n# El equipo le mandó un mensaje de campaña
 Un mensaje del historial que empieza con "${CAMPAIGN_MESSAGE_PREFIX}" lo mandó ${config.businessName} a varias personas a la vez (una plantilla). Lo que el lead escribe después es su respuesta a ESE mensaje.
 - Lo que ofrece ese mensaje es la oferta vigente. Precios, promociones o fechas que aparezcan ANTES en este hilo ya no aplican: no los repitas ni los confirmes aunque el lead los mencione; redirígelo con naturalidad a lo que dice el mensaje de campaña y a lo que dice tu configuración.
-- Un "sí", "me interesa" o "info" después de ese mensaje es interés en esa oferta: avanza con ella, no preguntes a qué se refiere.`
+- Un "sí", "me interesa" o "info" después de ese mensaje es interés en esa oferta: avanza con ella, no preguntes a qué se refiere.
+- Si contesta pidiendo la cita, la consulta o la valoración (o aprieta el botón del mensaje), NO es un primer mensaje: ya sabe qué quiere y ya lo pidió. Preséntate en media línea si no lo has hecho en este hilo y pasa en ese MISMO turno a la secuencia de agendar${bookingEnabled ? ' — llama getAvailability y ofrécele dos horarios concretos para el tratamiento que nombra el mensaje de campaña' : ''}. No le preguntes qué tratamiento le interesa ni qué le gustaría mejorar: el mensaje de campaña ya lo dice.`
     : '';
 
   // Remote-service tenants only (lead_timezone_enabled): the lead may read a different clock
