@@ -21,7 +21,7 @@
 import { DurableObject } from 'cloudflare:workers';
 import { runAgentTurn, type ScheduledTurn } from './webhook-handler.js';
 import { buildFrontDeskAgent } from '../roles/front-desk/index.js';
-import { logBotEvent } from '../db/queries.js';
+import { isLatestInboundMessage, logBotEvent } from '../db/queries.js';
 
 const PENDING_KEY = 'pendingTurn';
 /** Debounce window — matches the legacy waitUntil path (coalesces a rapid message burst). */
@@ -50,10 +50,32 @@ export class ConversationDO extends DurableObject<ConversationDoEnv> {
    * Buffer a turn and (re)arm the debounce alarm. Rapid messages coalesce: each call
    * overwrites the pending params and resets the alarm to now+15s, so only the latest
    * message's turn runs once the burst settles.
+   *
+   * Calls arrive in the order their webhooks finish, not the order the messages were
+   * stored: two messages a fraction of a second apart can schedule in reverse. So an
+   * older message never overwrites a pending turn — when the incoming message is not the
+   * conversation's latest inbound, the pending one stays (only the alarm is reset).
+   * Overwriting it there would leave the alarm with a turn the debounce gate drops as
+   * superseded, and the latest message with no turn at all.
    */
   async scheduleTurn(params: ScheduledTurn): Promise<void> {
-    await this.ctx.storage.put(PENDING_KEY, params);
+    const pending = await this.ctx.storage.get<ScheduledTurn>(PENDING_KEY);
+    if (!pending || pending.messageId === params.messageId || (await this.isLatest(params))) {
+      await this.ctx.storage.put(PENDING_KEY, params);
+    } else {
+      console.log(`[ConversationDO] kept pending turn — message ${params.messageId} is older than the latest inbound`);
+    }
     await this.ctx.storage.setAlarm(Date.now() + DEBOUNCE_MS);
+  }
+
+  /** On a failed read, treat the message as the latest: overwriting is the old behavior. */
+  private async isLatest(params: ScheduledTurn): Promise<boolean> {
+    try {
+      return await isLatestInboundMessage(params.conversationId, params.messageId);
+    } catch (err) {
+      console.error('[ConversationDO] latest-inbound read failed:', err instanceof Error ? err.message : String(err));
+      return true;
+    }
   }
 
   override async alarm(): Promise<void> {

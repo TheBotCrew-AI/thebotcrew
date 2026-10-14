@@ -83,7 +83,9 @@ case — the in-flight reply going out AND the next turn repeating it — is the
 guard** (2026-10-03): after generating, a run whose lead wrote again drops its reply unsent
 (`run_superseded {reason:'newer_inbound'}`) unless a non-read tool (a booking, a status) already
 acted on it. `scheduleTurn` stores the turn and arms a **durable 15s Alarm**
-(each new inbound resets it → debounce/coalescing). On the alarm the DO runs `runAgentTurn`.
+(each new inbound resets it → debounce/coalescing; a message that is no longer the latest
+inbound resets the alarm but never overwrites the pending turn — two webhooks can schedule in
+reverse order, 2026-10-13). On the alarm the DO runs `runAgentTurn`.
 Because a DO instance is single-threaded, all processing for a conversation is **serialized**
 (kills the double-run / self-block-on-booking class), and the Alarm is **durable** (kills the
 silent-drop class). The same alarm also carries the **pause-resume** (0053): a turn suppressed

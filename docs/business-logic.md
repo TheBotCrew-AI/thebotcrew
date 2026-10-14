@@ -1754,6 +1754,19 @@ Short log of *why* certain rules exist, so they aren't "simplified away" later.
   reports it goes out, so the lead never misses a confirmation. Not dropped either: the
   non-debounced paths (resume, sync fallback) and the deterministic demo handover. The last
   message of a burst always gets an answer, since nothing can supersede it.
+- **2026-10-13 — the burst's LAST message lost its turn (schedule order ≠ message order).**
+  Heriberto lead Perla (conv `gCtNs7c2hZxMc3rvcPPG`, WA, lp5) tapped "CONFIRMO" twice, 0.4 s
+  apart, on the GHL appointment reminder. Both webhooks stored their message and reached
+  `ConversationDO.scheduleTurn` 6 ms apart — in REVERSE: the older message's call landed last
+  and overwrote the newer one's pending turn. The alarm ran the older message, the debounce
+  gate dropped it as `run_superseded` (not the latest inbound), and the latest message had no
+  turn left: silence, with nothing after it to notice (the reconciliation cron that once
+  caught unanswered inbounds was retired in Phase 3; GHL got its 200s, so no retry). The
+  window is the ~1.5–2 s between storing an inbound and scheduling it, so two messages closer
+  than that can invert. Fix: `scheduleTurn` no longer lets a message that is not the
+  conversation's latest inbound (`isLatestInboundMessage`) overwrite a pending turn — it only
+  resets the alarm. A failed read falls back to overwriting. One case in 30 days; rescued by
+  hand with `ops/rescue-turn.eval.ts`.
 - **2026-09-02 — the bot could not "see" a photo (media, 0046 → image descriptions).**
   Background: until 0046 (2026-08-01) a media-only inbound (voice note, photo) was DROPPED at
   parse — `text` was empty, the parser returned null, nothing was stored, no turn ran, and the

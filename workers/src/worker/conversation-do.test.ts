@@ -3,11 +3,14 @@ import type { ScheduledTurn } from './webhook-handler.js';
 
 vi.mock('./webhook-handler.js', () => ({ runAgentTurn: vi.fn() }));
 vi.mock('../roles/front-desk/index.js', () => ({ buildFrontDeskAgent: vi.fn(() => ({ id: 'agent' })) }));
-vi.mock('../db/queries.js', () => ({ logBotEvent: vi.fn().mockResolvedValue(undefined) }));
+vi.mock('../db/queries.js', () => ({
+  logBotEvent: vi.fn().mockResolvedValue(undefined),
+  isLatestInboundMessage: vi.fn().mockResolvedValue(true),
+}));
 
 import { runAgentTurn } from './webhook-handler.js';
 import { buildFrontDeskAgent } from '../roles/front-desk/index.js';
-import { logBotEvent } from '../db/queries.js';
+import { isLatestInboundMessage, logBotEvent } from '../db/queries.js';
 import { ConversationDO } from './conversation-do.js';
 
 function makeStorage() {
@@ -25,6 +28,7 @@ function makeDO(storage = makeStorage(), env: Record<string, unknown> = { CONVER
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(runAgentTurn).mockResolvedValue({ status: 200, body: {} });
+  vi.mocked(isLatestInboundMessage).mockResolvedValue(true);
 });
 
 afterEach(() => {
@@ -58,11 +62,52 @@ describe('ConversationDO — scheduleTurn (debounce)', () => {
     vi.setSystemTime(1_000);
     const { doInst, storage } = makeDO();
 
+    storage.get.mockResolvedValue(params);
+
     const next = { ...params, messageId: 'm2' } as ScheduledTurn;
     await doInst.scheduleTurn(next);
 
+    expect(isLatestInboundMessage).toHaveBeenCalledWith('cv1', 'm2');
     expect(storage.put).toHaveBeenLastCalledWith('pendingTurn', next);
     expect(storage.setAlarm).toHaveBeenLastCalledWith(16_000);
+  });
+
+  it('an older message scheduled after a newer one keeps the newer pending turn', async () => {
+    // Two messages 0.4 s apart whose webhooks finished in reverse: m2 (latest) scheduled
+    // first, then m1. Overwriting would hand the alarm a turn the debounce gate drops.
+    vi.useFakeTimers();
+    vi.setSystemTime(2_000);
+    const { doInst, storage } = makeDO();
+    const newer = { ...params, messageId: 'm2' } as ScheduledTurn;
+    storage.get.mockResolvedValue(newer);
+    vi.mocked(isLatestInboundMessage).mockResolvedValue(false);
+
+    await doInst.scheduleTurn(params);
+
+    expect(isLatestInboundMessage).toHaveBeenCalledWith('cv1', 'm1');
+    expect(storage.put).not.toHaveBeenCalled();
+    expect(storage.setAlarm).toHaveBeenCalledWith(17_000);
+  });
+
+  it('the same message scheduled twice (retry) overwrites without reading the DB', async () => {
+    const { doInst, storage } = makeDO();
+    storage.get.mockResolvedValue(params);
+
+    await doInst.scheduleTurn({ ...params, resumed: undefined } as ScheduledTurn);
+
+    expect(isLatestInboundMessage).not.toHaveBeenCalled();
+    expect(storage.put).toHaveBeenCalled();
+  });
+
+  it('a failed latest-inbound read falls back to overwriting', async () => {
+    const { doInst, storage } = makeDO();
+    storage.get.mockResolvedValue({ ...params, messageId: 'm2' });
+    vi.mocked(isLatestInboundMessage).mockRejectedValue(new Error('db down'));
+
+    await doInst.scheduleTurn(params);
+
+    expect(storage.put).toHaveBeenCalledWith('pendingTurn', params);
+    expect(storage.setAlarm).toHaveBeenCalled();
   });
 });
 
