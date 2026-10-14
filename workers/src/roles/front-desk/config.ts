@@ -176,6 +176,13 @@ export const promptVariantSchema = z.object({
    */
   followUpsEnabled: z.boolean().optional(),
   /**
+   * Whether this variant's keyword may REPLACE a pin the conversation already has (0072).
+   * Off = first-touch sticky, as every ad campaign. On for a recovery campaign: the lead
+   * answering the template is pinned to the ad they came from months ago, and that script
+   * is exactly what must stop. Not a prompt field — see core/tenant.ts `variantRepins`.
+   */
+  repin: z.boolean().optional(),
+  /**
    * Campaign tag appended to the GHL calendar event title when a conversation
    * pinned to this variant books (e.g. "Jornada Bótox" → "Karla — Bótox — Jornada
    * Bótox"), so staff see which promo brought the lead. Variant metadata read

@@ -7,7 +7,8 @@
  */
 
 export type Direction = 'inbound' | 'outbound';
-export type SenderType = 'lead' | 'bot' | 'human_agent';
+/** 'campaign' = a team send nobody typed (a bulk WhatsApp template, 0072): the business's words, not a person's reply. */
+export type SenderType = 'lead' | 'bot' | 'human_agent' | 'campaign';
 export type Channel = 'whatsapp' | 'instagram' | 'facebook';
 export type AiProvider = 'openai' | 'anthropic';
 /** `active` is the only value that permits follow-ups (see app_schedule_follow_up).
@@ -89,6 +90,8 @@ export interface RawTenantConfig {
   bookingMinNoticeDays?: number | null;
   /** Sliding pause (minutes) opened by a human agent's reply; null = platform default (5). */
   humanPauseMinutes?: number | null;
+  /** Days of lead silence after which a pinned campaign variant is cleared (0072); null = never. */
+  variantTtlDays?: number | null;
   /** Render appointment times in the LEAD's timezone (0057). Off by default: right for a
    *  remote service (a video call), wrong for a walk-in business. See core/lead-timezone.ts. */
   leadTimezoneEnabled?: boolean;
@@ -193,6 +196,9 @@ export interface TurnContext {
    *  that treats those (prefix-marked) messages as the team's official answer, so the bot
    *  stops promising to confirm what a person already confirmed. */
   hasHumanReplies?: boolean;
+  /** A campaign send (a bulk template, 0072) is in the history window: the lead is answering
+   *  it, and the prompt rule makes its offer the one on the table over the thread's past. */
+  hasCampaignSends?: boolean;
 }
 
 /** A turn in our own conversation store, used to rebuild agent history. */

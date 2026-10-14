@@ -68,8 +68,18 @@ describe('parseOutboundWebhook', () => {
     expect(parseOutboundWebhook({ ...base, source: 'api' })).toBeNull();
   });
 
-  it('skips when userId is missing', () => {
+  it('skips a human (app) message with no userId', () => {
     expect(parseOutboundWebhook({ ...base, userId: undefined })).toBeNull();
+  });
+
+  it('a bulk action (no userId) parses as a campaign send — the shape GHL sent on 2026-10-14', () => {
+    const out = parseOutboundWebhook({ ...base, source: 'bulk_actions', userId: undefined, messageType: 'WhatsApp', status: 'pending' });
+    expect(out).toMatchObject({ source: 'bulk_actions', channel: 'whatsapp', text: 'reply' });
+    expect(out?.ghlUserId).toBeUndefined();
+  });
+
+  it('skips when source is missing entirely', () => {
+    expect(parseOutboundWebhook({ ...base, source: undefined })).toBeNull();
   });
 });
 

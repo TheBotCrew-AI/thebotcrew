@@ -23,6 +23,7 @@ const parsed = (): ParsedHumanOutbound => ({
   text: 'hola desde el equipo',
   messageId: 'm1',
   ghlUserId: 'u1',
+  source: 'app',
   sentAt: '2026-07-02T10:00:00Z',
   phone: '+521',
 });
@@ -105,6 +106,40 @@ describe('handleOutboundWebhook — takeover vs opener', () => {
     expect(q.setHumanActive).not.toHaveBeenCalled();
     expect(q.cancelFollowUps).not.toHaveBeenCalled();
     expect(res.body).toMatchObject({ logged: true, opener: true });
+  });
+});
+
+describe('handleOutboundWebhook — campaign sends (bulk_actions, 0072)', () => {
+  const campaign = (): ParsedHumanOutbound => ({ ...parsed(), ghlUserId: undefined, source: 'bulk_actions' });
+
+  it('mid-thread template → logged with no author, nudges cancelled, NO pause, NO GHL user lookup', async () => {
+    vi.mocked(parseOutboundWebhook).mockReturnValue(campaign());
+    const res = await handleOutboundWebhook({} as never);
+
+    expect(q.logMessage).toHaveBeenCalledWith(expect.objectContaining({ p_sender_type: 'campaign', p_human_agent_id: null }));
+    expect(q.cancelFollowUps).toHaveBeenCalledWith('cv1');
+    expect(q.setHumanActive).not.toHaveBeenCalled();
+    expect(q.findHumanAgentByGhlId).not.toHaveBeenCalled();
+    expect(ghl.getUser).not.toHaveBeenCalled();
+    expect(res.body).toMatchObject({ logged: true, opener: true, campaign: 'bulk_actions' });
+  });
+
+  it('template as the first message → logged, nothing to cancel, NO pause', async () => {
+    vi.mocked(parseOutboundWebhook).mockReturnValue(campaign());
+    vi.mocked(q.conversationMessageCount).mockResolvedValue(0);
+    await handleOutboundWebhook({} as never);
+
+    expect(q.cancelFollowUps).not.toHaveBeenCalled();
+    expect(q.setHumanActive).not.toHaveBeenCalled();
+  });
+
+  it('duplicate webhook for the same template (GHL fires twice) → dedup, nothing else', async () => {
+    vi.mocked(parseOutboundWebhook).mockReturnValue(campaign());
+    vi.mocked(q.logMessage).mockResolvedValue({ conversationId: 'cv1', messageId: null } as never);
+    const res = await handleOutboundWebhook({} as never);
+
+    expect(q.cancelFollowUps).not.toHaveBeenCalled();
+    expect(res.body).toMatchObject({ ignored: 'duplicate' });
   });
 });
 

@@ -111,3 +111,15 @@ export function matchVariantKeyword(tenant: TenantContext, text: string): Varian
   }
   return best ? { keyword: best.keyword, variant: best.variant } : null;
 }
+
+/**
+ * Whether a variant may replace the pin a conversation already carries (`repin: true`,
+ * 0072). Absent or malformed reads as false — the first-touch sticky default — so a config
+ * typo can never let an ad campaign hijack threads mid-conversation.
+ */
+export function variantRepins(promptVariants: unknown, variantKey: string): boolean {
+  if (!promptVariants || typeof promptVariants !== 'object' || Array.isArray(promptVariants)) return false;
+  const variant = (promptVariants as Record<string, unknown>)[variantKey];
+  if (!variant || typeof variant !== 'object' || Array.isArray(variant)) return false;
+  return (variant as Record<string, unknown>).repin === true;
+}

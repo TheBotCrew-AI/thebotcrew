@@ -62,6 +62,7 @@ export function buildFrontDeskAgent(): Agent {
         turn?.demoHandoff,
         turn?.hasHumanReplies,
         turn?.leadTimezone,
+        turn?.hasCampaignSends,
       );
     },
     model: ({ requestContext }) => {

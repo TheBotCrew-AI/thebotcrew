@@ -1060,7 +1060,7 @@ describe('handleInboundWebhook — campaign prompt variants', () => {
     vi.mocked(q.loadTenantConfig).mockResolvedValue(withVariants());
     vi.mocked(q.setPromptVariant).mockResolvedValue(true);
     await handleInboundWebhook({ ...inbound, body: 'Hola, vi su PROMO LASER' }, agentReplying());
-    expect(q.setPromptVariant).toHaveBeenCalledWith('conv1', 'laser-promo');
+    expect(q.setPromptVariant).toHaveBeenCalledWith('conv1', 'laser-promo', false);
     expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'variant_assigned',
       expect.objectContaining({ variant: 'laser-promo', keyword: 'promo laser', known: true }));
   });
@@ -1094,6 +1094,47 @@ describe('handleInboundWebhook — campaign prompt variants', () => {
     vi.mocked(q.setPromptVariant).mockRejectedValue(new Error('db down'));
     const agent = agentReplying();
     const res = await handleInboundWebhook({ ...inbound, body: 'promo laser' }, agent);
+    expect(agent.generate).toHaveBeenCalled();
+    expect(res.body).toMatchObject({ replied: true });
+  });
+
+  it('a `repin: true` variant forces the pin and logs repinned (recovery campaign, 0072)', async () => {
+    const t = tenant({
+      keywordVariants: { 'quiero mi consulta gratis': 'r-botox' },
+      config: { ...tenant().config, promptVariants: { 'r-botox': { offering: 'Consulta gratis', repin: true } } },
+    });
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(t);
+    vi.mocked(q.setPromptVariant).mockResolvedValue(true);
+    await handleInboundWebhook({ ...inbound, body: 'Quiero mi consulta gratis' }, agentReplying());
+    expect(q.setPromptVariant).toHaveBeenCalledWith('conv1', 'r-botox', true);
+    expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'variant_assigned',
+      expect.objectContaining({ variant: 'r-botox', repinned: true }));
+  });
+
+  it('expiry runs BEFORE the match when the tenant has a TTL, and logs variant_expired', async () => {
+    const t = withVariants();
+    (t.config as { variantTtlDays?: number | null }).variantTtlDays = 30;
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(t);
+    vi.mocked(q.expirePromptVariant).mockResolvedValue('a02');
+    vi.mocked(q.setPromptVariant).mockResolvedValue(true);
+    await handleInboundWebhook({ ...inbound, body: 'promo laser' }, agentReplying());
+    expect(q.expirePromptVariant).toHaveBeenCalledWith(expect.any(String), expect.any(String), 30);
+    expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'variant_expired', { variant: 'a02', ttlDays: 30 });
+    const order = vi.mocked(q.expirePromptVariant).mock.invocationCallOrder[0]! < vi.mocked(q.setPromptVariant).mock.invocationCallOrder[0]!;
+    expect(order).toBe(true);
+  });
+
+  it('no TTL → expiry is never consulted; an expiry failure never blocks the turn', async () => {
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(withVariants());
+    await handleInboundWebhook(inbound, agentReplying());
+    expect(q.expirePromptVariant).not.toHaveBeenCalled();
+
+    const t = withVariants();
+    (t.config as { variantTtlDays?: number | null }).variantTtlDays = 30;
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(t);
+    vi.mocked(q.expirePromptVariant).mockRejectedValue(new Error('db down'));
+    const agent = agentReplying();
+    const res = await handleInboundWebhook(inbound, agent);
     expect(agent.generate).toHaveBeenCalled();
     expect(res.body).toMatchObject({ replied: true });
   });

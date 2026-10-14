@@ -15,9 +15,9 @@
 import type { Agent } from '@mastra/core/agent';
 import { resolveAiApiKey } from '../core/env.js';
 import { usageFromAgentResult } from '../core/llm-usage.js';
-import { channelEnabled, hasTriggerKeywords, inTestMode, matchesDemoOff, matchesDemoOn, matchVariantKeyword, messageMatchesTrigger, resolveTenant, roleEnabled } from '../core/tenant.js';
+import { channelEnabled, hasTriggerKeywords, inTestMode, matchesDemoOff, matchesDemoOn, matchVariantKeyword, messageMatchesTrigger, resolveTenant, roleEnabled, variantRepins } from '../core/tenant.js';
 import { buildAgentRequestContext } from '../core/runtime-context.js';
-import { PHOTO_DESCRIPTION_PREFIX, hasHumanReplies, photoDescriptionLine, toModelMessages } from '../core/model-messages.js';
+import { PHOTO_DESCRIPTION_PREFIX, hasCampaignSends, hasHumanReplies, photoDescriptionLine, toModelMessages } from '../core/model-messages.js';
 import { cadenceForRound, totalRounds, variantAllowsFollowUps } from '../core/reactivation-rounds.js';
 import { parseFollowUpPlaybook, resolveStagePlan } from '../core/followup-playbook.js';
 import { auxReasoningEffort } from '../core/reasoning.js';
@@ -63,6 +63,7 @@ import {
   setMessageContent,
   recentInboundAttachments,
   setPromptVariant,
+  expirePromptVariant,
   updateConversationContact,
   updateConversationStatus,
   setConversationContactKeys,
@@ -1057,6 +1058,7 @@ export async function runAgentTurn({
     demoHandoff,
     // Same window the model reads: a teammate's answer outside it is not "seen" either way.
     hasHumanReplies: hasHumanReplies(history),
+    hasCampaignSends: hasCampaignSends(history),
   };
   // A key fallback is logged, never swallowed, because from here on every usage row
   // would be misattributed.
@@ -1644,10 +1646,30 @@ export async function handleInboundWebhook(
   // a tenant can flavor threads without gating them. First-touch sticky — enforced in
   // SQL (COALESCE), so re-matches are no-ops and only the pinning call logs the event.
   // Best-effort: a variant failure must never block the turn (lead gets the base prompt).
+  //
+  // Expiry runs first (0072): a lead back after `variant_ttl_days` of silence sheds the
+  // campaign they came from — a dead promotion is worse than the base prompt — and a
+  // recovery keyword on that thread then pins the ordinary way.
+  if (messageId && tenant.config.variantTtlDays) {
+    try {
+      const expired = await expirePromptVariant(conversationId, messageId, tenant.config.variantTtlDays);
+      if (expired) {
+        await logBotEvent(tenant.clientId, parsed.conversationId, 'variant_expired', {
+          variant: expired,
+          ttlDays: tenant.config.variantTtlDays,
+        });
+      }
+    } catch (e) {
+      console.error('[variant] expirePromptVariant failed (non-blocking):', e instanceof Error ? e.message : String(e));
+    }
+  }
   const variantMatch = matchVariantKeyword(tenant, parsed.text);
   if (variantMatch) {
     try {
-      const assigned = await setPromptVariant(parsed.conversationId, variantMatch.variant);
+      // A `repin: true` variant (a recovery campaign) replaces the pin the thread already
+      // carries; every other variant keeps first-touch sticky.
+      const repin = variantRepins(tenant.config.promptVariants, variantMatch.variant);
+      const assigned = await setPromptVariant(parsed.conversationId, variantMatch.variant, repin);
       if (assigned) {
         // known:false is the misconfiguration fingerprint — a keyword mapped to a
         // variant key with no prompt_variants entry. The prompt falls back to base.
@@ -1659,6 +1681,7 @@ export async function handleInboundWebhook(
           variant: variantMatch.variant,
           keyword: variantMatch.keyword,
           known,
+          ...(repin ? { repinned: true } : {}),
         });
       }
     } catch (e) {

@@ -81,10 +81,23 @@ monolithic prompt (migration 0036; `core/tenant.ts` `matchVariantKeyword`,
   conversation (`bookingEnabled` is the only flag that removes one), so a lead pinned to an
   offer campaign can still trigger `startDemo` by asking for a demo, even though their flow
   never mentions it. Usually desirable — just not accidental.
-- **First-touch sticky**, enforced in SQL (`app_set_prompt_variant`, COALESCE): the first
+- **First-touch sticky**, enforced in SQL (`app_set_prompt_variant`): the first
   matching message pins `conversations.prompt_variant`; later campaign keywords never switch
   it (ad attribution; no mid-thread personality swap). Read fresh each turn alongside
-  `active_role`. The demo persona, when active, wins over the variant.
+  `active_role`. The demo persona, when active, wins over the variant. Two exceptions, both
+  from the recovery-campaign case (0072 — a WhatsApp template to leads who asked about a
+  treatment months ago, who are still pinned to the ad they came from):
+  - **`repin: true`** on a variant lets ITS keyword replace the pin the thread already carries
+    (`app_set_prompt_variant(..., p_force := true)`); the reactivation round resets to 0 — a
+    recovery is a new nudge cycle. Landing on the variant already pinned is a no-op, so a lead
+    who types the keyword twice doesn't reset twice. Event: `variant_assigned {repinned:true}`.
+    Absent/malformed = sticky (`variantRepins`, `core/tenant.ts`): a typo can't let an ad
+    campaign hijack live threads.
+  - **`tenant_config.variant_ttl_days`** (NULL = never): on each inbound, BEFORE the keyword
+    match, `app_expire_prompt_variant` clears the pin when the latest inbound *before this
+    one* is older than the TTL — silence is measured on the lead's messages, so the bot's own
+    nudges never keep a dead promotion alive. Event `variant_expired {variant, ttlDays}`. A
+    recovery keyword on an expired thread then pins the ordinary way. Heriberto runs 30.
 - Observability: `variant_assigned` event `{variant, keyword, known}`. **`known:false` is the
   misconfiguration fingerprint** — a keyword mapped to a variant key with no
   `prompt_variants` entry; the prompt falls back to base, loudly, never silently. A variant
@@ -166,6 +179,20 @@ Hybrid human ↔ AI. Enforced by `isBotSuppressed`, re-checked again right befor
   ongoing thread. It's still logged (history context; maps to an assistant turn) but does **not**
   open the pause, so the bot answers the lead's reply. A real takeover happens mid-thread and
   still pauses. (Fixed the 2026-07-02 "template opener → lead replies → bot muted 5 min" bug.)
+- **Campaign sends are not takeovers (0072).** A Contacts **bulk action** (a WhatsApp
+  template) reaches the outbound webhook as `source:'bulk_actions'` with **no `userId`**
+  (verified 2026-10-14; a workflow send is expected to look alike). Before 0072 the parser
+  dropped it, so the lead's "sí" arrived on top of a months-old thread and the bot had no idea
+  which offer they were answering. Now it is stored as **`sender_type='campaign'`** — the
+  business's words, nobody's reply — and the handler treats it as an opener wherever it lands:
+  no human pause, pending nudges **cancelled** (they were chasing with the old offer; the lead's
+  reply re-arms whatever the new script decides). In the history the model reads it carries the
+  `[Mensaje de campaña que mandó el equipo]` prefix (`CAMPAIGN_MESSAGE_PREFIX`), and the
+  front-desk prompt renders a section (only when one is in the window) that makes its offer the
+  one on the table: prices and promotions earlier in the thread no longer apply, and a bare
+  "sí"/"info" after it is interest in THAT offer. It is NOT a `human_agent` message on purpose:
+  0054's pending-info resolution counts human answers, and a template answers nothing.
+  GHL fires the webhook twice per send (a status update) — `ghl_message_id` dedup absorbs it.
 - **Resume after the pause (0053).** A lead message that lands while the pause is running
   is **not dropped**. The turn still runs at the debounce alarm, sees the pause, and returns
   the pause expiry (`resumeAt`) instead of just bailing; `ConversationDO` stores the turn

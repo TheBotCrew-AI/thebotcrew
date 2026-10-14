@@ -95,21 +95,25 @@ export async function verifyGhlWebhook(rawBody: string, headers: Headers): Promi
 }
 
 /**
- * Extract a normalized human-agent outbound turn, or null if this isn't one.
+ * Extract a normalized outbound turn somebody OTHER than the bot sent, or null.
  *
  * Filtering logic:
  *   source === 'api'  → our bot's own message echoed back by GHL — always skip.
- *   source === 'app'  → sent by a human via the GHL UI — process.
- *   userId absent     → defensive skip (no agent to attribute to).
+ *   source === 'app'  → sent by a human via the GHL UI — needs a userId to attribute to.
+ *   any other source  → a campaign send (bulk action, workflow): no person typed it and
+ *                       GHL sends no userId. Logged so the model sees what the lead is
+ *                       answering; the handler treats it as an opener, never a takeover.
  */
 export function parseOutboundWebhook(payload: GhlOutboundWebhook): ParsedHumanOutbound | null {
   if (payload.type !== 'OutboundMessage' || payload.direction !== 'outbound') return null;
-  if (payload.source !== 'app') return null;
+  const source = payload.source;
+  if (!source || source === 'api') return null;
 
   const { locationId, contactId, conversationId, body, messageId, userId } = payload;
-  if (!locationId || !contactId || !conversationId || !body || !messageId || !userId) {
+  if (!locationId || !contactId || !conversationId || !body || !messageId) {
     return null;
   }
+  if (source === 'app' && !userId) return null;
 
   const phone = typeof payload.to === 'string' && payload.to ? payload.to : undefined;
   const sentAt = payload.dateAdded ?? payload.timestamp ?? new Date().toISOString();
@@ -121,7 +125,8 @@ export function parseOutboundWebhook(payload: GhlOutboundWebhook): ParsedHumanOu
     channel: normalizeChannel(payload.messageType),
     text: body,
     messageId,
-    ghlUserId: userId,
+    ghlUserId: source === 'app' ? userId : undefined,
+    source,
     sentAt,
     phone,
   };

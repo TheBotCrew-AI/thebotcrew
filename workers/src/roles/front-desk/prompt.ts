@@ -7,7 +7,7 @@
  */
 
 import { BUBBLES_RULE, CLOSED_QUESTION_RULE, VOICE_RULE, WARM_NO_RULE } from '../../core/prompt-rules.js';
-import { HUMAN_REPLY_PREFIX, PHOTO_DESCRIPTION_PREFIX } from '../../core/model-messages.js';
+import { CAMPAIGN_MESSAGE_PREFIX, HUMAN_REPLY_PREFIX, PHOTO_DESCRIPTION_PREFIX } from '../../core/model-messages.js';
 import type { DemoHandoff } from '../../core/types.js';
 import { frameTimeZone, zoneLabel, zoneSuffix } from '../../core/lead-timezone.js';
 import { zonedWallClockToMs } from './tools/booking-time.js';
@@ -256,6 +256,7 @@ export function buildFrontDeskInstructions(
   demoHandoff?: DemoHandoff,
   hasHumanReplies?: boolean,
   leadTimezone?: string,
+  hasCampaignSends?: boolean,
 ): string {
   // Override precedence: demo persona > pinned campaign variant (merged over base) > base.
   const { overrides, usingDemo } = resolveEffectiveOverrides(config, activeRole, promptVariant);
@@ -639,6 +640,16 @@ Los mensajes del historial que empiezan con "${HUMAN_REPLY_PREFIX}" NO los escri
 - Si el lead pregunta algo nuevo, contéstalo con normalidad. No te disculpes por la intervención ni la expliques.`
       : '';
 
+  // A campaign send (a bulk WhatsApp template) sits in the history as a team message
+  // nobody typed. The lead's reply answers THAT — the offer in it is the one on the
+  // table, whatever this thread discussed months ago.
+  const campaignSection = hasCampaignSends && !usingDemo
+    ? `\n\n# El equipo le mandó un mensaje de campaña
+Un mensaje del historial que empieza con "${CAMPAIGN_MESSAGE_PREFIX}" lo mandó ${config.businessName} a varias personas a la vez (una plantilla). Lo que el lead escribe después es su respuesta a ESE mensaje.
+- Lo que ofrece ese mensaje es la oferta vigente. Precios, promociones o fechas que aparezcan ANTES en este hilo ya no aplican: no los repitas ni los confirmes aunque el lead los mencione; redirígelo con naturalidad a lo que dice el mensaje de campaña y a lo que dice tu configuración.
+- Un "sí", "me interesa" o "info" después de ese mensaje es interés en esa oferta: avanza con ella, no preguntes a qué se refiere.`
+    : '';
+
   // Remote-service tenants only (lead_timezone_enabled): the lead may read a different clock
   // than the calendar. Three states — located in another zone, located in the same zone, not
   // located at all — and in none of them does the model convert an hour itself: the tools
@@ -666,7 +677,7 @@ No sabemos en qué zona horaria está este lead, y los horarios se le muestran e
 Hoy es ${nowReadable} (zona horaria: ${config.timezone}).
 Formato ISO para herramientas: ${nowIso}.
 NUNCA calcules tú el día de la semana de una fecha — usa el día que ya viene en los
-horarios de getAvailability (campo "label") o la fecha de hoy de arriba.${horizonLine}${leadTimezoneSection}
+horarios de getAvailability (campo "label") o la fecha de hoy de arriba.${horizonLine}${leadTimezoneSection}${campaignSection}
 
 # Tono y formato
 ${toneBody}

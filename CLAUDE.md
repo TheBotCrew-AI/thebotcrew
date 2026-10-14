@@ -359,6 +359,14 @@ supabase/
                                #      lo que el inbound hizo al entrar: follow_ups.cancelled_at + conversations.reactivated_from/_at
                                #      y el RPC app_restore_after_courtesy regresan nudges y status; evento courtesy_skipped.
                                #      Migración PRIMERO, Worker después. Ver business-logic §1.2)
+                               # 0072 variant_repin_and_expiry (campañas de recuperación: una variante con `repin: true`
+                               #      PISA el pin que el hilo ya trae y reinicia la ronda — app_set_prompt_variant gana
+                               #      p_force DEFAULT false, se DROPEA la de 2 args; tenant_config.variant_ttl_days limpia el
+                               #      pin cuando el último inbound ANTERIOR es más viejo que el TTL, evento variant_expired;
+                               #      y messages.sender_type gana 'campaign': el bulk de GHL (source bulk_actions, sin userId)
+                               #      queda en el historial con prefijo propio, sin pausa humana y cancelando nudges.
+                               #      Migración PRIMERO, Worker después: el Worker nuevo lee variant_ttl_days en loadTenantConfig
+                               #      y sin la columna CADA tenant queda mudo. Ver business-logic §1.1 y §3)
   clients.sql, seed-tenants.sql# seeds (run by `supabase db reset` per config.toml)
 sites/                         # client marketing sites: static HTML, no build step, no deps
   _template/                   # starting point for a new client
@@ -614,6 +622,11 @@ cualquier Chrome headless recibe SIGTERM a los ~2 s (ver cabecera de `render-bat
   `messageType` (`FB`/`IG`/`WhatsApp`, normalized in `ghl/webhook.ts`); outbound sends with
   the matching `type`. FB/IG have no phone — delivery routes by `contactId`, and a real
   inbound (FB/IG/WhatsApp messaging window) must be open for GHL to deliver.
+- Campaign sends (0072): a GHL bulk action / template arrives on the outbound webhook as
+  `source:'bulk_actions'`, no `userId`. Stored as `sender_type='campaign'`, no pause, nudges
+  cancelled, marked for the model as the offer on the table. Pair it with a `repin: true`
+  variant keyed on the template's quick-reply text (also in `trigger_keywords`) so the thread
+  switches scripts; `variant_ttl_days` retires stale pins on its own. See docs/business-logic.md §1.1/§3.
 - Human takeover (hybrid): a human reply (`source:'app'` outbound webhook) opens a
   sliding pause — per-tenant length via `tenant_config.human_pause_minutes` (0052),
   NULL = 5 min default (MADI: 30); `status='handed_off'` is a permanent pause. A lead

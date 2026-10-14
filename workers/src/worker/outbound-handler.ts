@@ -12,9 +12,12 @@
  *      (catches our own echo when we couldn't capture its id).
  *   4. Resolve tenant.
  *   5. Resolve (or lazily create) the human_agents row for this GHL user.
- *   6. Log message to our store (sender_type='human_agent').
+ *   6. Log message to our store (sender_type='human_agent', or 'campaign' for a bulk send).
  *   7. If this is the conversation's FIRST message, it's a cold-outreach opener
- *      (e.g. a WhatsApp template) — log only, no pause. Otherwise:
+ *      (e.g. a WhatsApp template) — log only, no pause. A CAMPAIGN send (source
+ *      'bulk_actions' / a workflow, no userId — 0072) is an opener wherever it lands:
+ *      logged, pending nudges cancelled (the lead just got a different offer), no
+ *      pause. Otherwise:
  *   8. Start/refresh the human-active timer (tenant_config.human_pause_minutes,
  *      default 5) + cancel pending follow-ups (a human is in the conversation).
  */
@@ -63,8 +66,10 @@ export async function handleOutboundWebhook(
     return { status: 200, body: { ignored: 'unknown or inactive tenant', locationId: parsed.locationId } };
   }
 
-  const ghl = new GhlClient(tenant.tenantId);
-  const humanAgentId = await resolveHumanAgent(tenant, parsed.ghlUserId, ghl);
+  // A campaign send has no author to resolve: it is stored as sender_type='campaign',
+  // which is how the history the model reads tells it apart from a person's reply.
+  const isCampaign = !parsed.ghlUserId;
+  const humanAgentId = isCampaign ? null : await resolveHumanAgent(tenant, parsed.ghlUserId!, new GhlClient(tenant.tenantId));
 
   // Cold-outreach opener vs. human takeover: if this 'app' message is the FIRST message in
   // the conversation, it's an outreach opener (e.g. a WhatsApp template Leo sends to open the
@@ -81,7 +86,7 @@ export async function handleOutboundWebhook(
     p_ghl_contact_id: parsed.contactId,
     p_contact_phone: parsed.phone ?? null,
     p_direction: 'outbound',
-    p_sender_type: 'human_agent',
+    p_sender_type: isCampaign ? 'campaign' : 'human_agent',
     p_content: parsed.text,
     p_agent_role: null,
     p_human_agent_id: humanAgentId,
@@ -95,10 +100,19 @@ export async function handleOutboundWebhook(
     return { status: 200, body: { ignored: 'duplicate', ghlMessageId: parsed.messageId } };
   }
 
-  if (isOpener) {
+  if (isCampaign && !isOpener && conversationId) {
+    // A template to a thread with history: the nudge ladder was chasing with the OLD
+    // offer. Cancel it; the lead's reply re-arms whatever the new script decides.
+    try {
+      await cancelFollowUps(conversationId);
+    } catch (e) {
+      console.error('[outbound] cancelFollowUps failed:', e instanceof Error ? e.message : String(e));
+    }
+  }
+  if (isOpener || isCampaign) {
     // Outreach opener: logged for history, but no human pause — let the bot answer the reply.
-    console.log(`[outbound] cold-outreach opener conv=${parsed.conversationId} — not a human takeover`);
-    return { status: 200, body: { logged: true, conversationId, opener: true } };
+    console.log(`[outbound] ${isCampaign ? `campaign send (${parsed.source})` : 'cold-outreach opener'} conv=${parsed.conversationId} — not a human takeover`);
+    return { status: 200, body: { logged: true, conversationId, opener: true, ...(isCampaign ? { campaign: parsed.source } : {}) } };
   }
 
   // These must be awaited — fire-and-forget gets killed when the Worker response is sent

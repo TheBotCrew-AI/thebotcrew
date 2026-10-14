@@ -17,6 +17,11 @@ export type ChatMessage = { role: 'user'; content: string } | { role: 'assistant
  *  by the front-desk prompt — change both or the rule points at nothing. */
 export const HUMAN_REPLY_PREFIX = '[Respuesta de una persona del equipo]';
 
+/** Marks a campaign send (a bulk WhatsApp template, 0072) — stored as `sender_type='campaign'`,
+ *  a team message nobody typed. The lead's next message is an answer to THIS, so the model
+ *  must read it as the offer on the table. Referenced verbatim by the prompts. */
+export const CAMPAIGN_MESSAGE_PREFIX = '[Mensaje de campaña que mandó el equipo]';
+
 /** Opens the line that stands in for a photo the lead sent: the vision description written
  *  over the "[imagen]" placeholder (`core/describe-image.ts`). Referenced verbatim by the
  *  front-desk prompt, which teaches it as "a picture you DID see" — change both together. */
@@ -32,11 +37,17 @@ export function toModelMessages(history: ConversationMessage[]): ChatMessage[] {
   return history.map((m): ChatMessage => {
     if (m.senderType === 'lead') return { role: 'user', content: m.content };
     if (m.senderType === 'human_agent') return { role: 'assistant', content: `${HUMAN_REPLY_PREFIX} ${m.content}` };
+    if (m.senderType === 'campaign') return { role: 'assistant', content: `${CAMPAIGN_MESSAGE_PREFIX} ${m.content}` };
     return { role: 'assistant', content: m.content };
   });
 }
 
-/** Whether a human teammate wrote anything in this history window. */
+/** Whether a human teammate wrote anything in this history window (a campaign send is not a person). */
 export function hasHumanReplies(history: ConversationMessage[]): boolean {
   return history.some((m) => m.senderType === 'human_agent');
+}
+
+/** Whether a campaign send (a bulk template, 0072) is in the window. */
+export function hasCampaignSends(history: ConversationMessage[]): boolean {
+  return history.some((m) => m.senderType === 'campaign');
 }

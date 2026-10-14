@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { HUMAN_REPLY_PREFIX, PHOTO_DESCRIPTION_PREFIX, hasHumanReplies, photoDescriptionLine, toModelMessages } from './model-messages.js';
+import { CAMPAIGN_MESSAGE_PREFIX, HUMAN_REPLY_PREFIX, PHOTO_DESCRIPTION_PREFIX, hasCampaignSends, hasHumanReplies, photoDescriptionLine, toModelMessages } from './model-messages.js';
 import type { ConversationMessage } from './types.js';
 
 const msg = (senderType: ConversationMessage['senderType'], content: string): ConversationMessage => ({
@@ -23,6 +23,18 @@ describe('toModelMessages', () => {
       role: 'assistant',
       content: `${HUMAN_REPLY_PREFIX} Sí se puede con 17 años, acompañada de un adulto.`,
     });
+  });
+
+  it('a campaign send (a bulk template) is an assistant message marked as a campaign, not as a person (0072)', () => {
+    const [sent] = toModelMessages([msg('campaign', 'Hola, te ofrecemos una consulta gratis.')]);
+    expect(sent).toEqual({ role: 'assistant', content: `${CAMPAIGN_MESSAGE_PREFIX} Hola, te ofrecemos una consulta gratis.` });
+    expect(sent?.content).not.toContain(HUMAN_REPLY_PREFIX);
+  });
+
+  it('hasCampaignSends / hasHumanReplies tell the two apart', () => {
+    expect(hasCampaignSends([msg('lead', 'a'), msg('campaign', 'b')])).toBe(true);
+    expect(hasHumanReplies([msg('lead', 'a'), msg('campaign', 'b')])).toBe(false);
+    expect(hasCampaignSends([msg('lead', 'a'), msg('human_agent', 'b')])).toBe(false);
   });
 
   it('never marks a bot message', () => {

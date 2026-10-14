@@ -1,5 +1,5 @@
 import { CLOSED_QUESTION_RULE, VOICE_RULE, WARM_NO_RULE } from '../../core/prompt-rules.js';
-import { HUMAN_REPLY_PREFIX } from '../../core/model-messages.js';
+import { CAMPAIGN_MESSAGE_PREFIX, HUMAN_REPLY_PREFIX } from '../../core/model-messages.js';
 import { STAGE_LABELS } from '../../core/followup-playbook.js';
 import type { StageContext } from '../../core/runtime-context.js';
 
@@ -163,6 +163,7 @@ ${closingRules}
 # Historial y diferenciación
 Revisa TODOS los mensajes anteriores del bot en el historial antes de escribir.
 - Los mensajes que empiezan con "${HUMAN_REPLY_PREFIX}" los escribió una persona del equipo, no tú: lo que ahí se afirmó es la respuesta oficial. No lo contradigas ni digas que sigue pendiente.
+- Un mensaje que empieza con "${CAMPAIGN_MESSAGE_PREFIX}" es una plantilla que el equipo mandó a varias personas: lo que ofrece es la oferta vigente, y lo que el hilo decía antes de él ya no aplica.
 - Si el historial ya contiene información del servicio (descripción, precio, condiciones, etc.), NO la repitas. El lead ya la vio; repetirla se siente como spam.
 - Tu mensaje DEBE explorar un ángulo distinto a los ya enviados — diferente pregunta, diferente tema, diferente enfoque.
 

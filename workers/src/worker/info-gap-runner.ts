@@ -157,7 +157,7 @@ async function drainExtractions(
     try {
       const messages = await loadRecentMessages(x.conversationId, TRANSCRIPT_MESSAGES);
       const transcript: TranscriptLine[] = messages.map((m) => ({
-        sender: m.senderType === 'lead' ? 'lead' : m.senderType === 'human_agent' ? 'human' : 'bot',
+        sender: m.senderType === 'lead' ? 'lead' : m.senderType === 'human_agent' || m.senderType === 'campaign' ? 'human' : 'bot',
         at: m.sentAt,
         text: m.content,
       }));

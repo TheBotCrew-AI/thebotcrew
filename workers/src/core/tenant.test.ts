@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { channelEnabled, inTestMode, hasTriggerKeywords, matchVariantKeyword, messageMatchesTrigger, roleEnabled } from './tenant.js';
+import { channelEnabled, inTestMode, hasTriggerKeywords, matchVariantKeyword, messageMatchesTrigger, roleEnabled, variantRepins } from './tenant.js';
 import type { TenantContext } from './types.js';
 
 function tenant(overrides: Partial<TenantContext> = {}): TenantContext {
@@ -137,5 +137,21 @@ describe('matchVariantKeyword', () => {
   it('ignores entries with empty variant values and returns null when nothing matches', () => {
     expect(matchVariantKeyword(tenant({ keywordVariants: { roto: '  ' } }), 'roto')).toBeNull();
     expect(matchVariantKeyword(tenant({ keywordVariants: map }), 'hola buenas tardes')).toBeNull();
+  });
+});
+
+describe('variantRepins (0072)', () => {
+  const variants = { 'r-botox': { offering: 'x', repin: true }, a02: { offering: 'y' }, bad: 'not an object', loose: { repin: 'true' } };
+  it('true only for an explicit boolean true', () => {
+    expect(variantRepins(variants, 'r-botox')).toBe(true);
+    expect(variantRepins(variants, 'a02')).toBe(false);
+    expect(variantRepins(variants, 'loose')).toBe(false);
+    expect(variantRepins(variants, 'bad')).toBe(false);
+    expect(variantRepins(variants, 'missing')).toBe(false);
+  });
+  it('malformed config reads as sticky', () => {
+    expect(variantRepins(null, 'r-botox')).toBe(false);
+    expect(variantRepins([], 'r-botox')).toBe(false);
+    expect(variantRepins('x', 'r-botox')).toBe(false);
   });
 });

@@ -63,7 +63,7 @@ export async function loadTenantConfig(ghlLocationId: string): Promise<TenantCon
   const { data, error } = await supabase
     .from('tenant_config')
     .select(
-      'business_name, timezone, tone, services, hours, calendars, faq, enabled_roles, prompt_overrides, ai_provider, ai_model, ai_key_ref, awaiting_human_tag, pending_info_tag, follow_up_tiers, follow_up_cadence, follow_up_angles, follow_up_rounds, follow_up_playbook, quiet_hours, booking_horizon_days, booking_min_notice_days, human_pause_minutes, enabled_channels, test_contact_ids, trigger_keywords, demo_on_keywords, demo_off_keywords, demo_prompt_overrides, keyword_variants, prompt_variants, demo_sessions_enabled, meta_capi, lead_timezone_enabled, interest_tags, book_unconfirmed, booking_payment, prime_time,' +
+      'business_name, timezone, tone, services, hours, calendars, faq, enabled_roles, prompt_overrides, ai_provider, ai_model, ai_key_ref, awaiting_human_tag, pending_info_tag, follow_up_tiers, follow_up_cadence, follow_up_angles, follow_up_rounds, follow_up_playbook, quiet_hours, booking_horizon_days, booking_min_notice_days, human_pause_minutes, variant_ttl_days, enabled_channels, test_contact_ids, trigger_keywords, demo_on_keywords, demo_off_keywords, demo_prompt_overrides, keyword_variants, prompt_variants, demo_sessions_enabled, meta_capi, lead_timezone_enabled, interest_tags, book_unconfirmed, booking_payment, prime_time,' +
         'tenants!inner(id, client_id, ghl_location_id, is_active)',
     )
     .eq('tenants.ghl_location_id', ghlLocationId)
@@ -126,6 +126,10 @@ export async function loadTenantConfig(ghlLocationId: string): Promise<TenantCon
       humanPauseMinutes:
         typeof row.human_pause_minutes === 'number' && row.human_pause_minutes > 0
           ? row.human_pause_minutes
+          : null,
+      variantTtlDays:
+        typeof row.variant_ttl_days === 'number' && row.variant_ttl_days > 0
+          ? row.variant_ttl_days
           : null,
       aiKeyRef: row.ai_key_ref?.trim() ? row.ai_key_ref.trim() : null,
       leadTimezoneEnabled: row.lead_timezone_enabled === true,
@@ -515,18 +519,42 @@ export async function setSimulatedBooking(sessionId: string, booking: SimulatedB
 }
 
 /**
- * First-touch sticky variant assignment (app_set_prompt_variant). Returns true
- * only when THIS call pinned the variant — callers log variant_assigned then.
- * Re-matches on an already-pinned conversation are no-ops (false).
+ * Campaign variant assignment (app_set_prompt_variant). Returns true only when THIS call
+ * changed the pin — callers log variant_assigned then. Without `force`, first-touch sticky:
+ * a re-match on a pinned conversation is a no-op (false). With `force` (a `repin: true`
+ * variant, 0072) the pin is replaced and the reactivation round reset — unless the thread
+ * already carries that same variant, which is also a no-op.
  */
-export async function setPromptVariant(ghlConversationId: string, variant: string): Promise<boolean> {
+export async function setPromptVariant(ghlConversationId: string, variant: string, force = false): Promise<boolean> {
   const supabase = getSupabase();
   const { data, error } = await supabase.rpc('app_set_prompt_variant', {
     p_ghl_conversation_id: ghlConversationId,
     p_variant: variant,
+    p_force: force,
   });
   fail('setPromptVariant', error);
   return data === true;
+}
+
+/**
+ * Clear a pin the lead's silence outgrew (app_expire_prompt_variant, 0072). Measured
+ * against the latest inbound BEFORE `messageId`; returns the variant it cleared, or null
+ * when nothing expired. A null TTL short-circuits without a round trip.
+ */
+export async function expirePromptVariant(
+  conversationId: string,
+  messageId: string,
+  ttlDays: number | null,
+): Promise<string | null> {
+  if (!ttlDays) return null;
+  const supabase = getSupabase();
+  const { data, error } = await supabase.rpc('app_expire_prompt_variant', {
+    p_conversation_id: conversationId,
+    p_message_id: messageId,
+    p_ttl_days: ttlDays,
+  });
+  fail('expirePromptVariant', error);
+  return typeof data === 'string' && data ? data : null;
 }
 
 /**

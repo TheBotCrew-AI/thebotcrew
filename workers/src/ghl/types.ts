@@ -76,7 +76,8 @@ export interface GhlOutboundWebhook {
   timestamp?: string;
   /** GHL user id of the human agent who sent the message. Absent on API-sent (bot) messages. */
   userId?: string;
-  /** 'app' = sent by a human via the GHL UI; 'api' = sent by our bot via the API. */
+  /** 'app' = sent by a human via the GHL UI; 'api' = sent by our bot via the API;
+   *  'bulk_actions' = a Contacts bulk send (a WhatsApp template, no userId). */
   source?: string;
   /** Sender's phone number (human agent side). */
   from?: string;
@@ -96,8 +97,12 @@ export interface ParsedHumanOutbound {
   text: string;
   /** GHL message id — used for deduplication. */
   messageId: string;
-  /** GHL user id of the human agent who sent the message. */
-  ghlUserId: string;
+  /** GHL user id of the human agent who sent the message — absent on a campaign send
+   *  (`source:'bulk_actions'` / a workflow), which no person typed. */
+  ghlUserId?: string;
+  /** Where GHL says the message came from: 'app' (a person, in the UI) or a campaign
+   *  source such as 'bulk_actions' (0072). Never 'api' — that is our own echo, filtered. */
+  source: string;
   /** ISO 8601 timestamp from GHL. */
   sentAt: string;
   /** Contact's phone number (the "to" field on outbound WhatsApp). */

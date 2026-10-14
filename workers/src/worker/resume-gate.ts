@@ -26,6 +26,7 @@ const SPEAKER: Record<ConversationMessage['senderType'], string> = {
   lead: 'cliente',
   bot: 'asistente',
   human_agent: 'equipo',
+  campaign: 'equipo (plantilla)',
 };
 
 export function formatTail(tail: ConversationMessage[]): string {
