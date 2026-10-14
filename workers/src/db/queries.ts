@@ -1185,6 +1185,25 @@ export async function isLatestInboundMessage(
   return (data as { last_inbound_message_id: string | null } | null)?.last_inbound_message_id === messageId;
 }
 
+/**
+ * Undo what courtesy inbounds did since `since` (0071): the nudges they cancelled go back
+ * to pending at their original time, and a conversation they reactivated returns to its
+ * previous status. Called when the courtesy gate keeps the turn silent.
+ */
+export async function restoreAfterCourtesy(
+  conversationId: string,
+  since: string,
+): Promise<{ followUps: number; status: string | null }> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase.rpc('app_restore_after_courtesy', {
+    p_conversation_id: conversationId,
+    p_since: since,
+  });
+  fail('restoreAfterCourtesy', error);
+  const r = (data ?? {}) as { followUps?: number; status?: string | null };
+  return { followUps: r.followUps ?? 0, status: r.status ?? null };
+}
+
 /** Cancel all pending follow-ups for a conversation. Call on every inbound message. */
 export async function cancelFollowUps(conversationId: string): Promise<void> {
   const supabase = getSupabase();

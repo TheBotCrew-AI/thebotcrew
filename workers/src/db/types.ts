@@ -226,6 +226,7 @@ export type BotEventType =
   | 'run_superseded'   // debounced run skipped: a newer inbound message arrived
   | 'run_suppressed'   // run skipped: human active or handed_off (see metadata.stage; metadata.resumeAt when the DO will retry at pause expiry)
   | 'resume_skipped'   // a turn re-run after the human pause chose silence (metadata.reason: answered | no_reply_needed)
+  | 'courtesy_skipped' // the lead only thanked/reacted to the bot's goodbye → silence; metadata.restored = what the inbound undid (0071)
   // Info gaps (0054)
   | 'pending_info_escalated' // a pending_info nobody answered in time got the escalation tag on the contact
   | 'info_gap_error'   // escalation tag failed (metadata.stage 'escalation') or an extraction failed for good ('extract')

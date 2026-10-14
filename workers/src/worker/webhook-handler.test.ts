@@ -2369,3 +2369,110 @@ describe('handleInboundWebhook — the playbook arms by stage (0068)', () => {
     expect(q.scheduleFollowUp).toHaveBeenCalledWith('cv-uuid', 1, 30, 'America/Mexico_City', undefined, 'cadence', 0, null);
   });
 });
+
+describe('runAgentTurn — courtesy gate: the bot says goodbye once (0071)', () => {
+  // Leo, 2026-10-13: the bot answered "gracias", the lead answered that, the bot answered
+  // the 👍, and so on. After the bot's own goodbye, courtesy gets silence — and the
+  // inbound's side effects (cancelled nudges, reactivated status) are undone.
+  const run = (agent: Agent, extra: { resumed?: boolean } = {}) =>
+    runAgentTurn({
+      agent, conversationId: 'cv-uuid', messageId: 'msg-uuid', tenant: tenant(),
+      parsed: parseInboundWebhook({ ...inbound, body: '👍' } as never)!, phone: '+521', debounced: true, ...extra,
+    });
+  const m = (senderType: 'lead' | 'bot' | 'human_agent', content: string, sentAt: string) =>
+    ({ direction: senderType === 'lead' ? 'inbound' : 'outbound', senderType, content, sentAt });
+  const afterGoodbye = [
+    m('bot', 'Listo, tu cita quedó el miércoles a las 3:45 p.m.', '2026-10-13T21:00:00Z'),
+    m('lead', 'Gracias', '2026-10-13T21:01:00Z'),
+    m('bot', '¡Con mucho gusto, Perla! Te esperamos.', '2026-10-13T21:01:20Z'),
+    m('lead', '👍', '2026-10-13T21:05:00Z'),
+  ] as Awaited<ReturnType<typeof q.loadRecentMessages>>;
+
+  const stubGate = (skip: boolean | 'error') => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      skip === 'error'
+        ? { ok: false, status: 500, json: async () => ({}) }
+        : { ok: true, json: async () => ({ choices: [{ message: { content: JSON.stringify({ skip }) } }] }) },
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    return fetchMock;
+  };
+
+  beforeEach(() => {
+    vi.mocked(q.loadRecentMessages).mockResolvedValue(afterGoodbye);
+    vi.mocked(q.restoreAfterCourtesy).mockResolvedValue({ followUps: 1, status: 'completed' });
+  });
+
+  it('courtesy after the bot\'s goodbye → silent, restores from the first courtesy message, logs why', async () => {
+    const fetchMock = stubGate(true);
+    const agent = agentReplying();
+
+    const res = await run(agent);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(agent.generate).not.toHaveBeenCalled();
+    expect(ghl.sendMessage).not.toHaveBeenCalled();
+    expect(res.body).toMatchObject({ skipped: 'courtesy' });
+    expect(q.restoreAfterCourtesy).toHaveBeenCalledWith('cv-uuid', '2026-10-13T21:05:00Z');
+    expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'courtesy_skipped',
+      { messageId: 'msg-uuid', restored: { followUps: 1, status: 'completed' } });
+  });
+
+  it('the classifier says reply (e.g. a thank-you to a booking confirmation) → the normal turn answers', async () => {
+    stubGate(false);
+    const agent = agentReplying();
+
+    const res = await run(agent);
+
+    expect(agent.generate).toHaveBeenCalled();
+    expect(res.body).toMatchObject({ replied: true });
+    expect(q.restoreAfterCourtesy).not.toHaveBeenCalled();
+  });
+
+  it('a failed classifier call answers — silence is only ever a positive decision', async () => {
+    stubGate('error');
+    const agent = agentReplying();
+    const res = await run(agent);
+    expect(agent.generate).toHaveBeenCalled();
+    expect(res.body).toMatchObject({ replied: true });
+  });
+
+  it('not a candidate (the bot asked something) → no classifier call, answers', async () => {
+    const fetchMock = stubGate(true);
+    vi.mocked(q.loadRecentMessages).mockResolvedValue([
+      m('bot', '¿Te aparto el miércoles a las 3:45?', '2026-10-13T21:00:00Z'),
+      m('lead', 'Ok', '2026-10-13T21:01:00Z'),
+    ] as Awaited<ReturnType<typeof q.loadRecentMessages>>);
+    const agent = agentReplying();
+
+    await run(agent);
+
+    expect(fetchMock).not.toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      body: expect.stringContaining('YA FUE UNA DESPEDIDA'),
+    }));
+    expect(agent.generate).toHaveBeenCalled();
+  });
+
+  it('a failed restore still stays silent and records that nothing was restored', async () => {
+    stubGate(true);
+    vi.mocked(q.restoreAfterCourtesy).mockRejectedValue(new Error('db down'));
+    const res = await run(agentReplying());
+    expect(res.body).toMatchObject({ skipped: 'courtesy' });
+    expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'courtesy_skipped', { messageId: 'msg-uuid', restored: null });
+  });
+
+  it('demo turns are roleplay and never gated', async () => {
+    const fetchMock = stubGate(true);
+    vi.mocked(q.getConversationPersona).mockResolvedValue({ activeRole: 'demo', roleStartedAt: null, demoStartedAt: null, promptVariant: null, reactivationRound: 0, leadTimezone: null, stage: null, interest: null });
+    vi.mocked(q.getActiveDemoSession).mockResolvedValue(null);
+    const agent = agentReplying();
+
+    await run(agent);
+
+    expect(q.restoreAfterCourtesy).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+      body: expect.stringContaining('YA FUE UNA DESPEDIDA'),
+    }));
+    expect(agent.generate).toHaveBeenCalled();
+  });
+});

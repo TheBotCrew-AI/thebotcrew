@@ -105,6 +105,34 @@ monolithic prompt (migration 0036; `core/tenant.ts` `matchVariantKeyword`,
   persona read failure) fall back to the tenant pool — never to silence. Resolver:
   `resolveAnglePool` (`roles/reactivation/angle-select.ts`); wired in `followup-runner.ts`.
 
+### 1.2 The bot says goodbye once — courtesy gate (0071)
+
+Leo, 2026-10-13: the bot answered "gracias", the lead answered that, the bot answered the 👍,
+and so on. Rule: **the bot gets one goodbye; courtesy after it gets silence.** A thank-you to
+a booking confirmation, an address or a price still gets its "con mucho gusto" — those are not
+goodbyes. Nothing here depends on time: a 👍 a month later is still silence, a real message a
+minute later is still answered. That is also why there is no "closed" mode to reopen —
+reactivation needs nothing, since the gate only ever silences courtesy.
+
+`worker/courtesy-gate.ts`, run in `runAgentTurn` after the persona and media are resolved and
+before history (not on the resumed path, which has its own gate in §3; never in demo):
+
+1. **`courtesyCandidate`** (code, free) — every lead message since the bot's last message is
+   ≤ 60 chars, has no `?`/`¿` and is not a media marker, and the bot's last message has no
+   `?`. Any miss → the normal turn, no call spent. The bot-asked-nothing condition protects
+   the "Ok" that answers "¿te aparto el miércoles?" — a yes.
+2. **`classifyCourtesySkip`** (aux call `courtesy-gate`, last 8 messages) — was the bot's last
+   message ALREADY a goodbye, and is the lead only thanking/reacting to it? **Biased to
+   reply**: a failed or unparseable call answers.
+3. Silence → `app_restore_after_courtesy` undoes what those inbounds did at ingest: the nudges
+   they cancelled go back to `pending` at their original time (`follow_ups.cancelled_at`),
+   and a conversation they reactivated returns to its previous status
+   (`conversations.reactivated_from/_at`) — unless something else moved it since. Event
+   `courtesy_skipped {messageId, restored}`. The courtesy counts as if it never arrived.
+
+Golden cases on prod threads: `worker/courtesy-gate.eval.ts` (the ablation in its header
+shows rule 1 is what keeps the booking-confirmation thank-you answered).
+
 ## 2. Conversation lifecycle
 
 Statuses (`conversations.status`): `active`, `standby`, `completed`, `opted_out`,

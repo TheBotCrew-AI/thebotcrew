@@ -58,6 +58,7 @@ import {
   reactivateConversation,
   countSentDemoReminders,
   scheduleFollowUp,
+  restoreAfterCourtesy,
   setGhlMessageId,
   setMessageContent,
   recentInboundAttachments,
@@ -85,6 +86,7 @@ import { buildDemoEndAnnouncement, buildDemoStartAnnouncement } from '../roles/f
 import { fixPayLinks } from '../payments/pay-link.js';
 import { AUX_MAX_COMPLETION_TOKENS, recordAuxUsage, type AuxLlmCall } from './aux-llm.js';
 import { classifyNeedsReply, RESUME_TAIL_SIZE } from './resume-gate.js';
+import { classifyCourtesySkip, COURTESY_TAIL_SIZE, courtesyCandidate } from './courtesy-gate.js';
 
 /**
  * Milliseconds to wait after the last inbound message before running the agent.
@@ -865,6 +867,31 @@ export async function runAgentTurn({
       await resolveAttachments(parsed, messageId, tenant, { apiKey: mediaKey.apiKey, keySource: mediaKey.source });
     } catch (e) {
       console.error('[attachments] resolve failed (non-blocking):', e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  // Courtesy gate: the bot says goodbye once. A lead who only thanks/reacts to the bot's
+  // goodbye gets silence, and the inbound's side effects (cancelled nudges, reactivated
+  // status) are undone so the courtesy counts as if it never arrived. The resumed path
+  // has its own gate above; demo turns are roleplay and always answer.
+  if (!resumed && activeRole !== 'demo' && !demoJustEnded) {
+    try {
+      const tail = await loadRecentMessages(conversationId, COURTESY_TAIL_SIZE);
+      const candidate = courtesyCandidate(tail);
+      if (candidate && (await classifyCourtesySkip(tail, resolveTurnLlm(tenant, parsed).aux))) {
+        let restored: Awaited<ReturnType<typeof restoreAfterCourtesy>> | null = null;
+        try {
+          restored = await restoreAfterCourtesy(conversationId, candidate.since);
+        } catch (e) {
+          console.error('[courtesy] restore failed:', e instanceof Error ? e.message : String(e));
+        }
+        console.log(`[courtesy] skip conv=${parsed.conversationId} — courtesy after the bot's goodbye`);
+        await logBotEvent(tenant.clientId, parsed.conversationId, 'courtesy_skipped', { messageId, restored });
+        return { status: 200, body: { skipped: 'courtesy', conversationId } };
+      }
+    } catch (e) {
+      // A failed read answers: silence is only ever a positive decision.
+      console.error('[courtesy] gate failed, replying:', e instanceof Error ? e.message : String(e));
     }
   }
 

@@ -166,7 +166,7 @@ workers/                       # Mastra + Cloudflare Worker package (@thebotcrew
     meta/                      # Meta Conversions API (0048/0056): capi-config (pure parse/payload, per-channel identity, lead_replies_required reply-threshold) + capi (enqueue + Graph send)
     payments/                  # Stripe (0062): stripe.ts (fetch client: Checkout Session create/expire + webhook signature, ONE platform account) + hold-messages (LLM-free lead texts) + pay-link (0063: the short code, <WORKER_URL>/p/<code>, and fixPayLinks — the deterministic repair of a link the model padded) + hold-reminder (0065: when the one reminder goes out, kept out of quiet hours)
     db/                        # service-role Supabase client, queries (config read + RPC writes)
-    worker/                    # webhook-handler (inbound) + conversation-do (per-conversation Durable Object: durable-alarm debounce + serialized turn) + outbound-handler (human takeover) + tag-handler (bot-off) + delivery-retry + followup-runner + capi-runner (Meta CAPI queue drain) + info-gap-runner + info-gaps/ (0054: what the bot couldn't answer — extraction queue, aggregate, report; pending_info escalation) + stripe-webhook-handler + hold-expiry-runner + system-message (0062 paid confirmation: settle on payment, release on the 5-min cron, one fixed message outside a turn) + pay-link-handler (0063: GET /p/:code → 302 to Stripe while pending, "ya está pagado" / "venció" pages after) + stripe-oauth-handler (GET /stripe/oauth/callback: Connect OAuth code → acct_…, logged) + hold-reminder-runner (0065: the one pre-deadline reminder, 5-min cron)
+    worker/                    # webhook-handler (inbound) + conversation-do (per-conversation Durable Object: durable-alarm debounce + serialized turn) + outbound-handler (human takeover) + tag-handler (bot-off) + delivery-retry + followup-runner + capi-runner (Meta CAPI queue drain) + info-gap-runner + info-gaps/ (0054: what the bot couldn't answer — extraction queue, aggregate, report; pending_info escalation) + stripe-webhook-handler + hold-expiry-runner + system-message (0062 paid confirmation: settle on payment, release on the 5-min cron, one fixed message outside a turn) + pay-link-handler (0063: GET /p/:code → 302 to Stripe while pending, "ya está pagado" / "venció" pages after) + stripe-oauth-handler (GET /stripe/oauth/callback: Connect OAuth code → acct_…, logged) + hold-reminder-runner (0065: the one pre-deadline reminder, 5-min cron) + courtesy-gate (0071: after the bot's goodbye, courtesy gets silence)
   scripts/simulate-webhook.mjs # local dev: fire a fake GHL webhook
   scripts/demo-take.mjs        # arma/cierra una toma del demo de bótox para grabar video (business-logic §5b)
   scripts/battery.mjs          # pnpm battery <slug>: corre la batería de conversaciones de muestra de un tenant
@@ -354,6 +354,11 @@ supabase/
                                #      el tenant sobreescribe por etapa y campo. app_mark_follow_up_sent gana p_step (DROP de la de 3).
                                #      Vista follow_up_step_outcomes = la métrica del arco. Heriberto corre el preset + 2 excepciones.
                                #      Ver business-logic §4.7)
+                               # 0071 courtesy_skip (el bot se despide UNA vez: tras su despedida, un "gracias"/👍 del lead
+                               #      recibe silencio — filtro gratis + clasificador aux, worker/courtesy-gate.ts. Callar deshace
+                               #      lo que el inbound hizo al entrar: follow_ups.cancelled_at + conversations.reactivated_from/_at
+                               #      y el RPC app_restore_after_courtesy regresan nudges y status; evento courtesy_skipped.
+                               #      Migración PRIMERO, Worker después. Ver business-logic §1.2)
   clients.sql, seed-tenants.sql# seeds (run by `supabase db reset` per config.toml)
 sites/                         # client marketing sites: static HTML, no build step, no deps
   _template/                   # starting point for a new client
