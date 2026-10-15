@@ -856,6 +856,7 @@ export const HERIBERTO_SERVICES = [
   },
   {
     "name": "Láser CO₂ Fraccionado",
+    "tagSlug": "laser-co2",
     "description": "Precio normal $4,500 por sesión; precio especial de $3,500 por sesión en todo el tratamiento si lo inicia dentro de los 14 días siguientes a su evaluación médica (sin costo). Mejora textura, poros, manchas y cicatrices, estimulando la renovación de la piel. Requiere evaluación médica previa y contempla tiempo de recuperación."
   },
   {
