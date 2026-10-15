@@ -751,7 +751,13 @@ cualquier Chrome headless recibe SIGTERM a los ~2 s (ver cabecera de `render-bat
   wall-clock, the 5:15→10:15 bug class). Dedups by appointment id+action (the workflow
   fires for bot bookings too), logs `source='ghl-workflow'`, and on `booked` cancels
   pending nudges + resets `reactivation_round` (parity with a bot booking, 0049).
-  Setup per tenant: [`docs/onboarding.md` §8](docs/onboarding.md).
+  Since 0074 the same endpoint takes `confirmed|showed|noshow` (status-only, no store row) from
+  ONE "Appointment Status" workflow with a switch — there is no `{{appointment.status}}` merge
+  tag, and reschedules need the separate "Appointment Rescheduled" trigger (`rescheduled`).
+  **Every GHL write in this handler is awaited:** the route has no `waitUntil`, and the
+  `cita-cancelada` / `esperando-agenda` writes were detached until 2026-10-14 — logged as done,
+  never delivered (Heriberto's cancellations since August carried no tag; backfilled by hand).
+  Setup per tenant: [`docs/onboarding.md` §8 + §13](docs/onboarding.md).
 - Per-tenant reply gating (`tenant_config`, enforced in `webhook-handler.ts`; inbound is
   always stored — only the *reply* is gated):
   - `enabled_channels text[]` — channels the bot may reply on. **`NULL` = none** (installed
