@@ -100,6 +100,18 @@ describe('handleAppointmentWebhook — the DEFAULT GHL workflow payload', () => 
     expect(q.logAppointment).toHaveBeenCalledWith(expect.objectContaining({ p_action: 'cancelled' }));
   });
 
+  it('GHL nests the custom data under `customData` — that is where the real action lives', async () => {
+    // The 2026-10-14 Heriberto test: three workflows with action booked/rescheduled/cancelled
+    // all landed as `booked` because only the root key was read, and the dedup ate the rest.
+    await run(ghlDefault({ customData: { action: 'rescheduled' } }));
+    expect(q.logAppointment).toHaveBeenCalledWith(expect.objectContaining({ p_action: 'rescheduled' }));
+  });
+
+  it('a root `action` (manual replay) outranks `customData.action`', async () => {
+    await run(ghlDefault({ action: 'cancelled', customData: { action: 'booked' } }));
+    expect(q.logAppointment).toHaveBeenCalledWith(expect.objectContaining({ p_action: 'cancelled' }));
+  });
+
   it('no contact_id → falls back to phone/email search (the merge-recovery path)', async () => {
     ghl.resolveContactByPhoneOrEmail.mockResolvedValue('c-found');
     const res = await run(ghlDefault({ contact_id: undefined }));

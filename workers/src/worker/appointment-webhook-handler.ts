@@ -68,16 +68,28 @@ export async function handleAppointmentWebhook(
   const locationId = asTrimmed(p.locationId) ?? asTrimmed(location.id);
   let contactId = asTrimmed(p.contactId) ?? asTrimmed(p.contact_id);
   const appointmentId = asTrimmed(p.appointmentId) ?? asTrimmed(calendar.appointmentId);
-  const action = (asTrimmed(p.action) ?? 'booked') as AppointmentAction;
+  // GHL nests the webhook action's custom data under `customData` (seen 2026-10-14 on the
+  // Heriberto test: `{customData: {action: 'cancelled'}}`), so a root `action` only comes
+  // from manual replays. Read both; root wins.
+  const customData = (p.customData ?? {}) as Record<string, unknown>;
+  const action = (asTrimmed(p.action) ?? asTrimmed(customData.action) ?? 'booked') as AppointmentAction;
+  // What GHL actually sent: the trigger decides the payload shape, and a workflow that
+  // answers 200 "ignored" is invisible otherwise (the 2026-10-14 Heriberto test).
+  console.log(
+    `[appt-webhook] in action=${action} location=${locationId ?? '-'} appt=${appointmentId ?? '-'} contact=${contactId ?? '-'} keys=${Object.keys(p).join(',')} calendarKeys=${Object.keys(calendar).join(',')}`,
+  );
   if (!locationId || !appointmentId) {
+    console.error('[appt-webhook] 400: missing locationId or appointmentId');
     return { status: 400, body: { error: 'locationId (location.id) and appointmentId (calendar.appointmentId) are required' } };
   }
   if (!ACTIONS.includes(action)) {
+    console.error(`[appt-webhook] 400: unknown action=${action}`);
     return { status: 400, body: { error: `action must be one of ${ACTIONS.join('|')}` } };
   }
 
   const tenant = await resolveTenant(locationId);
   if (!tenant) {
+    console.log(`[appt-webhook] ignored: unknown or inactive tenant location=${locationId}`);
     return { status: 200, body: { ignored: 'unknown or inactive tenant', locationId } };
   }
 
@@ -86,6 +98,7 @@ export async function handleAppointmentWebhook(
   // log lands milliseconds after its booking, well before any workflow delivery,
   // so id+action is a safe key.
   if (await appointmentActionLogged(tenant.clientId, appointmentId, action)) {
+    console.log(`[appt-webhook] ignored: already logged appt=${appointmentId} action=${action}`);
     return { status: 200, body: { ignored: 'already logged', appointmentId, action } };
   }
 

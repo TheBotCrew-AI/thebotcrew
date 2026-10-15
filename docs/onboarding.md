@@ -491,7 +491,9 @@ anywhere), those citas never reach the stats — unless the tenant has this work
      workflow's trigger is appointment-shaped, which step 1 guarantees.
    - Custom data (optional but recommended): key `action`, value `booked` — and on
      the status-change trigger variants, `cancelled` / `rescheduled`. Omitted =
-     `booked`.
+     `booked`. GHL ships it nested as `customData.action` (not at the root); the
+     handler reads both. Until 2026-10-14 only the root was read, so every workflow
+     landed as `booked` and the dedup silently ate the cancel/reschedule ones.
 
 Notes that save debugging time:
 
