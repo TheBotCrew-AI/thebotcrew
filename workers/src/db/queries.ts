@@ -63,7 +63,7 @@ export async function loadTenantConfig(ghlLocationId: string): Promise<TenantCon
   const { data, error } = await supabase
     .from('tenant_config')
     .select(
-      'business_name, timezone, tone, services, hours, calendars, faq, enabled_roles, prompt_overrides, ai_provider, ai_model, ai_key_ref, awaiting_human_tag, pending_info_tag, follow_up_tiers, follow_up_cadence, follow_up_angles, follow_up_rounds, follow_up_playbook, quiet_hours, booking_horizon_days, booking_min_notice_days, human_pause_minutes, variant_ttl_days, enabled_channels, test_contact_ids, trigger_keywords, demo_on_keywords, demo_off_keywords, demo_prompt_overrides, keyword_variants, prompt_variants, demo_sessions_enabled, meta_capi, lead_timezone_enabled, interest_tags, segment_tags, zone_catalog, objection_catalog, book_unconfirmed, booking_payment, prime_time,' +
+      'business_name, timezone, tone, services, hours, calendars, faq, enabled_roles, prompt_overrides, ai_provider, ai_model, ai_key_ref, awaiting_human_tag, pending_info_tag, follow_up_tiers, follow_up_cadence, follow_up_angles, follow_up_rounds, follow_up_playbook, quiet_hours, booking_horizon_days, booking_min_notice_days, human_pause_minutes, variant_ttl_days, enabled_channels, test_contact_ids, trigger_keywords, demo_on_keywords, demo_off_keywords, demo_prompt_overrides, keyword_variants, prompt_variants, demo_sessions_enabled, meta_capi, lead_timezone_enabled, interest_tags, segment_tags, zone_catalog, objection_catalog, funnel_tags, book_unconfirmed, booking_payment, prime_time,' +
         'tenants!inner(id, client_id, ghl_location_id, is_active)',
     )
     .eq('tenants.ghl_location_id', ghlLocationId)
@@ -137,6 +137,7 @@ export async function loadTenantConfig(ghlLocationId: string): Promise<TenantCon
       segmentTags: row.segment_tags === true,
       zoneCatalog: row.zone_catalog ?? null,
       objectionCatalog: row.objection_catalog ?? null,
+      funnelTags: row.funnel_tags ?? null,
       bookUnconfirmed: row.book_unconfirmed === true,
       bookingPayment: row.booking_payment ?? null,
       primeTime: row.prime_time ?? null,
@@ -1139,6 +1140,23 @@ export async function setMarketingOptOutByContact(ghlContactId: string): Promise
   });
   fail('setMarketingOptOutByContact', error);
   return (data as number | null) ?? 0;
+}
+
+/**
+ * Whether a funnel step (0074) was already applied for this appointment+status — the
+ * key is a bot_events row, not an `appointments` row, so showed/noshow never inflate
+ * the booked counts. `scheduled` covers booked+confirmed, which GHL fires separately.
+ */
+export async function appointmentStatusLogged(clientId: string, ghlAppointmentId: string, status: string): Promise<boolean> {
+  const supabase = getSupabase();
+  const { count, error } = await supabase
+    .from('bot_events')
+    .select('id', { count: 'exact', head: true })
+    .eq('client_id', clientId)
+    .eq('event_type', 'appointment_status')
+    .contains('metadata', { appointmentId: ghlAppointmentId, status });
+  fail('appointmentStatusLogged', error);
+  return (count ?? 0) > 0;
 }
 
 /**

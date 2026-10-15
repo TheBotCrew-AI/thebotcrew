@@ -33,20 +33,123 @@
  */
 
 import { resolveTenant } from '../core/tenant.js';
+import type { TenantContext } from '../core/types.js';
 import type { AppointmentAction } from '../db/types.js';
 import {
   appointmentActionLogged,
+  appointmentStatusLogged,
   cancelFollowUps,
   getLatestConversationByContact,
   logAppointment,
+  logBotEvent,
   resetReactivationRound,
   setAwaitingHumanByContact,
 } from '../db/queries.js';
 import { GhlClient } from '../ghl/client.js';
 import { CANCELLED_APPOINTMENT_TAG } from '../ghl/tags.js';
+import { allowedFunnelTags, funnelPlan, normalizeFunnelStatus, parseFunnelTags, ymdInZone } from '../core/funnel-tags.js';
 import type { WebhookResult } from './webhook-handler.js';
 
-const ACTIONS: readonly AppointmentAction[] = ['booked', 'rescheduled', 'cancelled'];
+/** Actions that land in the `appointments` store (0049). */
+const STORE_ACTIONS: readonly AppointmentAction[] = ['booked', 'rescheduled', 'cancelled'];
+/** Status-only actions (0074): no store row, only the funnel tags. The ONE GHL workflow
+ *  ("Appointment Status", any calendar) sends the status name as `action`. */
+const STATUS_ACTIONS = ['confirmed', 'showed', 'noshow'] as const;
+type WebhookAction = AppointmentAction | (typeof STATUS_ACTIONS)[number];
+const ACTIONS: readonly WebhookAction[] = [...STORE_ACTIONS, ...STATUS_ACTIONS];
+
+type LiveAppointment = Awaited<ReturnType<GhlClient['getContactAppointments']>>[number];
+
+/** One attempt + one retry: GHL hiccups are short, and a lost tag is a lost smart list. */
+async function withRetry<T>(what: string, fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (e) {
+    console.error(`[funnel] ${what} failed, retrying:`, e instanceof Error ? e.message : String(e));
+    return await fn();
+  }
+}
+
+/**
+ * Funnel tags (0074). Verifies the status LIVE (the workflow's `action` is a hint; GHL
+ * is the truth, so a mis-wired workflow cannot mark anyone a patient), maps the
+ * calendar, writes the plan in three batched calls, then records the dedupe key.
+ * The key is written only after every write succeeded, so a replay can finish a
+ * half-applied step; a tag already on the contact is never re-sent.
+ */
+async function applyFunnel(args: {
+  tenant: TenantContext;
+  ghl: GhlClient;
+  contactId: string;
+  appointmentId: string;
+  live: LiveAppointment | undefined;
+  hint: WebhookAction;
+}): Promise<void> {
+  const { tenant, ghl, contactId, appointmentId, live, hint } = args;
+  const config = parseFunnelTags(tenant.config.funnelTags);
+  if (!config) return;
+
+  const conv = await getLatestConversationByContact(tenant.clientId, contactId).catch(() => null);
+  const ghlConversationId = conv?.ghlConversationId ?? '';
+  const fail = (reason: string, extra: Record<string, unknown> = {}) => {
+    console.error(`[funnel] ${reason} appt=${appointmentId} contact=${contactId}`);
+    return logBotEvent(tenant.clientId, ghlConversationId, 'funnel_error', { appointmentId, reason, hint, ...extra });
+  };
+
+  if (!live) return fail('no_live_appointment');
+  const status = normalizeFunnelStatus(live.status);
+  if (!status) return; // cancelled / invalid: the funnel has nothing to say
+  const hinted = normalizeFunnelStatus(hint);
+  if (hinted && hinted !== status) {
+    console.log(`[funnel] workflow said ${hint}, GHL says ${live.status} — GHL wins appt=${appointmentId}`);
+  }
+  if (!live.calendarId) return fail('no_calendar_id');
+  if (!live.startTime) return fail('no_start_time');
+
+  if (await appointmentStatusLogged(tenant.clientId, appointmentId, status)) {
+    console.log(`[funnel] ignored: already applied appt=${appointmentId} status=${status}`);
+    return;
+  }
+
+  let currentTags: string[] = [];
+  try {
+    currentTags = (await ghl.getContact(contactId))?.tags ?? [];
+  } catch (e) {
+    console.error('[funnel] getContact failed (removals skipped):', e instanceof Error ? e.message : String(e));
+  }
+
+  const plan = funnelPlan({
+    config,
+    calendarId: live.calendarId,
+    status,
+    dateYmd: ymdInZone(live.startTime, tenant.config.timezone),
+    currentTags,
+  });
+  if ('ignored' in plan) {
+    console.warn(`[funnel] calendar not in funnel_tags map: ${live.calendarId} appt=${appointmentId} tenant=${tenant.tenantId}`);
+    return;
+  }
+  const allowed = allowedFunnelTags(config);
+  const add = plan.add.filter((t) => allowed.has(t));
+  if (add.length !== plan.add.length) {
+    return fail('tag_outside_allowlist', { add: plan.add });
+  }
+
+  try {
+    if (add.length) await withRetry('addContactTags', () => ghl.addContactTags(contactId, add));
+    if (plan.remove.length) await withRetry('removeContactTags', () => ghl.removeContactTags(contactId, plan.remove));
+    if (plan.fields.length) await withRetry('updateContactCustomFields', () => ghl.updateContactCustomFields(contactId, plan.fields));
+  } catch (e) {
+    return fail('ghl_write_failed', { add, remove: plan.remove, fields: plan.fields, error: e instanceof Error ? e.message : String(e) });
+  }
+
+  const slug = config.calendars[live.calendarId]!.slug;
+  console.log(`[funnel] ${status} ${slug} appt=${appointmentId} contact=${contactId} +[${add.join(',')}] -[${plan.remove.join(',')}] fields=${plan.fields.length}`);
+  await logBotEvent(tenant.clientId, ghlConversationId, 'funnel_tagged', {
+    appointmentId, status, calendarId: live.calendarId, slug, add, remove: plan.remove, fields: plan.fields,
+  });
+  await logBotEvent(tenant.clientId, ghlConversationId, 'appointment_status', { appointmentId, status, calendarId: live.calendarId });
+}
 
 function asTrimmed(v: unknown): string | null {
   return typeof v === 'string' && v.trim().length > 0 ? v.trim() : null;
@@ -72,7 +175,7 @@ export async function handleAppointmentWebhook(
   // Heriberto test: `{customData: {action: 'cancelled'}}`), so a root `action` only comes
   // from manual replays. Read both; root wins.
   const customData = (p.customData ?? {}) as Record<string, unknown>;
-  const action = (asTrimmed(p.action) ?? asTrimmed(customData.action) ?? 'booked') as AppointmentAction;
+  const action = (asTrimmed(p.action) ?? asTrimmed(customData.action) ?? 'booked') as WebhookAction;
   // What GHL actually sent: the trigger decides the payload shape, and a workflow that
   // answers 200 "ignored" is invisible otherwise (the 2026-10-14 Heriberto test).
   console.log(
@@ -93,11 +196,12 @@ export async function handleAppointmentWebhook(
     return { status: 200, body: { ignored: 'unknown or inactive tenant', locationId } };
   }
 
+  const isStoreAction = (STORE_ACTIONS as readonly string[]).includes(action);
   // Dedup first (cheap, needs only the ids) — the workflow fires for BOT bookings
   // too (GHL can't tell them apart), and workflow retries re-POST. The bot's own
   // log lands milliseconds after its booking, well before any workflow delivery,
-  // so id+action is a safe key.
-  if (await appointmentActionLogged(tenant.clientId, appointmentId, action)) {
+  // so id+action is a safe key. Status-only actions dedupe inside applyFunnel.
+  if (isStoreAction && await appointmentActionLogged(tenant.clientId, appointmentId, action)) {
     console.log(`[appt-webhook] ignored: already logged appt=${appointmentId} action=${action}`);
     return { status: 200, body: { ignored: 'already logged', appointmentId, action } };
   }
@@ -125,21 +229,28 @@ export async function handleAppointmentWebhook(
   // null datetime — a stat with no time beats a booking that never counted.
   let startTime: string | null = null;
   let service: string | null = null;
+  let live: LiveAppointment | undefined;
   try {
     const events = await ghl.getContactAppointments(contactId, tenant.config.timezone);
-    const match = events.find((e) => e.id === appointmentId);
-    if (match) {
-      startTime = match.startTime ?? null;
-      service = match.title ?? null;
+    live = events.find((e) => e.id === appointmentId);
+    if (live) {
+      startTime = live.startTime ?? null;
+      service = live.title ?? null;
     }
   } catch (e) {
     console.error('[appt-webhook] GHL read failed (logging without datetime):', e instanceof Error ? e.message : String(e));
   }
 
+  // Status-only actions (0074): no store row — the funnel is the whole job.
+  if (!isStoreAction) {
+    await applyFunnel({ tenant, ghl, contactId, appointmentId, live, hint: action });
+    return { status: 200, body: { ok: true, action, appointmentId, funnel: true } };
+  }
+
   await logAppointment({
     p_client_id: tenant.clientId,
     p_ghl_contact_id: contactId,
-    p_action: action,
+    p_action: action as AppointmentAction,
     p_appointment_datetime: startTime,
     p_service_type: service,
     p_source: 'ghl-workflow',
@@ -194,6 +305,11 @@ export async function handleAppointmentWebhook(
     ghl.removeContactTags(contactId, [CANCELLED_APPOINTMENT_TAG]).catch((e: unknown) =>
       console.error('[appt-webhook] cancelled tag removal failed (non-blocking):', e instanceof Error ? e.message : String(e)),
     );
+  }
+
+  // The funnel's "scheduled" step rides on the booking (0074); a cancel touches no funnel tag.
+  if (action === 'booked') {
+    await applyFunnel({ tenant, ghl, contactId, appointmentId, live, hint: action });
   }
 
   console.log(`[appt-webhook] ${action} appt=${appointmentId} contact=${contactId} tenant=${tenant.tenantId} conv=${conversationId ?? 'none'}`);

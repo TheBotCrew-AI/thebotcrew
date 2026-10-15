@@ -2055,6 +2055,29 @@ the event repeats if the lead names the same treatment again, and GHL no-ops an 
 Tags are never removed — interest is history, and the client's campaigns decide what to do
 with it.
 
+### 9.4 Funnel tags from appointment status (0074)
+
+The funnel tags the client used to write with per-calendar GHL workflows — `agendo:<slug>`,
+`valorado`, `noshow:<slug>`, `paciente:<slug>` — are now written by the appointment webhook
+(`worker/appointment-webhook-handler.ts`) from ONE workflow per tenant ("Appointment Status", any
+calendar, a switch that hardcodes the status into `action`) and a calendar map in
+`tenant_config.funnel_tags` (`{calendarId: {slug, kind: assessment|treatment}}` + custom-field
+IDs for `ultima-visita` / `ultimo-<slug>`). The table is `core/funnel-tags.ts` (`funnelPlan`,
+pinned by unit tests) and the operator's checklist is onboarding §13. Three rules that matter:
+- **GHL is the truth.** The handler reads the appointment live (`getContactAppointments`:
+  status, calendarId, startTime) and applies THAT status; the workflow's `action` is a hint. A
+  mis-wired branch can't mark anyone a patient; a missing live appointment writes nothing
+  (`funnel_error no_live_appointment`).
+- **`booked`/`confirmed`/`new` are one step** (`scheduled`): GHL fires them separately for the
+  same appointment, and the dedupe key is `(appointmentId, status)` in `bot_events`
+  `appointment_status` — not an `appointments` row, so showed/noshow never inflate the booked
+  counts. The key is written only after every GHL write succeeded.
+- **This path never ADDS `interes:`, `zona:`, `objecion:`, `cotizo:` or `fuente:`.** It removes
+  `objecion:*` when the assessment is booked and `interes:`/`cotizo:`/`noshow:` of a slug when
+  that treatment is attended — that is all. Cancellations keep their 0049 behaviour.
+Verified 2026-10-14 on Novobelle: the "Appointment Status" trigger fires on every change reception
+makes by hand (confirmed → showed in 28 s), and the live read returns `showed` / `noshow`.
+
 Enable per tenant: `update tenant_config set segment_tags = true where tenant_id = '…'`
 (`interest_tags = true` still works). First tenant: Dr. Heriberto Valdivia (2026-08-28; moved to
 `interes:` + catalogs 2026-10-14, migration 0073). His older `interes-*` tags stay on the contacts

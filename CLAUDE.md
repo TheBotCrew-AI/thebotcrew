@@ -377,6 +377,11 @@ supabase/
                                #      (paciente:, cotizo:, valorado, noshow:, fuente:, agendo:) los escribe GHL y el bot SÓLO los lee
                                #      como memoria del lead. Migración PRIMERO (lee segment_tags en loadTenantConfig); después
                                #      re-sincronizar HERIBERTO_SERVICES (`sync-heriberto-fixture.mjs`: ganó tagSlug). Ver §9)
+                               # 0074 funnel_tags (tenant_config.funnel_tags jsonb, NULL = off: mapa calendario → {slug, kind} +
+                               #      ids de custom fields; el webhook de citas escribe agendo:/valorado/noshow:/paciente: y las
+                               #      fechas desde el estatus VIVO de GHL, dedupe en bot_events appointment_status. Eventos
+                               #      appointment_status/funnel_tagged/funnel_error. Seeds: Novobelle ON (e2e), Heriberto mapeado
+                               #      con enabled:false hasta pasar el e2e y cargar los field ids. Ver business-logic §9.4)
   clients.sql, seed-tenants.sql# seeds (run by `supabase db reset` per config.toml)
 sites/                         # client marketing sites: static HTML, no build step, no deps
   _template/                   # starting point for a new client
@@ -693,6 +698,13 @@ cualquier Chrome headless recibe SIGTERM a los ~2 s (ver cabecera de `render-bat
   → `zona:<slug>` / `objecion:<slug>`; outside the catalog = `otro` + a contact note with the lead's
   words. The catalog grows by hand only (`workers/scripts/segment-catalog.mjs`), after the weekly
   review of those notes; create the tag in GHL first. See docs/business-logic.md §9.3.
+- Funnel tags from appointment status (0074): the appointment webhook now also accepts
+  `confirmed|showed|noshow` (one GHL workflow per tenant, "Appointment Status" + a switch that
+  hardcodes `action`) and writes `agendo:`/`valorado`/`noshow:`/`paciente:` + the `ultima-visita`
+  / `ultimo-<slug>` date fields through `tenant_config.funnel_tags` (`core/funnel-tags.ts`).
+  GHL's live status wins over the hint; dedupe = `bot_events` `appointment_status` per
+  (appointment, status), NOT an `appointments` row; a calendar outside the map is ignored. This is
+  the ONE place the Worker writes those four funnel tags. See docs/business-logic.md §9.4, onboarding §13.
 - Cancelled-appointment tag (2026-08-28): `cita-cancelada` is ADDED by `cancelAppointment` and by the
   staff workflow's `cancelled` action, REMOVED by any new booking (both paths). Platform constant
   (`ghl/tags.ts`), no config, no LLM, skipped in demo. A smart-list hook for GHL reactivation

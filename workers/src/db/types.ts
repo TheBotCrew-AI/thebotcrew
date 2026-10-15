@@ -47,6 +47,8 @@ export interface TenantConfigRow {
   segment_tags?: boolean | null;
   zone_catalog?: unknown;
   objection_catalog?: unknown;
+  /** Funnel tags from appointment status (0074); NULL = off. */
+  funnel_tags?: unknown;
   /** Book/reschedule as appointmentStatus='new' — "No confirmada" (0061); false/null = confirmed. */
   book_unconfirmed?: boolean | null;
   /** Paid confirmation config ({amount, currency, hold_hours, …}, 0062). NULL = off. */
@@ -316,6 +318,9 @@ export type BotEventType =
   | 'segment_note_added'
   | 'no_promos_on'
   | 'no_promos_off'
+  | 'appointment_status'
+  | 'funnel_tagged'
+  | 'funnel_error'
   /** The lead's stage rose ({from, to, source, reasons}, 0067). Shadow data for the playbook. */
   | 'stage_changed';
 

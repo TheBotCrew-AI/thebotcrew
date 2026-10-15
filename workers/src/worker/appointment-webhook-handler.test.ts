@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { TenantContext } from '../core/types.js';
 
 vi.mock('../db/queries.js');
-const ghl = { getContactAppointments: vi.fn(), resolveContactByPhoneOrEmail: vi.fn(), removeContactTags: vi.fn(), addContactTags: vi.fn() };
+const ghl = { getContactAppointments: vi.fn(), resolveContactByPhoneOrEmail: vi.fn(), removeContactTags: vi.fn(), addContactTags: vi.fn(), getContact: vi.fn(), updateContactCustomFields: vi.fn() };
 vi.mock('../ghl/client.js', () => ({ GhlClient: vi.fn(() => ghl) }));
 
 import * as q from '../db/queries.js';
@@ -40,6 +40,10 @@ beforeEach(() => {
   vi.mocked(q.setAwaitingHumanByContact).mockResolvedValue(1);
   ghl.removeContactTags.mockResolvedValue(undefined);
   ghl.addContactTags.mockResolvedValue(undefined);
+  ghl.getContact.mockResolvedValue({ tags: [] });
+  ghl.updateContactCustomFields.mockResolvedValue(undefined);
+  vi.mocked(q.appointmentStatusLogged).mockResolvedValue(false);
+  vi.mocked(q.logBotEvent).mockResolvedValue(undefined);
   ghl.getContactAppointments.mockResolvedValue([
     { id: 'appt-9', startTime: '2099-08-09T16:00:00-07:00', title: 'Depilación láser' },
     { id: 'other', startTime: '2099-01-01T10:00:00-07:00', title: 'Otra' },
@@ -276,3 +280,141 @@ describe('handleAppointmentWebhook — the `cita-cancelada` tag (parity with the
     expect(q.logAppointment).toHaveBeenCalledWith(expect.objectContaining({ p_action: 'cancelled' }));
   });
 });
+
+describe('handleAppointmentWebhook — funnel tags from appointment status (0074)', () => {
+  const FUNNEL = {
+    enabled: true,
+    calendars: {
+      'cal-val': { slug: 'valoracion', kind: 'assessment' },
+      'cal-botox': { slug: 'botox', kind: 'treatment' },
+    },
+    fields: { last_visit: 'fld-visit', last_treatment: { botox: 'fld-botox' } },
+  };
+  const funnelTenant = { ...tenant, config: { ...tenant.config, funnelTags: FUNNEL } } as unknown as TenantContext;
+  const live = (o: Record<string, unknown>) =>
+    ghl.getContactAppointments.mockResolvedValue([{ id: 'appt-9', startTime: '2026-10-15T16:00:00-07:00', title: 'X', calendarId: 'cal-val', status: 'confirmed', ...o }]);
+
+  beforeEach(() => {
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(funnelTenant);
+  });
+
+  it('showed on the assessment → valorado + ultima-visita (date of the CITA, tenant clock), no store row', async () => {
+    live({ status: 'showed' });
+    ghl.getContact.mockResolvedValue({ tags: ['agendo:valoracion', 'noshow:valoracion'] });
+    const res = await run(payload({ action: 'showed' }));
+    expect(res.body).toMatchObject({ ok: true, funnel: true });
+    expect(q.logAppointment).not.toHaveBeenCalled();
+    expect(ghl.addContactTags).toHaveBeenCalledWith('c1', ['valorado']);
+    expect(ghl.removeContactTags).toHaveBeenCalledWith('c1', ['noshow:valoracion']);
+    expect(ghl.updateContactCustomFields).toHaveBeenCalledWith('c1', [{ id: 'fld-visit', value: '2026-10-15' }]);
+    expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'funnel_tagged', expect.objectContaining({ status: 'showed', slug: 'valoracion' }));
+    expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'appointment_status', { appointmentId: 'appt-9', status: 'showed', calendarId: 'cal-val' });
+  });
+
+  it('showed on a treatment → paciente:<slug>, drops interes:/cotizo:, both date fields', async () => {
+    live({ status: 'showed', calendarId: 'cal-botox' });
+    ghl.getContact.mockResolvedValue({ tags: ['interes:botox', 'cotizo:botox', 'interes:laser-co2'] });
+    await run(payload({ action: 'showed' }));
+    expect(ghl.addContactTags).toHaveBeenCalledWith('c1', ['paciente:botox']);
+    expect(ghl.removeContactTags).toHaveBeenCalledWith('c1', ['interes:botox', 'cotizo:botox']);
+    expect(ghl.updateContactCustomFields).toHaveBeenCalledWith('c1', [{ id: 'fld-botox', value: '2026-10-15' }, { id: 'fld-visit', value: '2026-10-15' }]);
+  });
+
+  it('noshow → noshow:<slug>, nothing removed, no fields', async () => {
+    live({ status: 'noshow' });
+    await run(payload({ action: 'noshow' }));
+    expect(ghl.addContactTags).toHaveBeenCalledWith('c1', ['noshow:valoracion']);
+    expect(ghl.removeContactTags).not.toHaveBeenCalled();
+    expect(ghl.updateContactCustomFields).not.toHaveBeenCalled();
+  });
+
+  it('confirmed → the scheduled step: agendo:valoracion + objections cleared; booked uses the same key', async () => {
+    live({ status: 'confirmed' });
+    ghl.getContact.mockResolvedValue({ tags: ['objecion:precio'] });
+    await run(payload({ action: 'confirmed' }));
+    expect(ghl.addContactTags).toHaveBeenCalledWith('c1', ['agendo:valoracion']);
+    expect(ghl.removeContactTags).toHaveBeenCalledWith('c1', ['objecion:precio']);
+    expect(q.appointmentStatusLogged).toHaveBeenCalledWith('client1', 'appt-9', 'scheduled');
+  });
+
+  it('booked (the store path) ALSO runs the scheduled step, after the row', async () => {
+    live({ status: 'confirmed' });
+    await run(payload({ action: 'booked' }));
+    expect(q.logAppointment).toHaveBeenCalled();
+    expect(ghl.addContactTags).toHaveBeenCalledWith('c1', ['agendo:valoracion']);
+  });
+
+  it('GHL is the truth: the workflow says showed, GHL says noshow → noshow is applied', async () => {
+    live({ status: 'noshow' });
+    await run(payload({ action: 'showed' }));
+    expect(ghl.addContactTags).toHaveBeenCalledWith('c1', ['noshow:valoracion']);
+    expect(ghl.addContactTags).not.toHaveBeenCalledWith('c1', expect.arrayContaining(['valorado']));
+  });
+
+  it('no live appointment → nothing written, funnel_error logged (a hint alone never tags)', async () => {
+    ghl.getContactAppointments.mockResolvedValue([]);
+    await run(payload({ action: 'showed' }));
+    expect(ghl.addContactTags).not.toHaveBeenCalled();
+    expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'funnel_error', expect.objectContaining({ reason: 'no_live_appointment' }));
+  });
+
+  it('duplicate (same appointment + status already applied) → skipped, no writes', async () => {
+    live({ status: 'showed' });
+    vi.mocked(q.appointmentStatusLogged).mockResolvedValue(true);
+    await run(payload({ action: 'showed' }));
+    expect(ghl.addContactTags).not.toHaveBeenCalled();
+    expect(q.logBotEvent).not.toHaveBeenCalledWith('client1', 'conv1', 'funnel_tagged', expect.anything());
+  });
+
+  it('a calendar outside the map → ignored, no writes, no invented slug', async () => {
+    live({ status: 'showed', calendarId: 'cal-unknown' });
+    await run(payload({ action: 'showed' }));
+    expect(ghl.addContactTags).not.toHaveBeenCalled();
+    expect(q.logBotEvent).not.toHaveBeenCalledWith('client1', 'conv1', 'funnel_tagged', expect.anything());
+  });
+
+  it('a tag already on the contact is not re-sent', async () => {
+    live({ status: 'showed' });
+    ghl.getContact.mockResolvedValue({ tags: ['valorado'] });
+    await run(payload({ action: 'showed' }));
+    expect(ghl.addContactTags).not.toHaveBeenCalled();
+    // ...but the step still completes (date field + dedupe key), so a replay stops here.
+    expect(ghl.updateContactCustomFields).toHaveBeenCalled();
+    expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'appointment_status', expect.anything());
+  });
+
+  it('a GHL write failure is retried once; a second failure logs funnel_error and leaves NO dedupe key', async () => {
+    live({ status: 'showed' });
+    ghl.addContactTags.mockRejectedValueOnce(new Error('503')).mockResolvedValueOnce(undefined);
+    await run(payload({ action: 'showed' }));
+    expect(ghl.addContactTags).toHaveBeenCalledTimes(2);
+    expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'appointment_status', expect.anything());
+
+    vi.clearAllMocks();
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(funnelTenant);
+    vi.mocked(q.getLatestConversationByContact).mockResolvedValue({ id: 'cv1', ghlConversationId: 'conv1' });
+    vi.mocked(q.appointmentStatusLogged).mockResolvedValue(false);
+    ghl.getContact.mockResolvedValue({ tags: [] });
+    live({ status: 'showed' });
+    ghl.addContactTags.mockRejectedValue(new Error('503'));
+    await run(payload({ action: 'showed' }));
+    expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'funnel_error', expect.objectContaining({ reason: 'ghl_write_failed' }));
+    expect(q.logBotEvent).not.toHaveBeenCalledWith('client1', 'conv1', 'appointment_status', expect.anything());
+  });
+
+  it('tenant without funnel_tags → status actions are accepted and do nothing', async () => {
+    vi.mocked(q.loadTenantConfig).mockResolvedValue(tenant);
+    live({ status: 'showed' });
+    const res = await run(payload({ action: 'showed' }));
+    expect(res.status).toBe(200);
+    expect(ghl.addContactTags).not.toHaveBeenCalled();
+  });
+
+  it('cancelled keeps its 0049 behaviour and touches no funnel tag', async () => {
+    live({ status: 'cancelled' });
+    await run(payload({ action: 'cancelled' }));
+    expect(ghl.addContactTags).toHaveBeenCalledWith('c1', ['cita-cancelada']);
+    expect(ghl.addContactTags).toHaveBeenCalledTimes(1);
+  });
+});
+

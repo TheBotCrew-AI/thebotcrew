@@ -830,3 +830,64 @@ select created_at, metadata->>'quote' from bot_events
   message to the eval `worker/segment-classify.eval.ts` as a new case; the prompt wording or a
   hint is the fix, not code.
 
+## 13. Funnel tags from appointment status — one GHL workflow, no branches (0074)
+
+> Behaviour: [`business-logic.md` §9.4](business-logic.md). The table is `core/funnel-tags.ts`.
+
+The client's workflows used to write `agendo:` / `valorado` / `noshow:` / `paciente:` with one
+branch per calendar. Now the appointment webhook does it from **one** workflow per tenant and a
+calendar map in `tenant_config.funnel_tags`. The status is always **verified live** with GHL —
+the workflow's value is a hint, so a mis-wired branch cannot mark anyone a patient.
+
+**The one workflow** (replaces every per-calendar status workflow; keep the 0049 "Customer Booked
+Appointment" one if it already exists, or fold it in — `booked` and `confirmed` are one step):
+1. Trigger **Appointment Status**, no filters (every calendar, every status).
+2. A **switch on status** with one **Webhook** action per branch — same URL and header as §8
+   (`POST <base>/webhooks/ghl/appointments`, `Authorization: Bearer <GHL_WORKFLOW_SECRET>`),
+   custom data `action` **hardcoded** per branch: `confirmed`, `showed`, `noshow`, `cancelled`,
+   and `booked` for New. Lowercase, no dash (`noshow`). There is no `{{appointment.status}}`
+   merge tag in GHL — that is why the switch.
+
+**The map.** Calendar ids from `node workers/scripts/ghl-calendars.mjs <tenantId>`; field ids from
+Settings → Custom Fields (the id, never the name — resolving a name needs a scope we don't have):
+```sql
+update tenant_config set funnel_tags = '{
+  "enabled": true,
+  "calendars": {
+    "<valoración calendarId>": {"slug": "valoracion", "kind": "assessment"},
+    "<botox calendarId>":      {"slug": "botox",      "kind": "treatment"},
+    "<laser calendarId>":      {"slug": "laser-co2",  "kind": "treatment"}
+  },
+  "fields": {"last_visit": "<fieldId ultima-visita>", "last_treatment": {"botox": "<fieldId ultimo-botox>"}}
+}'::jsonb where tenant_id = '<tenant uuid>';
+```
+A calendar outside the map is ignored (warning in the log). A treatment slug without a
+`last_treatment` field writes `ultima-visita` only. Slugs must match the `interes:` / `paciente:`
+values (§12 step 1).
+
+**What each status does** (`kind` = the calendar's):
+
+| status | assessment | treatment |
+|---|---|---|
+| booked / confirmed / new | `agendo:<slug>`; removes every `objecion:*` | `agendo:<slug>` |
+| showed | `valorado`; removes `noshow:<slug>`; `ultima-visita` = cita date | `paciente:<slug>`; removes `interes:`/`cotizo:`/`noshow:` of that slug; `ultima-visita` + `ultimo-<slug>` |
+| noshow | `noshow:<slug>` | `noshow:<slug>` |
+| cancelled | unchanged (§8: `cita-cancelada`) | unchanged |
+
+Dates are the appointment's **start** in the tenant's clock, never the webhook's time. Idempotent
+per (appointment, status) via `bot_events` `appointment_status`; a noshow later corrected to showed
+applies the showed row (its removal covers the noshow tag). Writes go out in three batched calls
+(add, remove, fields), each retried once; a failure logs `funnel_error` and leaves **no** dedupe
+key, so re-marking the status in GHL replays it. The bot's own bookings fire the workflow too —
+`agendo:valoracion` + the objection cleanup happen for them without touching `bookAppointment`.
+
+**Add a treatment:** create its calendar; create in GHL `agendo:<slug>`, `noshow:<slug>`,
+`paciente:<slug>` (and `interes:<slug>` for §12) plus the `ultimo-<slug>` date field; add one line
+to `calendars` and, if recurring, one to `last_treatment`. No deploy.
+
+**Workflows you can turn off** once this is on: every "appointment status → add/remove tag" and
+"→ update field" workflow with calendar branches. Keep the confirmation/reminder ones.
+
+**Reading it:** `select created_at, metadata from bot_events where event_type in
+('funnel_tagged','funnel_error') and client_id = '<client uuid>' order by 1 desc;`
+

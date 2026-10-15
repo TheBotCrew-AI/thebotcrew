@@ -105,6 +105,8 @@ export interface RawTenantConfig {
   /** Raw `zone_catalog` / `objection_catalog` jsonb — parsed by core/lead-memory.ts. */
   zoneCatalog?: unknown;
   objectionCatalog?: unknown;
+  /** Funnel tags from appointment status (0074), raw jsonb — parsed by core/funnel-tags.ts. */
+  funnelTags?: unknown;
   /** Book (and reschedule) GHL appointments as "No confirmada" (0061), leaving the flip to
    *  confirmed to the tenant's GHL confirmation workflow. Off by default. */
   bookUnconfirmed?: boolean;

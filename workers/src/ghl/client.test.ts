@@ -151,6 +151,20 @@ describe('GhlClient — getContact / updateContactName', () => {
     expect((await new GhlClient().getContact('c1'))?.tags).toEqual(['paciente:botox', 'zona:labios']);
   });
 
+  it('updateContactCustomFields PUTs customFields by id with field_value (0074)', async () => {
+    const f = stubFetch();
+    f.mockResolvedValue(ok({}));
+    await new GhlClient().updateContactCustomFields('c1', [{ id: 'fld-1', value: '2026-10-15' }]);
+    expect((f.mock.calls[0]![1] as RequestInit).method).toBe('PUT');
+    expect(bodyOf(f)).toEqual({ customFields: [{ id: 'fld-1', field_value: '2026-10-15' }] });
+  });
+
+  it('updateContactCustomFields with no fields makes no call', async () => {
+    const f = stubFetch();
+    await new GhlClient().updateContactCustomFields('c1', []);
+    expect(f).not.toHaveBeenCalled();
+  });
+
   it('updateContactTimezone PUTs only the timezone field', async () => {
     const f = stubFetch();
     f.mockResolvedValue(ok({}));

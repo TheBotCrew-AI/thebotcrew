@@ -168,6 +168,29 @@ export class GhlClient {
     }
   }
 
+  /**
+   * Write custom-field values on a contact (0074: `ultima-visita`, `ultimo-<slug>`). Fields
+   * are addressed by ID — resolving a name would need `locations/customFields.readonly`,
+   * which the app does not have. A date field takes `YYYY-MM-DD`.
+   */
+  async updateContactCustomFields(contactId: string, fields: Array<{ id: string; value: string }>): Promise<void> {
+    if (fields.length === 0) return;
+    const token = await this.getAccessToken();
+    const res = await fetch(`${this.apiBase}/contacts/${contactId}`, {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Version: '2021-07-28',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ customFields: fields.map((f) => ({ id: f.id, field_value: f.value })) }),
+    });
+    if (!res.ok) {
+      const detail = await res.text();
+      throw new Error(`[ghl] updateContactCustomFields failed ${res.status}: ${detail}`);
+    }
+  }
+
   /** Add tags to a GHL contact. Requires the `contacts.write` scope. */
   async addContactTags(contactId: string, tags: string[]): Promise<void> {
     await this.contactTags('POST', contactId, tags);
