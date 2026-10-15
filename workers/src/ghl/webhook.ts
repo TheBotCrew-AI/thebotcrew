@@ -100,14 +100,20 @@ export async function verifyGhlWebhook(rawBody: string, headers: Headers): Promi
  * Filtering logic:
  *   source === 'api'  → our bot's own message echoed back by GHL — always skip.
  *   source === 'app'  → sent by a human via the GHL UI — needs a userId to attribute to.
- *   any other source  → a campaign send (bulk action, workflow): no person typed it and
- *                       GHL sends no userId. Logged so the model sees what the lead is
- *                       answering; the handler treats it as an opener, never a takeover.
+ *   source === 'bulk_actions' → a campaign send: no person typed it and GHL sends no
+ *                       userId. Logged so the model sees what the lead is answering; the
+ *                       handler treats it as an opener, never a takeover.
+ *   anything else ('workflow', …) → skipped. A workflow send is the tenant's appointment
+ *                       confirmation / reminder, not an offer: stored as a campaign it read
+ *                       as "you already have a cita" to a lead whose booking GHL had since
+ *                       cancelled (Heriberto test thread, 2026-10-14).
  */
+const CAMPAIGN_SOURCES = new Set(['bulk_actions']);
+
 export function parseOutboundWebhook(payload: GhlOutboundWebhook): ParsedHumanOutbound | null {
   if (payload.type !== 'OutboundMessage' || payload.direction !== 'outbound') return null;
   const source = payload.source;
-  if (!source || source === 'api') return null;
+  if (!source || (source !== 'app' && !CAMPAIGN_SOURCES.has(source))) return null;
 
   const { locationId, contactId, conversationId, body, messageId, userId } = payload;
   if (!locationId || !contactId || !conversationId || !body || !messageId) {

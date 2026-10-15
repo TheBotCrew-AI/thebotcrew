@@ -78,6 +78,10 @@ describe('parseOutboundWebhook', () => {
     expect(out?.ghlUserId).toBeUndefined();
   });
 
+  it('skips a workflow send (an appointment confirmation is not a campaign)', () => {
+    expect(parseOutboundWebhook({ ...base, source: 'workflow', userId: undefined, messageType: 'WhatsApp' })).toBeNull();
+  });
+
   it('skips when source is missing entirely', () => {
     expect(parseOutboundWebhook({ ...base, source: undefined })).toBeNull();
   });

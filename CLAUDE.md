@@ -623,7 +623,8 @@ cualquier Chrome headless recibe SIGTERM a los ~2 s (ver cabecera de `render-bat
   the matching `type`. FB/IG have no phone — delivery routes by `contactId`, and a real
   inbound (FB/IG/WhatsApp messaging window) must be open for GHL to deliver.
 - Campaign sends (0072): a GHL bulk action / template arrives on the outbound webhook as
-  `source:'bulk_actions'`, no `userId`. Stored as `sender_type='campaign'`, no pause, nudges
+  `source:'bulk_actions'`, no `userId` — and ONLY that source (`source:'workflow'` = the
+  tenant's confirmation/reminder, skipped). Stored as `sender_type='campaign'`, no pause, nudges
   cancelled, marked for the model as the offer on the table. Pair it with a `repin: true`
   variant keyed on the template's quick-reply text (also in `trigger_keywords`) so the thread
   switches scripts; `variant_ttl_days` retires stale pins on its own. See docs/business-logic.md §1.1/§3.

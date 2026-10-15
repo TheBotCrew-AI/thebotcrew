@@ -20,13 +20,24 @@ const row = (o: Record<string, unknown> = {}) => ({
 
 function ghlWith(
   events: Array<{ id: string; startTime?: string; status?: string; title?: string; deleted?: boolean }>,
-): ContactAppointmentsSource & { calls: number } {
+  live?: { startTime?: string; status?: string } | Error,
+): ContactAppointmentsSource & { calls: number; reads: string[] } {
   const src = {
     calls: 0,
+    reads: [] as string[],
     async getContactAppointments() {
       src.calls += 1;
       return events;
     },
+    ...(live === undefined
+      ? {}
+      : {
+          async getAppointment(id: string) {
+            src.reads.push(id);
+            if (live instanceof Error) throw live;
+            return live;
+          },
+        }),
   };
   return src;
 }
@@ -36,12 +47,36 @@ beforeEach(() => {
 });
 
 describe('findUpcomingAppointment', () => {
-  it('returns the store appointment when it is future and not cancelled — no GHL call', async () => {
+  it('returns the store appointment when it is future and not cancelled — no contact-wide GHL call', async () => {
     mockLog.mockResolvedValue([row()]);
     const ghl = ghlWith([]);
     const out = await findUpcomingAppointment('client', 'contact', ghl, NOW, TZ);
     expect(out).toEqual({ startTime: FUTURE, service: 'facial' });
     expect(ghl.calls).toBe(0);
+  });
+
+  it('a store appointment GHL now reports cancelled is NOT upcoming (the 2026-10-14 Heriberto test)', async () => {
+    mockLog.mockResolvedValue([row()]);
+    const ghl = ghlWith([], { status: 'cancelled', startTime: FUTURE });
+    const out = await findUpcomingAppointment('client', 'contact', ghl, NOW, TZ);
+    expect(out).toBeNull();
+    expect(ghl.reads).toEqual(['a1']);
+    expect(ghl.calls).toBe(1); // history exists → GHL asked for another appointment
+  });
+
+  it('a store appointment moved in GHL is returned at its LIVE time', async () => {
+    mockLog.mockResolvedValue([row()]);
+    const ghl = ghlWith([], { status: 'confirmed', startTime: LATER });
+    const out = await findUpcomingAppointment('client', 'contact', ghl, NOW, TZ);
+    expect(out).toEqual({ startTime: LATER, service: 'facial' });
+    expect(ghl.calls).toBe(0);
+  });
+
+  it('the live read failing keeps the store answer (never fails toward chasing a booked lead)', async () => {
+    mockLog.mockResolvedValue([row()]);
+    const ghl = ghlWith([], new Error('401'));
+    const out = await findUpcomingAppointment('client', 'contact', ghl, NOW, TZ);
+    expect(out).toEqual({ startTime: FUTURE, service: 'facial' });
   });
 
   it('two upcoming citas in the store → the SOONEST, not the newest-created (2026-08-02 MADI)', async () => {

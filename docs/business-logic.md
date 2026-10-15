@@ -181,7 +181,11 @@ Hybrid human ↔ AI. Enforced by `isBotSuppressed`, re-checked again right befor
   still pauses. (Fixed the 2026-07-02 "template opener → lead replies → bot muted 5 min" bug.)
 - **Campaign sends are not takeovers (0072).** A Contacts **bulk action** (a WhatsApp
   template) reaches the outbound webhook as `source:'bulk_actions'` with **no `userId`**
-  (verified 2026-10-14; a workflow send is expected to look alike). Before 0072 the parser
+  (verified 2026-10-14). **Only that source is a campaign.** A `source:'workflow'` send is the
+  tenant's appointment confirmation / reminder (the CONFIRMO sequence) and is skipped as
+  before: for a few hours on 2026-10-14 it was stored as a campaign too, and the bot read
+  "Tu cita quedó agendada…" as the offer on the table — it told a lead whose cita GHL had
+  since cancelled that she still had one. Before 0072 the parser
   dropped it, so the lead's "sí" arrived on top of a months-old thread and the bot had no idea
   which offer they were answering. Now it is stored as **`sender_type='campaign'`** — the
   business's words, nobody's reply — and the handler treats it as an opener wherever it lands:
@@ -406,7 +410,11 @@ sees what the bot itself booked — a package customer's next session is usually
 in the GHL calendar** and invisible to us (no appointment webhook exists):
 
 - **Arm-time** (`findUpcomingAppointment`, `db/upcoming-appointment.ts`): store row still
-  future → yes, free. Store row stale (the package trap) → ask GHL (`getContactAppointments`).
+  future → **verified live** (`getAppointment` of that one row, 2026-10-14): cancelled in GHL
+  → treated as no row; moved → its live time; read fails → the store's answer. The store only
+  hears a staff cancel through the tenant's workflow, and a stale `booked` row put Leo's test
+  thread in modo asistencia ("ya tienes cita", no slots) for a cita GHL had cancelled.
+  Store row stale (the package trap) → ask GHL (`getContactAppointments`).
   No store row at all → no GHL call (fresh leads stay cheap) — except for tenants with
   `bookingEnabled=false`, where every appointment is staff-booked, so GHL is checked each turn.
 - **Send-time backstop** (runner, before generating): always store + GHL; an upcoming

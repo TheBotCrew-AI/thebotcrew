@@ -23,6 +23,8 @@ export interface ContactAppointmentsSource {
     contactId: string,
     timeZone: string,
   ): Promise<Array<{ id: string; startTime?: string; status?: string; title?: string; deleted?: boolean }>>;
+  /** One appointment, live. Optional so a source that can't read it keeps the store's answer. */
+  getAppointment?(appointmentId: string): Promise<{ startTime?: string; status?: string; title?: string }>;
 }
 
 export interface UpcomingAppointment {
@@ -33,7 +35,13 @@ export interface UpcomingAppointment {
 /**
  * Resolve the lead's soonest upcoming (future, non-cancelled) appointment, or null.
  *
- * - Store has an upcoming one → returned, no API call (the self-block fast path).
+ * - Store has an upcoming one → verified live (one GHL read of THAT appointment) and
+ *   returned at its live time. The store only hears about a staff cancel/move when the
+ *   tenant's workflow posts it, and a row that outlived its appointment put the bot in
+ *   modo asistencia for a lead whose cita GHL had cancelled — it told her she still had
+ *   one and refused to offer slots (Heriberto, 2026-10-14). Cancelled live → treated as
+ *   no store appointment, and GHL is asked for another. The read failing keeps the
+ *   store's answer, same as lookupAppointment.
  *   The event log is collapsed first (soonestUpcomingAppointment), so a lead with
  *   several future citas gets the NEXT one, and a later cancel/reschedule row
  *   supersedes the original booking.
@@ -55,7 +63,10 @@ export async function findUpcomingAppointment(
   const stored = soonestUpcomingAppointment(log, nowMs);
   if (stored) {
     // soonestUpcomingAppointment guarantees a valid future appointmentDatetime.
-    return { startTime: stored.appointmentDatetime!, service: stored.serviceType ?? undefined };
+    const live = await readLive(ghl, stored.ghlAppointmentId);
+    if (live !== 'cancelled') {
+      return { startTime: live?.startTime ?? stored.appointmentDatetime!, service: stored.serviceType ?? undefined };
+    }
   }
   if (log.length === 0 && !opts.alwaysCheckGhl) return null;
 
@@ -67,4 +78,20 @@ export async function findUpcomingAppointment(
     .sort((a, b) => a.startMs - b.startMs)[0];
   if (!upcoming) return null;
   return { startTime: upcoming.startTime!, service: upcoming.title };
+}
+
+/** The store row's appointment as GHL has it now: 'cancelled', its live fields, or null when unreadable. */
+async function readLive(
+  ghl: ContactAppointmentsSource,
+  appointmentId: string,
+): Promise<'cancelled' | { startTime?: string } | null> {
+  if (!ghl.getAppointment) return null;
+  try {
+    const live = await ghl.getAppointment(appointmentId);
+    if (live.status?.toLowerCase() === 'cancelled') return 'cancelled';
+    return { startTime: live.startTime };
+  } catch (e) {
+    console.error('[upcoming-appointment] GHL read failed, trusting the store:', e instanceof Error ? e.message : String(e));
+    return null;
+  }
 }
