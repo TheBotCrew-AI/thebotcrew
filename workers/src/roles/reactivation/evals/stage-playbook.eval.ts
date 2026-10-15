@@ -44,7 +44,7 @@ const turn = { ghlConversationId: 'conv_eval_stage', ghlContactId: 'contact_eval
 /** Heriberto's live bótox angle: it asks for the appointment outright. */
 const SLOT_ANGLE = 'Ángulo de lugar: pregunta en una línea si quiere que le aparten su lugar para su cita de bótox. Una sola pregunta, en neutro, que se conteste con una palabra.';
 
-const BOTOX_FACTS = 'Por zona: frente $2,500, entrecejo $2,000, patas de gallo $2,000, maseteros $3,500. Full face (frente, entrecejo y patas de gallo): $6,000. Suaviza líneas de expresión y ayuda a prevenir la formación de nuevas arrugas.';
+const BOTOX_FACTS = 'Desde $2,000; el valor final depende de la zona, de las unidades y del resultado que se busca, y el precio exacto lo da el Dr. Valdivia en la valoración. Suaviza líneas de expresión y ayuda a prevenir la formación de nuevas arrugas.';
 
 const NI_CTX: StageContext = {
   stage: 'NI',

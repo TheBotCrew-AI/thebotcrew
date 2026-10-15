@@ -868,12 +868,13 @@ describe.skipIf(!evalApiKey)('Dr. Heriberto Valdivia — zona fuera de la lista'
  * La promo de septiembre de bótox y Sculptra se quedó en la config hasta el 2026-10-08, y en
  * octubre el modelo la seguía citando (o decía "la promoción de septiembre ya terminó"). Hoy
  * la única promoción es el precio especial del láser: los demás tratamientos van a su precio
- * de lista, sin comparación ni fecha. Maseteros es la guardia de que no se invente un "regular".
+ * de lista, sin comparación ni fecha — salvo el bótox, que desde 2026-10-15 no se cotiza por zona:
+ * se dice el "desde $2,000" y el precio exacto lo da el doctor (houseRules "# Bótox").
  */
 describe.skipIf(!evalApiKey)('Dr. Heriberto Valdivia — precios sin promo vencida', () => {
   const STALE = /2[,.]?125|12[,.]?499|septiembre/;
 
-  it('precio de frente → $2,500, sin promoción de septiembre', async () => {
+  it('precio de frente → el "desde $2,000", nunca el de la zona, sin promoción de septiembre', async () => {
     const res = await buildFrontDeskAgent().generate(
       [
         { role: 'user', content: 'Hola, me interesa el botox' },
@@ -883,7 +884,8 @@ describe.skipIf(!evalApiKey)('Dr. Heriberto Valdivia — precios sin promo venci
       { requestContext: rc(tenantFor('stale-promo')) },
     );
     const text = reply(res);
-    expect(text, text).toMatch(/\$\s?2[,.]?500\b/);
+    expect(text, text).toMatch(/desde \$\s?2[,.]?000\b/);
+    expect(text, text).not.toMatch(/\$\s?2[,.]?500\b/);
     expect(text, text).not.toMatch(STALE);
   }, 120_000);
 
@@ -917,7 +919,7 @@ describe.skipIf(!evalApiKey)('Dr. Heriberto Valdivia — precios sin promo venci
     expect(text, text).not.toMatch(/confirm(ar|o)|consult(ar|o) con el equipo/);
   }, 120_000);
 
-  it('maseteros no tiene descuento: da el precio, sin comparación inventada', async () => {
+  it('maseteros → el "desde $2,000", nunca el precio de la zona ni una comparación inventada', async () => {
     const res = await buildFrontDeskAgent().generate(
       [
         { role: 'user', content: 'Hola, me interesa el botox' },
@@ -927,8 +929,9 @@ describe.skipIf(!evalApiKey)('Dr. Heriberto Valdivia — precios sin promo venci
       { requestContext: rc(heribertoTenant) },
     );
     const text = reply(res);
-    expect(text, text).toMatch(/\$\s?3[,.]?500\b/);
-    expect(text, text).not.toMatch(/regular\s*\$?\s?(?!3[,.]?500)\d/);
+    expect(text, text).toMatch(/desde \$\s?2[,.]?000\b/);
+    expect(text, text).not.toMatch(/\$\s?3[,.]?500\b/);
+    expect(text, text).not.toMatch(/regular\s*\$?\s?\d/);
   }, 120_000);
 });
 
@@ -1209,7 +1212,7 @@ describe.skipIf(!evalApiKey)('Dr. Heriberto Valdivia — las zonas por su nombre
           {
             role: 'assistant',
             content:
-              '¡Hola! Soy Sofía, del consultorio del Dr. Heriberto Valdivia. El precio de bótox es cerrado por zona y te lo damos por aquí antes de agendar. ¿Qué zona te interesa?',
+              '¡Hola! Soy Sofía, del consultorio del Dr. Heriberto Valdivia. Con gusto te oriento con el bótox. ¿Qué zona te gustaría suavizar?',
           },
           { role: 'user', content: zona },
         ],
@@ -1217,9 +1220,10 @@ describe.skipIf(!evalApiKey)('Dr. Heriberto Valdivia — las zonas por su nombre
       ),
     );
 
-  it('"Zona de antifaz" → es el full face, con su precio, sin preguntar a qué se refiere', async () => {
+  it('"Zona de antifaz" → es el full face, sin su precio, sin preguntar a qué se refiere', async () => {
     const text = await preguntarZona('Zona de antifaz');
-    expect(text, text).toMatch(/\$\s?6[,.]?000\b/);
+    expect(text, text).toMatch(/antifaz|full face|frente|entrecejo|patas de gallo/);
+    expect(text, text).not.toMatch(/\$\s?6[,.]?000\b/);
     expect(text, text).not.toMatch(/te refieres|a qué zona|cuál zona/);
   }, 120_000);
 
