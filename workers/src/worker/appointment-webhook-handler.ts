@@ -60,6 +60,16 @@ const ACTIONS: readonly WebhookAction[] = [...STORE_ACTIONS, ...STATUS_ACTIONS];
 
 type LiveAppointment = Awaited<ReturnType<GhlClient['getContactAppointments']>>[number];
 
+/** A tag write that must not fail the webhook — but MUST be awaited: this route has no
+ *  waitUntil, so a detached promise dies with the response and the write never leaves. */
+async function bestEffort(what: string, fn: () => Promise<void>): Promise<void> {
+  try {
+    await fn();
+  } catch (e) {
+    console.error(`[appt-webhook] ${what} failed (non-fatal):`, e instanceof Error ? e.message : String(e));
+  }
+}
+
 /** One attempt + one retry: GHL hiccups are short, and a lost tag is a lost smart list. */
 async function withRetry<T>(what: string, fn: () => Promise<T>): Promise<T> {
   try {
@@ -288,23 +298,19 @@ export async function handleAppointmentWebhook(
       } catch (e) {
         console.error('[appt-webhook] awaiting_human clear failed (non-fatal):', e instanceof Error ? e.message : String(e));
       }
-      ghl.removeContactTags(contactId, [awaitingTag]).catch((e: unknown) =>
-        console.error('[appt-webhook] tag removal failed (non-blocking):', e instanceof Error ? e.message : String(e)),
-      );
+      await bestEffort('awaiting tag removal', () => ghl.removeContactTags(contactId!, [awaitingTag]));
     }
   }
 
   // `cita-cancelada` parity with the bot's own tools: a staff cancellation tags the contact,
   // a staff booking clears it. No demo guard is needed here — a simulated demo booking never
-  // reaches GHL, so the workflow never fires for it. Non-blocking, like the tag above.
+  // reaches GHL, so the workflow never fires for it. AWAITED (2026-10-14): this route has no
+  // waitUntil, so a detached write was killed with the response — Heriberto's test contact
+  // got two `cancelled` rows and never the tag.
   if (action === 'cancelled') {
-    ghl.addContactTags(contactId, [CANCELLED_APPOINTMENT_TAG]).catch((e: unknown) =>
-      console.error('[appt-webhook] cancelled tag add failed (non-blocking):', e instanceof Error ? e.message : String(e)),
-    );
+    await bestEffort('cancelled tag add', () => ghl.addContactTags(contactId!, [CANCELLED_APPOINTMENT_TAG]));
   } else if (action === 'booked') {
-    ghl.removeContactTags(contactId, [CANCELLED_APPOINTMENT_TAG]).catch((e: unknown) =>
-      console.error('[appt-webhook] cancelled tag removal failed (non-blocking):', e instanceof Error ? e.message : String(e)),
-    );
+    await bestEffort('cancelled tag removal', () => ghl.removeContactTags(contactId!, [CANCELLED_APPOINTMENT_TAG]));
   }
 
   // The funnel's "scheduled" step rides on the booking (0074); a cancel touches no funnel tag.

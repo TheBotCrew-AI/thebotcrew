@@ -249,6 +249,22 @@ describe('handleAppointmentWebhook — 0049 parity with a bot booking', () => {
   });
 });
 
+describe('handleAppointmentWebhook — tag writes are awaited (the route has no waitUntil)', () => {
+  it('the cancelled tag write completes BEFORE the response (a detached promise would be killed)', async () => {
+    let settled = false;
+    ghl.addContactTags.mockImplementation(() => new Promise<void>((r) => setTimeout(() => { settled = true; r(); }, 20)));
+    await run(payload({ action: 'cancelled' }));
+    expect(settled).toBe(true);
+  });
+
+  it('a failing tag write is logged and the webhook still answers 200', async () => {
+    ghl.addContactTags.mockRejectedValue(new Error('ghl down'));
+    ghl.removeContactTags.mockRejectedValue(new Error('ghl down'));
+    expect((await run(payload({ action: 'cancelled' }))).status).toBe(200);
+    expect((await run(payload({ action: 'booked' }))).status).toBe(200);
+  });
+});
+
 describe('handleAppointmentWebhook — the `cita-cancelada` tag (parity with the bot tools)', () => {
   it('a staff cancellation tags the contact', async () => {
     await run(payload({ action: 'cancelled' }));
