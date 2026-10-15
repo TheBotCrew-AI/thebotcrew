@@ -24,6 +24,7 @@ import { updateConversationStatusTool } from './tools/update-conversation-status
 import { updateContactNameTool } from './tools/update-contact-name.js';
 import { flagAwaitingHumanTool } from './tools/flag-awaiting-human.js';
 import { flagPendingInfoTool } from './tools/flag-pending-info.js';
+import { flagNoPromosTool } from './tools/flag-no-promos.js';
 import { setLeadTimezoneTool } from './tools/set-lead-timezone.js';
 import { startDemoTool } from './tools/start-demo.js';
 
@@ -63,6 +64,7 @@ export function buildFrontDeskAgent(): Agent {
         turn?.hasHumanReplies,
         turn?.leadTimezone,
         turn?.hasCampaignSends,
+        turn?.contactTags,
       );
     },
     model: ({ requestContext }) => {
@@ -91,6 +93,7 @@ export function buildFrontDeskAgent(): Agent {
       updateContactName: updateContactNameTool,
       flagAwaitingHuman: flagAwaitingHumanTool,
       flagPendingInfo: flagPendingInfoTool,
+      flagNoPromos: flagNoPromosTool,
       setLeadTimezone: setLeadTimezoneTool,
       startDemo: startDemoTool,
     },

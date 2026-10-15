@@ -78,8 +78,9 @@ import { parseAttachments, parseInboundWebhook } from '../ghl/webhook.js';
 import { transcribeAudio } from '../core/transcribe.js';
 import { describeImages } from '../core/describe-image.js';
 import { phoneFromFormText } from '../core/form-phone.js';
-import { demoEndTag, interestTag, STATUS_TAGS } from '../ghl/tags.js';
-import { interestPromptAddendum, matchInterest, serviceNames } from '../core/interest.js';
+import { demoEndTag, NO_PROMOS_TAG, STATUS_TAGS } from '../ghl/tags.js';
+import { interestPromptAddendum, interestServices, interestTagFor, matchInterest } from '../core/interest.js';
+import { isPatientOf } from '../core/lead-memory.js';
 import { raiseStage, stageFloor, stagePromptAddendum, type LeadStage } from '../core/stage.js';
 import type { GhlInboundWebhook, InboundAttachment, ParsedInbound } from '../ghl/types.js';
 import { DEFAULT_MODEL, DEFAULT_PROVIDER, FRONT_DESK_ROLE } from '../roles/front-desk/index.js';
@@ -923,10 +924,18 @@ export async function runAgentTurn({
   let contactEmail: string | undefined;
   let fetchedContact = false;
   let capturedCapiIdentity: CapiIdentity | undefined;
-  if (!history.some((m) => m.senderType === 'bot')) {
+  // The contact's tags (0073) are read on EVERY turn: the client's workflows write the
+  // funnel tags (`paciente:`, `cotizo:`, …) between turns, and they are the agent's memory
+  // of this lead plus the dedupe set for the classifier's own writes. One GHL call per
+  // turn, inside the DO (nowhere near GHL's 100/10 s per location); on failure the turn
+  // runs with no memory and writes without dedupe — GHL no-ops an existing tag anyway.
+  let contactTags: string[] | undefined;
+  const openingTurns = !history.some((m) => m.senderType === 'bot');
+  {
     try {
       const contact = await ghl.getContact(parsed.contactId);
-      if (contact) {
+      contactTags = contact?.tags;
+      if (contact && openingTurns) {
         fetchedContact = true;
         contactName = contact.name?.trim() || undefined;
         contactPhone = contactPhone ?? contact.phone;
@@ -968,7 +977,7 @@ export async function runAgentTurn({
         }
       }
     } catch (e) {
-      console.error('[contact-name] fetch failed (non-blocking):', e instanceof Error ? e.message : String(e));
+      console.error('[contact] fetch failed (non-blocking):', e instanceof Error ? e.message : String(e));
     }
   }
   // Later turns (bot already spoke) or a failed fetch: fall back to the merge keys captured
@@ -1059,6 +1068,7 @@ export async function runAgentTurn({
     // Same window the model reads: a teammate's answer outside it is not "seen" either way.
     hasHumanReplies: hasHumanReplies(history),
     hasCampaignSends: hasCampaignSends(history),
+    contactTags,
   };
   // A key fallback is logged, never swallowed, because from here on every usage row
   // would be misattributed.
@@ -1268,26 +1278,35 @@ export async function runAgentTurn({
   // message was in-character roleplay — nothing there is a real terminal state.
   // Interest tags (0058): the same call also names the service the lead asked about, for
   // tenants that opted in. The list is the tenant's own `services[].name`; empty = off.
-  const interestServices = tenant.config.interestTags ? serviceNames(tenant.config.services) : undefined;
+  const segmentServices = tenant.config.segmentTags || tenant.config.interestTags ? interestServices(tenant.config.services) : [];
+  const interestServiceNames = segmentServices.length ? segmentServices.map((s) => s.name) : undefined;
+  // Everything the classifier path tags this turn, written in ONE call at the end (0073):
+  // tags the contact already carries are left out, so the write is a no-op-free batch.
+  const tagsToAdd = new Set<string>();
+  const alreadyTagged = (tag: string) => contactTags?.includes(tag) === true;
   // The agent closing the conversation itself (updateConversationStatus in this turn) makes
   // the classifier's status guess redundant — applying it again logged a second
   // `status_changed completed→completed` on every booked lead. Skipped entirely unless the
   // call is still needed for interest tags, in which case only its status is ignored.
   if (agentSetStatus) console.log(`[classify] status skipped: the agent set it conv=${parsed.conversationId}`);
-  const classified = activeRole === 'demo' || forcedReply || endedByBooking || (agentSetStatus && !interestServices)
+  const classified = activeRole === 'demo' || forcedReply || endedByBooking || (agentSetStatus && !interestServiceNames)
     ? NO_CLASSIFY
-    : await classifyConversationOutcome(parsed.text, reply, aux, interestServices, true);
+    : await classifyConversationOutcome(parsed.text, reply, aux, interestServiceNames, true);
   const outcome = agentSetStatus ? undefined : classified.status;
   console.log(`[classify] outcome=${outcome ?? 'null (active or error)'} interest=${classified.interest ?? 'null'}`);
   if (classified.interest) {
-    // Fire-and-forget: a tag is for smart lists, never worth a slower or lost reply.
-    // The event repeats if the lead keeps naming the same treatment — GHL treats an
-    // existing tag as a no-op, and the repeat is cheaper than a lookup on every turn.
-    const tag = interestTag(classified.interest);
-    ghl.addContactTags(parsed.contactId, [tag]).catch((e: unknown) =>
-      console.error('[tags] interest tag failed:', e instanceof Error ? e.message : String(e)),
-    );
-    void logBotEvent(tenant.clientId, parsed.conversationId, 'interest_tagged', { service: classified.interest, tag });
+    const svc = segmentServices.find((s) => s.name === classified.interest);
+    const tag = svc ? interestTagFor(segmentServices, svc.name) : null;
+    // A contact already tagged `paciente:<x>` by the client's workflow is not "interested
+    // in x" — they get it. No interest tag, no event (0073).
+    if (svc && tag && isPatientOf(contactTags ?? [], svc)) {
+      console.log(`[tags] interest skipped: already a patient conv=${parsed.conversationId} service=${svc.name}`);
+    } else if (tag && !alreadyTagged(tag)) {
+      // The event repeats if the lead keeps naming the same treatment on a turn where the
+      // fetch failed — GHL treats an existing tag as a no-op, so that costs nothing.
+      tagsToAdd.add(tag);
+      void logBotEvent(tenant.clientId, parsed.conversationId, 'interest_tagged', { service: classified.interest, tag });
+    }
   }
   if (outcome) {
     try {
@@ -1310,22 +1329,27 @@ export async function runAgentTurn({
         // fire-and-forget, a failed write would leave a muted lead with no tag — and
         // the next unrelated tag edit on that contact would silently un-mute someone
         // who had asked us to stop. Loud on failure for the same reason.
+        // `no-promos` rides along (0073): no more messages includes no offers.
         try {
-          await ghl.addContactTags(parsed.contactId, [tag]);
+          await ghl.addContactTags(parsed.contactId, [tag, NO_PROMOS_TAG]);
         } catch (e) {
           console.error(
             `[tags] OPT-OUT TAG WRITE FAILED contact=${parsed.contactId} — muted with no tag, a tag edit could lift it:`,
             e instanceof Error ? e.message : String(e),
           );
         }
-      } else if (tag) {
-        ghl.addContactTags(parsed.contactId, [tag]).catch((e: unknown) =>
-          console.error('[tags] add on classify failed:', e instanceof Error ? e.message : String(e)),
-        );
+      } else if (tag && !alreadyTagged(tag)) {
+        tagsToAdd.add(tag);
       }
     } catch (e) {
       console.error('[conv] updateConversationStatus failed:', e instanceof Error ? e.message : String(e));
     }
+  }
+  if (tagsToAdd.size > 0) {
+    // Fire-and-forget: a tag is for smart lists, never worth a slower or lost reply.
+    ghl.addContactTags(parsed.contactId, [...tagsToAdd]).catch((e: unknown) =>
+      console.error('[tags] add on classify failed:', e instanceof Error ? e.message : String(e)),
+    );
   }
 
   // The lead's stage (0067): computed and recorded on every real turn. The rules set

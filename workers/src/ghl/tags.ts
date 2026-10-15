@@ -85,28 +85,62 @@ export function demoEndTag(reason: 'exhausted' | 'expired' | 'closed' | 'booked'
 export const CANCELLED_APPOINTMENT_TAG = 'cita-cancelada';
 
 /**
- * Interest tags (0058): `interes-<servicio>` per configured service the lead asked
- * about, chosen by the classifier and validated against `services[].name`. Slug =
- * lowercase, accents stripped, subscript digits normalized ("CO₂" → "co2"), anything
- * else collapsed to a single dash — so the tag is stable across spellings and safe
- * as a GHL tag name.
+ * Interest tags (0058, `prefix:value` since 0073): `interes:<slug>` per configured service
+ * the lead asked about, chosen by the classifier and validated against `services[].name`.
+ * The slug is `services[].tagSlug` when the tenant set one (it must match the tag the
+ * client created in GHL — "Láser CO₂ Fraccionado" is `interes:laser-co2` there), else the
+ * name slugged: lowercase, accents stripped, subscript digits normalized ("CO₂" → "co2"),
+ * anything else collapsed to a single dash. GHL lowercases tag names itself, so every tag
+ * written here is already lowercase and reads back byte-identical.
  */
-export const INTEREST_TAG_PREFIX = 'interes-';
+export const INTEREST_TAG_PREFIX = 'interes:';
 
 const SUBSCRIPT_DIGITS: Record<string, string> = {
   '₀': '0', '₁': '1', '₂': '2', '₃': '3', '₄': '4', '₅': '5', '₆': '6', '₇': '7', '₈': '8', '₉': '9',
 };
 
-export function interestTag(serviceName: string): string {
-  const slug = serviceName
+/** A GHL-safe slug: what every `prefix:value` tag carries after the colon. */
+export function tagSlug(value: string): string {
+  return value
     .replace(/[₀-₉]/g, (d) => SUBSCRIPT_DIGITS[d] ?? d)
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
-  return `${INTEREST_TAG_PREFIX}${slug}`;
 }
+
+export function interestTag(serviceName: string, slugOverride?: string): string {
+  return `${INTEREST_TAG_PREFIX}${slugOverride?.trim() ? tagSlug(slugOverride) : tagSlug(serviceName)}`;
+}
+
+/**
+ * Segment tags (0073): the zones the lead named and the objection they gave, from the
+ * tenant's catalogs. Written by the classifier path only; `objecion:` is removed by the
+ * client's GHL workflow when the lead books, `zona:` is never removed.
+ */
+export const ZONE_TAG_PREFIX = 'zona:';
+export const OBJECTION_TAG_PREFIX = 'objecion:';
+
+/**
+ * `no-promos` (0073): the lead does not want promotions. Written alongside
+ * `bot-opted-out` on every opt-out and on its own by the flagNoPromos tool (the lead
+ * keeps talking, just no offers). Read back by the tag webhook into
+ * `conversations.no_promos`, which the follow-up runner honours. Removing
+ * `bot-opted-out` (the opt-out undo) leaves this one in place: that is a person's call.
+ */
+export const NO_PROMOS_TAG = 'no-promos';
+
+/**
+ * The funnel tags the client's own GHL workflows write and the bot only READS (0073):
+ * `paciente:<servicio>` (already a patient of it), `cotizo:<servicio>` (was quoted),
+ * `valorado` (had the valoración), `noshow:<…>`. Nothing in the Worker writes these —
+ * see core/lead-memory.ts for how they reach the agent.
+ */
+export const PATIENT_TAG_PREFIX = 'paciente:';
+export const QUOTED_TAG_PREFIX = 'cotizo:';
+export const NOSHOW_TAG_PREFIX = 'noshow:';
+export const EVALUATED_TAG = 'valorado';
 
 /**
  * Paid confirmation (0062) — the hold's state, mirrored on the GHL contact so the

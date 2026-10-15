@@ -1,6 +1,6 @@
 /**
  * Interest tags (0058): which configured service a lead is asking about, so the GHL
- * contact can carry `interes-<servicio>` for smart lists and campaigns.
+ * contact can carry `interes:<servicio>` for smart lists and campaigns.
  *
  * The pick is made by the status classifier (one aux model call per replied turn when
  * the tenant opts in); this module holds the parts that don't need a model — the
@@ -10,21 +10,47 @@
  */
 
 import { serviceSchema } from '../roles/front-desk/config.js';
+import { interestTag, tagSlug } from '../ghl/tags.js';
+
+export interface InterestService {
+  name: string;
+  /** `services[].tagSlug` — the slug GHL's catalog uses when it differs from the name's. */
+  tagSlug?: string;
+}
+
+/** The configured services, in config order, with the tag slug each one carries (0073).
+ *  Tolerates a malformed `services`. */
+export function interestServices(rawServices: unknown): InterestService[] {
+  if (!Array.isArray(rawServices)) return [];
+  const out: InterestService[] = [];
+  for (const s of rawServices) {
+    const parsed = serviceSchema.safeParse(s);
+    if (parsed.success && parsed.data.name.trim()) {
+      out.push({ name: parsed.data.name.trim(), tagSlug: parsed.data.tagSlug?.trim() || undefined });
+    }
+  }
+  return out;
+}
 
 /** The configured service names, in config order. Tolerates a malformed `services`. */
 export function serviceNames(rawServices: unknown): string[] {
-  if (!Array.isArray(rawServices)) return [];
-  const names: string[] = [];
-  for (const s of rawServices) {
-    const parsed = serviceSchema.safeParse(s);
-    if (parsed.success && parsed.data.name.trim()) names.push(parsed.data.name.trim());
-  }
-  return names;
+  return interestServices(rawServices).map((s) => s.name);
+}
+
+/** The slug a configured service goes by in every `prefix:value` tag (interes:, paciente:, cotizo:). */
+export function serviceSlug(service: InterestService): string {
+  return service.tagSlug ? tagSlug(service.tagSlug) : tagSlug(service.name);
+}
+
+/** The `interes:` tag for a configured service name; null when the name is not configured. */
+export function interestTagFor(services: InterestService[], configuredName: string): string | null {
+  const svc = services.find((s) => s.name === configuredName);
+  return svc ? interestTag(svc.name, svc.tagSlug) : null;
 }
 
 /** Case- and accent-insensitive key: "Ácido Hialurónico" and "acido hialuronico" collide. */
 function fold(s: string): string {
-  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+  return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
 }
 
 /**

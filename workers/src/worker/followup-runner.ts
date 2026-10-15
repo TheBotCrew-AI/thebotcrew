@@ -24,6 +24,7 @@ import {
   getFollowUpStatus,
   getLatestDemoSession,
   isBotSuppressed,
+  isNoPromos,
   loadDueFollowUps,
   loadMediaAssets,
   loadOutboundAttachmentUrls,
@@ -339,6 +340,11 @@ async function processOne(
   //    fires inside the window — push it to the window's end instead of dropping it.
   if (await isBotSuppressed(followUp.ghlConversationId)) {
     return abortFollowUp(followUp, tenant, 'human_active');
+  }
+  // `no-promos` (0073): the lead said no to offers. A nudge IS an offer, so the row is
+  // dropped like an opt-out — checked at send time so a tag added after the arming counts.
+  if (await isNoPromos(followUp.conversationId)) {
+    return abortFollowUp(followUp, tenant, 'no_promos');
   }
   if (isQuietNow(new Date(), tenant.config.timezone, tenant.config.quietHours ?? DEFAULT_QUIET_HOURS)) {
     await cancelFollowUps(followUp.conversationId);

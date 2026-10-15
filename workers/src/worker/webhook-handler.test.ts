@@ -401,7 +401,9 @@ describe('handleInboundWebhook — Meta CAPI attribution capture (0048)', () => 
       vi.mocked(q.loadTenantConfig).mockResolvedValue(tenant({ metaCapi: gated } as Partial<TenantContext>));
       vi.mocked(q.loadRecentMessages).mockResolvedValue(replied);
       await handleInboundWebhook(inbound, agentReplying());
-      expect(ghl.getContact).not.toHaveBeenCalled();
+      // The contact IS fetched every turn since 0073 (for its tags) — but the identity
+      // is not re-captured from it: it comes from the row.
+      expect(q.setConversationAttribution).not.toHaveBeenCalled();
       expect(queueCapiEvent).toHaveBeenCalledTimes(1);
       expect(queueCapiEvent).toHaveBeenCalledWith({
         tenant: expect.objectContaining({ tenantId: 't1' }),
@@ -2231,7 +2233,7 @@ describe('handleInboundWebhook — interest tags (0058)', () => {
     const prompt = classifierPrompt(fetchSpy);
     expect(prompt).not.toContain('"interest"');
     expect(prompt).not.toContain('- Botox');
-    expect(ghl.addContactTags).not.toHaveBeenCalledWith('c1', expect.arrayContaining([expect.stringMatching(/^interes-/)]));
+    expect(ghl.addContactTags).not.toHaveBeenCalledWith('c1', expect.arrayContaining([expect.stringMatching(/^interes[-:]/)]));
   });
 
   it('flag on: runs on a question reply, lists the services, tags the pick — status ignored', async () => {
@@ -2245,8 +2247,8 @@ describe('handleInboundWebhook — interest tags (0058)', () => {
     expect(prompt).toContain('- Botox');
     expect(prompt).toContain('- Láser CO₂ Fraccionado');
     expect(prompt).toContain('"interest":null');
-    expect(ghl.addContactTags).toHaveBeenCalledWith('c1', ['interes-botox']);
-    expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'interest_tagged', { service: 'Botox', tag: 'interes-botox' });
+    expect(ghl.addContactTags).toHaveBeenCalledWith('c1', ['interes:botox']);
+    expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'interest_tagged', { service: 'Botox', tag: 'interes:botox' });
     // The reply carried a question: the status half is ignored exactly as before.
     expect(q.updateConversationStatus).not.toHaveBeenCalled();
   });
@@ -2256,14 +2258,16 @@ describe('handleInboundWebhook — interest tags (0058)', () => {
     vi.mocked(q.loadTenantConfig).mockResolvedValue(withInterest());
     await handleInboundWebhook(inbound, agentReplying('Entendido, gracias.'));
     expect(q.updateConversationStatus).toHaveBeenCalledWith('conv1', 'standby');
-    expect(ghl.addContactTags).toHaveBeenCalledWith('c1', ['interes-acido-hialuronico']);
+    // ONE write for the turn: the status mirror and the interest tag travel together (0073).
+    expect(ghl.addContactTags).toHaveBeenCalledTimes(1);
+    expect(ghl.addContactTags).toHaveBeenCalledWith('c1', expect.arrayContaining(['bot-standby', 'interes:acido-hialuronico']));
   });
 
   it('a service the tenant did not configure never becomes a tag', async () => {
     vi.stubGlobal('fetch', classifierReturning('{"status":"active","interest":"Rinomodelación"}'));
     vi.mocked(q.loadTenantConfig).mockResolvedValue(withInterest());
     await handleInboundWebhook(inbound, agentReplying('¿Qué te gustaría mejorar?'));
-    expect(ghl.addContactTags).not.toHaveBeenCalledWith('c1', expect.arrayContaining([expect.stringMatching(/^interes-/)]));
+    expect(ghl.addContactTags).not.toHaveBeenCalledWith('c1', expect.arrayContaining([expect.stringMatching(/^interes[-:]/)]));
     expect(q.logBotEvent).not.toHaveBeenCalledWith('client1', 'conv1', 'interest_tagged', expect.anything());
   });
 
@@ -2274,7 +2278,7 @@ describe('handleInboundWebhook — interest tags (0058)', () => {
     vi.mocked(q.getConversationPersona).mockResolvedValue({ activeRole: 'demo', roleStartedAt: null, demoStartedAt: '2026-07-29T10:00:00Z', promptVariant: null, reactivationRound: 0, leadTimezone: null, stage: null, interest: null });
     await handleInboundWebhook(inbound, agentReplying('¿Te agendo el botox?'));
     expect(fetchSpy).not.toHaveBeenCalled();
-    expect(ghl.addContactTags).not.toHaveBeenCalledWith('c1', expect.arrayContaining([expect.stringMatching(/^interes-/)]));
+    expect(ghl.addContactTags).not.toHaveBeenCalledWith('c1', expect.arrayContaining([expect.stringMatching(/^interes[-:]/)]));
   });
 
   it('a failing tag write never breaks the turn', async () => {
@@ -2283,6 +2287,75 @@ describe('handleInboundWebhook — interest tags (0058)', () => {
     ghl.addContactTags.mockRejectedValueOnce(new Error('ghl down'));
     await expect(handleInboundWebhook(inbound, agentReplying('¿Primera vez?'))).resolves.not.toThrow();
     expect(ghl.sendMessage).toHaveBeenCalled();
+  });
+
+  describe('segment tags (0073): prefix:value, tags read every turn', () => {
+    const withSlug = () =>
+      tenant({
+        config: {
+          ...withInterest().config,
+          services: [{ name: 'Botox' }, { name: 'Láser CO₂ Fraccionado', tagSlug: 'laser-co2' }],
+          interestTags: false,
+          segmentTags: true,
+        },
+      });
+
+    it('segment_tags alone turns interest on (interest_tags is the alias)', async () => {
+      vi.stubGlobal('fetch', classifierReturning('{"status":"active","interest":"Botox"}'));
+      vi.mocked(q.loadTenantConfig).mockResolvedValue(withSlug());
+      await handleInboundWebhook(inbound, agentReplying('¿Primera vez?'));
+      expect(ghl.addContactTags).toHaveBeenCalledWith('c1', ['interes:botox']);
+    });
+
+    it('services[].tagSlug names the value after the colon — the tag GHL already has', async () => {
+      vi.stubGlobal('fetch', classifierReturning('{"status":"active","interest":"Láser CO₂ Fraccionado"}'));
+      vi.mocked(q.loadTenantConfig).mockResolvedValue(withSlug());
+      await handleInboundWebhook(inbound, agentReplying('¿Primera vez?'));
+      expect(ghl.addContactTags).toHaveBeenCalledWith('c1', ['interes:laser-co2']);
+    });
+
+    it('a tag the contact already carries is not re-written (no call at all)', async () => {
+      vi.stubGlobal('fetch', classifierReturning('{"status":"active","interest":"Botox"}'));
+      vi.mocked(q.loadTenantConfig).mockResolvedValue(withSlug());
+      ghl.getContact.mockResolvedValue({ tags: ['interes:botox'] });
+      await handleInboundWebhook(inbound, agentReplying('¿Primera vez?'));
+      expect(ghl.addContactTags).not.toHaveBeenCalled();
+      expect(q.logBotEvent).not.toHaveBeenCalledWith('client1', 'conv1', 'interest_tagged', expect.anything());
+    });
+
+    it('a contact already paciente:<x> gets no interes:<x> — they are not interested, they get it', async () => {
+      vi.stubGlobal('fetch', classifierReturning('{"status":"active","interest":"Láser CO₂ Fraccionado"}'));
+      vi.mocked(q.loadTenantConfig).mockResolvedValue(withSlug());
+      ghl.getContact.mockResolvedValue({ tags: ['paciente:laser-co2'] });
+      await handleInboundWebhook(inbound, agentReplying('¿Primera vez?'));
+      expect(ghl.addContactTags).not.toHaveBeenCalled();
+      expect(q.logBotEvent).not.toHaveBeenCalledWith('client1', 'conv1', 'interest_tagged', expect.anything());
+    });
+
+    it('the contact is fetched on a LATER turn too, and its tags reach the agent as memory', async () => {
+      vi.mocked(q.loadTenantConfig).mockResolvedValue(withSlug());
+      vi.mocked(q.loadRecentMessages).mockResolvedValue([
+        { direction: 'outbound', senderType: 'bot', content: 'Hola', sentAt: '' },
+        { direction: 'inbound', senderType: 'lead', content: 'hola', sentAt: '' },
+      ] as Awaited<ReturnType<typeof q.loadRecentMessages>>);
+      ghl.getContact.mockResolvedValue({ name: 'Ana', tags: ['paciente:botox', 'zona:labios'] });
+      const agent = agentReplying('¿Qué te gustaría?');
+      await handleInboundWebhook(inbound, agent);
+      expect(ghl.getContact).toHaveBeenCalledWith('c1');
+      const call = vi.mocked(agent.generate).mock.calls[0] as unknown as [unknown, { requestContext: { get(k: string): unknown } }];
+      const turn = call[1].requestContext.get('turn') as { contactTags?: string[]; contactName?: string };
+      expect(turn.contactTags).toEqual(['paciente:botox', 'zona:labios']);
+      // The name window is still the opening turns only.
+      expect(turn.contactName).toBeUndefined();
+    });
+
+    it('a classifier opt-out writes bot-opted-out AND no-promos in the one awaited call', async () => {
+      vi.stubGlobal('fetch', classifierReturning('{"status":"opted_out","interest":null}'));
+      vi.mocked(q.loadTenantConfig).mockResolvedValue(withSlug());
+      vi.mocked(q.updateConversationStatus).mockResolvedValue(true);
+      await handleInboundWebhook(inbound, agentReplying('Entendido, no te escribimos más.'));
+      expect(ghl.addContactTags).toHaveBeenCalledWith('c1', ['bot-opted-out', 'no-promos']);
+    });
   });
 });
 

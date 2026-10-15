@@ -158,7 +158,7 @@ The agent runtime is a pnpm workspace package in `workers/` (the monorepo also h
 workers/                       # Mastra + Cloudflare Worker package (@thebotcrew/workers)
   src/
     mastra/index.ts            # Mastra instance: agents + GHL webhook route + CloudflareDeployer
-    core/                      # role interface + registry, tenant resolver, request-context, env (incl. per-tenant AI key resolution), llm-usage (token normalization), followup-playbook + media-assets + followup-steps + playbooks/ (0068–0070: the per-stage ladder, the files a touch delivers, the sequence cursor and the platform presets), nudge-openers (the openers a thread already used, listed to the nudge as banned — business-logic §4.7), prompt-rules (wording bans shared by every role — see business-logic §6c — VOICE_RULE, the voice every role speaks in, §6d, and BUBBLES_RULE, a front-desk turn as one or two short messages, §6e), transcribe + describe-image (a lead's voice note / photo → text at ingest, business-logic §7), types
+    core/                      # role interface + registry, tenant resolver, request-context, env (incl. per-tenant AI key resolution), llm-usage (token normalization), followup-playbook + media-assets + followup-steps + playbooks/ (0068–0070: the per-stage ladder, the files a touch delivers, the sequence cursor and the platform presets), nudge-openers (the openers a thread already used, listed to the nudge as banned — business-logic §4.7), prompt-rules (wording bans shared by every role — see business-logic §6c — VOICE_RULE, the voice every role speaks in, §6d, and BUBBLES_RULE, a front-desk turn as one or two short messages, §6e), lead-memory (0073: the contact's funnel tags → the one prompt line the agent reads; the catalogs' parser), transcribe + describe-image (a lead's voice note / photo → text at ingest, business-logic §7), types
     roles/
       front-desk/              # config (zod), prompt (es template), agent, tools/, evals/
       reactivation/            # text-only follow-up/reactivation agent (no tools)
@@ -367,6 +367,15 @@ supabase/
                                #      queda en el historial con prefijo propio, sin pausa humana y cancelando nudges.
                                #      Migración PRIMERO, Worker después: el Worker nuevo lee variant_ttl_days en loadTenantConfig
                                #      y sin la columna CADA tenant queda mudo. Ver business-logic §1.1 y §3)
+                               # 0073 segment_tags (etiquetas `prefijo:valor`: `interes:` reemplaza a `interes-` (default de
+                               #      plataforma, services[].tagSlug cuando el catálogo de GHL deletrea distinto), tenant_config
+                               #      .segment_tags + zone_catalog/objection_catalog jsonb [{slug,label,hints[]}] (fase B: zona:/
+                               #      objecion: del clasificador), conversations.no_promos + app_set_no_promos_by_contact (switch
+                               #      en los dos sentidos desde el tag `no-promos`; el runner de nudges lo respeta) y los eventos
+                               #      zone_tagged/objection_tagged/segment_note_added/no_promos_on/off. Los tags del embudo
+                               #      (paciente:, cotizo:, valorado, noshow:, fuente:, agendo:) los escribe GHL y el bot SÓLO los lee
+                               #      como memoria del lead. Migración PRIMERO (lee segment_tags en loadTenantConfig); después
+                               #      re-sincronizar HERIBERTO_SERVICES (`sync-heriberto-fixture.mjs`: ganó tagSlug). Ver §9)
   clients.sql, seed-tenants.sql# seeds (run by `supabase db reset` per config.toml)
 sites/                         # client marketing sites: static HTML, no build step, no deps
   _template/                   # starting point for a new client
@@ -660,10 +669,24 @@ cualquier Chrome headless recibe SIGTERM a los ~2 s (ver cabecera de `render-bat
 - Opt-out undo (0045): `opted_out` now mutes the bot like `handed_off`, and since a classifier
   (an LLM) sets it, **removing the `bot-opted-out` tag clears it** — same route/handler. Adding
   the tag opts nobody out; the switch only undoes. See docs/business-logic.md §2a.
-- Interest tags (0058): `interes-<servicio>` per configured service the lead asks about, chosen by the
-  status classifier (not the agent, not a keyword match), validated against `services[].name`
-  (`core/interest.ts`), opt-in per tenant via `tenant_config.interest_tags`. Never removed. See
-  docs/business-logic.md §9.
+- Interest tags (0058, `prefix:value` since 0073): `interes:<slug>` per configured service the lead
+  asks about, chosen by the status classifier (not the agent, not a keyword match), validated against
+  `services[].name` (`core/interest.ts`); the slug is `services[].tagSlug` when the client's GHL
+  catalog spells it differently (`interes:laser-co2`), else the slugged name. Opt-in per tenant via
+  `tenant_config.segment_tags` (or the older `interest_tags`, kept as an alias). Never removed, and
+  NOT written to a contact that already carries `paciente:<slug>`. GHL lowercases tag names and
+  no-ops an existing one; the classifier path still reads the contact's tags each turn and writes
+  everything it owes in ONE call. See docs/business-logic.md §9.
+- Lead memory from tags (0073): the contact's GHL tags are fetched on **every** turn (`TurnContext.contactTags`)
+  and the funnel tags the client's own workflows write — `paciente:`, `cotizo:`, `valorado`, `noshow:`,
+  plus the classifier's `zona:` — reach the agent as one prompt line ("Este contacto: ya es paciente de
+  Botox; le preocupan labios y ojeras.", `core/lead-memory.ts`). Read-only: **nothing in the Worker
+  writes `fuente:`, `agendo:`, `noshow:`, `valorado`, `cotizo:` or `paciente:`** — do not add code that does.
+- `no-promos` (0073): the lead said no to promotions. Written next to `bot-opted-out` on every opt-out
+  (tool and classifier) and alone by the `flagNoPromos` tool when the lead keeps talking; mirrored both
+  ways into `conversations.no_promos` by the tag webhook (it also stamps `marketing_opted_out_at`,
+  the 0051 date — `marketing-opt-out` stays as a read alias). The follow-up runner aborts a nudge for it
+  (`followup_aborted {reason:'no_promos'}`). Removing `bot-opted-out` does NOT remove it: a person does.
 - Cancelled-appointment tag (2026-08-28): `cita-cancelada` is ADDED by `cancelAppointment` and by the
   staff workflow's `cancelled` action, REMOVED by any new booking (both paths). Platform constant
   (`ghl/tags.ts`), no config, no LLM, skipped in demo. A smart-list hook for GHL reactivation

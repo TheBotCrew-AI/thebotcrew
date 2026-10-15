@@ -16,7 +16,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { logBotEvent, updateConversationStatus } from '../../../db/queries.js';
 import { GhlClient } from '../../../ghl/client.js';
-import { STATUS_TAGS } from '../../../ghl/tags.js';
+import { NO_PROMOS_TAG, STATUS_TAGS } from '../../../ghl/tags.js';
 import { queueCapiStatusEvent } from '../../../meta/capi.js';
 import { resolveAgentContext } from './agent-context.js';
 
@@ -88,10 +88,15 @@ export const updateConversationStatusTool = createTool({
     // Mirror the state onto the GHL contact as a tag (transparency / sync).
     // For handed_off this writes `bot-off`, which keeps the bot suppressed AND
     // is visible to the human in GHL. Best-effort — never fail the tool on it.
+    // An opt-out also carries `no-promos` (0073): no more messages includes no offers, and
+    // undoing the opt-out (removing `bot-opted-out`) deliberately leaves this one on.
     const tag = STATUS_TAGS[status as keyof typeof STATUS_TAGS];
     if (tag) {
       try {
-        await new GhlClient(tenant.tenantId).addContactTags(turn.ghlContactId, [tag]);
+        await new GhlClient(tenant.tenantId).addContactTags(
+          turn.ghlContactId,
+          status === 'opted_out' ? [tag, NO_PROMOS_TAG] : [tag],
+        );
       } catch (e) {
         console.error('[updateConversationStatus] tag sync failed:', e instanceof Error ? e.message : String(e));
       }

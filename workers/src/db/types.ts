@@ -43,6 +43,10 @@ export interface TenantConfigRow {
   lead_timezone_enabled: boolean | null;
   /** Interest tags on the GHL contact (0058); false/null = off. */
   interest_tags?: boolean | null;
+  /** Segment tags (0073): zones + objections; implies interest tags. false/null = off. */
+  segment_tags?: boolean | null;
+  zone_catalog?: unknown;
+  objection_catalog?: unknown;
   /** Book/reschedule as appointmentStatus='new' — "No confirmada" (0061); false/null = confirmed. */
   book_unconfirmed?: boolean | null;
   /** Paid confirmation config ({amount, currency, hold_hours, …}, 0062). NULL = off. */
@@ -307,6 +311,11 @@ export type BotEventType =
   /** getAvailability handed a restricted service its prime-time slots (0066): the lead refused
    *  every off-peak option. The key bookAppointment checks before it books a prime slot. */
   | 'prime_time_released'
+  | 'zone_tagged'
+  | 'objection_tagged'
+  | 'segment_note_added'
+  | 'no_promos_on'
+  | 'no_promos_off'
   /** The lead's stage rose ({from, to, source, reasons}, 0067). Shadow data for the playbook. */
   | 'stage_changed';
 

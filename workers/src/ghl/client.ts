@@ -232,6 +232,8 @@ export class GhlClient {
         email?: string;
         attributionSource?: unknown;
         lastAttributionSource?: unknown;
+        /** The contact's GHL tags, as GHL stores them (already lowercase). */
+        tags?: string[];
       }
     | undefined
   > {
@@ -250,6 +252,7 @@ export class GhlClient {
         email?: string;
         attributionSource?: unknown;
         lastAttributionSource?: unknown;
+        tags?: unknown;
       };
     };
     const c = data?.contact;
@@ -265,6 +268,7 @@ export class GhlClient {
       email,
       attributionSource: c.attributionSource,
       lastAttributionSource: c.lastAttributionSource,
+      tags: Array.isArray(c.tags) ? c.tags.filter((t): t is string => typeof t === 'string') : undefined,
     };
   }
 

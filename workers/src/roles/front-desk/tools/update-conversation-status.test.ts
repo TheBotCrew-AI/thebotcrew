@@ -38,6 +38,11 @@ describe('updateConversationStatus tool', () => {
     expect(ghl.addContactTags).toHaveBeenCalledWith('c1', ['bot-off']);
   });
 
+  it('opted_out writes bot-opted-out AND no-promos (0073): no more messages includes no offers', async () => {
+    await run('opted_out');
+    expect(ghl.addContactTags).toHaveBeenCalledWith('c1', ['bot-opted-out', 'no-promos']);
+  });
+
   it('a stated reason is logged as lead_disqualified alongside the status change', async () => {
     await run('standby', 'no agenda citas');
     expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'lead_disqualified', {

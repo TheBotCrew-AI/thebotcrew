@@ -95,9 +95,16 @@ export interface RawTenantConfig {
   /** Render appointment times in the LEAD's timezone (0057). Off by default: right for a
    *  remote service (a video call), wrong for a walk-in business. See core/lead-timezone.ts. */
   leadTimezoneEnabled?: boolean;
-  /** Tag the GHL contact `interes-<servicio>` for each configured service the lead asks
-   *  about (0058). Off by default: with it on the classifier runs on every replied turn. */
+  /** Tag the GHL contact `interes:<servicio>` for each configured service the lead asks
+   *  about (0058). Off by default: with it on the classifier runs on every replied turn.
+   *  Alias of `segmentTags` for the interest half since 0073. */
   interestTags?: boolean;
+  /** Segment tags (0073): zones + objections from the classifier, written as `zona:` /
+   *  `objecion:` and validated against the two catalogs below. Implies interest tags. */
+  segmentTags?: boolean;
+  /** Raw `zone_catalog` / `objection_catalog` jsonb — parsed by core/lead-memory.ts. */
+  zoneCatalog?: unknown;
+  objectionCatalog?: unknown;
   /** Book (and reschedule) GHL appointments as "No confirmada" (0061), leaving the flip to
    *  confirmed to the tenant's GHL confirmation workflow. Off by default. */
   bookUnconfirmed?: boolean;
@@ -199,6 +206,10 @@ export interface TurnContext {
   /** A campaign send (a bulk template, 0072) is in the history window: the lead is answering
    *  it, and the prompt rule makes its offer the one on the table over the thread's past. */
   hasCampaignSends?: boolean;
+  /** The contact's GHL tags at turn start (0073) — the funnel tags the client's workflows
+   *  write (`paciente:`, `cotizo:`, …) become the agent's memory of this lead, and the
+   *  classifier's writes skip what is already there. undefined = the fetch failed. */
+  contactTags?: string[];
 }
 
 /** A turn in our own conversation store, used to rebuild agent history. */

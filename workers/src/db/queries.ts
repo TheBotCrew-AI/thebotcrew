@@ -63,7 +63,7 @@ export async function loadTenantConfig(ghlLocationId: string): Promise<TenantCon
   const { data, error } = await supabase
     .from('tenant_config')
     .select(
-      'business_name, timezone, tone, services, hours, calendars, faq, enabled_roles, prompt_overrides, ai_provider, ai_model, ai_key_ref, awaiting_human_tag, pending_info_tag, follow_up_tiers, follow_up_cadence, follow_up_angles, follow_up_rounds, follow_up_playbook, quiet_hours, booking_horizon_days, booking_min_notice_days, human_pause_minutes, variant_ttl_days, enabled_channels, test_contact_ids, trigger_keywords, demo_on_keywords, demo_off_keywords, demo_prompt_overrides, keyword_variants, prompt_variants, demo_sessions_enabled, meta_capi, lead_timezone_enabled, interest_tags, book_unconfirmed, booking_payment, prime_time,' +
+      'business_name, timezone, tone, services, hours, calendars, faq, enabled_roles, prompt_overrides, ai_provider, ai_model, ai_key_ref, awaiting_human_tag, pending_info_tag, follow_up_tiers, follow_up_cadence, follow_up_angles, follow_up_rounds, follow_up_playbook, quiet_hours, booking_horizon_days, booking_min_notice_days, human_pause_minutes, variant_ttl_days, enabled_channels, test_contact_ids, trigger_keywords, demo_on_keywords, demo_off_keywords, demo_prompt_overrides, keyword_variants, prompt_variants, demo_sessions_enabled, meta_capi, lead_timezone_enabled, interest_tags, segment_tags, zone_catalog, objection_catalog, book_unconfirmed, booking_payment, prime_time,' +
         'tenants!inner(id, client_id, ghl_location_id, is_active)',
     )
     .eq('tenants.ghl_location_id', ghlLocationId)
@@ -134,6 +134,9 @@ export async function loadTenantConfig(ghlLocationId: string): Promise<TenantCon
       aiKeyRef: row.ai_key_ref?.trim() ? row.ai_key_ref.trim() : null,
       leadTimezoneEnabled: row.lead_timezone_enabled === true,
       interestTags: row.interest_tags === true,
+      segmentTags: row.segment_tags === true,
+      zoneCatalog: row.zone_catalog ?? null,
+      objectionCatalog: row.objection_catalog ?? null,
       bookUnconfirmed: row.book_unconfirmed === true,
       bookingPayment: row.booking_payment ?? null,
       primeTime: row.prime_time ?? null,
@@ -1136,6 +1139,34 @@ export async function setMarketingOptOutByContact(ghlContactId: string): Promise
   });
   fail('setMarketingOptOutByContact', error);
   return (data as number | null) ?? 0;
+}
+
+/**
+ * Mirror the `no-promos` contact tag (0073) onto the contact's conversations, both
+ * directions: present → true, absent → false. Returns how many rows changed; 0 on the
+ * repeat webhooks GHL sends for every other tag edit.
+ */
+export async function setNoPromosByContact(ghlContactId: string, on: boolean): Promise<number> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase.rpc('app_set_no_promos_by_contact', {
+    p_ghl_contact_id: ghlContactId,
+    p_on: on,
+  });
+  fail('setNoPromosByContact', error);
+  return (data as number | null) ?? 0;
+}
+
+/** Whether the conversation's contact said no to promotions (0073). The follow-up runner's
+ *  send-time gate; unknown row → false (a missing row is not consent). */
+export async function isNoPromos(conversationId: string): Promise<boolean> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from('conversations')
+    .select('no_promos')
+    .eq('id', conversationId)
+    .maybeSingle();
+  fail('isNoPromos', error);
+  return (data as { no_promos: boolean | null } | null)?.no_promos === true;
 }
 
 /**

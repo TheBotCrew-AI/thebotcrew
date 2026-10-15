@@ -10,6 +10,8 @@ import { BUBBLES_RULE, CLOSED_QUESTION_RULE, VOICE_RULE, WARM_NO_RULE } from '..
 import { CAMPAIGN_MESSAGE_PREFIX, HUMAN_REPLY_PREFIX, PHOTO_DESCRIPTION_PREFIX } from '../../core/model-messages.js';
 import type { DemoHandoff } from '../../core/types.js';
 import { frameTimeZone, zoneLabel, zoneSuffix } from '../../core/lead-timezone.js';
+import { interestServices } from '../../core/interest.js';
+import { leadMemoryLine, parseCatalog, readLeadMemory } from '../../core/lead-memory.js';
 import { zonedWallClockToMs } from './tools/booking-time.js';
 import { earliestBookableMs, latestBookableMs } from './tools/booking-window.js';
 import { openDaysEs, openWeekdays, WEEKDAY_LABEL } from './tools/open-days.js';
@@ -113,6 +115,7 @@ IMPORTANTE: Si la conversación llega a un punto terminal y NO llamas updateConv
 
 - standby: el lead no califica o no está listo. Llama updateConversationStatus(standby) → luego escribe tu cierre amable.
 - opted_out: el lead dijo explícitamente que no quiere más mensajes. Llama updateConversationStatus(opted_out) → luego agradece en una línea.
+  Distinto: si dice que no quiere PROMOCIONES u ofertas pero sigue conversando (quiere agendar, pregunta algo), NO es opted_out — llama flagNoPromos y sigue atendiéndolo con normalidad.
 - completed: el lead agendó o completó el proceso. Llama updateConversationStatus(completed) → luego confirma el siguiente paso.
 - handed_off: derivado a un agente humano. Llama updateConversationStatus(handed_off) → luego avisa al lead.
 
@@ -257,6 +260,7 @@ export function buildFrontDeskInstructions(
   hasHumanReplies?: boolean,
   leadTimezone?: string,
   hasCampaignSends?: boolean,
+  contactTags?: readonly string[],
 ): string {
   // Override precedence: demo persona > pinned campaign variant (merged over base) > base.
   const { overrides, usingDemo } = resolveEffectiveOverrides(config, activeRole, promptVariant);
@@ -651,6 +655,21 @@ Un mensaje del historial que empieza con "${CAMPAIGN_MESSAGE_PREFIX}" lo mandó 
 - Si contesta pidiendo la cita, la consulta o la valoración (o aprieta el botón del mensaje), NO es un primer mensaje: ya sabe qué quiere y ya lo pidió. Preséntate en media línea si no lo has hecho en este hilo y pasa en ese MISMO turno a la secuencia de agendar${bookingEnabled ? ' — llama getAvailability y ofrécele dos horarios concretos para el tratamiento que nombra el mensaje de campaña' : ''}. No le preguntes qué tratamiento le interesa ni qué le gustaría mejorar: el mensaje de campaña ya lo dice.`
     : '';
 
+  // Lead memory (0073): what the business already knows about this contact, read off the
+  // GHL tags its own workflows write (`paciente:`, `cotizo:`, `valorado`, `noshow:`) plus the
+  // classifier's `zona:`. One line, facts only — the agent must not re-sell a treatment the
+  // contact already gets, nor ask what they want to improve when the zones are on record.
+  // Suppressed in demo mode: the roleplay's customer is fictional, the tags are the lead's.
+  const memoryLine = usingDemo
+    ? ''
+    : leadMemoryLine(readLeadMemory(contactTags, interestServices(config.services), parseCatalog(config.zoneCatalog)));
+  const leadMemorySection = memoryLine
+    ? `\n\n# Lo que ya sabemos de este contacto
+${memoryLine}
+- Úsalo: no le ofrezcas como novedad un tratamiento del que ya es paciente; si ya se le cotizó algo, retómalo; si una zona le preocupa, habla de esa zona sin volver a preguntar qué quiere mejorar.
+- No le recites esta lista ni le digas "veo que…": son datos para ti, no un mensaje para él.`
+    : '';
+
   // Remote-service tenants only (lead_timezone_enabled): the lead may read a different clock
   // than the calendar. Three states — located in another zone, located in the same zone, not
   // located at all — and in none of them does the model convert an hour itself: the tools
@@ -678,7 +697,7 @@ No sabemos en qué zona horaria está este lead, y los horarios se le muestran e
 Hoy es ${nowReadable} (zona horaria: ${config.timezone}).
 Formato ISO para herramientas: ${nowIso}.
 NUNCA calcules tú el día de la semana de una fecha — usa el día que ya viene en los
-horarios de getAvailability (campo "label") o la fecha de hoy de arriba.${horizonLine}${leadTimezoneSection}${campaignSection}
+horarios de getAvailability (campo "label") o la fecha de hoy de arriba.${horizonLine}${leadTimezoneSection}${campaignSection}${leadMemorySection}
 
 # Tono y formato
 ${toneBody}

@@ -1964,13 +1964,57 @@ changes ship with evals (§6c) — the report drafts the text, a person decides.
 MADI report's acceptance test was the manual tracker it replaced
 (`docs/madi-info-gaps.md`): it must rediscover the open gaps and none of the closed ones.
 
-## 9. Interest tags — which treatment the lead asked about (0058)
+## 9. Segment tags — what the lead asked about, in the client's `prefix:value` scheme (0058, 0073)
 
-A tenant with `tenant_config.interest_tags = true` gets one **`interes-<servicio>`** tag on the
-GHL contact per configured service the lead shows interest in (`interes-botox`,
-`interes-acido-hialuronico`, `interes-laser-co2-fraccionado` — slug = the `services[].name`,
-lowercased, accents stripped, `₂` → `2`, non-alphanumerics → `-`). The point is GHL smart lists
-and campaigns per treatment; nothing in the Worker reads the tags back.
+A tenant with `tenant_config.segment_tags = true` (or the older `interest_tags`, kept as an alias)
+gets one **`interes:<slug>`** tag on the GHL contact per configured service the lead shows
+interest in (`interes:botox`, `interes:acido-hialuronico`). The slug is `services[].tagSlug` when
+the client's GHL catalog spells it differently (Heriberto's laser is `interes:laser-co2`, not what
+"Láser CO₂ Fraccionado" slugs to), else the name lowercased, accents stripped, `₂` → `2`,
+non-alphanumerics → `-`. The point is GHL smart lists and campaigns per treatment. Verified
+2026-10-14 on Heriberto's test contact: GHL accepts `:` in a tag name, **lowercases it**, and
+no-ops a tag the contact already has (`tagsAdded` lists only the new ones). The tag is
+**skipped for a contact already carrying `paciente:<slug>`** — a patient of botox is not
+"interested in botox" — and the classifier path writes everything it owes in **one** call,
+leaving out tags the contact already carries (§9.1).
+
+### 9.1 The contact's tags as the lead's memory (0073, read-only)
+
+The client's own GHL workflows write the funnel tags — `paciente:<slug>`, `cotizo:<slug>`,
+`valorado`, `noshow:<…>`, `fuente:<…>`, `agendo:<…>` — and **the Worker never writes any of them**
+(no code may). It reads them: the contact is fetched on **every** turn (one GHL call inside the DO,
+far from the 100 / 10 s per-location limit; on failure the turn runs with no memory and the writes
+go out without dedupe, which GHL no-ops anyway). `core/lead-memory.ts` turns `paciente:`, `cotizo:`,
+`valorado`, `noshow:` and the classifier's `zona:` into one prompt line under
+`# Lo que ya sabemos de este contacto` — "Este contacto: ya es paciente de Botox; se le cotizó Ácido
+Hialurónico; le preocupan labios y ojeras." — with the rule not to re-sell a treatment the contact
+already gets, to pick up what was quoted, and to talk about the zone on record instead of asking
+what they want to improve. Suppressed in demo mode.
+
+### 9.2 `no-promos` (0073)
+
+The lead does not want promotions. Three writers, one reader:
+- `updateConversationStatus(opted_out)` (tool) and the classifier's `opted_out` both write
+  `[bot-opted-out, no-promos]` — no more messages includes no offers;
+- `flagNoPromos` (tool) writes `no-promos` alone when the lead keeps talking ("no me manden
+  promos, pero sí quiero agendar"): the conversation stays `active`, the bot keeps answering;
+- the tag webhook mirrors presence/absence into `conversations.no_promos`
+  (`app_set_no_promos_by_contact`, both directions, `no_promos_on/off` events) and stamps
+  `marketing_opted_out_at` (0051) the first time — `marketing-opt-out` stays as a read alias of the
+  same consent.
+The follow-up runner checks the column at send time and aborts (`followup_aborted
+{reason:'no_promos'}`): a nudge is an offer. Removing `bot-opted-out` (the opt-out undo, §2a) does
+**not** remove `no-promos`; a person removes it in GHL, and the webhook clears the column.
+
+### 9.3 Catalogs (0073, phase B pending)
+
+`tenant_config.zone_catalog` and `objection_catalog` are `[{slug, label, hints[]}]` lists seeded
+for Heriberto (21 zones, 6 objections; `otro` is implicit). Phase B extends the classifier with
+`zones[]` (0–3, said, not inferred) and `objection` (max 1, a reason given for not booking this
+turn), written as `zona:<slug>` / `objecion:<slug>`; anything outside the catalog maps to `otro`
+plus a contact note with the lead's verbatim phrase for the weekly review. The system never grows a
+catalog — a person does, after reviewing the `otro` notes. `objecion:` is removed by the client's
+GHL workflow when the lead books; `zona:` is never removed.
 
 **Who decides.** Not the agent (a side-effect-only tool is exactly the kind OpenAI models skip —
 the `updateContactName` lesson) and not a keyword match (Leo's call, 2026-08-28: "para 3 está
@@ -1999,5 +2043,7 @@ the event repeats if the lead names the same treatment again, and GHL no-ops an 
 Tags are never removed — interest is history, and the client's campaigns decide what to do
 with it.
 
-Enable per tenant: `update tenant_config set interest_tags = true where tenant_id = '…'`.
-First tenant: Dr. Heriberto Valdivia (2026-08-28).
+Enable per tenant: `update tenant_config set segment_tags = true where tenant_id = '…'`
+(`interest_tags = true` still works). First tenant: Dr. Heriberto Valdivia (2026-08-28; moved to
+`interes:` + catalogs 2026-10-14, migration 0073). His older `interes-*` tags stay on the contacts
+that carry them — they are history, not rewritten.

@@ -25,6 +25,11 @@
  * one-directional: the lead's "stop" is never something an operator can assert on
  * their behalf, only something they can decide was misread.
  *
+ * `no-promos` (global, 0073) — the lead said no to promotions. Mirrored both ways
+ * into `conversations.no_promos` (present → true, absent → false), which the
+ * follow-up runner honours. Also stamps `marketing_opted_out_at` like the tag below:
+ * it is the same consent, in the client's newer tag scheme.
+ *
  * `marketing-opt-out` (global, 0051) — the odd one out: it changes no state at
  * all. The contact left the GHL marketing campaigns, which we don't send and the
  * bot has no part in, so all this does is stamp the date on their conversations
@@ -42,8 +47,9 @@ import {
   setAwaitingHumanByContact,
   setBotOffByContact,
   setMarketingOptOutByContact,
+  setNoPromosByContact,
 } from '../db/queries.js';
-import { BOT_OFF_TAG, MARKETING_OPT_OUT_TAG, OPTED_OUT_TAG } from '../ghl/tags.js';
+import { BOT_OFF_TAG, MARKETING_OPT_OUT_TAG, NO_PROMOS_TAG, OPTED_OUT_TAG } from '../ghl/tags.js';
 import type { GhlContactTagWebhook } from '../ghl/types.js';
 import { parseContactTagWebhook } from '../ghl/webhook.js';
 import type { WebhookResult } from './webhook-handler.js';
@@ -128,8 +134,25 @@ export async function handleTagWebhook(
   // a date stamp must not make GHL retry the kill-switch half of this webhook. Fired
   // unconditionally while the tag is present because the RPC is write-once, so the
   // repeat calls (GHL sends the full tag list on ANY tag change) stamp nothing.
+  // `no-promos` (0073): a real switch, both directions, same non-fatal treatment.
+  const noPromos = parsed.tags.includes(NO_PROMOS_TAG);
+  let noPromosAffected = 0;
+  try {
+    noPromosAffected = await setNoPromosByContact(parsed.contactId, noPromos);
+    if (noPromosAffected > 0) {
+      await logBotEvent(tenant.clientId, '', noPromos ? 'no_promos_on' : 'no_promos_off', {
+        contactId: parsed.contactId,
+        affected: noPromosAffected,
+        source: 'tag',
+      });
+      console.log(`[tags] contact=${parsed.contactId} ${NO_PROMOS_TAG}=${noPromos} affected=${noPromosAffected}`);
+    }
+  } catch (e) {
+    console.error('[tags] setNoPromosByContact failed:', e instanceof Error ? e.message : String(e));
+  }
+
   let marketingOptOut = 0;
-  if (parsed.tags.includes(MARKETING_OPT_OUT_TAG)) {
+  if (parsed.tags.includes(MARKETING_OPT_OUT_TAG) || noPromos) {
     try {
       marketingOptOut = await setMarketingOptOutByContact(parsed.contactId);
       if (marketingOptOut > 0) {
@@ -140,5 +163,5 @@ export async function handleTagWebhook(
     }
   }
 
-  return { status: 200, body: { ok: true, botOff, affected, awaitingAffected, optOutCleared, marketingOptOut } };
+  return { status: 200, body: { ok: true, botOff, affected, awaitingAffected, optOutCleared, marketingOptOut, noPromosAffected } };
 }

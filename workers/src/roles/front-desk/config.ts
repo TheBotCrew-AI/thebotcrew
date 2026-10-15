@@ -16,6 +16,9 @@ export const serviceSchema = z.object({
   description: z.string().optional(),
   /** Per-service hold amount in pesos (0062); overrides bookingPayment.amount for this service. */
   deposit: z.number().positive().optional(),
+  /** The value after `interes:` / `paciente:` / `cotizo:` for this service (0073), when the
+   *  tag the client created in GHL differs from the slugged name ("laser-co2"). */
+  tagSlug: z.string().optional(),
 });
 
 /**
@@ -219,6 +222,8 @@ export const frontDeskConfigSchema = z.object({
   bookingPayment: bookingPaymentSchema.nullable().default(null),
   /** Prime time reserved for paying services (0066): null = off. Already validated by parsePrimeTime. */
   primeTime: primeTimeSchema.nullable().default(null),
+  /** Segment tags (0073): the zone catalog, raw — parsed by core/lead-memory.ts where it is read. */
+  zoneCatalog: z.unknown().nullable().default(null),
 });
 
 export type FrontDeskConfig = z.infer<typeof frontDeskConfigSchema>;
@@ -279,6 +284,7 @@ export function parseFrontDeskConfig(raw: RawTenantConfig): FrontDeskConfig {
     bookUnconfirmed: raw.bookUnconfirmed === true,
     bookingPayment: parseBookingPayment(raw.bookingPayment),
     primeTime: parsePrimeTime(raw.primeTime),
+    zoneCatalog: raw.zoneCatalog ?? null,
   });
 }
 

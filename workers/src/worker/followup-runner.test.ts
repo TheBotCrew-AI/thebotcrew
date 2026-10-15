@@ -89,6 +89,7 @@ beforeEach(() => {
   });
   vi.mocked(findUpcomingAppointment).mockResolvedValue(null);
   vi.mocked(q.isBotSuppressed).mockResolvedValue(false);
+  vi.mocked(q.isNoPromos).mockResolvedValue(false);
   vi.mocked(agent.generate).mockResolvedValue({ text: 'te esperamos 👋' } as never);
   ghl.sendMessage.mockResolvedValue({ ghlMessageId: 'g1' });
   ghl.addContactTags.mockResolvedValue(undefined);
@@ -540,6 +541,15 @@ describe('runPendingFollowUps — send-time gates and truthful delivery (0067)',
     expect(agent.generate).not.toHaveBeenCalled();
     expect(ghl.sendMessage).not.toHaveBeenCalled();
     expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'followup_aborted', expect.objectContaining({ reason: 'human_active' }));
+    expect(res.skipped).toBe(1);
+  });
+
+  it('a contact tagged no-promos aborts the nudge — a nudge is an offer (0073)', async () => {
+    vi.mocked(q.isNoPromos).mockResolvedValue(true);
+    const res = await runPendingFollowUps(agent);
+    expect(agent.generate).not.toHaveBeenCalled();
+    expect(ghl.sendMessage).not.toHaveBeenCalled();
+    expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'followup_aborted', expect.objectContaining({ reason: 'no_promos' }));
     expect(res.skipped).toBe(1);
   });
 

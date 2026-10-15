@@ -8,7 +8,7 @@ vi.mock('../ghl/webhook.js');
 import { resolveTenant } from '../core/tenant.js';
 import * as q from '../db/queries.js';
 import { parseContactTagWebhook } from '../ghl/webhook.js';
-import { BOT_OFF_TAG, MARKETING_OPT_OUT_TAG, OPTED_OUT_TAG } from '../ghl/tags.js';
+import { BOT_OFF_TAG, MARKETING_OPT_OUT_TAG, NO_PROMOS_TAG, OPTED_OUT_TAG } from '../ghl/tags.js';
 import { handleTagWebhook } from './tag-handler.js';
 
 const tenant = { tenantId: 't1', clientId: 'client1', ghlLocationId: 'loc1' } as unknown as TenantContext;
@@ -21,6 +21,7 @@ beforeEach(() => {
   vi.mocked(q.setAwaitingHumanByContact).mockResolvedValue(0);
   vi.mocked(q.clearOptedOutByContact).mockResolvedValue(0);
   vi.mocked(q.setMarketingOptOutByContact).mockResolvedValue(0);
+  vi.mocked(q.setNoPromosByContact).mockResolvedValue(0);
   vi.mocked(q.logBotEvent).mockResolvedValue(undefined);
 });
 
@@ -289,6 +290,56 @@ describe('handleTagWebhook', () => {
       expect(q.setBotOffByContact).toHaveBeenCalledWith('c1', false);
       expect(q.clearOptedOutByContact).toHaveBeenCalledWith('c1');
       expect(res.body).toMatchObject({ marketingOptOut: 1 });
+    });
+  });
+
+  describe('the no-promos tag (0073)', () => {
+    // A real switch, both directions: the follow-up runner reads the mirrored column.
+    it('tag present → mirrors true, stamps the marketing date, logs no_promos_on', async () => {
+      vi.mocked(parseContactTagWebhook).mockReturnValue({ locationId: 'loc1', contactId: 'c1', tags: [NO_PROMOS_TAG] });
+      vi.mocked(q.setNoPromosByContact).mockResolvedValue(1);
+      vi.mocked(q.setMarketingOptOutByContact).mockResolvedValue(1);
+
+      const res = await handleTagWebhook({} as never);
+
+      expect(q.setNoPromosByContact).toHaveBeenCalledWith('c1', true);
+      expect(q.setMarketingOptOutByContact).toHaveBeenCalledWith('c1');
+      expect(q.logBotEvent).toHaveBeenCalledWith('client1', '', 'no_promos_on', expect.objectContaining({ contactId: 'c1', source: 'tag' }));
+      expect(res.body).toMatchObject({ noPromosAffected: 1, marketingOptOut: 1 });
+    });
+
+    it('tag absent → mirrors false (a person removing it is the undo), date untouched', async () => {
+      vi.mocked(parseContactTagWebhook).mockReturnValue({ locationId: 'loc1', contactId: 'c1', tags: ['bot-standby'] });
+      vi.mocked(q.setNoPromosByContact).mockResolvedValue(1);
+
+      await handleTagWebhook({} as never);
+
+      expect(q.setNoPromosByContact).toHaveBeenCalledWith('c1', false);
+      expect(q.setMarketingOptOutByContact).not.toHaveBeenCalled();
+      expect(q.logBotEvent).toHaveBeenCalledWith('client1', '', 'no_promos_off', expect.anything());
+    });
+
+    it('removing bot-opted-out alone leaves no-promos on: the undo is for the mute, not the consent', async () => {
+      vi.mocked(parseContactTagWebhook).mockReturnValue({ locationId: 'loc1', contactId: 'c1', tags: [NO_PROMOS_TAG] });
+      vi.mocked(q.clearOptedOutByContact).mockResolvedValue(1);
+
+      await handleTagWebhook({} as never);
+
+      expect(q.clearOptedOutByContact).toHaveBeenCalledWith('c1');
+      expect(q.setNoPromosByContact).toHaveBeenCalledWith('c1', true);
+    });
+
+    it('no rows changed (the repeat webhook) → no event', async () => {
+      vi.mocked(parseContactTagWebhook).mockReturnValue({ locationId: 'loc1', contactId: 'c1', tags: [NO_PROMOS_TAG] });
+      await handleTagWebhook({} as never);
+      expect(q.logBotEvent).not.toHaveBeenCalledWith('client1', '', 'no_promos_on', expect.anything());
+    });
+
+    it('a failure here does not 500 the webhook', async () => {
+      vi.mocked(q.setNoPromosByContact).mockRejectedValue(new Error('db down'));
+      const res = await handleTagWebhook({} as never);
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({ ok: true, noPromosAffected: 0 });
     });
   });
 });
