@@ -78,9 +78,10 @@ import { parseAttachments, parseInboundWebhook } from '../ghl/webhook.js';
 import { transcribeAudio } from '../core/transcribe.js';
 import { describeImages } from '../core/describe-image.js';
 import { phoneFromFormText } from '../core/form-phone.js';
-import { demoEndTag, NO_PROMOS_TAG, STATUS_TAGS } from '../ghl/tags.js';
+import { demoEndTag, NO_PROMOS_TAG, OBJECTION_TAG_PREFIX, STATUS_TAGS, ZONE_TAG_PREFIX } from '../ghl/tags.js';
 import { interestPromptAddendum, interestServices, interestTagFor, matchInterest } from '../core/interest.js';
-import { isPatientOf } from '../core/lead-memory.js';
+import { isPatientOf, parseCatalog, type CatalogEntry } from '../core/lead-memory.js';
+import { matchCatalog, matchZones, OTHER_SLUG, segmentPromptAddendum } from '../core/segments.js';
 import { raiseStage, stageFloor, stagePromptAddendum, type LeadStage } from '../core/stage.js';
 import type { GhlInboundWebhook, InboundAttachment, ParsedInbound } from '../ghl/types.js';
 import { DEFAULT_MODEL, DEFAULT_PROVIDER, FRONT_DESK_ROLE } from '../roles/front-desk/index.js';
@@ -245,7 +246,19 @@ function typingDelayMs(text: string): number {
 
 // `services` is passed ONLY for tenants with interest tags on (0058): the prompt every
 // other tenant sends stays byte-identical to what it was before that feature.
-const CLASSIFY_PROMPT = (leadMessage: string, botReply: string, services?: string[], withStage = false) =>
+/** Segment tags (0073): the catalogs the classifier picks zones/objections from. */
+export interface SegmentCatalogs {
+  zones: CatalogEntry[];
+  objections: CatalogEntry[];
+}
+
+const CLASSIFY_PROMPT = (
+  leadMessage: string,
+  botReply: string,
+  services?: string[],
+  withStage = false,
+  segments?: SegmentCatalogs,
+) =>
   `Clasifica el estado de esta conversación de ventas tras el último intercambio.
 
 Lead dijo: "${leadMessage.slice(0, 200)}"
@@ -257,7 +270,13 @@ Elige UNO:
 - opted_out: el lead dijo EXPLÍCITAMENTE que no quiere más mensajes, que pare, que no le interesa, o pidió que no lo contacten. Requiere una expresión directa de rechazo, no solo no calificar.
 - completed: el lead completó el proceso (agendó, se registró, pagó).
 
-Responde SOLO con JSON: {"status":"active"} o {"status":"standby"} o {"status":"opted_out"} o {"status":"completed"}. Sin explicaciones.${services?.length ? interestPromptAddendum(services) : ''}${withStage ? stagePromptAddendum() : ''}`;
+Responde SOLO con JSON: {"status":"active"} o {"status":"standby"} o {"status":"opted_out"} o {"status":"completed"}. Sin explicaciones.${
+  services?.length
+    ? segments
+      ? segmentPromptAddendum(services, segments.zones, segments.objections)
+      : interestPromptAddendum(services)
+    : ''
+}${withStage ? stagePromptAddendum() : ''}`;
 
 const VALID_STATUSES = new Set(['active', 'standby', 'opted_out', 'completed']);
 
@@ -268,8 +287,11 @@ interface ClassifyResult {
   interest: string | null;
   /** The classifier's read of the lead's stage (0067), raw — only ever RAISES the rules' floor. */
   stage: unknown;
+  /** Segment tags (0073): validated catalog slugs (or `otro`); empty / null when off. */
+  zones: string[];
+  objection: string | null;
 }
-const NO_CLASSIFY: ClassifyResult = { status: null, interest: null, stage: null };
+const NO_CLASSIFY: ClassifyResult = { status: null, interest: null, stage: null, zones: [], objection: null };
 
 /**
  * Provider, model and key for this tenant's model calls. The tenant's own key when it
@@ -303,18 +325,21 @@ function resolveTurnLlm(tenant: TenantContext, parsed: ParsedInbound) {
  * old short-circuit never looked. The status half keeps its rule: on a turn whose reply
  * carries a question the status is ignored, exactly as if the call had not run.
  */
-async function classifyConversationOutcome(
+export async function classifyConversationOutcome(
   leadMessage: string,
   botReply: string,
   llm: AuxLlmCall,
   services?: string[],
   withStage = false,
+  segments?: SegmentCatalogs,
 ): Promise<ClassifyResult> {
   const wantStatus = !botReply.includes('?'); // has a question → still active
   const wantInterest = !!services?.length;
   if (!wantStatus && !wantInterest) return NO_CLASSIFY;
-  // The stage question (0067) rides on a call that already runs — it never adds one.
-  const prompt = CLASSIFY_PROMPT(leadMessage, botReply, wantInterest ? services : undefined, withStage);
+  // The stage question (0067) and the segment questions (0073) ride on a call that
+  // already runs — they never add one.
+  const wantSegments = wantInterest && !!segments;
+  const prompt = CLASSIFY_PROMPT(leadMessage, botReply, wantInterest ? services : undefined, withStage, wantSegments ? segments : undefined);
 
   try {
     let raw: string;
@@ -329,7 +354,8 @@ async function classifyConversationOutcome(
         },
         body: JSON.stringify({
           model: llm.model,
-          max_tokens: 32,
+          // The segment answer carries an array; the bare status fits in 32.
+          max_tokens: wantSegments ? 120 : 32,
           messages: [{ role: 'user', content: prompt }],
         }),
       });
@@ -356,15 +382,18 @@ async function classifyConversationOutcome(
       raw = data.choices[0]?.message?.content ?? '';
     }
 
-    const parsed = JSON.parse(raw) as { status?: string; interest?: unknown; stage?: unknown };
+    const parsed = JSON.parse(raw) as { status?: string; interest?: unknown; stage?: unknown; zones?: unknown; objection?: unknown };
     // Only a CONFIGURED service name gets through — the model picks from a closed list.
     const interest = wantInterest ? matchInterest(services!, parsed.interest) : null;
     const stage = withStage ? parsed.stage ?? null : null;
+    // Same closed-list rule for the catalogs, with `otro` as the one escape hatch.
+    const zones = wantSegments ? matchZones(segments!.zones, parsed.zones) : [];
+    const objection = wantSegments ? matchCatalog(segments!.objections, parsed.objection) : null;
     const status = parsed.status;
     if (!wantStatus || !status || !VALID_STATUSES.has(status) || status === 'active') {
-      return { status: null, interest, stage };
+      return { status: null, interest, stage, zones, objection };
     }
-    return { status: status as Exclude<ConversationStatus, 'active' | 'handed_off'>, interest, stage };
+    return { status: status as Exclude<ConversationStatus, 'active' | 'handed_off'>, interest, stage, zones, objection };
   } catch (err) {
     console.error('[classify] failed:', err instanceof Error ? err.message : String(err));
     return NO_CLASSIFY; // fail safe: never block the main flow
@@ -1289,9 +1318,12 @@ export async function runAgentTurn({
   // `status_changed completed→completed` on every booked lead. Skipped entirely unless the
   // call is still needed for interest tags, in which case only its status is ignored.
   if (agentSetStatus) console.log(`[classify] status skipped: the agent set it conv=${parsed.conversationId}`);
+  const segmentCatalogs: SegmentCatalogs | undefined = tenant.config.segmentTags
+    ? { zones: parseCatalog(tenant.config.zoneCatalog), objections: parseCatalog(tenant.config.objectionCatalog) }
+    : undefined;
   const classified = activeRole === 'demo' || forcedReply || endedByBooking || (agentSetStatus && !interestServiceNames)
     ? NO_CLASSIFY
-    : await classifyConversationOutcome(parsed.text, reply, aux, interestServiceNames, true);
+    : await classifyConversationOutcome(parsed.text, reply, aux, interestServiceNames, true, segmentCatalogs);
   const outcome = agentSetStatus ? undefined : classified.status;
   console.log(`[classify] outcome=${outcome ?? 'null (active or error)'} interest=${classified.interest ?? 'null'}`);
   if (classified.interest) {
@@ -1307,6 +1339,35 @@ export async function runAgentTurn({
       tagsToAdd.add(tag);
       void logBotEvent(tenant.clientId, parsed.conversationId, 'interest_tagged', { service: classified.interest, tag });
     }
+  }
+  // Segment tags (0073): `zona:<slug>` per zone the lead named, `objecion:<slug>` for the
+  // reason they gave not to book. `otro` is tagged too (so the smart list catches it) and
+  // ALSO leaves the lead's words as a contact note — the weekly review that grows the
+  // catalog reads those notes. Deduped against the contact like every tag this turn.
+  const otherNotes: string[] = [];
+  for (const slug of classified.zones) {
+    const tag = `${ZONE_TAG_PREFIX}${slug}`;
+    if (!alreadyTagged(tag)) {
+      tagsToAdd.add(tag);
+      void logBotEvent(tenant.clientId, parsed.conversationId, 'zone_tagged', { zone: slug, tag });
+    }
+    if (slug === OTHER_SLUG) otherNotes.push('zona');
+  }
+  if (classified.objection) {
+    const tag = `${OBJECTION_TAG_PREFIX}${classified.objection}`;
+    if (!alreadyTagged(tag)) {
+      tagsToAdd.add(tag);
+      void logBotEvent(tenant.clientId, parsed.conversationId, 'objection_tagged', { objection: classified.objection, tag });
+    }
+    if (classified.objection === OTHER_SLUG) otherNotes.push('objeción');
+  }
+  if (otherNotes.length > 0) {
+    const quote = parsed.text.trim().slice(0, 500);
+    const note = `[${otherNotes.join(' + ')}: otro] Lead dijo: «${quote}»`;
+    ghl.addContactNote(parsed.contactId, note).catch((e: unknown) =>
+      console.error('[tags] segment note failed:', e instanceof Error ? e.message : String(e)),
+    );
+    void logBotEvent(tenant.clientId, parsed.conversationId, 'segment_note_added', { kinds: otherNotes, quote });
   }
   if (outcome) {
     try {

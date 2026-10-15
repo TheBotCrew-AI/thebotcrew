@@ -132,6 +132,25 @@ describe('GhlClient — getContact / updateContactName', () => {
     await expect(new GhlClient().updateContactName('c1', { firstName: 'A', lastName: '' })).rejects.toThrow(/updateContactName failed 401/);
   });
 
+  it('addContactNote POSTs the body to /contacts/:id/notes (0073)', async () => {
+    const f = stubFetch();
+    f.mockResolvedValue(ok({}));
+    await new GhlClient().addContactNote('c1', '[zona: otro] Lead dijo: «la papada»');
+    expect(String(f.mock.calls[0]![0])).toBe('https://api.ghl/contacts/c1/notes');
+    expect((f.mock.calls[0]![1] as RequestInit).method).toBe('POST');
+    expect(bodyOf(f)).toEqual({ body: '[zona: otro] Lead dijo: «la papada»' });
+  });
+
+  it('addContactNote throws on a non-ok response', async () => {
+    stubFetch().mockResolvedValue(err(403));
+    await expect(new GhlClient().addContactNote('c1', 'x')).rejects.toThrow(/addContactNote failed 403/);
+  });
+
+  it('getContact returns the contact tags, dropping non-strings', async () => {
+    stubFetch().mockResolvedValue(ok({ contact: { name: 'Ana', tags: ['paciente:botox', 3, 'zona:labios'] } }));
+    expect((await new GhlClient().getContact('c1'))?.tags).toEqual(['paciente:botox', 'zona:labios']);
+  });
+
   it('updateContactTimezone PUTs only the timezone field', async () => {
     const f = stubFetch();
     f.mockResolvedValue(ok({}));

@@ -147,6 +147,27 @@ export class GhlClient {
     return resolvedContactId ? { ghlMessageId, resolvedContactId } : { ghlMessageId };
   }
 
+  /**
+   * Leave a note on a GHL contact (0073): the lead's own words behind a `zona:otro` /
+   * `objecion:otro`, for the weekly catalog review. Requires the `contacts.write` scope.
+   */
+  async addContactNote(contactId: string, body: string): Promise<void> {
+    const token = await this.getAccessToken();
+    const res = await fetch(`${this.apiBase}/contacts/${contactId}/notes`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Version: '2021-07-28',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ body }),
+    });
+    if (!res.ok) {
+      const detail = await res.text();
+      throw new Error(`[ghl] addContactNote failed ${res.status}: ${detail}`);
+    }
+  }
+
   /** Add tags to a GHL contact. Requires the `contacts.write` scope. */
   async addContactTags(contactId: string, tags: string[]): Promise<void> {
     await this.contactTags('POST', contactId, tags);

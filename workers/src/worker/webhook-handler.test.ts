@@ -11,6 +11,7 @@ const ghl = {
   updateContactTimezone: vi.fn(),
   sendMessage: vi.fn(),
   addContactTags: vi.fn(),
+  addContactNote: vi.fn(),
 };
 vi.mock('../ghl/client.js', () => ({ GhlClient: vi.fn(() => ghl) }));
 vi.mock('../core/env.js');
@@ -100,6 +101,7 @@ beforeEach(() => {
   ghl.updateContactTimezone.mockResolvedValue(undefined);
   ghl.sendMessage.mockResolvedValue({ ghlMessageId: 'out-ghl-1' });
   ghl.addContactTags.mockResolvedValue(undefined);
+  ghl.addContactNote.mockResolvedValue(undefined);
 });
 
 describe('splitIntoMessages', () => {
@@ -2347,6 +2349,75 @@ describe('handleInboundWebhook — interest tags (0058)', () => {
       expect(turn.contactTags).toEqual(['paciente:botox', 'zona:labios']);
       // The name window is still the opening turns only.
       expect(turn.contactName).toBeUndefined();
+    });
+
+    const ZONES = [
+      { slug: 'frente', label: 'frente', hints: [] },
+      { slug: 'entrecejo', label: 'entrecejo', hints: ['el 11'] },
+    ];
+    const OBJECTIONS = [{ slug: 'precio', label: 'precio', hints: ['está caro'] }];
+    const withCatalogs = () =>
+      tenant({ config: { ...withSlug().config, zoneCatalog: ZONES, objectionCatalog: OBJECTIONS } });
+
+    it('segment_tags: the prompt carries the catalogs (slug + hints) and the four-field JSON', async () => {
+      const fetchSpy = classifierReturning('{"status":"active","interest":null,"zones":[],"objection":null}');
+      vi.stubGlobal('fetch', fetchSpy);
+      vi.mocked(q.loadTenantConfig).mockResolvedValue(withCatalogs());
+      await handleInboundWebhook(inbound, agentReplying('¿Qué te gustaría mejorar?'));
+      const prompt = classifierPrompt(fetchSpy);
+      expect(prompt).toContain('- entrecejo (el 11)');
+      expect(prompt).toContain('- precio (está caro)');
+      expect(prompt).toContain('"zones":[...]');
+      expect(ghl.addContactTags).not.toHaveBeenCalled();
+      expect(ghl.addContactNote).not.toHaveBeenCalled();
+    });
+
+    it('interest_tags only (the alias): the old interest addendum, no catalogs, no zones parsed', async () => {
+      const fetchSpy = classifierReturning('{"status":"active","interest":"Botox","zones":["frente"],"objection":"precio"}');
+      vi.stubGlobal('fetch', fetchSpy);
+      vi.mocked(q.loadTenantConfig).mockResolvedValue(
+        tenant({ config: { ...withCatalogs().config, segmentTags: false, interestTags: true } }),
+      );
+      await handleInboundWebhook(inbound, agentReplying('¿Primera vez?'));
+      expect(classifierPrompt(fetchSpy)).not.toContain('"zones"');
+      expect(ghl.addContactTags).toHaveBeenCalledWith('c1', ['interes:botox']);
+    });
+
+    it('zones and the objection become zona:/objecion: tags in the same batched write, with events', async () => {
+      vi.stubGlobal('fetch', classifierReturning('{"status":"active","interest":"Botox","zones":["frente","Entrecejo"],"objection":"precio"}'));
+      vi.mocked(q.loadTenantConfig).mockResolvedValue(withCatalogs());
+      await handleInboundWebhook(inbound, agentReplying('¿Te agendo?'));
+      expect(ghl.addContactTags).toHaveBeenCalledTimes(1);
+      expect(ghl.addContactTags).toHaveBeenCalledWith('c1', ['interes:botox', 'zona:frente', 'zona:entrecejo', 'objecion:precio']);
+      expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'zone_tagged', { zone: 'frente', tag: 'zona:frente' });
+      expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'objection_tagged', { objection: 'precio', tag: 'objecion:precio' });
+      expect(ghl.addContactNote).not.toHaveBeenCalled();
+    });
+
+    it('a value outside the catalog → otro tag + a contact note with the lead\'s words', async () => {
+      vi.stubGlobal('fetch', classifierReturning('{"status":"active","interest":null,"zones":["papada"],"objection":"no confío"}'));
+      vi.mocked(q.loadTenantConfig).mockResolvedValue(withCatalogs());
+      await handleInboundWebhook({ ...inbound, body: 'me preocupa la papada pero no confío en clínicas' }, agentReplying('¿Te cuento?'));
+      expect(ghl.addContactTags).toHaveBeenCalledWith('c1', ['zona:otro', 'objecion:otro']);
+      expect(ghl.addContactNote).toHaveBeenCalledWith('c1', '[zona + objeción: otro] Lead dijo: «me preocupa la papada pero no confío en clínicas»');
+      expect(q.logBotEvent).toHaveBeenCalledWith('client1', 'conv1', 'segment_note_added', expect.objectContaining({ kinds: ['zona', 'objeción'] }));
+    });
+
+    it('a zone the contact already carries is not re-written nor re-logged; a new one is', async () => {
+      vi.stubGlobal('fetch', classifierReturning('{"status":"active","interest":null,"zones":["frente","entrecejo"],"objection":null}'));
+      vi.mocked(q.loadTenantConfig).mockResolvedValue(withCatalogs());
+      ghl.getContact.mockResolvedValue({ tags: ['zona:frente'] });
+      await handleInboundWebhook(inbound, agentReplying('¿Te cuento?'));
+      expect(ghl.addContactTags).toHaveBeenCalledWith('c1', ['zona:entrecejo']);
+      expect(q.logBotEvent).not.toHaveBeenCalledWith('client1', 'conv1', 'zone_tagged', expect.objectContaining({ zone: 'frente' }));
+    });
+
+    it('a failing note never breaks the turn', async () => {
+      vi.stubGlobal('fetch', classifierReturning('{"status":"active","interest":null,"zones":["otro"],"objection":null}'));
+      vi.mocked(q.loadTenantConfig).mockResolvedValue(withCatalogs());
+      ghl.addContactNote.mockRejectedValueOnce(new Error('ghl down'));
+      await expect(handleInboundWebhook(inbound, agentReplying('¿Te cuento?'))).resolves.not.toThrow();
+      expect(ghl.sendMessage).toHaveBeenCalled();
     });
 
     it('a classifier opt-out writes bot-opted-out AND no-promos in the one awaited call', async () => {

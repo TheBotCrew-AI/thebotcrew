@@ -169,6 +169,7 @@ workers/                       # Mastra + Cloudflare Worker package (@thebotcrew
     worker/                    # webhook-handler (inbound) + conversation-do (per-conversation Durable Object: durable-alarm debounce + serialized turn) + outbound-handler (human takeover) + tag-handler (bot-off) + delivery-retry + followup-runner + capi-runner (Meta CAPI queue drain) + info-gap-runner + info-gaps/ (0054: what the bot couldn't answer — extraction queue, aggregate, report; pending_info escalation) + stripe-webhook-handler + hold-expiry-runner + system-message (0062 paid confirmation: settle on payment, release on the 5-min cron, one fixed message outside a turn) + pay-link-handler (0063: GET /p/:code → 302 to Stripe while pending, "ya está pagado" / "venció" pages after) + stripe-oauth-handler (GET /stripe/oauth/callback: Connect OAuth code → acct_…, logged) + hold-reminder-runner (0065: the one pre-deadline reminder, 5-min cron) + courtesy-gate (0071: after the bot's goodbye, courtesy gets silence)
   scripts/simulate-webhook.mjs # local dev: fire a fake GHL webhook
   scripts/demo-take.mjs        # arma/cierra una toma del demo de bótox para grabar video (business-logic §5b)
+  scripts/segment-catalog.mjs  # 0073: list/add/remove una zona u objeción del catálogo de un tenant, sin redeploy
   scripts/battery.mjs          # pnpm battery <slug>: corre la batería de conversaciones de muestra de un tenant
   scripts/render-battery.mjs   # pnpm battery:render <slug>: transcripciones → "screenshots" de WhatsApp (PNG, sin deps)
   src/battery/                 # la batería: scenario.ts (tipos), fake-ghl.ts (calendario falso con horario real),
@@ -687,6 +688,11 @@ cualquier Chrome headless recibe SIGTERM a los ~2 s (ver cabecera de `render-bat
   ways into `conversations.no_promos` by the tag webhook (it also stamps `marketing_opted_out_at`,
   the 0051 date — `marketing-opt-out` stays as a read alias). The follow-up runner aborts a nudge for it
   (`followup_aborted {reason:'no_promos'}`). Removing `bot-opted-out` does NOT remove it: a person does.
+- Zones + objections (0073): with `segment_tags`, the classifier also returns `zones[]` / `objection`
+  from the tenant's catalogs (`core/segments.ts`, prompt built from `zone_catalog` / `objection_catalog`)
+  → `zona:<slug>` / `objecion:<slug>`; outside the catalog = `otro` + a contact note with the lead's
+  words. The catalog grows by hand only (`workers/scripts/segment-catalog.mjs`), after the weekly
+  review of those notes; create the tag in GHL first. See docs/business-logic.md §9.3.
 - Cancelled-appointment tag (2026-08-28): `cita-cancelada` is ADDED by `cancelAppointment` and by the
   staff workflow's `cancelled` action, REMOVED by any new booking (both paths). Platform constant
   (`ghl/tags.ts`), no config, no LLM, skipped in demo. A smart-list hook for GHL reactivation

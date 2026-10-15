@@ -2006,15 +2006,27 @@ The follow-up runner checks the column at send time and aborts (`followup_aborte
 {reason:'no_promos'}`): a nudge is an offer. Removing `bot-opted-out` (the opt-out undo, §2a) does
 **not** remove `no-promos`; a person removes it in GHL, and the webhook clears the column.
 
-### 9.3 Catalogs (0073, phase B pending)
+### 9.3 Zones and objections from the catalogs (0073)
 
-`tenant_config.zone_catalog` and `objection_catalog` are `[{slug, label, hints[]}]` lists seeded
-for Heriberto (21 zones, 6 objections; `otro` is implicit). Phase B extends the classifier with
-`zones[]` (0–3, said, not inferred) and `objection` (max 1, a reason given for not booking this
-turn), written as `zona:<slug>` / `objecion:<slug>`; anything outside the catalog maps to `otro`
-plus a contact note with the lead's verbatim phrase for the weekly review. The system never grows a
-catalog — a person does, after reviewing the `otro` notes. `objecion:` is removed by the client's
-GHL workflow when the lead books; `zona:` is never removed.
+With `segment_tags` on, the same classifier call also returns `zones[]` (0–3: concerns the lead
+**said**, not inferred — "me molesta la frente" → `frente`; "quiero verme mejor" → `[]`) and
+`objection` (max 1: a reason given **this turn** for not booking), written as `zona:<slug>` /
+`objecion:<slug>`. The prompt is built from `tenant_config.zone_catalog` / `objection_catalog`
+(`[{slug, label, hints[]}]`, `core/segments.ts` `segmentPromptAddendum`; the hints are the
+synonyms the model sees next to each slug), never hardcoded — an entry added with
+`node workers/scripts/segment-catalog.mjs <tenantId> zones add <slug> "<label>" "<hint>"…` is in
+the next turn's prompt, no redeploy. Validation is the interest rule again (`matchCatalog`: slug
+or label, case/accent-insensitive) with ONE escape hatch: a real value the catalog lacks becomes
+**`otro`** — tagged `zona:otro` / `objecion:otro` so the smart list catches it, AND the lead's
+message is left as a **contact note** (`GhlClient.addContactNote`, `[zona: otro] Lead dijo:
+«…»`, event `segment_note_added`) for the weekly review that promotes it into the catalog by hand.
+The system never grows a catalog. Seeded for Heriberto: 21 zones, 6 objections. `objecion:` is
+removed by the client's GHL workflow when the lead books; `zona:` is never removed. Create the
+tags in GHL by hand (category + color) before adding a slug: a tag the bot assigns that does not
+exist is created uncategorized.
+
+Measured on `worker/segment-classify.eval.ts` (gpt-6-luna, 2026-10-14, 3 runs): 18/18 — hints
+resolve ("el 11" → `entrecejo`), a vague wish stays `[]`, "la papada" → `otro`.
 
 **Who decides.** Not the agent (a side-effect-only tool is exactly the kind OpenAI models skip —
 the `updateContactName` lesson) and not a keyword match (Leo's call, 2026-08-28: "para 3 está
