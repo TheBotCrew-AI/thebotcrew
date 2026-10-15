@@ -105,7 +105,7 @@ from t;
 | `quiet_hours` | `NULL` = platform default 21:00–08:00 local. |
 | `lead_timezone_enabled` | `false` (default): times in `timezone`. `true`: times in the **lead's** zone (guessed from the WhatsApp area code, or stated by the lead), suffixed "hora de …" when it differs. **Only for remote services** (a video call) — for a walk-in business it shifts hours for anyone with an out-of-town number. See business-logic §5d. |
 | `follow_up_rounds` | Cadences for reactivation **rounds 1+** (0049) as an array of arrays of minutes, e.g. `'[[360,1080],[960]]'::jsonb` — each time the lead ghosts again the next (shorter, softer) round runs, and past the last one pursuit stops for good. `NULL` = platform default taper (`[[360,1080],[960]]`); `[]` = round 0 only (one ghost cycle, then stop). Round 0 always runs `follow_up_cadence`. See business-logic §4.3. |
-| `interest_tags` | `false` (default). `true` = the classifier also names the service the lead is asking about and the contact gets `interes-<servicio>` tags (one per `services[].name`, slugged). Costs one extra aux call per replied turn. See business-logic §9. |
+| `segment_tags` | `false` (default). `true` = the classifier also names the service (`interes:<slug>`), the zones the lead said (`zona:<slug>`) and the objection they gave (`objecion:<slug>`), from `zone_catalog` / `objection_catalog`. Costs one extra aux call per replied turn. `interest_tags` is the older alias (interest only). Setup in §12; behaviour in business-logic §9. |
 | `ai_provider` / `ai_model` | `NULL` = platform default (`openai` / `gpt-6-luna`). Only override with reason — an override also opts the tenant out of the per-role reasoning effort unless the model accepts it. |
 
 ### What goes inside `prompt_overrides` (the jsonb blob)
@@ -749,3 +749,84 @@ Write every `services[].description` as the sentences the nudge may say (price w
 what it includes, what to expect, evaluation cost); load files per §10 as they arrive.
 Overrides per treatment only when there is a hook the preset can't say — reference
 `docs/playbooks/heriberto-follow-up-playbook.sql`.
+
+## 12. Segment tags — `prefijo:valor` on the GHL contact (0073)
+
+> Behaviour and the why: [`business-logic.md` §9–9.3](business-logic.md). This is the operator's
+> checklist.
+
+**Who writes what.** Two owners, never crossed:
+
+| Tag | Written by | Removed by |
+|---|---|---|
+| `interes:<slug>` | the bot (classifier) | nobody |
+| `zona:<slug>` | the bot (classifier) | nobody |
+| `objecion:<slug>` | the bot (classifier) | the CLIENT's GHL workflow, when the lead books the valoración |
+| `no-promos` | the bot (opt-out, `flagNoPromos`) | a person, in GHL (the webhook clears the column) |
+| `paciente:<slug>`, `cotizo:<slug>`, `valorado`, `noshow:<…>`, `agendo:<…>`, `fuente:<…>` | the CLIENT's GHL workflows | the client |
+
+The bot **reads** the second group every turn and tells the agent ("Este contacto: ya es paciente
+de Botox; le preocupan labios y ojeras."). The Worker has no code that writes them — don't add any.
+
+**Turn it on for a tenant.**
+
+1. Agree the slugs with the client. The value after the colon must be identical in three places:
+   the tag they create in GHL, `services[].name` slugged (lowercase, no accents, `₂`→`2`, dashes)
+   or `services[].tagSlug` when the GHL tag spells it differently (`"Láser CO₂ Fraccionado"` →
+   `tagSlug: "laser-co2"`), and `zone_catalog[].slug`. GHL lowercases tag names on its own.
+2. The client creates every tag in GHL by hand, with category and color: `interes:<slug>` per
+   service, `zona:<slug>` per catalog entry **plus `zona:otro`**, `objecion:<slug>` per entry
+   **plus `objecion:otro`**, and `no-promos`. A tag the bot assigns that doesn't exist is created
+   uncategorized — fine functionally, ugly in their smart lists.
+3. Seed the catalogs. Copy Heriberto's from migration `0073_segment_tags.sql` (21 zones, 6
+   objections for medicina estética) and adjust, or start from them and let §12's review grow it:
+   ```sql
+   update tenant_config
+      set segment_tags = true,
+          zone_catalog = (select zone_catalog from tenant_config where business_name = 'Dr. Heriberto Valdivia'),
+          objection_catalog = (select objection_catalog from tenant_config where business_name = 'Dr. Heriberto Valdivia')
+    where tenant_id = '<tenant uuid>';
+   ```
+   Each entry is `{"slug","label","hints":[…]}`; `hints` are the synonyms the classifier sees
+   next to the slug ("el 11" → `entrecejo`). `otro` is implicit — never an entry.
+4. The client builds two GHL workflows: one that writes `paciente:`/`cotizo:`/`valorado`/`noshow:`
+   from their own pipeline, and one that **removes `objecion:*` when a valoración is booked**.
+   Without the second, a lead who already booked stays in the "precio" smart list.
+5. Test on your contact: send "me interesa el botox, me molesta el 11 pero está caro" and check
+   `bot_events` for `interest_tagged` / `zone_tagged` / `objection_tagged`, then the tags in GHL.
+
+**Grow the catalog (weekly).** Anything outside the catalog lands as `zona:otro` /
+`objecion:otro` **and** a contact note `[zona: otro] Lead dijo: «…»`. Read those notes; when a
+term repeats, create the tag in GHL first, then:
+```bash
+node workers/scripts/segment-catalog.mjs <tenantId> zones list
+node workers/scripts/segment-catalog.mjs <tenantId> zones add papada "papada" "doble mentón" "debajo de la barbilla"
+node workers/scripts/segment-catalog.mjs <tenantId> objections add "sin-tiempo-ahora" "sin tiempo ahora"
+node workers/scripts/segment-catalog.mjs <tenantId> zones remove papada
+```
+Takes effect on the next message — the prompt is built from the catalog each turn. The system
+never grows a catalog on its own.
+
+**Reading the results.**
+```sql
+-- zones and objections per week, one tenant
+select date_trunc('week', created_at) wk, event_type, metadata->>'tag' tag, count(*)
+  from bot_events
+ where client_id = '<client uuid>' and event_type in ('zone_tagged','objection_tagged')
+ group by 1,2,3 order by 1 desc, 4 desc;
+-- what fell outside the catalog (the review queue)
+select created_at, metadata->>'quote' from bot_events
+ where client_id = '<client uuid>' and event_type = 'segment_note_added' order by 1 desc;
+```
+
+**When something looks off.**
+- A tag appears in GHL with a different spelling than the smart list expects → the slug differs
+  in one of the three places of step 1; fix `tagSlug` or the catalog, the old tag stays as history.
+- No `zone_tagged` ever → `segment_tags` is false, or the catalog column is NULL/malformed
+  (`parseCatalog` drops bad entries silently; `zones list` shows what the Worker sees).
+- Follow-ups stopped for a contact → check `conversations.no_promos` and the `no-promos` tag;
+  removing the tag in GHL turns them back on (`followup_aborted {reason:'no_promos'}` in events).
+- A false positive (an objection tagged on a lead who only asked a question) → send the lead's
+  message to the eval `worker/segment-classify.eval.ts` as a new case; the prompt wording or a
+  hint is the fix, not code.
+
