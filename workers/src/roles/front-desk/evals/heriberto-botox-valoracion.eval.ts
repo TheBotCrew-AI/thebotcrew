@@ -14,6 +14,10 @@
  *   los dos de agendar (caliente; frío con las tres respuestas) — rojo 1/3 y 3/3 · verde 3/3:
  *   no prueban la regla, son la guarda de que las preguntas no frenan a quien ya está listo.
  *
+ * MEDIDO 2026-10-16, la excepción del primer mensaje (el texto del anuncio no cuenta como pedir
+ * agendar): "quiero mi consulta gratis de bótox" solo — sin la excepción 1/6 (fue a horarios) ·
+ * con ella 5/5. Quien no contesta la pregunta se distingue de quien se frenó ante los horarios.
+ *
  * Live-only (needs an API key); `pnpm eval`, excluded from the CI gate.
  */
 
@@ -158,6 +162,14 @@ describe.skipIf(!evalApiKey)('Dr. Heriberto Valdivia — bótox: se vende la val
     const text = res.text.toLowerCase();
     expect(text, text).not.toMatch(ZONE_PRICE);
     expect(text, text).toMatch(DESDE);
+  }, 120_000);
+
+  it('retargeting, solo el texto del anuncio ("quiero mi consulta gratis de bótox") → la pregunta 1, todavía sin horarios', async () => {
+    const res = await generate([lead('Hola, quiero mi consulta gratis de bótox', '2026-10-15T10:00')]);
+    const text = res.text.toLowerCase();
+    expect(toolIds(res), text).not.toContain('getAvailability');
+    expect(text, text).toMatch(ASKS_WHAT_TO_IMPROVE);
+    expect(text, text).not.toMatch(ZONE_PRICE);
   }, 120_000);
 
   it('caliente, ya trae zona, antecedente y fecha → horarios reales en ese turno', async () => {
