@@ -116,7 +116,7 @@ las fuentes, actualiza los tres.
 - Duración de cada procedimiento, duración del efecto, sesiones necesarias, cuidados.
 - Meses sin intereses, promociones, política formal de cancelación (hoy: «avísanos por
   WhatsApp»).
-- Fotos del consultorio y del doctor, cédula profesional, bio. El sitio funciona sin
+- Fotos del consultorio y del doctor, bio. El sitio funciona sin
   ellas; para verificación no hacen falta.
 
 Los textos legales son un punto de partida redactado para un consultorio médico en

@@ -351,11 +351,28 @@ const OLD_PRICE_WORDING: [string, string] = [
   'Cuando des un precio y ya sabes qué le interesa, ese MISMO mensaje lleva el siguiente paso: el número, amarrado a lo que te contó, y enseguida la consulta con el Dr. Valdivia. Un precio suelto deja la conversación muerta justo cuando más interesada está la persona. Si pregunta un precio directo, dáselo — no lo aplaces ni lo condiciones a preguntas.',
 ];
 
+const CREDENTIALS_LINE =
+  'Cédula profesional de médico 11565436 y cédula de Maestría en Medicina Regenerativa, Antienvejecimiento y Estética 13760154. Cuando hables de sus credenciales o de su cédula, das las dos juntas, siempre: no es solo médico general.';
+const OLD_CREDENTIALS_LINE = 'Cédula profesional 11565436.';
+const CREDENTIALS_FAQ =
+  'Los tratamientos los aplica el propio Dr. Heriberto Valdivia. Es médico con cédula profesional 11565436 y tiene Maestría en Medicina Regenerativa, Antienvejecimiento y Estética, con cédula 13760154.';
+const OLD_CREDENTIALS_FAQ =
+  'Los tratamientos los aplica el propio Dr. Heriberto Valdivia, médico de medicina estética y regenerativa, con cédula profesional 11565436.';
+
 const tenantWithout = (
-  rule: 'afternoon-only' | 'morning-ask' | 'medical' | 'drip' | 'service-name' | 'next-step' | 'zone-list' | 'slot-contrast' | 'stale-promo' | 'consulta-why' | 'first-time-fear' | 'negative-payments' | 'discovery-first' | 'city-split' | 'lada-faq' | 'zone-vocabulary' | 'walk-in' | 'laser-offer' | 'consulta-free' | 'price-to-slots',
+  rule: 'afternoon-only' | 'morning-ask' | 'medical' | 'drip' | 'service-name' | 'next-step' | 'zone-list' | 'slot-contrast' | 'stale-promo' | 'consulta-why' | 'first-time-fear' | 'negative-payments' | 'discovery-first' | 'city-split' | 'lada-faq' | 'zone-vocabulary' | 'walk-in' | 'laser-offer' | 'consulta-free' | 'price-to-slots' | 'credentials',
 ): TenantContext => {
   const p = HERIBERTO_PERSONA;
   const cfg = heribertoTenant.config;
+  if (rule === 'credentials') {
+    // Las dos mitades otra vez: la línea del offering y la ficha de FAQ, con solo la
+    // cédula de médico — como estaban hasta el 2026-10-16.
+    const offering = p.offering.replace(CREDENTIALS_LINE, OLD_CREDENTIALS_LINE);
+    if (offering === p.offering) throw new Error('credentials line not found');
+    const faq = HERIBERTO_FAQ.map((f) => (f.a === CREDENTIALS_FAQ ? { ...f, a: OLD_CREDENTIALS_FAQ } : f));
+    if (!faq.some((f) => f.a === OLD_CREDENTIALS_FAQ)) throw new Error('credentials FAQ entry not found');
+    return { ...heribertoTenant, config: { ...cfg, faq, promptOverrides: { ...p, offering } } };
+  }
   if (rule === 'price-to-slots') {
     if (!p.qualificationNotes.includes(OLD_PRICE_WORDING[0])) throw new Error('price wording not found');
     return {
@@ -1427,4 +1444,37 @@ describe.skipIf(!evalApiKey)('Dr. Heriberto Valdivia — solo por la tarde', () 
     expect(toolIds(res), text).toContain('flagAwaitingHuman');
     expect(text, text).not.toMatch(/\?/);
   }, 120_000);
+});
+
+/**
+ * Las credenciales van juntas: la cédula de médico (11565436) y la de la maestría en
+ * Medicina Regenerativa, Antienvejecimiento y Estética (13760154). Una sola deja leer
+ * "médico general", que es justo lo que no da confianza para un tratamiento estético.
+ *
+ * MEDIDO en gpt-6-luna, 2026-10-16: con las dos (offering + ficha de FAQ) 20/21 · con el texto
+ * anterior (`HERIBERTO_RULE_OFF=1`, solo 11565436) 0/9 — el rojo da una cédula, y a "qué
+ * estudios tiene" contesta "eso lo confirmo con el equipo" por un dato que ya tenemos.
+ */
+describe.skipIf(!evalApiKey)('Dr. Heriberto Valdivia — las dos cédulas, juntas', () => {
+  const ASKS = [
+    '¿El doctor tiene cédula profesional?',
+    '¿Quién me aplicaría el bótox? ¿Es médico general o especialista?',
+    'Antes de agendar quiero saber qué estudios tiene el doctor',
+  ];
+  for (const ask of ASKS) {
+    it(`"${ask}" → las dos cédulas y la maestría en el mismo mensaje`, async () => {
+      const res = await buildFrontDeskAgent().generate(
+        [
+          { role: 'user', content: 'Hola, me interesa el botox' },
+          { role: 'assistant', content: OPENER },
+          { role: 'user', content: ask },
+        ],
+        { requestContext: rc(tenantFor('credentials')) },
+      );
+      const text = reply(res);
+      expect(text, text).toMatch(/11565436/);
+      expect(text, text).toMatch(/13760154/);
+      expect(text, text).toMatch(/maestr[ií]a/);
+    }, 120_000);
+  }
 });
