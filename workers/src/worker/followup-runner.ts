@@ -415,7 +415,9 @@ async function processOne(
       sentSteps,
     );
     stepPick = nextStep(plan.sequence, {
-      covered, sentUrls: new Set(sentUrls), assets, interest, channel: followUp.channel as Channel,
+      covered,
+      cierresSent: sentSteps.filter((st) => st === 'cierre').length,
+      sentUrls: new Set(sentUrls), assets, interest, channel: followUp.channel as Channel,
     });
     if (stepPick) {
       stepDirective = stepPick.file

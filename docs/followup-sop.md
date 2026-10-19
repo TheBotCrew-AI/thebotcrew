@@ -75,8 +75,10 @@ Rules you must know when reading a thread:
   stated a `$` amount (the front-desk reply usually does).
 - **A step with a missing file goes out as text**, except `prueba`, which is **skipped**
   (no before/after = no "trust me" message).
-- **`cierre` is the only repeatable step.** When every other mark is covered the model
-  free-forms under the stage's objective.
+- **`cierre` is consumed by position and is the only repeatable step.** The n-th `cierre`
+  of a sequence counts as covered once the thread got n cierre nudges (any stage), so a
+  sequence may open with one (C). When every step is told, the last `cierre` repeats; a
+  sequence without one free-forms under the stage's objective.
 - **The last rung of the last round is the farewell**, playbook or not (teaches `CITA`).
 - Files only go out on channels that carry them: WhatsApp image + PDF, Facebook image + PDF,
   Instagram image only. A PDF step on Instagram goes out as text (or is skipped, if `prueba`).

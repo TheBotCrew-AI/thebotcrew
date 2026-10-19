@@ -592,8 +592,11 @@ step's text (and the file's caption). `core/followup-steps.ts`, pure.
   never sent the price at I. What counts as covered is deterministic: `precio` when a bot
   message states a price (the stage floor's detector); the rest when a sent nudge carries
   that mark (`follow_ups.step`, 0070) or the step's file is already in an outbound
-  `messages.attachments` (a front-desk send, a v2 angle); `cierre` never — it is the one
-  repeatable step. Story told → free-form, like an exhausted pool.
+  `messages.attachments` (a front-desk send, a v2 angle); `cierre` **by position** — the
+  n-th `cierre` of the sequence is covered once n cierre nudges went out, so C's
+  `cierre → duda → cierre → cierre` advances (until 2026-10-18 it never did: `cierre` was never
+  covered and C's step 0 won every rung — 29/29 C nudges were the same question). Story told →
+  the last `cierre` repeats; a sequence without one → free-form, like an exhausted pool.
 - **Files**: a step with an `asset` the tenant lacks goes out as **text**, except `prueba` —
   a "trust me" without the before/after is noise, so it is skipped (Leo, 2026-10-12).
   Channel filter as in §4.6.

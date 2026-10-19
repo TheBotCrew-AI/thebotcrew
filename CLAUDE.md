@@ -350,7 +350,7 @@ supabase/
                                #      `sequence: [{covers, text, asset?}]` en vez de un pool — el runner manda el primer paso cuya
                                #      marca (precio|quien|que-esperar|prueba|oferta|duda|cierre) la conversación NO ha cubierto y
                                #      el modelo sólo escribe el texto. Marcas POR CONVERSACIÓN (follow_ups.step + precio detectado
-                               #      en mensajes del bot + archivo ya en attachments); `cierre` es la única repetible; `prueba` sin
+                               #      en mensajes del bot + archivo ya en attachments); `cierre` se consume por posición y es la única repetible; `prueba` sin
                                #      archivo se salta. `{"preset":"medicina-estetica"}` = playbook de plataforma en core/playbooks/,
                                #      el tenant sobreescribe por etapa y campo. app_mark_follow_up_sent gana p_step (DROP de la de 3).
                                #      Vista follow_up_step_outcomes = la métrica del arco. Heriberto corre el preset + 2 excepciones.

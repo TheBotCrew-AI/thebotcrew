@@ -53,4 +53,25 @@ describe('nextStep', () => {
     expect(pick(['precio', 'quien', 'prueba', 'oferta'])).toMatchObject({ step: { covers: 'cierre' } });
     expect(nextStep(seq.slice(0, 4), { covered: new Set(['precio', 'quien', 'prueba', 'oferta']), sentUrls: new Set(), assets: [], interest: null, channel: 'whatsapp' })).toBeNull();
   });
+  it('a cierre is consumed by position: a sequence that OPENS with cierre still moves on', () => {
+    const c: StepSpec[] = [
+      { covers: 'cierre', text: 'c1' },
+      { covers: 'duda', text: 'duda' },
+      { covers: 'cierre', text: 'c2' },
+      { covers: 'cierre', text: 'c3' },
+    ];
+    const at = (covered: string[], cierresSent: number) =>
+      nextStep(c, { covered: new Set(covered as never[]), cierresSent, sentUrls: new Set(), assets: [], interest: null, channel: 'whatsapp' });
+    expect(at([], 0)).toMatchObject({ index: 0 });
+    expect(at([], 1)).toMatchObject({ index: 1, step: { covers: 'duda' } });
+    expect(at(['duda'], 1)).toMatchObject({ index: 2 });
+    expect(at(['duda'], 2)).toMatchObject({ index: 3 });
+    // every step told → the last cierre repeats, as a trailing cierre always has
+    expect(at(['duda'], 3)).toMatchObject({ index: 3 });
+    expect(at(['duda'], 7)).toMatchObject({ index: 3 });
+  });
+  it('a trailing cierre keeps repeating once it has been sent', () => {
+    expect(nextStep(seq, { covered: new Set(['precio', 'quien', 'prueba', 'oferta']), cierresSent: 2, sentUrls: new Set(), assets: [], interest: null, channel: 'whatsapp' }))
+      .toMatchObject({ index: 4, step: { covers: 'cierre' } });
+  });
 });

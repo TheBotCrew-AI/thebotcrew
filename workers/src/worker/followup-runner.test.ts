@@ -807,12 +807,17 @@ describe('runPendingFollowUps — sequence mode (0070): the runner picks the ste
     expect(q.markFollowUpSent).toHaveBeenCalledWith('fu1', null, null, null);
   });
 
-  it('cierre repeats: a C sequence of closes keeps sending after one went out', async () => {
+  it('a C sequence opening with cierre moves on after it went out, then repeats its cierre', async () => {
     vi.mocked(q.loadTenantConfig).mockResolvedValue(tenant({
-      followUpPlaybook: { stages: { C: { cadence: [10, 60], sequence: [{ covers: 'cierre', text: 'cierra' }, { covers: 'duda', text: 'qué lo detiene' }] } } },
+      followUpPlaybook: { stages: { C: { cadence: [10, 60, 300], sequence: [{ covers: 'cierre', text: 'cierra' }, { covers: 'duda', text: 'qué lo detiene' }] } } },
     }));
     vi.mocked(q.loadDueFollowUps).mockResolvedValue([due({ stage: 'C', tier: 2 })]);
     vi.mocked(q.loadSentSteps).mockResolvedValue(['cierre']);
+    await runPendingFollowUps(agent);
+    expect(ctx().stageContext?.step).toBe('qué lo detiene');
+
+    vi.mocked(q.loadDueFollowUps).mockResolvedValue([due({ stage: 'C', tier: 3 })]);
+    vi.mocked(q.loadSentSteps).mockResolvedValue(['cierre', 'duda']);
     await runPendingFollowUps(agent);
     expect(ctx().stageContext?.step).toBe('cierra');
   });

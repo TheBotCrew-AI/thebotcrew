@@ -14,7 +14,9 @@
  *   quien, que-esperar, prueba, oferta, duda
  *                a sent nudge stamped with that mark (follow_ups.step), or the
  *                step's file already in an outbound message's attachments
- *   cierre       never — it is the one repeatable step
+ *   cierre       by position: the n-th cierre of the sequence is covered once the
+ *                conversation has sent n cierre nudges; when the whole sequence is
+ *                told, its last cierre repeats
  *
  * A step with an asset the tenant lacks goes out as text, except `prueba`: a
  * "trust me" without the before/after is noise, so it is skipped.
@@ -62,6 +64,8 @@ export function coveredMarks(botMessages: readonly string[], sentSteps: readonly
 
 export interface StepPickInputs {
   covered: ReadonlySet<CoverMark>;
+  /** Cierre nudges this conversation has already sent; absent = 0. */
+  cierresSent?: number;
   /** URLs already sent as attachments on this conversation (any sender). */
   sentUrls: ReadonlySet<string>;
   assets: readonly MediaAsset[];
@@ -77,14 +81,24 @@ export interface StepPick {
   file: MediaAsset | null;
 }
 
-/** The first step of the sequence the conversation hasn't covered; null when the story is told. */
+/** The first step of the sequence the conversation hasn't covered; told → its last cierre again, or null without one. */
 export function nextStep(sequence: readonly StepSpec[], input: StepPickInputs): StepPick | null {
+  const fileFor = (step: StepSpec) =>
+    step.asset ? pickAsset(input.assets, step.asset, input.interest, input.channel) : null;
+  let cierresSeen = 0;
+  let lastCierre = -1;
   for (const [index, step] of sequence.entries()) {
-    if (step.covers !== 'cierre' && input.covered.has(step.covers)) continue;
-    const file = step.asset ? pickAsset(input.assets, step.asset, input.interest, input.channel) : null;
+    if (step.covers === 'cierre') {
+      cierresSeen += 1;
+      lastCierre = index;
+      if (cierresSeen <= (input.cierresSent ?? 0)) continue;
+    } else if (input.covered.has(step.covers)) continue;
+    const file = fileFor(step);
     if (file && input.sentUrls.has(file.url)) continue;
     if (step.covers === 'prueba' && !file) continue;
     return { step, index, file };
   }
-  return null;
+  if (lastCierre < 0) return null;
+  const step = sequence[lastCierre]!;
+  return { step, index: lastCierre, file: fileFor(step) };
 }
