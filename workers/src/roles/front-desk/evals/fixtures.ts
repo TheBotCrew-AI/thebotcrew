@@ -1124,6 +1124,18 @@ export const HERIBERTO_FAQ = [
   {
     "q": "¿Sigue el precio de $2,999 del láser? Vi la sesión de láser en $2,999",
     "a": "Ese precio ya no está vigente. Hoy el láser tiene precio especial de $3,500 por sesión en todo su tratamiento (en lugar de $4,500), con evaluación sin costo, kit de recuperación y seguimiento incluidos."
+  },
+  {
+    "q": "¿Cuántos días tarda la recuperación del láser CO₂? ¿Cuándo me veo normal? ¿Tengo que faltar al trabajo?",
+    "a": "La recuperación visible dura entre 5 y 7 días: el primer día la piel está roja, del segundo al tercero se pone marrón y del cuarto en adelante se descama sola. No necesitas reposo ni incapacidad; es cuestión de cómo se ve la piel, por eso muchas pacientes agendan de jueves o viernes. Puede quedar un tono rosado un par de semanas más que se cubre con bloqueador. El tiempo exacto depende de la intensidad que el Dr. Valdivia defina en tu evaluación."
+  },
+  {
+    "q": "¿Cuándo me puedo maquillar después del láser? ¿Cuándo puedo tomar sol?",
+    "a": "Maquillaje cuando la piel terminó de descamarse, normalmente a partir del día 5 al 7, de preferencia mineral. Sol directo evitarlo las primeras 2 a 4 semanas y usar bloqueador SPF 50 todos los días al menos un mes; el kit de recuperación lo incluye."
+  },
+  {
+    "q": "¿Cuántas sesiones de láser necesito? ¿Cada cuánto se hacen?",
+    "a": "Entre 1 y 3 sesiones según lo que quieras mejorar: manchas y textura suelen necesitar menos, cicatrices de acné más. Se espacian de 4 a 6 semanas para que la piel se renueve por completo. Los resultados se empiezan a ver desde la segunda semana y siguen mejorando de 3 a 6 meses, porque la piel va produciendo colágeno."
   }
 ];
 
