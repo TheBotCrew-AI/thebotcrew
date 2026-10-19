@@ -661,7 +661,14 @@ slots. Rules (also reinforced in the front-desk prompt):
   model — the tool never even queries GHL past the horizon. The last bookable day is also
   **surfaced in the prompt** (`# Fecha y hora actuales`, pre-computed in the tenant's clock — no
   model date math), so the agent sets expectations up front instead of silently offering
-  near-term slots when a lead asks for a later date.
+  near-term slots when a lead asks for a later date. **Waitlist (2026-10-19):** when the lead
+  says they can't within the window, the bot doesn't re-offer the same slots or let them go
+  ("escríbeme cuando regreses" — the red side, 0/9): it says it understands, explains the agenda
+  opens only N days ahead, offers the waitlist for their date and asks which day suits them (a
+  question, so no tool that turn); once they name it — or if they named it in the same message —
+  it calls `flagAwaitingHuman` with "lista de espera: <fecha> — <tratamiento>" (`awaiting_human`
+  + the tenant's tag, nudges off, a person books when the date opens). Never `getAvailability`
+  for that date. `evals/waitlist-beyond-horizon.eval.ts`.
 - **Minimum notice (deterministic, per-tenant, 0059):** `tenant_config.booking_min_notice_days`
   (int, NULL = same-day allowed) is the near-side twin of the horizon. With `1` the bot never
   offers or books **today**: `resolveBookingWindow` lifts the queried range to **local midnight

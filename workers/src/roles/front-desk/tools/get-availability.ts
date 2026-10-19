@@ -151,7 +151,7 @@ export const getAvailabilityTool = createTool({
         slots: [],
         note:
           `Solo se pueden agendar horarios dentro de los próximos ${horizon} días (hasta el ${maxLabel}). ` +
-          'El rango que pediste queda fuera de esa ventana; dile al lead esa limitación y ofrécele un horario dentro de ella.',
+          'El rango que pediste queda fuera de esa ventana; dile al lead esa limitación y ofrécele un horario dentro de ella. Si ya te dijo que no puede dentro de la ventana, no vuelvas a consultar: ofrécele la lista de espera para su fecha (ver prompt).',
       };
     }
 
@@ -185,7 +185,7 @@ export const getAvailabilityTool = createTool({
 
     const horizonNote =
       window.clamped && window.maxMs != null
-        ? ` IMPORTANTE: el rango pedido excede la ventana de agendado. Solo hay cupo hasta el ${lastDayLabel(window.maxMs)} (próximos ${horizon} días). Si el lead pidió una fecha posterior, díselo explícitamente y ofrécele ÚNICAMENTE estos horarios.`
+        ? ` IMPORTANTE: el rango pedido excede la ventana de agendado. Solo hay cupo hasta el ${lastDayLabel(window.maxMs)} (próximos ${horizon} días). Si el lead pidió una fecha posterior, díselo explícitamente y ofrécele ÚNICAMENTE estos horarios; si te contesta que no puede dentro de la ventana, pasa a la lista de espera (ver prompt).`
         : undefined;
     const noticeNote =
       window.liftedFrom && window.minMs != null

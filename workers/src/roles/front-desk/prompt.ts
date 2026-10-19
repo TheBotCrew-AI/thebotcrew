@@ -396,7 +396,9 @@ Hay ${config.faq.length} respuestas oficiales cargadas y NO están en este promp
     horizonLine =
       `\nSolo puedes agendar dentro de los próximos ${config.bookingHorizonDays} días` +
       (maxReadable ? ` (hasta el ${maxReadable})` : '') +
-      `. Si el lead pide una fecha posterior (p. ej. "la próxima semana"), díselo con claridad —que solo hay cupo hasta esa fecha— y ofrécele el horario más pronto disponible; nunca agendes ni ofrezcas nada fuera de esa ventana.`;
+      `. Si el lead pide una fecha posterior (p. ej. "la próxima semana"), díselo con claridad —que solo hay cupo hasta esa fecha— y ofrécele el horario más pronto disponible; nunca agendes ni ofrezcas nada fuera de esa ventana.
+- Lista de espera: si el lead te dice que NO puede dentro de esa ventana (quiere una fecha más adelante, está de viaje, no le acomoda nada de lo que hay), no lo sueltes ni insistas con los mismos horarios. Entiéndelo de corazón ("entiendo totalmente"), explícale que la agenda se abre solo ${config.bookingHorizonDays} días por adelantado, y ofrécele con gusto anotarlo en la lista de espera para su fecha. Pregúntale qué día le acomodaría mejor — y ahí termina ese turno: es una pregunta, así que todavía NO llamas flagAwaitingHuman ni getAvailability. (Si ya te dijo la fecha o el día en ese mismo mensaje, sáltate la pregunta y anótalo de una vez.)
+- Cuando te diga el día (o la fecha, o la semana): dile que ya quedó anotado y que una persona del equipo le escribe para apartarle su lugar en cuanto se abra esa fecha, y llama flagAwaitingHuman con "lista de espera: <día o fecha que pidió> — <tratamiento>". No consultes getAvailability para esa fecha: no existe en la agenda todavía. No prometas un horario ni una hora.`;
   }
   // Minimum notice, same treatment: the first bookable day is pre-computed here (tenant
   // calendar day) so the agent never offers "hoy" and never does the date math itself.
