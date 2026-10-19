@@ -24,6 +24,7 @@ import { z } from 'zod';
 import { logBotEvent, updateConversationStatus } from '../../../db/queries.js';
 import { GhlClient } from '../../../ghl/client.js';
 import { resolveAgentContext } from './agent-context.js';
+import { buildWaitlistTask } from './waitlist-task.js';
 
 export const flagAwaitingHumanTool = createTool({
   id: 'flagAwaitingHuman',
@@ -36,9 +37,16 @@ export const flagAwaitingHumanTool = createTool({
       .string()
       .optional()
       .describe('Resumen corto de lo que pidió el lead (servicio + preferencia de horario), para el registro interno.'),
+    waitlistDate: z
+      .string()
+      .optional()
+      .describe(
+        'SOLO para lista de espera: la fecha que pidió el lead, en formato YYYY-MM-DD (calcúlala a partir de la fecha de hoy del prompt). ' +
+          'Si dijo solo una semana, el lunes de esa semana. Crea una tarea con fecha para que una persona le escriba cuando esa fecha abra.',
+      ),
   }),
   outputSchema: z.object({ ok: z.boolean() }),
-  execute: async ({ summary }, ctx) => {
+  execute: async ({ summary, waitlistDate }, ctx) => {
     const { tenant, turn, config } = resolveAgentContext(ctx);
 
     // Demo roleplay: no real request is awaiting a real person — don't stop the real
@@ -65,10 +73,35 @@ export const flagAwaitingHumanTool = createTool({
       }
     }
 
+    // Waitlist: the tag is the state, the task is the dated reminder — due the day the
+    // requested date enters the booking window. Best-effort like the tag: the lead is
+    // already noted (status + event), a failed task write is logged, not surfaced.
+    let waitlist: { date: string; dueDay: string; taskId: string | null } | null = null;
+    if (waitlistDate) {
+      const task = buildWaitlistTask(waitlistDate, {
+        horizonDays: config.bookingHorizonDays,
+        nowMs: Date.now(),
+        timeZone: config.timezone,
+        summary,
+        businessName: config.businessName,
+      });
+      if (task) {
+        waitlist = { date: waitlistDate, dueDay: task.dueDay, taskId: null };
+        try {
+          waitlist.taskId = await new GhlClient(tenant.tenantId).createContactTask(turn.ghlContactId, task);
+        } catch (e) {
+          console.error('[flagAwaitingHuman] waitlist task failed:', e instanceof Error ? e.message : String(e));
+        }
+      } else {
+        console.warn(`[flagAwaitingHuman] waitlistDate is not YYYY-MM-DD, no task: ${waitlistDate}`);
+      }
+    }
+
     await logBotEvent(tenant.clientId, turn.ghlConversationId, 'awaiting_human', {
       tag: tag ?? null,
       summary: summary?.slice(0, 300) ?? null,
       service: config.businessName,
+      ...(waitlist ? { waitlist } : {}),
     });
 
     return { ok: true };

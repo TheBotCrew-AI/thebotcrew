@@ -196,6 +196,38 @@ export class GhlClient {
     await this.contactTags('POST', contactId, tags);
   }
 
+  /**
+   * Create a task on a GHL contact (the location's task list). Requires `contacts.write`.
+   * `dueDate` is an ISO instant; `assignedTo` a GHL user id. Returns the task id.
+   */
+  async createContactTask(
+    contactId: string,
+    task: { title: string; body?: string; dueDate: string; assignedTo?: string },
+  ): Promise<string | null> {
+    const token = await this.getAccessToken();
+    const res = await fetch(`${this.apiBase}/contacts/${contactId}/tasks`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Version: '2021-07-28',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        title: task.title,
+        body: task.body ?? '',
+        dueDate: task.dueDate,
+        completed: false,
+        ...(task.assignedTo ? { assignedTo: task.assignedTo } : {}),
+      }),
+    });
+    if (!res.ok) {
+      const detail = await res.text();
+      throw new Error(`[ghl] createContactTask failed ${res.status}: ${detail}`);
+    }
+    const data = (await res.json()) as { task?: { id?: string }; id?: string };
+    return data.task?.id ?? data.id ?? null;
+  }
+
   /** Remove tags from a GHL contact. Requires the `contacts.write` scope. */
   async removeContactTags(contactId: string, tags: string[]): Promise<void> {
     await this.contactTags('DELETE', contactId, tags);

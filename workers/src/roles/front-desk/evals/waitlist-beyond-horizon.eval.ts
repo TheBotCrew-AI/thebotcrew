@@ -124,6 +124,7 @@ describe.skipIf(!evalApiKey)('lista de espera — el lead no puede dentro de la 
     expect(toolIds(res), text).not.toContain('getAvailability');
     const flag = calls(res).find((c) => c.payload.toolName === 'flagAwaitingHuman');
     expect(JSON.stringify(flag?.payload.args ?? {}).toLowerCase()).toMatch(/3 de noviembre|martes 3|noviembre/);
+    expect((flag?.payload.args as { waitlistDate?: string } | undefined)?.waitlistDate, text).toBe('2026-11-03');
     expect(text, text).not.toMatch(REOFFERS_THIS_WEEK);
   }, 120_000);
 

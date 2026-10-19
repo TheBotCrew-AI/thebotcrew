@@ -666,9 +666,14 @@ slots. Rules (also reinforced in the front-desk prompt):
   ("escríbeme cuando regreses" — the red side, 0/9): it says it understands, explains the agenda
   opens only N days ahead, offers the waitlist for their date and asks which day suits them (a
   question, so no tool that turn); once they name it — or if they named it in the same message —
-  it calls `flagAwaitingHuman` with "lista de espera: <fecha> — <tratamiento>" (`awaiting_human`
-  + the tenant's tag, nudges off, a person books when the date opens). Never `getAvailability`
-  for that date. `evals/waitlist-beyond-horizon.eval.ts`.
+  it calls `flagAwaitingHuman` with "lista de espera: <fecha> — <tratamiento>" and
+  `waitlistDate` (YYYY-MM-DD): `awaiting_human` + the tenant's tag (the STATE, nudges off) **plus
+  a GHL task on the contact** (`tools/waitlist-task.ts`, `GhlClient.createContactTask`,
+  `contacts.write`) due at 09:00 local the day that date enters the window (date − horizon,
+  never before today) — the dated reminder a person acts on. Unassigned; a failed task write is
+  logged, never surfaced (the lead is already noted); the `awaiting_human` event carries
+  `waitlist {date, dueDay, taskId}`. A non-date `waitlistDate` creates no task. Never
+  `getAvailability` for that date. `evals/waitlist-beyond-horizon.eval.ts`.
 - **Minimum notice (deterministic, per-tenant, 0059):** `tenant_config.booking_min_notice_days`
   (int, NULL = same-day allowed) is the near-side twin of the horizon. With `1` the bot never
   offers or books **today**: `resolveBookingWindow` lifts the queried range to **local midnight
